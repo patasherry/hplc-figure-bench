@@ -1,0 +1,100 @@
+// 10 data truth (biochemist): load synthetic files with known answers (data/expected.json, made by data/gen_chrom.py and data/gen_nd.py)
+// and check what the app shows in its UI: SEC detection, column, flow, UV path, fraction count and labels, peak Ve, pool area and mg, NanoDrop means.
+// Everything is read from the DOM (timeline, run card, peak table, step sheet), never from app internals.
+const {open, H, suite, path, fs, DATA} = require('../lib/harness');
+const EXP = JSON.parse(fs.readFileSync(path.join(DATA, 'expected.json'), 'utf8')), CH = path.join(DATA, 'chrom'), ND = path.join(DATA, 'nd');
+const T = suite('10_data_truth'), num = s => { const m = String(s == null ? '' : s).replace(/,/g, '').match(/-?\d+(\.\d+)?/); return m ? +m[0] : NaN; };
+const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;
+
+/* DOM readers, kept here so a renamed element is fixed in one place */
+const card = p => p.locator('.trace.run.sel').first();
+const cardText = async p => (await card(p).innerText()).replace(/\s+/g, ' ');
+const field = async (p, k) => { const el = card(p).locator(`[data-k=${k}]`).first(); if (!(await el.count())) return ''; const v = await el.inputValue().catch(() => ''); return v || (await el.getAttribute('placeholder')) || ''; };
+const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, String(v)]);
+const detect = async p => { await p.evaluate(() => { const b = document.getElementById('intAuto'); if (b) b.click(); }); await p.waitForTimeout(900); };
+/* the peak table as objects keyed by header, with the Ve/apex column under "ve" */
+async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return {head: [], rows: []}; const head = t[0];
+  const iv = head.findIndex(c => /^(Ve|Center|Apex|Elution time)\b/.test(c)), ia = head.findIndex(c => /^Area/.test(c)), im = head.findIndex(c => /^Protein/.test(c)), ip = head.findIndex(c => /% of regions/.test(c));
+  const rows = t.slice(1).filter(r => r.length > 3).map(r => ({name: r[0], a: num(r[1]), b: num(r[2]), ve: iv >= 0 ? num(r[iv]) : NaN, area: ia >= 0 ? num(r[ia]) : NaN, mg: im >= 0 ? num(r[im]) : NaN, pct: ip >= 0 ? num(r[ip]) : NaN}));
+  return {head, unit: (head[iv] || '').match(/\((\w+)\)/) ? (head[iv].match(/\((\w+)\)/)[1]) : '', rows}; }
+
+async function chromFile(e){ const id = e.file.replace(/\.[^.]+$/, ''), t0 = Date.now();
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('truth ' + id); await h.addRun(path.join(CH, e.file)); await p.waitForTimeout(e.slow_ok_s ? 1500 : 300);
+    const secs = (Date.now() - t0)/1000;
+    // guards: a file the app can read at all becomes a run card
+    if (!T.check(`${id}/loads`, await card(p).count(), 'no selected run card after loading')) return;
+    // guards: large exports (200k points) still load in reasonable time
+    if (e.slow_ok_s) T.check(`${id}/load-time`, secs < e.slow_ok_s + 6, `${secs.toFixed(1)} s`);
+    const tl = await h.timeline(), run = tl.find(x => /^run/.test(x.k || '')) || tl.find(x => /IMAC|exclusion|exchange|column|run/i.test(x.t || ''));
+    // guards: SEC is recognised (or not) from the file, so Ve counts from the injection and the step is named right
+    T.check(`${id}/step-name`, run && new RegExp(e.step, 'i').test(run.t || ''), `expected "${e.step}", timeline says "${run ? run.t : 'none'}"`);
+    const ct = await cardText(p);
+    // guards: the fraction marks are read: count of collected (non-waste) fractions and the first and last label
+    T.check(`${id}/fractions`, ct.includes(`${e.frac.n} fractions, ${e.frac.first} to ${e.frac.last}`), `expected "${e.frac.n} fractions, ${e.frac.first} to ${e.frac.last}", card: ${ct.slice(0, 160)}`);
+    // guards: SEC volumes are counted from the injection when the injection is not at 0
+    if (e.kind === 'sec' && e.injection > 0.5) T.check(`${id}/says-from-injection`, /from (the )?injection/i.test(ct + " " + (await h.svgTexts()).map(x => x.t).join(" ")), "neither the run card nor the figure says the volumes count from the injection");
+    // guards: the column is read from the file name or the UNICORN log
+    if (e.column) { const c = (await field(p, 'mCol')).replace(/^auto:\s*/i, '').replace(/\s*\(from the file.*$/i, '').trim(); T.check(`${id}/column`, c.toLowerCase() === e.column.toLowerCase(), `expected "${e.column}", got "${c}"`); }
+    // guards: the flow rate is read from the exported flow curve
+    if (e.flow) { const f = num((await field(p, 'mFlow')).replace(/^auto:\s*/i, '')); T.check(`${id}/flow`, Math.abs(f - e.flow) < 0.01, `expected ${e.flow}, got ${f}`); }
+    // guards: the UV path stored in a UNICORN archive (CurveUVInfo/UVPathLength) is used, and the "UV cell path length" curve is not a trace
+    if (/\.zip$/.test(e.file)) { const pv = num(await field(p, 'path')); T.check(`${id}/uv-path`, Math.abs(pv - e.path_mm) < 0.01, `expected ${e.path_mm} mm, got ${pv}`); }
+    await setOpt(p, 'o-eps', e.pool ? e.pool.eps : 1); await detect(p);
+    const P = await peaks(p, h), pk = P.rows.filter(r => !/^pool/i.test(r.name));
+    // guards: the axis unit follows the file (mL, or min for a time-based export)
+    T.check(`${id}/unit`, P.unit === e.unit, `expected ${e.unit}, table header "${P.head.join(' | ')}"`);
+    for (const [k, x] of e.peaks.entries()) { const hit = pk.find(r => Math.abs(r.ve - x.ve) <= x.tol);
+      // guards: each real peak is found at its true elution volume (from the injection for SEC); optional peaks are only reported
+      if (x.must) T.check(`${id}/peak${k + 1}@${x.ve}`, hit, `${x.note}: expected Ve ${x.ve} ±${x.tol}, table has ${pk.map(r => r.ve).join(', ') || 'none'}`);
+      else console.log(`INFO ${id}/peak${k + 1}@${x.ve} (optional, ${x.note}): ${hit ? 'found ' + hit.ve : 'not reported'}`); }
+    for (const [k, x] of (e.forbid || []).entries()) // guards: dips and peaks that exist only in derived curves are never reported as peaks
+      T.check(`${id}/no-false-peak${k + 1}@${x.ve}`, !pk.some(r => Math.abs(r.ve - x.ve) <= x.tol && !(r.pct < 1)), `${x.note}: table has ${pk.map(r => r.ve + ' (' + r.pct + '%)').join(', ')}`);
+    const known = e.peaks.concat(e.forbid || []), extra = pk.filter(r => r.pct >= 2 && !known.some(x => Math.abs(r.ve - x.ve) <= Math.max(x.tol, 0.3)));
+    // guards: noise and baseline drift do not create peaks of 2% or more of the area
+    T.check(`${id}/no-spurious`, !extra.length, `unexpected peaks: ${extra.map(r => r.ve + ' (' + r.pct + '%)').join(', ')}`);
+    if (e.pool) { await h.pool(e.pool.label); const pr = (await peaks(p, h)).rows.find(r => /^pool/i.test(r.name));
+      // guards: the pool spans from the first pooled fraction mark to the mark after the last one
+      if (T.check(`${id}/pool-row`, pr, 'no Pool row in the peak table')) {
+        T.check(`${id}/pool-span`, Math.abs(pr.a - e.pool.a) < 0.02 && Math.abs(pr.b - e.pool.b) < 0.02, `expected ${e.pool.a}–${e.pool.b}, got ${pr.a}–${pr.b}`);
+        // guards: the pool's A280 area, the number every mg estimate is built on
+        T.check(`${id}/pool-area`, Math.abs(pr.area - e.pool.area) <= e.pool.area*e.pool.area_tol_pct/100, `expected ${e.pool.area} ±${e.pool.area_tol_pct}%, got ${pr.area}`);
+        // guards: mg = area / 1000 / (eps × path/10), with eps set to the stated value and the file's (or default 2 mm) path
+        if (e.pool.mg != null) T.check(`${id}/pool-mg`, Math.abs(pr.mg - e.pool.mg) <= Math.max(0.011, e.pool.mg*(e.pool.area_tol_pct || 5)/100), `expected ${e.pool.mg} mg (eps ${e.pool.eps}, ${e.path_mm} mm), got ${pr.mg}`); } }
+  } finally {
+    // guards: no script errors while loading and analysing this file
+    T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
+}
+
+async function ndFile(e, withEps){ const id = e.file.replace(/\.[^.]+$/, '') + (withEps ? '+eps' : ''), vol = 0.5;
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('nd ' + id); await h.addRun(path.join(CH, 'imac_HisTrap_FF_1mL_step_u7.csv')); await h.pool('T1-T3');
+    if (withEps) await setOpt(p, 'o-eps', e.eps);
+    await h.addConc(path.join(ND, e.file), vol); await p.waitForTimeout(400);
+    /* the step sheet and the readings list under it: everything in the side panel from the step sheet's heading on */
+    const sheet = (await p.evaluate(() => { const ss = document.getElementById('stepSheet'), pn = document.getElementById('panel') || document.body, all = pn.innerText, head = (ss ? ss.innerText : '').trim().slice(0, 40), i = head ? all.indexOf(head) : -1; return i >= 0 ? all.slice(i) : all; })).replace(/\s+/g, ' '), tl = await h.timeline(), conc = tl.find(x => /concentrat/i.test(x.t || ''));
+    const want = withEps ? e.mean_eps : e.mean_abs1;
+    if (e.n === 0) { // guards: a nucleic acid file gives no protein concentration
+      T.check(`${id}/no-protein-mean`, !/\d\s*mg\/mL/.test(conc ? conc.s || '' : '') && !/mean of \d+ reading/i.test(sheet), `timeline "${conc && conc.s}", sheet ${sheet.slice(0, 200)}`); return; }
+    const m = sheet.match(/(\d+(?:\.\d+)?)\s*(?:±\s*(\d+(?:\.\d+)?)\s*)?mg\/mL/), nm = sheet.match(/mean of (\d+) readings?/i);
+    // guards: the mean concentration of the readings, with 1 Abs = 1 mg/mL or with the A280 coefficient set
+    T.check(`${id}/mean`, m && Math.abs(+m[1] - want) <= 0.006 + want*0.002, `expected ${want} mg/mL, sheet: ${m ? m[0] : sheet.slice(0, 200)}`);
+    // guards: every protein reading in the file is counted
+    if (e.n > 1) T.check(`${id}/n`, nm && +nm[1] === e.n, `expected ${e.n}, sheet: ${nm ? nm[0] : 'no "mean of N readings"'}`);
+    // guards: the SD shown is the sample SD of the replicates
+    if (e.sd_abs1 != null && !withEps) T.check(`${id}/sd`, m && m[2] != null && Math.abs(+m[2] - e.sd_abs1) <= 0.006, `expected ±${e.sd_abs1}, sheet: ${m ? m[0] : ''}`);
+    // guards: names with commas, quotes and unicode survive parsing
+    for (const n of [...new Set(e.names)]) T.check(`${id}/name:${n}`, sheet.includes(n), sheet.slice(0, 300));
+    // guards: the mg carried to the timeline is mean × volume after concentrating
+    T.check(`${id}/timeline-mg`, conc && Math.abs(num((conc.s || '').split(',').find(s => /mg$/.test(s.trim())) || '') - want*vol) <= 0.011, `expected ${(want*vol).toFixed(3)} mg, timeline "${conc && conc.s}"`);
+    // guards: an A260/A280 well above 0.6 is pointed out (nucleic acid in the protein)
+    if (e.warn_high_ratio) T.check(`${id}/flags-260-280`, /1\.25/.test(sheet) && (/nucleic|contamin|high/i.test(sheet) || await p.locator('#panel .hi, #panel .warn, #panel [class*=warn]').count() > 0), sheet.slice(0, 300));
+  } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
+}
+
+(async () => {
+  for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
+  for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
+  T.done(); })();

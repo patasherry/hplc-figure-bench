@@ -1,0 +1,4 @@
+Date,Sample Name,Protein (mg/mL),A280,A260/A280,Sample Type,MW,E / 1000,Extinction coefficient,Baseline Correction (nm),Baseline Absorbance
+"10/22/2026 9:58:00 AM","Pool 1.E.7–1.F.6, conc",3.210,3.210,0.56,"1 Abs = 1 mg / mL",,,,340,0.011
+"10/22/2026 9:58:00 AM","KPP-MM α/β 4 °C",3.180,3.180,0.57,"1 Abs = 1 mg / mL",,,,340,0.011
+"10/22/2026 9:58:00 AM","Ulp1 cut, ""final""",3.240,3.240,0.57,"1 Abs = 1 mg / mL",,,,340,0.011
