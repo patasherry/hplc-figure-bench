@@ -33,12 +33,15 @@ As a single HTML file, you can run the application locally on Windows by double-
 ## External Libraries and Network Dependencies
 The application fetches resources over the network for specific features:
 *   **Fonts:** Loads "Instrument Sans" from Google Fonts (`fonts.googleapis.com` and `fonts.gstatic.com`).
+*   **TIFF Gel Images:** Loads `pako` 2.1.0 from cdnjs (`cdnjs.cloudflare.com`) and `UTIF` 3.1.0 from jsDelivr (`cdn.jsdelivr.net`) the first time a TIFF image is opened.
 *   **PDB Entries:** Fetches structure files directly from the RCSB Protein Data Bank (`https://files.rcsb.org/download/`) when a PDB code is requested.
 
 ## Repository Layout
-The repository contains only two tracked files:
 *   `hplc-figure-bench(WF1.13).html`: The standalone web application containing all HTML, CSS, and JavaScript.
 *   `README.md`: This documentation file.
+*   `AGENTS.md`: Shared instructions for the coding agents that work on this repository.
+*   `CLAUDE.md`: Points Claude Code to `AGENTS.md`.
+*   `.github/workflows/`: Claude Code GitHub Actions for automatic pull request review and `@claude` mentions.
 
 ## Uncertainties
 *   **Browser Support:** The exact supported browsers and minimum versions are unknown. The code uses modern web APIs (`IndexedDB`, `fetch`, `DecompressionStream`, etc.), suggesting a modern browser is required.
