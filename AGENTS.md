@@ -15,6 +15,7 @@ The owner is a biochemistry graduate student who uses it for real lab data. Scie
 - `AGENTS.md`: this file.
 - `CLAUDE.md`: points Claude Code to this file.
 - `.github/workflows/`: Claude Code GitHub Actions (automatic PR review, and `@claude` mentions).
+- `tests/`: the automated browser test suite and its synthetic test data.
 
 ## How the code is organized
 
@@ -58,14 +59,31 @@ Figure defaults follow publication conventions: the Okabe-Ito colorblind-safe pa
 
 ## Testing
 
-There is no automated test suite. To check your work:
+`tests/` holds an automated browser test suite (Playwright, headless Chromium). See `tests/README.md` for details.
 
-1. Open the HTML file directly in a browser. Example chromatograms load automatically.
-2. `#quick` at the end of the file's URL opens Quick-Figure mode directly.
-3. `#selftest` at the end of the URL exposes internal functions on `window.__HFB` for checking from the browser console.
-4. Exercise the feature you changed, and check the browser console for errors.
+**Before opening a PR that changes the HTML file:**
 
-In every PR description, say exactly what you tested and how. If you could not run a browser, say so plainly. Do not claim testing that did not happen.
+1. Run the suite on your change and on `main`, and compare them:
+   ```
+   cd tests
+   node compare.js
+   ```
+   This tests your working copy of the app against the version on `origin/main` (read from git) and writes `tests/results/compare.md`. A full run takes several minutes. If you cannot run the comparison, run `node run.js` on your change at least.
+2. Paste the summary into the PR description: pass and fail counts per suite, and every regression (a check that passed on `main` and fails on your branch).
+3. A regression is either fixed, or explained in the PR as intended.
+4. When you fix a bug or add a feature, add a check for it to the suite it belongs to.
+
+Checks that already fail on `main` are known problems. They are not yours to fix unless the task asks.
+
+**Rules for the suite:**
+
+- Tests drive the app only through its UI and DOM, never internal functions.
+- All test data is synthetic. Never add real lab files to `tests/`. Inputs that were first real files are mapped to synthetic stand-ins in `tests/lib/harness.js`.
+- Do not weaken or delete a check to make a change pass. If a check is wrong, say why in the PR.
+
+For a quick manual look: open the HTML file in a browser (example chromatograms load automatically), or add `#quick` to the URL for Quick-Figure mode. `#selftest` exposes internal functions on `window.__HFB` for the browser console.
+
+In every PR description, say exactly what you tested and how. Do not claim testing that did not happen.
 
 ## Rules for pull requests
 
@@ -91,6 +109,7 @@ When reviewing, check:
 - That the change does what the linked issue asked, and nothing more.
 - Correctness, especially of parsing, numerical calculations and figure output.
 - Backward compatibility with saved settings and projects.
+- That the PR reports test suite results, and that no check was weakened or removed without a reason.
 - That README claims match what the code actually does.
 - No new external network requests or dependencies.
 

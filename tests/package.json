@@ -1,0 +1,12 @@
+{
+  "name": "hplc-figure-bench-tests",
+  "private": true,
+  "description": "Browser test suite for HPLC Figure Bench",
+  "scripts": {
+    "test": "node run.js",
+    "compare": "node compare.js"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

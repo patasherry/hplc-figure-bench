@@ -1,0 +1,13 @@
+{
+ "sec_inject2.csv": {
+  "injection_ml": 2.0,
+  "ve_from_injection": [
+   12.0,
+   15.0
+  ]
+ },
+ "nd3.csv": {
+  "abs_mean": 1.42,
+  "n": 3
+ }
+}
