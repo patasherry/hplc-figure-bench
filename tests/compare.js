@@ -4,7 +4,7 @@
 //   The baseline is BASE=/path/old.html or BASE=<git ref>; default origin/main.
 // Output: results/compare.md with regressions (pass on baseline, fail on new), fixes, and checks that exist in only one run.
 const { spawnSync } = require('child_process'); const fs = require('fs'); const path = require('path');
-const APPF = require('./lib/harness').APP, arg = process.argv[2] && /\.html?$/i.test(process.argv[2]) ? process.argv[2] : null;
+const APPF = require('./lib/app'), arg = process.argv[2] && /\.html?$/i.test(process.argv[2]) ? process.argv[2] : null;
 const NEW = path.resolve(arg || APPF), filt = process.argv.slice(arg ? 3 : 2);
 if (!fs.existsSync(NEW)) { console.error('No app file at ' + NEW); process.exit(2); }
 /* the baseline: BASE=/path/old.html, or BASE=<git ref> (default origin/main), read from git without touching the working tree */

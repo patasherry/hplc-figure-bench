@@ -7,4 +7,4 @@ const rows = []; for (const f of files) { const t0 = Date.now(); const r = spawn
   rows.push({f, pass, fail, crashed: r.status !== 0 && !fail, s: Math.round((Date.now() - t0)/1000)}); fs.writeFileSync(path.join(__dirname, 'results', f.replace(/\.js$/, '.log')), out);
   console.log(`${f.padEnd(34)} pass ${String(pass).padStart(3)}  fail ${String(fail).padStart(3)}${r.status !== 0 && !fail ? '  CRASHED' : ''}  ${rows[rows.length - 1].s}s`); }
 const P = rows.reduce((a, r) => a + r.pass, 0), F = rows.reduce((a, r) => a + r.fail, 0), C = rows.filter(r => r.crashed).length;
-console.log(`\nTOTAL pass ${P}  fail ${F}  crashed suites ${C}  (APP=${require('./lib/harness').APP})`); process.exit(F || C ? 1 : 0);
+console.log(`\nTOTAL pass ${P}  fail ${F}  crashed suites ${C}  (APP=${require('./lib/app')})`); process.exit(F || C ? 1 : 0);

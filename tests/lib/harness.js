@@ -4,7 +4,7 @@
 const { chromium } = require('playwright'); const fs = require('fs'); const path = require('path'); const http = require('http');
 const ROOT = path.resolve(__dirname, '..'), DATA = path.join(ROOT, 'data'), RES = path.join(ROOT, 'results');
 /* default: the app in the repository root */
-const APP = path.resolve(process.env.APP || path.join(ROOT, '..', fs.readdirSync(path.join(ROOT, '..')).find(f => /^hplc-figure-bench.*\.html$/.test(f)) || 'hplc-figure-bench.html'));
+const APP = require('./app');
 /* Inputs that were first real lab files. The real files are private (unpublished data) and never go in the repository.
    With HFB_PRIVATE_DATA set to the folder that holds them, the suites use the real file; otherwise a synthetic stand-in
    from data/standins (gen_standins.py), in the same format, with the same fraction labels. */

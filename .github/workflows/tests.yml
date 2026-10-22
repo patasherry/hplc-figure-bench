@@ -1,0 +1,120 @@
+name: Test suite
+
+# Runs the browser test suite on every pull request that touches the app or the tests,
+# on the PR's version and on main, and posts what changed as one comment on the PR.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '*.html'
+      - 'tests/**'
+      - '.github/workflows/tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ['00_', '10_', '20_', '30_', '40_']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright
+        working-directory: tests
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Compare this PR with main
+        working-directory: tests
+        env:
+          BASE: origin/${{ github.event.pull_request.base.ref || 'main' }}
+        run: node compare.js ${{ matrix.suite }}
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.suite }}
+          path: |
+            tests/results/compare.md
+            tests/results/new/*.json
+            tests/results/baseline/*.json
+            tests/results/*.log
+            tests/results/shots/
+          if-no-files-found: ignore
+
+  report:
+    needs: suite
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: results
+      - name: Summarize
+        id: sum
+        run: |
+          python3 - <<'EOF'
+          import json, glob, os, re
+          names = {'00_': 'smoke', '10_': 'data truth', '20_': 'science', '30_': 'robustness', '40_': 'visual'}
+          rows, regs, fixes, total_reg, missing = [], [], [], 0, []
+          for key, label in names.items():
+              d = f'results/results-{key}'
+              def counts(sub):
+                  p = f = 0
+                  for j in glob.glob(f'{d}/{sub}/*.json'):
+                      for c in json.load(open(j))['checks']:
+                          p += c['ok']; f += not c['ok']
+                  return p, f
+              md = open(f'{d}/compare.md').read() if os.path.exists(f'{d}/compare.md') else ''
+              if not md:
+                  missing.append(label); rows.append(f'| {label} | - | - | - | did not finish |'); continue
+              bp, bf = counts('baseline'); np_, nf = counts('new')
+              sec = lambda title: re.search(r'## ' + title + r'[^\n]*\((\d+)\)\n(.*?)(?=\n## |\Z)', md, re.S)
+              r, fx = sec('Regressions'), sec('Fixed')
+              nr, nfx = (int(r.group(1)) if r else 0), (int(fx.group(1)) if fx else 0)
+              total_reg += nr
+              if nr: regs.append(f'**{label}**\n' + r.group(2).strip())
+              if nfx: fixes.append(f'**{label}**\n' + fx.group(2).strip())
+              rows.append(f'| {label} | {bp} pass, {bf} fail | {np_} pass, {nf} fail | {nfx} | {nr} |')
+          head = '### ✅ No regressions' if not total_reg and not missing else (f'### ❌ {total_reg} regression(s)' if total_reg else '### ⚠️ Some suites did not finish')
+          out = ['<!-- test-suite-report -->', head, '', '| Suite | main | this PR | Fixed | Regressions |', '|---|---|---|---|---|', *rows, '']
+          if regs: out += ['#### Regressions (passed on main, fail here)', '', *regs, '']
+          if fixes: out += ['<details><summary>Checks this PR fixes</summary>', '', *fixes, '', '</details>', '']
+          if missing: out += [f'Did not finish: {", ".join(missing)}. See the workflow run logs.', '']
+          out += [f'Full results and screenshots: [workflow run]({os.environ["RUN_URL"]}), under Artifacts.']
+          open('report.md', 'w').write('\n'.join(out))
+          open(os.environ['GITHUB_OUTPUT'], 'a').write(f'regressions={total_reg}\nmissing={len(missing)}\n')
+          EOF
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Post or update the PR comment
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[] | select(.body | contains("<!-- test-suite-report -->")) | .id' | head -1)
+          if [ -n "$id" ]; then gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@report.md >/dev/null
+          else gh api "repos/$REPO/issues/$PR/comments" -F body=@report.md >/dev/null; fi
+      - name: Fail on regressions
+        if: steps.sum.outputs.regressions != '0' || steps.sum.outputs.missing != '0'
+        run: exit 1
