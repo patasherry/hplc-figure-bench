@@ -19,13 +19,26 @@ permissions:
   contents: read
 
 jobs:
+  # Every tests/suites/NN_name.js runs as its own job, so a new suite needs no edit to this file.
+  list:
+    runs-on: ubuntu-latest
+    outputs:
+      suites: ${{ steps.ls.outputs.suites }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tests/suites
+      - id: ls
+        run: echo "suites=$(ls tests/suites | sed -n 's/^\([0-9][0-9]_\).*\.js$/\1/p' | sort -u | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split()))')" >> "$GITHUB_OUTPUT"
+
   suite:
+    needs: list
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        suite: ['00_', '10_', '12_', '20_', '22_', '26_', '30_', '40_', '50_']
+        suite: ${{ fromJson(needs.list.outputs.suites) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,13 +70,16 @@ jobs:
           if-no-files-found: ignore
 
   report:
-    needs: suite
+    needs: [list, suite]
     if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tests/suites
       - uses: actions/download-artifact@v4
         with:
           path: results
@@ -72,7 +88,11 @@ jobs:
         run: |
           python3 - <<'EOF'
           import json, glob, os, re
-          names = {'00_': 'smoke', '10_': 'data truth', '12_': 'genbank', '20_': 'science', '22_': 'protein', '26_': 'SEC calibration', '30_': 'robustness', '40_': 'visual', '50_': 'export'}
+          # one row per suite file: '30_robust.js' becomes key '30_' and label 'robust'
+          names = {}
+          for f in sorted(os.listdir('tests/suites')):
+              m = re.match(r'(\d\d_)(.*)\.js$', f)
+              if m and m.group(1) not in names: names[m.group(1)] = m.group(2).replace('_', ' ')
           rows, regs, fixes, total_reg, missing, newfail = [], [], [], 0, [], []
           for key, label in names.items():
               d = f'results/results-{key}'
