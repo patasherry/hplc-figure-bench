@@ -97,5 +97,7 @@ module.exports = async ({github, context, core}) => {
         const exists = (await github.rest.search.issuesAndPullRequests({q: `repo:${owner}/${repo} is:issue in:title "${title.replace(/"/g, '')}"`})).data.total_count;
         if (!exists) { await github.rest.issues.create({owner, repo, title, labels: [L.triage], body: `${body}\n\n_From ${f} (#${p.number})._`}); say(`follow-up issue: ${title}`); } } } }
 
+  /* tell the workflow whether to check again soon (GitHub rarely fires the 15-minute schedule) */
+  core.setOutput('active', key && ((await issues(L.run)).length + (await issues(L.queue)).length) > 0 ? 'true' : 'false');
   await core.summary.addHeading('Jules leader').addList(log.length ? log : ['nothing to do']).write();
 };
