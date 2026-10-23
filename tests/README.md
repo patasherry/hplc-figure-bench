@@ -20,6 +20,8 @@ node run.js 00_ 10_                # run specific suites passed as arguments
 - `node compare.js` runs all suites on your working copy and on `origin/main` baseline, writing `results/compare.md` listing regressions, fixes, and invariant failures. `BASE=<file or git ref>` sets a custom baseline.
 - Test logs and screenshots go to `results/` (not committed).
 
+After running tests, read the output of node failures.js, not the full logs.
+
 ## Suites
 
 | File | Area | What it checks |

@@ -7,6 +7,13 @@ on:
   workflow_dispatch:
   issues:
     types: [labeled]
+  # GitHub often delays or skips scheduled runs, so the leader also wakes on activity:
+  # a finished Test suite run (to merge), and comments from Jules (to see finished or failed sessions).
+  workflow_run:
+    workflows: ['Test suite']
+    types: [completed]
+  issue_comment:
+    types: [created]
 
 concurrency:
   group: jules-leader
@@ -20,7 +27,7 @@ permissions:
 
 jobs:
   lead:
-    if: github.event_name != 'issues' || github.event.label.name == 'jules-queue'
+    if: (github.event_name != 'issues' || github.event.label.name == 'jules-queue') && (github.event_name != 'issue_comment' || contains(github.event.comment.user.login, 'jules'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

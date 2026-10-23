@@ -3769,7 +3769,7 @@ function parseGenBank(text){
   const len = lm ? +lm[2] : seq.length;
   const out = feats.map(f => { const nums = (f.loc.match(/\d+/g) || []).map(Number); if (!nums.length) return null;
     const lab = String(f.q.label || f.q.gene || f.q.product || f.q.note || f.type).replace(/\s+/g, ' ').trim();
-    return {type: f.type, a: Math.min(...nums), b: Math.max(...nums), rev: /complement/.test(f.loc), label: lab, tx: (f.q.translation || '').replace(/[^A-Z*]/gi, '').toUpperCase(), wrap: /join/.test(f.loc) && nums[0] > nums[nums.length - 1]}; }).filter(Boolean);
+    return {type: f.type, a: Math.min(...nums), b: Math.max(...nums), rev: /complement/.test(f.loc), label: lab, tx: (f.q.translation || '').replace(/[^A-Z*]/gi, '').toUpperCase(), wrap: /join/.test(f.loc) && nums[0] > nums[nums.length - 1], loc: f.loc}; }).filter(Boolean);
   return {name: lm ? lm[1] : 'plasmid', len, circ: /circular/i.test(loc), def, feats: out, seq};
 }
 const RES_RE = /\bkan|neo|aph\(|nptii|\bbla\b|amp|beta-lactamase|\bcat\b|chloramph|\bcmr?\b|\btet|spec|aad|strep|gent|zeo|\bble\b|hyg|\bbsd/i, REG_RE = /laci|\brop\b|arac|tetr|lacz|lac ?y|\bori\b/i;
@@ -3778,7 +3778,7 @@ const RES_SHORT = {Kan: 'kanamycin', Amp: 'ampicillin', Cm: 'chloramphenicol', S
 /* the expressed ORF in a GenBank file: the CDS that contains the protein sequence, else the longest CDS that is not a marker or regulator */
 function gbCassette(gb){
   const ps = cleanSeq(opt.protSeq), probe = ps.slice(0, Math.min(25, ps.length));
-  const cds = gb.feats.filter(f => f.type === 'CDS' && !f.wrap).map(f => { let tx = f.tx; if (!tx && gb.seq) { const nt = gb.seq.slice(f.a - 1, f.b); tx = translateNt(f.rev ? revComp(nt) : nt); } return Object.assign({}, f, {tx: tx.replace(/\*+$/, '')}); }).filter(c => c.tx.length >= 30);
+  const cds = gb.feats.filter(f => f.type === 'CDS').map(f => { let tx = f.tx; if (!tx && gb.seq) { const rm = (f.loc || '').match(/(\d+)\.\.(\d+)/g); const nt = rm ? rm.map(r => { const [s, e] = r.split('..').map(Number); return gb.seq.slice(s - 1, e); }).join('') : gb.seq.slice(f.a - 1, f.b); tx = translateNt(f.rev ? revComp(nt) : nt); } return Object.assign({}, f, {tx: tx.replace(/\*+$/, '')}); }).filter(c => c.tx.length >= 30);
   const main = (probe && cds.find(c => c.tx.includes(probe))) || cds.filter(c => !RES_RE.test(c.label) && !REG_RE.test(c.label)).sort((p, q) => q.tx.length - p.tx.length)[0];
   if (!main) return null;
   const up = f => main.rev ? f.a - main.b : main.a - f.b, down = f => main.rev ? main.a - f.b : f.a - main.b;

@@ -99,6 +99,32 @@ await T.t('fuzz', async () => { const {p, errs, close} = await open(), h = H(p);
   await close(); });
 
 /* ---------------- persistence ---------------- */
+await T.t('save-reload', async () => { const {p, errs, close} = await open(), h = H(p);
+  await h.newProject('SaveReload');
+  await h.dropFiles(path.join(DATA, 'standins', 'imac_histrap_1ml_step.csv'));
+  await h.pool('T1-T6');
+  await h.addConc(path.join(DATA, 'nd', 'nd_one_protein_a280.csv'), 0.5);
+  await h.step('figure');
+  const ts = await p.$$('#paper svg text');
+  for (const t of ts) if (/^[A-Z]\s/.test(((await t.textContent()) || '').trim())) {
+    await t.click(); await p.waitForTimeout(300);
+    const i = await p.$(SEL.wfTitle); if (i) { await i.fill('IMAC Step'); await i.press('Enter'); }
+    break;
+  }
+  await openMethods(p); await p.waitForTimeout(400);
+  const tl0 = JSON.stringify(await h.timeline()), sum0 = JSON.stringify(await h.sumTable()), mth0 = await h.methods().catch(() => '');
+  await p.waitForTimeout(3500);
+  await p.reload(); await p.waitForTimeout(1200);
+  const opened = await openCard(p, 'SaveReload');
+  T.check('save-reload.listed', opened, 'opened project from home screen');
+  await h.step('figure'); await openMethods(p); await p.waitForTimeout(400);
+  const tl1 = JSON.stringify(await h.timeline()), sum1 = JSON.stringify(await h.sumTable()), mth1 = await h.methods().catch(() => '');
+  T.check('save-reload.timeline', tl0 === tl1, diff({tl: tl0}, {tl: tl1}));
+  T.check('save-reload.sumTable', sum0 === sum1, diff({sum: sum0}, {sum: sum1}));
+  T.check('save-reload.methods', mth0 === mth1, `methods before len ${mth0.length} vs after len ${mth1.length}`);
+  T.check('save-reload.no-error', !errs.length, errs.join(' | '));
+  await close(); });
+
 async function build(p, h){ await h.newProject('Persist'); await h.dropFiles(F.his); await h.pool('T1-T6'); await h.addConc(F.ndSpec, 0.25); await h.dropFiles(F.zip); await h.dropFiles(F.q); await h.pool('T11-T16');
   await h.step('figure'); const t = (await p.$$('#paper svg text')); for (const x of t) if (/^[A-Z]\s/.test(((await x.textContent()) || '').trim())) { await x.click(); await p.waitForTimeout(300); const i = await p.$(SEL.wfTitle); if (i) { await i.fill('Renamed panel'); await i.press('Enter'); } break; }
   await p.waitForTimeout(3500); }

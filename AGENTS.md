@@ -14,10 +14,12 @@ The owner is a biochemistry graduate student who uses it for real lab data. Scie
 - `README.md`: user-facing documentation.
 - `AGENTS.md`: this file.
 - `CLAUDE.md`: points Claude Code to this file.
-- `.github/workflows/`: GitHub Actions: Claude Code (automatic PR review, `@claude` mentions) and the test suite on every PR.
+- `.github/workflows/`: GitHub Actions: Claude Code (automatic PR review on app changes, `@claude` mentions) and the test suite on every PR.
 - `tests/`: the automated browser test suite and its synthetic test data.
 
 ## How the code is organized
+
+Read docs/CODEMAP.md first. Open only the lines you need from the HTML file.
 
 - One `<style>` block, then one `<script>` block.
 - All JavaScript lives inside a single strict-mode IIFE: `(function(){ "use strict"; ... })();`. There are no modules, no build step, no package manager and no framework. Keep it that way.
@@ -77,6 +79,8 @@ The `Test suite` GitHub Action also runs this comparison on every PR that touche
 
 Checks that already fail on `main` are known problems. They are not yours to fix unless the task asks.
 
+After running tests, read the output of node failures.js, not the full logs.
+
 **Rules for the suite:**
 
 - Tests drive the app only through its UI and DOM, never internal functions.
@@ -100,7 +104,7 @@ In every PR description, say exactly what you tested and how. Do not claim testi
 ## How agents divide the work
 
 - **Jules** works from issues labeled `jules`.
-- **Claude** reviews every PR automatically and is called with `@claude`.
+- **Claude** reviews PRs changing the app automatically and is called on any PR with `@claude`.
 - Agents never push to another agent's branch: a revision goes on a new branch.
 - Only one PR at a time should change the HTML file, because changes to the same large file will conflict.
 
