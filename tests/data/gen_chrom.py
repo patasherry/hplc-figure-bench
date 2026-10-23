@@ -290,8 +290,30 @@ def sec_zip_edge():
              peaks=[dict(ve=12.0, tol=0.08, must=True, note='inside the fractions'), dict(ve=16.0, tol=0.1, must=True, note='apex exactly at the end of the fraction range')],
              pool=None))
 
+# ---------------------------------------------------------------- J. units behind the mg estimate (the "mg" list in expected.json)
+# One Gaussian, 1 mg/mL = 1 A280 (eps 1), 10 mm path typed on the card. mg = area in mAU*mL / 1000 / (eps*path/10).
+# On a time axis the area is mAU*min, so mg also needs the flow: area_mAU*mL = area_mAU*min * flow.
+MG = []
+def mg_run(fn, xu, yu, flow_curve, scale=1.0):
+    x = np.round(np.arange(0, 40.0001, 0.01), 4); comps = [(20.0, 0.5, 2000.0)]
+    y = signal(x, comps)*scale                                   # no noise: the area is exact
+    ev = frac_events(17.0, 1.0, [f'F{i}' for i in range(1, 7)]); cur = [('UV', xu, yu, x, y), ('Fraction', xu, 'Fraction', ev, None)]
+    if flow_curve: cur.append(('System flow', xu, 'ml/min', x[::10], np.full(x[::10].size, 0.5)))
+    write_unicorn_csv(os.path.join(OUT, fn), cur)
+    return area(comps, 17.0, 23.0)
+def hplc_min_flow():
+    fn = 'hplc_min_flow_known_u7.csv'; ar = mg_run(fn, 'min', 'mAU', True)
+    MG.append(dict(file=fn, note='x in minutes, flow 0.5 mL/min in the file, mAU', unit='min', flow=0.5, pool='F1-F6', path_mm=10, eps=POOL_EPS, area=round(ar, 2), mg=round(ar*0.5/1000/(POOL_EPS*1.0), 4)))
+def hplc_min_noflow():
+    fn = 'hplc_min_flow_missing_u7.csv'; ar = mg_run(fn, 'min', 'mAU', False)
+    MG.append(dict(file=fn, note='x in minutes, no flow in the file: no mg until a flow is typed (0.5 mL/min)', unit='min', flow=None, typed_flow=0.5, pool='F1-F6', path_mm=10, eps=POOL_EPS, area=round(ar, 2), mg=None, mg_with_flow=round(ar*0.5/1000/(POOL_EPS*1.0), 4)))
+def au_trace():
+    fn = 'hplc_au_ml_u7.csv'; ar = mg_run(fn, 'ml', 'AU', False, 0.001)
+    MG.append(dict(file=fn, note='y in AU (not mAU), x in mL', unit='mL', flow=None, pool='F1-F6', path_mm=10, eps=POOL_EPS, area=round(ar/1000, 4), mg=round(ar/1000/(POOL_EPS*1.0), 4)))
+
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
+    doc['mg'] = MG
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()
     json.dump(doc, open(p, 'w'), indent=1); print(f'{len(EXP)} chromatograms -> {OUT}')

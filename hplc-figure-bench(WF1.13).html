@@ -1824,7 +1824,11 @@ function secLabel(info, kind){
   if (kind === 'olig' && info.ratio != null) return `${mw} (${fmt(info.ratio, 1)}× monomer)`;
   return mw;
 }
-const massOf = (area, run) => { const E = run && typeof ndEpsFor === 'function' ? ndEpsFor(run.id) : null, e = E ? E.e : numOr(opt.eps, 0), p = numOr(run && run.path, numOr(opt.path, 2)); return e > 0 && p > 0 ? (area/1000)/(e*p/10) : null; };
+/* mg from a UV area needs: the signal in mAU or AU, volume on the x axis (minutes only with a known flow) and the UV path. massWhy says which is missing, '' when none */
+const uvDiv = run => { const u = String(((run && run.uvs && uvOf(run)) || {}).yu || '').trim(); return /^mau$/i.test(u) ? 1000 : /^au$/i.test(u) ? 1 : 0; };
+const uvFlow = run => numOr(run && run.mFlow, numOr(run && run.flowAuto, 0));
+const massWhy = run => !run || !run.uvs ? 'no UV trace' : !uvDiv(run) ? 'the UV signal is not in mAU or AU' : xUnit(run) === 'min' && !(uvFlow(run) > 0) ? 'the x axis is in minutes and the flow rate is not known (enter it under Flow)' : !(numOr(run.path, 0) > 0) ? 'the UV path is not known (enter it on the run card)' : '';
+const massOf = (area, run) => { if (massWhy(run)) return null; const E = typeof ndEpsFor === 'function' ? ndEpsFor(run.id) : null, e = E ? E.e : numOr(opt.eps, 0), p = numOr(run.path, 0), a = xUnit(run) === 'min' ? area*uvFlow(run) : area; return e > 0 && p > 0 ? (a/uvDiv(run))/(e*p/10) : null; };
 /* least-squares fit of a sum of Gaussians (Levenberg-Marquardt). p = [H1, mu1, s1, H2, mu2, s2, ...] */
 function fitGaussians(xs, ys, p, lo, hi, smin){
   p = p.slice(); const n = p.length, m = xs.length, smax = Math.max(smin*2, hi - lo);
@@ -4296,9 +4300,9 @@ function renderList(){
       ${segs.length > 12 ? `<label class="f">Show<select id="cr${r.id}" data-k="crop" title="Crop the chromatogram to the fractions that matter. A window dragged on the plot still wins"><option value="">All fractions</option><option value="peaks"${r.crop === 'peaks' ? ' selected' : ''}>Fractions around the peaks</option><option value="pool"${r.crop === 'pool' ? ' selected' : ''}>Fractions around the pool</option></select></label>` : ''}
       <div class="cardopts">
         ${PROJ ? '' : cardType}
-        <label class="eye" title="UV flow cell path of the instrument this run was on (ÄKTA usually 2 mm, HPLC often 10 mm). Used for mg from the A280 area">UV path (mm)<input type="number" step="any" min="0.1" id="up${r.id}" data-k="path" value="${esc(r.path ?? '')}" placeholder="assumed: ${esc(String(numOr(opt.path, 2)))}" class="tiny autoval" title="Not in the file. ÄKTA monitors are usually 2 mm, HPLC flow cells often 10 mm"></label>
+        <label class="eye" title="UV flow cell path of the instrument this run was on (ÄKTA usually 2 mm, HPLC often 10 mm). Used for mg from the A280 area">UV path (mm)<input type="number" step="any" min="0.1" id="up${r.id}" data-k="path" value="${esc(r.path ?? '')}" placeholder="required for mg" class="tiny" title="Not in the file. ÄKTA monitors are usually 2 mm, HPLC flow cells often 10 mm. No mg is shown until it is entered"></label>
       </div>
-      ${r.inWf && !hasTxt(r.path) && !(poolRows(r) || {}).measured ? '<p class="hint uvhint">ÄKTA monitors are usually 2 mm, HPLC flow cells often 10 mm. The mg from the UV area depend on it.</p>' : ''}
+      ${r.inWf && massWhy(r) && !(poolRows(r) || {}).measured ? `<p class="hint uvhint">No mg from the UV area: ${esc(massWhy(r))}.${hasTxt(r.path) ? '' : ' ÄKTA monitors are usually 2 mm, HPLC flow cells often 10 mm.'}</p>` : ''}
       ${(() => { const c = runCond(r), f = (k, lab, ph, extra) => `<label class="f">${lab}<input type="${extra && extra.num ? 'number' : 'text'}"${extra && extra.num ? ' step="any" min="0"' : ''} id="${k}${r.id}" data-k="${k}" value="${esc(r[k] == null ? '' : r[k])}" placeholder="${esc(c.auto[k] ? 'auto: ' + c.auto[k] : ph)}"${c.auto[k] ? ` class="autoval" title="Read from the run: ${esc(c.auto[k])}. This is what the figure and methods use until you type your own."` : ''}></label>`;
         const filled = COND_KEYS.some(k => String(r[k] || '').trim());
         const miss = runNeeds(r).filter(n => !/UV path/.test(n)), sumT = [c.mCol, c.mFlow ? `${c.mFlow} mL/min` : ''].filter(Boolean).join(', ');
@@ -4760,6 +4764,7 @@ function renderSumTable(){
     { const wf = runs.filter(r => r.inWf), c = cutAfterIndex(); if (c >= 0 && !prep.cleave && !wf.some(r => PROT_NOTE.test(String(r.note || '')) && !PROT_NOT.test(String(r.note || '')))) notes.push(`The tag is assumed to be cut before step ${c + 2} (${stepTitle(wf[c + 1])}), so steps up to ${c + 1} use the tagged form. Add a cleavage step to set where it happens.`); wf.forEach((r, i) => { if ((String(r.stepName || '').trim() || guessStep(r)) === 'Reverse IMAC' && c >= 0 && i <= c) notes.push(`Step ${rows.findIndex(x => x.r === r) + 1} (Reverse IMAC) comes before the tag is cut, so the tagged protein would bind. Move the cleavage step before it.`); }); }
     const q = prep.on ? exprQuant() : {}; if (q.level || q.sol) notes.push(`Expression gel: ${q.level ? `the tagged protein is ≈${fmt(q.level.pct, 0)}% of the stain in lane ${q.level.lane}` : ''}${q.level && q.sol ? ', and ' : ''}${q.sol ? `≈${fmt(q.sol.pct, 0)}% of it is soluble (${q.sol.s} against ${q.sol.p}, assuming both were loaded from equal culture volumes)` : ''}. Bands within 8% of the tagged size are counted, so a co-migrating host protein adds to it.`); }
   rows.forEach((x, k) => { const nm = `Step ${k + 1} (${stepTitle(x.r) !== x.r.name ? stepTitle(x.r) : shortRunName(x.r)})`;
+    if (!x.p.none && !x.p.measured && massWhy(x.r)) notes.push(`${nm}: no protein mg from the UV area, because ${massWhy(x.r)}.`);
     if (x.yld > 100) notes.push(`${nm}: above 100% of ${rows.baseMan ? `the ${rows.baseMan.name} step` : 'step 1'}. Check each run's UV path (mm), then the yield basis and volumes.`);
     else if (x.stepY > 105) notes.push(`${nm}: ${fmt(x.stepY, 0)}% of ${x.fromKept ? 'the amount measured before it was loaded' : 'the step before'}, which can't be a real gain. Check its UV path (mm) on the run card (HPLC cells are often 10 mm), then whether the pool was concentrated before loading.`);
     else if (x.stepY != null && x.stepY < 20) notes.push(`${nm}: only ${fmt(x.stepY, 0)}% of the step before was recovered, so most protein was lost here. Check the unpooled peaks and the flow-through.`);
@@ -4808,7 +4813,8 @@ function renderIntTable(run){
   const blank = n => '<td></td>'.repeat(n);
   const pr = pool ? `<tr class="pool" title="UV area across the pooled fractions, same baseline as the regions"><td><span class="sw" style="background:${esc(opt.poolColor)}"></span>Pool ${esc(pool.label)}</td><td>${fmt(pool.a, 2)}</td><td>${fmt(pool.b, 2)}</td>${blank(1 + (hasKav ? 1 : 0) + (hasMw ? 1 : 0) + (hasOl ? 1 : 0) + 1)}${gs ? '<td></td>' : ''}<td>${fmtAuto(pool.area)}</td><td></td>${hasMg ? `<td>${pool.mg == null ? '' : fmt(pool.mg, 2)}</td>` : ''}${rat ? '<td></td>' : ''}${gs ? '<td></td>' : ''}<td></td></tr>` : '';
   const note = sec && !hasMw && opt.secStds ? `<tr><td colspan="${cols}" class="empty-row">Add a column calibration under Size exclusion (SEC) to see apparent molecular weights and oligomer states.</td></tr>` : '';
-  $('#intTable').innerHTML = head + (body + pr || `<tr><td colspan="${cols}" class="empty-row">No regions yet. Drag across the chromatogram, or click Detect peaks.</td></tr>`) + note;
+  const mgWhy = hasMg ? massWhy(run) : '', mgNote = mgWhy ? `<tr><td colspan="${cols}" class="empty-row">No protein mg: ${esc(mgWhy)}.</td></tr>` : '';
+  $('#intTable').innerHTML = head + (body + pr || `<tr><td colspan="${cols}" class="empty-row">No regions yet. Drag across the chromatogram, or click Detect peaks.</td></tr>`) + note + mgNote;
   /* FWHM, fit quality and A260/A280 wait behind More columns */
   { const tb = $('#intTable'), hd = [...(tb.rows[0] || {cells: []}).cells].map(c => c.textContent), extra = hd.map(t => /FWHM|Fit R|A₂₆₀\/A₂₈₀|Height/.test(t));
     [...tb.rows].forEach(r => { if (r.cells.length !== hd.length) return; [...r.cells].forEach((c, i) => c.classList.toggle('xc', !!extra[i])); });

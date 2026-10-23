@@ -11,6 +11,7 @@ const card = p => p.locator('.trace.run.sel').first();
 const cardText = async p => (await card(p).innerText()).replace(/\s+/g, ' ');
 const field = async (p, k) => { const el = card(p).locator(`[data-k=${k}]`).first(); if (!(await el.count())) return ''; const v = await el.inputValue().catch(() => ''); return v || (await el.getAttribute('placeholder')) || ''; };
 const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, String(v)]);
+const setRun = async (p, k, v) => { const l = p.locator(`.trace.run.sel [data-k=${k}]`).first(); await l.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } }); await l.fill(String(v)); await l.dispatchEvent('change'); await p.waitForTimeout(400); };
 const detect = async p => { await p.evaluate(() => { const b = document.getElementById('intAuto'); if (b) b.click(); }); await p.waitForTimeout(900); };
 /* the peak table as objects keyed by header, with the Ve/apex column under "ve" */
 async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return {head: [], rows: []}; const head = t[0];
@@ -60,7 +61,11 @@ async function chromFile(e){ const id = e.file.replace(/\.[^.]+$/, ''), t0 = Dat
         T.check(`${id}/pool-span`, Math.abs(pr.a - e.pool.a) < 0.02 && Math.abs(pr.b - e.pool.b) < 0.02, `expected ${e.pool.a}–${e.pool.b}, got ${pr.a}–${pr.b}`);
         // guards: the pool's A280 area, the number every mg estimate is built on
         T.check(`${id}/pool-area`, Math.abs(pr.area - e.pool.area) <= e.pool.area*e.pool.area_tol_pct/100, `expected ${e.pool.area} ±${e.pool.area_tol_pct}%, got ${pr.area}`);
-        // guards: mg = area / 1000 / (eps × path/10), with eps set to the stated value and the file's (or default 2 mm) path
+        // guards: a path length that is not in the file is never assumed: no mg (and a note saying why) until it is typed on the run card
+        if (e.pool.mg != null && !/\.zip$/.test(e.file)) { T.check(`${id}/no-mg-without-path`, Number.isNaN(pr.mg), `mg shown without a UV path: ${pr.mg}`);
+          T.check(`${id}/no-mg-path-note`, /UV path/i.test((await p.locator('#intTable').innerText()).replace(/\s+/g, ' ')), 'the peak table does not say a UV path is missing');
+          await setRun(p, 'path', e.path_mm); pr.mg = ((await peaks(p, h)).rows.find(r => /^pool/i.test(r.name)) || {}).mg; }
+        // guards: mg = area / 1000 / (eps × path/10), with eps set to the stated value and the UV path of the file or the one typed on the card
         if (e.pool.mg != null) T.check(`${id}/pool-mg`, Math.abs(pr.mg - e.pool.mg) <= Math.max(0.011, e.pool.mg*(e.pool.area_tol_pct || 5)/100), `expected ${e.pool.mg} mg (eps ${e.pool.eps}, ${e.path_mm} mm), got ${pr.mg}`); } }
   } finally {
     // guards: no script errors while loading and analysing this file
@@ -94,7 +99,36 @@ async function ndFile(e, withEps){ const id = e.file.replace(/\.[^.]+$/, '') + (
   } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
 }
 
+/* mg from the UV area needs the right units: minutes only with a flow, AU not mAU, and a typed path length */
+async function mgFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
+  const {p, errs, close} = await open(), h = H(p), pool = async () => (await peaks(p, h)).rows.find(r => /^pool/i.test(r.name)), tbl = async () => (await p.locator('#intTable').innerText()).replace(/\s+/g, ' '), tol = x => Math.max(0.011, x*0.05);
+  try {
+    await h.newProject('mg ' + id); await h.addRun(path.join(CH, e.file)); await setOpt(p, 'o-eps', e.eps); await h.pool(e.pool);
+    const area = (await pool() || {}).area;
+    // guards: the area is read in the unit of the file (mAU*mL, AU*mL or mAU*min)
+    T.check(`${id}/area`, Math.abs(area - e.area) <= e.area*0.05, `expected ${e.area}, got ${area}`);
+    // guards: no UV path in the file, so no mg and a note, never the old 2 mm default
+    T.check(`${id}/no-mg-without-path`, Number.isNaN((await pool()).mg), `mg shown without a UV path: ${(await pool()).mg}`);
+    T.check(`${id}/path-note`, /UV path/i.test(await tbl()), (await tbl()).slice(-200));
+    await setRun(p, 'path', e.path_mm);
+    if (e.mg == null) { // guards: minutes without a known flow give no mg, and the note says it is the flow
+      T.check(`${id}/no-mg-without-flow`, Number.isNaN((await pool()).mg), `mg shown on a time axis without a flow: ${(await pool()).mg}`);
+      T.check(`${id}/flow-note`, /flow/i.test(await tbl()), (await tbl()).slice(-200));
+      await setRun(p, 'mFlow', e.typed_flow); e.mg = e.mg_with_flow; }
+    // guards: mg = area (mAU*mL) / 1000 / (eps × path/10); minutes are turned into mL with the flow, AU is not divided by 1000
+    const mg = (await pool()).mg; T.check(`${id}/pool-mg`, Math.abs(mg - e.mg) <= tol(e.mg), `expected ${e.mg} mg, got ${mg}`);
+    await detect(p);
+    // guards: a peak row follows the same units as the pool
+    const pr = (await peaks(p, h)).rows.filter(r => !/^pool/i.test(r.name)).sort((a, b) => b.area - a.area)[0];
+    T.check(`${id}/peak-mg`, pr && Math.abs(pr.mg - e.mg) <= tol(e.mg), `expected about ${e.mg} mg, peak row ${pr && pr.mg}`);
+    // guards: the summary table and methods show the same mg and no NaN
+    await h.step('figure'); const st = (await h.sumTable()).map(r => r.join(' | ')).join('\n');
+    T.check(`${id}/summary-clean`, !/NaN|undefined|null/.test(st + (await h.methods())), st.slice(0, 300));
+  } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
+}
+
 (async () => {
+  for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
   T.done(); })();
