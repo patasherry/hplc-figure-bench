@@ -56,6 +56,11 @@ await T.t('bad', async () => { const {p, errs, close} = await open(), h = H(p); 
     T.check(`bad.${id}.toast`, ts.some(t => t.length > 15), `toasts: ${ts.join(' | ') || 'none'}`); // says why nothing was used
     T.check(`bad.${id}.no-protein-reading`, !/mg\/mL/.test(st.s || ''), `step now reads: ${st.s}`); // DNA or a photo must not become a protein concentration
     T.check(`bad.${id}.no-error`, errs.length === e0, errs.slice(e0).join(' | ')); }
+  /* adding a second Concentrated step when all column runs already have one adds a manual conc step without timing out */
+  const cBefore = (await h.timeline()).length;
+  await h.addConc(null, '0.5');
+  const cAfter = (await h.timeline()).length;
+  T.check('ok.second-conc-step', cAfter === cBefore + 1, `timeline ${cBefore}->${cAfter}`);
   await close(); });
 
 /* ---------------- operation fuzz, fixed seed ---------------- */
@@ -94,6 +99,32 @@ await T.t('fuzz', async () => { const {p, errs, close} = await open(), h = H(p);
   await close(); });
 
 /* ---------------- persistence ---------------- */
+await T.t('save-reload', async () => { const {p, errs, close} = await open(), h = H(p);
+  await h.newProject('SaveReload');
+  await h.dropFiles(path.join(DATA, 'standins', 'imac_histrap_1ml_step.csv'));
+  await h.pool('T1-T6');
+  await h.addConc(path.join(DATA, 'nd', 'nd_one_protein_a280.csv'), 0.5);
+  await h.step('figure');
+  const ts = await p.$$('#paper svg text');
+  for (const t of ts) if (/^[A-Z]\s/.test(((await t.textContent()) || '').trim())) {
+    await t.click(); await p.waitForTimeout(300);
+    const i = await p.$(SEL.wfTitle); if (i) { await i.fill('IMAC Step'); await i.press('Enter'); }
+    break;
+  }
+  await openMethods(p); await p.waitForTimeout(400);
+  const tl0 = JSON.stringify(await h.timeline()), sum0 = JSON.stringify(await h.sumTable()), mth0 = await h.methods().catch(() => '');
+  await p.waitForTimeout(3500);
+  await p.reload(); await p.waitForTimeout(1200);
+  const opened = await openCard(p, 'SaveReload');
+  T.check('save-reload.listed', opened, 'opened project from home screen');
+  await h.step('figure'); await openMethods(p); await p.waitForTimeout(400);
+  const tl1 = JSON.stringify(await h.timeline()), sum1 = JSON.stringify(await h.sumTable()), mth1 = await h.methods().catch(() => '');
+  T.check('save-reload.timeline', tl0 === tl1, diff({tl: tl0}, {tl: tl1}));
+  T.check('save-reload.sumTable', sum0 === sum1, diff({sum: sum0}, {sum: sum1}));
+  T.check('save-reload.methods', mth0 === mth1, `methods before len ${mth0.length} vs after len ${mth1.length}`);
+  T.check('save-reload.no-error', !errs.length, errs.join(' | '));
+  await close(); });
+
 async function build(p, h){ await h.newProject('Persist'); await h.dropFiles(F.his); await h.pool('T1-T6'); await h.addConc(F.ndSpec, 0.25); await h.dropFiles(F.zip); await h.dropFiles(F.q); await h.pool('T11-T16');
   await h.step('figure'); const t = (await p.$$('#paper svg text')); for (const x of t) if (/^[A-Z]\s/.test(((await x.textContent()) || '').trim())) { await x.click(); await p.waitForTimeout(300); const i = await p.$(SEL.wfTitle); if (i) { await i.fill('Renamed panel'); await i.press('Enter'); } break; }
   await p.waitForTimeout(3500); }
@@ -105,6 +136,24 @@ for (const cloud of [false, true]) await T.t(cloud ? 'persist-cloud' : 'persist-
     await p.click(SEL.home); await p.waitForTimeout(600); await p.setInputFiles(SEL.importFile, f); await p.waitForTimeout(3500); const c = await snapshot(p, h);
     T.check('persist.export-import.same', !diff(a, c), diff(a, c)); } // an exported file imports to the same project
   T.check(`persist.${tag}.no-error`, !errs.length, errs.join(' | ')); await close(); });
+
+/* ---------------- older and partial project files ---------------- */
+await T.t('partial-project', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p);
+  await h.newProject('Partial base'); await h.dropFiles(F.his); await h.addConc(F.ndSpec, 0.25);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]);
+  const origPath = path.join(ROOT, 'results', 'partial_orig.json'); await dl.saveAs(origPath);
+  const origJson = JSON.parse(fs.readFileSync(origPath, 'utf8'));
+  for (const sec of ['gels', 'nanodrop', 'traces', 'opt']) {
+    const mod = JSON.parse(JSON.stringify(origJson)); delete mod[sec];
+    const modPath = path.join(ROOT, 'results', `partial_no_${sec}.json`); fs.writeFileSync(modPath, JSON.stringify(mod));
+    const e0 = errs.length; await p.setInputFiles(SEL.importFile, modPath); await p.waitForTimeout(3000); const ts = await takeToasts(p);
+    T.check(`partial.${sec}.no-error`, errs.length === e0, errs.slice(e0).join(' | '));
+    const tl = await h.timeline(), hasRun = tl.some(x => x.k.startsWith('run:')), hasND = tl.some(x => /mg\/mL/.test(x.s || ''));
+    if (sec === 'nanodrop') T.check(`partial.${sec}.remaining-data`, hasRun && !hasND, `run=${hasRun}, nd=${hasND}`);
+    else T.check(`partial.${sec}.remaining-data`, hasRun && hasND, `run=${hasRun}, nd=${hasND}`);
+    T.check(`partial.${sec}.message`, ts.length > 0, `toasts: ${ts.join(' | ') || 'none'}`);
+  }
+  await close(); });
 
 /* ---------------- performance budgets ---------------- */
 await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Perf');

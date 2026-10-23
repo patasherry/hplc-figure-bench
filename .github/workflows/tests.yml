@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: ['00_', '10_', '20_', '25_', '30_', '40_']
+        suite: ['00_', '10_', '12_', '20_', '25_', '30_', '40_', '50_']
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,8 +72,8 @@ jobs:
         run: |
           python3 - <<'EOF'
           import json, glob, os, re
-          names = {'00_': 'smoke', '10_': 'data truth', '20_': 'science', '25_': 'gels', '30_': 'robustness', '40_': 'visual'}
-          rows, regs, fixes, total_reg, missing = [], [], [], 0, []
+          names = {'00_': 'smoke', '10_': 'data truth', '12_': 'genbank', '20_': 'science', '25_': 'gels', '30_': 'robustness', '40_': 'visual', '50_': 'export'}
+          rows, regs, fixes, total_reg, missing, newfail = [], [], [], 0, [], []
           for key, label in names.items():
               d = f'results/results-{key}'
               def counts(sub):
@@ -92,11 +92,14 @@ jobs:
               total_reg += nr
               if nr: regs.append(f'**{label}**\n' + r.group(2).strip())
               if nfx: fixes.append(f'**{label}**\n' + fx.group(2).strip())
+              nb = sec('Checks only on new')
+              if nb: newfail.extend([l for l in nb.group(2).strip().split('\n') if '(FAIL:' in l])
               rows.append(f'| {label} | {bp} pass, {bf} fail | {np_} pass, {nf} fail | {nfx} | {nr} |')
           head = '### ✅ No regressions' if not total_reg and not missing else (f'### ❌ {total_reg} regression(s)' if total_reg else '### ⚠️ Some suites did not finish')
           out = ['<!-- test-suite-report -->', head, '', '| Suite | main | this PR | Fixed | Regressions |', '|---|---|---|---|---|', *rows, '']
           if regs: out += ['#### Regressions (passed on main, fail here)', '', *regs, '']
           if fixes: out += ['<details><summary>Checks this PR fixes</summary>', '', *fixes, '', '</details>', '']
+          if newfail: out += ['#### New checks failing (possible bugs found)', '', *newfail, '']
           if missing: out += [f'Did not finish: {", ".join(missing)}. See the workflow run logs.', '']
           out += [f'Full results and screenshots: [workflow run]({os.environ["RUN_URL"]}), under Artifacts.']
           open('report.md', 'w').write('\n'.join(out))

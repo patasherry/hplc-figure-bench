@@ -123,7 +123,28 @@ async function mgFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
   } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
 }
 
+/* pool volume when the pool includes the last fraction: the last fraction ends at the logged end of fractionation, else one median width, not at the end of the trace */
+async function lastFracFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('lastfrac ' + id); await h.addRun(path.join(CH, e.file)); await p.waitForTimeout(300); await h.pool(e.pool);
+    /* the run card redraws its notes when the step is opened again */
+    { const k = ((await h.timeline()).find(x => /^run:/.test(x.k)) || {}).k; await h.step('figure'); if (k) await h.step(k); }
+    const ct = await cardText(p);
+    T.check(`${id}/fractions`, ct.includes(`${e.n} fractions, ${e.first} to ${e.last}`), `card: ${ct.slice(0, 200)}`);
+    // guards: the run card says when a pooled fraction's end is assumed or it is much wider than the others
+    if (e.card_note) T.check(`${id}/card-note`, new RegExp(e.card_note).test(ct), `expected a note matching "${e.card_note}", card: ${ct.slice(0, 300)}`);
+    else T.check(`${id}/no-card-note`, !/not logged|1\.5 times/.test(ct), ct.slice(0, 300));
+    await h.step('figure'); const st = await h.sumTable(), hd = st[0] || [], iv = hd.findIndex(c => /^Volume/.test(c)), row = st.slice(1).find(r => r.length > 2 && /\d/.test(r[iv] || ''));
+    // guards: the pool volume (summary table Volume column) is the fractions' own volume, without the wash after the last one
+    T.check(`${id}/summary-volume`, row && Math.abs(num(row[iv]) - e.vol) < 0.06, `${e.note}: expected ${e.vol} mL, table: ${st.map(r => r.join(' | ')).join(' / ').slice(0, 300)}`);
+    // guards: the methods sentence "Fractions ... (N mL) were pooled" uses the same volume
+    const meth = await h.methods(), mm = meth.match(/\((\d+(?:\.\d+)?) mL\) were pooled/); T.check(`${id}/methods-volume`, mm && Math.abs(+mm[1] - e.vol) < 0.06, `expected ${e.vol} mL, methods: ${meth.slice(0, 300)}`);
+  } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
+}
+
 (async () => {
+  for (const e of EXP.lastfrac || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => lastFracFile(e)); }
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
