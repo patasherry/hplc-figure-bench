@@ -1721,7 +1721,7 @@ function poolBlocks(run){
 function runUV(run){ const uvC = uvOf(run), a = runAuto(run), lo = numOr(run.xmin, a.lo), hi = numOr(run.xmax, a.hi); return Object.assign(processXY(uvC.xs, uvC.ys, lo, hi, false, 1), {lo, hi}); }
 function clipXY(xs, ys, a, b){
   a = Math.max(a, xs[0]); b = Math.min(b, xs[xs.length - 1]); if (!(b > a)) return {xs: [], ys: []};
-  const at = x => { const i = lowerBound(xs, x); return i === 0 || xs[i] === x ? ys[i] : ys[i-1] + (ys[i] - ys[i-1])*(x - xs[i-1])/(xs[i] - xs[i-1]); };
+  const at = x => { const i = lowerBound(xs, x); return i === 0 || xs[i] === x ? ys[i] : ys[i-1] + (ys[i] - ys[i-1])*(x - xs[i-1])/((xs[i] - xs[i-1]) || 1); };
   const i = lowerBound(xs, a), j = lowerBound(xs, b), xx = xs.slice(i, j), yy = ys.slice(i, j);
   if (xx[0] !== a) { xx.unshift(a); yy.unshift(at(a)); } xx.push(b); yy.push(at(b)); return {xs: xx, ys: yy};
 }
@@ -5543,10 +5543,10 @@ async function openProject(data, name, noUndo){
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image; processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
   runs = data.runs; traces = data.traces || []; gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
-  if (data.opt) { const myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, DEF, data.opt);
+  if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
     { const pq = Array.isArray(opt.myQuick) ? opt.myQuick : [], del = new Set([...(myQDel || []), ...(Array.isArray(opt.myQuickDel) ? opt.myQuickDel : [])]); opt.myQuickDel = [...del]; opt.myQuick = myQ.concat(pq.filter(q => !myQ.some(m => m.id === q.id))).filter(q => !del.has(q.id)); }
     const pc = Array.isArray(opt.secCals) ? opt.secCals : []; opt.secCals = pc.concat(myCals.filter(c => !pc.some(x => x.id === c.id)));
-    if (myKnown) { const pk = Array.isArray(opt.known) ? opt.known : []; opt.known = myKnown.concat(pk.filter(k => !myKnown.some(m => m.name === k.name && +m.kda === +k.kda))); } tidyOpt(); }
+    if (myKnown) { const pk = Array.isArray(dopt.known) ? dopt.known : []; opt.known = myKnown.concat(pk.filter(k => !myKnown.some(m => m.name === k.name && +m.kda === +k.kda))); } tidyOpt(); }
   let mx = 0; [...runs, ...gels].forEach(x => { const m = String(x.id).match(/\d+/); if (m) mx = Math.max(mx, +m[0]); }); traces.forEach(t => { mx = Math.max(mx, +t.id || 0); }); uid = Math.max(mx + 1, numOr(prep.nextUid, 0));
   cur = data.cur || 'overlay'; marking = null; tagMode = '';
   renderList(); syncControls(); render(); saveOpt();
