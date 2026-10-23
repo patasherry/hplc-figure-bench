@@ -68,7 +68,9 @@ module.exports = async ({github, context, core}) => {
     const cs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: p.number, per_page: 100}), rep = cs.reverse().find(c => c.body.includes('<!-- test-suite-report -->'));
     const testsTouched = files.some(f => f.startsWith('tests/'));
     if (testsTouched && !(runs.length && runs[0].status === 'completed' && runs[0].conclusion === 'success' && rep && /No regressions/.test(rep.body))) continue;
-    const full = (await github.rest.pulls.get({owner, repo, pull_number: p.number})).data;
+    /* GitHub works out mergeability in the background: ask a few times before giving up for this run */
+    let full = (await github.rest.pulls.get({owner, repo, pull_number: p.number})).data;
+    for (let k = 0; k < 4 && full.mergeable === null; k++) { await new Promise(r => setTimeout(r, 4000)); full = (await github.rest.pulls.get({owner, repo, pull_number: p.number})).data; }
     if (full.mergeable_state === 'dirty') { if (!labels.includes(L.fail)) { await setLabels(p.number, [L.fail], []); await github.rest.issues.createComment({owner, repo, issue_number: p.number, body: 'Jules leader: this PR has merge conflicts with main. Needs the coordinator.'}); } continue; }
     if (full.mergeable !== true) continue;
     if (p.labels.some(l => l.name === L.fail)) await setLabels(p.number, [], [L.fail]);
