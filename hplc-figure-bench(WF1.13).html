@@ -1501,10 +1501,8 @@ function aktaFromCurves(curves, fname, extra){
   const curveMax = arrMax(uvs[0].xs); let evMax = -Infinity; fr.concat(log).forEach(e => { if (e.x > evMax) evMax = e.x; });
   let shift = 0;
   if (injEv && isFinite(evMax) && Math.abs(curveMax + injEv.x - evMax) < Math.abs(curveMax - evMax)) shift = injEv.x;
-  /* size exclusion counts elution volume from the injection: a run logged from the method start is moved back by it */
-  let moved = 0; { const mr = (log.find(e => /Method Run/.test(e.label)) || {}).label || '', mt = ((mr.match(/Method:\s*(.*?)(?:\s+Result:|\s+User\s|$)/) || [])[1] || '');
-    if (!shift && injEv && injEv.x > 0.5 && secGuess({file: fname, method: mt + ' ' + log.map(e => e.label).filter(t => /Base CV/i.test(t)).join(' '), name: fname, grad: pick('grad'), cond: pick('cond')})) {
-      shift = moved = injEv.x; curves.forEach(c => { if (c.xs.length) c.xs = c.xs.map(x => x - moved); }); } }
+  /* a run logged from the method start keeps its injection volume (injX); applyInjShift moves it back when the run is size exclusion */
+  const injX = !shift && injEv && injEv.x > 0.5 ? injEv.x : null;
   const phases = log.filter(e => /^Phase /.test(e.label) && !/Method Settings/i.test(e.label)).map(e => ({x: e.x - shift, label: e.label.replace(/^Phase /, '')}));
   const mrun = (log.find(e => /Method Run/.test(e.label)) || {}).label || '', rt = parseRunTime(mrun), method = ((mrun.match(/Method:\s*(.*?)(?:\s+Result:|\s+User\s|$)/) || [])[1] || '').trim();
   const med = c => { if (!c || c.ys.length < 3) return null; const v = c.ys.filter(y => y > 0).sort((a, b) => a - b); return v.length ? v[v.length >> 1] : null; };
@@ -1512,7 +1510,7 @@ function aktaFromCurves(curves, fname, extra){
   /* UNICORN logs the column it was told: "Base CV, 0.962 {ml}, HisTrap FF, 1 ml" */
   const cvl = log.map(e => /Base CV,\s*(?:Vc\s*=\s*)?([\d.]+)\s*\{ml\},\s*([^,]+)(?:,\s*([\d.]+)\s*ml)?/i.exec(e.label)).find(Boolean), colLog = cvl && !/^any$/i.test(cvl[2].trim()) ? `${cvl[2].trim()}${cvl[3] ? ` ${+cvl[3]} mL` : ''}` : '', cvLog = cvl ? +cvl[1] : null;
   return {name: tidyName(fname), file: fname, flowAuto: flowMed, tempAuto: tempMed, colLog, cvLog, uvs: uvs.map(c => ({name: c.name, yu: c.yu, xs: c.xs, ys: c.ys})), grad: pick('grad'), cond: pick('cond'),
-    fracs: fr.map(e => ({x: e.x - shift, label: e.label})).filter(e => !moved || e.x >= 0 || !/^waste$/i.test(e.label)), phases, shift: moved ? 0 : shift, injShift: moved || null, xu: uvs[0].xu, method, time: rt ? rt.t : null, timeStr: rt ? rt.str : '', ...(extra || {})};
+    fracs: fr.map(e => ({x: e.x - shift, label: e.label})), phases, shift, injX, injShift: null, xu: uvs[0].xu, method, time: rt ? rt.t : null, timeStr: rt ? rt.str : '', ...(extra || {})};
 }
 /* ---------- UNICORN 7 result archive (.zip) ---------- */
 /* the archive and each curve inside it are zip files, the curves in zip64 form; their points are .NET float arrays */
@@ -1550,7 +1548,7 @@ function makeTrace(name, p, ex){
     xc: p.xc ?? 0, yc: p.yc ?? 1, offset: 0, scale: 1, xshift: 0, peaks: [], ex: !!ex};
 }
 function makeRun(p){ const r = Object.assign({id: 'r' + (uid++), color: RUN_COLORS.uv, uvi: 0, xmin:'', xmax:'', ymin:'', ymax:'', shade:'', inWf: true, integ: [], secMode: 'auto'}, p);
-  r.secAuto = secGuess(r);
+  r.secAuto = secGuess(r); applyInjShift(r);
   /* size exclusion opens on the fractions around its peaks */
   if (r.secAuto && r.crop === undefined) r.crop = 'peaks';
   /* a calibration standards run is not a purification step */
@@ -1740,15 +1738,22 @@ function integrateRegion(xs, ys, a, b, mode){
 /* ---------- size exclusion (SEC) ---------- */
 const xUnit = run => /min/i.test((run && run.xu) || '') ? 'min' : 'mL';
 const SEC_RE = /(^|[^a-z])(sec|superdex|superose|gel ?filtration|size ?exclusion|hiload|s200|s75|s6|sd ?200|sd ?75|sepharose ?6|sephacryl|yarra|tskgel|advancebio sec)([^a-z]|$)/i;
-/* a run is treated as SEC when its file or method name says so, or when it has no gradient and the salt never changes */
+/* a run is auto-detected as SEC only on a strong signal: the file, method or column name says so. A flat gradient and conductivity prove nothing (isocratic runs, desalting), so use the SEC switch on the run card for those */
 function secGuess(r){
-  if (SEC_RE.test((r.file || '') + ' ' + (r.method || '') + ' ' + (r.name || ''))) return true;
-  const flat = c => { if (!c || c.ys.length < 3) return true; const a = arrMin(c.ys), b = arrMax(c.ys); return b - a < 1; };
-  if (!flat(r.grad)) return false;
-  if (r.cond && r.cond.ys.length > 10) { const ys = r.cond.ys.slice().sort((p, q) => p - q), lo = ys[Math.floor(ys.length*0.05)], hi = ys[Math.floor(ys.length*0.95)], md = ys[ys.length >> 1]; return md > 0 && (hi - lo) < 0.15*md; }
-  return false;
+  return SEC_RE.test((r.file || '') + ' ' + (r.method || '') + ' ' + (r.name || '') + ' ' + (r.colLog || ''));
 }
 const isSec = r => !!r && (r.secMode === 'on' ? true : r.secMode === 'off' ? false : !!r.secAuto);
+/* size exclusion counts elution volume from the injection. A run logged from the method start (injX) is moved back by it while it is SEC, and put back when it is not. injShift is the amount applied now; integrated regions and the zoom window move with it */
+function applyInjShift(r){
+  const ix = r.injX || r.injShift || 0, have = r.injShift || 0, want = ix && isSec(r) ? ix : 0, d = want - have; if (!ix) return;
+  r.injX = ix; if (!d) return;
+  const mv = c => { if (c && c.xs) c.xs = c.xs.map(x => x - d); };
+  (r.uvs || []).forEach(mv); mv(r.grad); mv(r.cond);
+  r.fracs = (r.fracs || []).map(e => ({x: e.x - d, label: e.label})).filter(e => !want || e.x >= 0 || !/^waste$/i.test(e.label));
+  r.phases = (r.phases || []).map(e => ({x: e.x - d, label: e.label}));
+  r.integ = (r.integ || []).map(g => Object.assign({}, g, {a: g.a - d, b: g.b - d}));
+  ['xmin', 'xmax'].forEach(k => { if (r[k] !== '' && r[k] != null && isFinite(+r[k])) r[k] = +(+r[k] - d).toFixed(4); });
+  r.injShift = want || null; }
 /* column presets: the bed volume is the column's geometric volume; V0 is a typical starting value (about 36% of the bed for
    Superdex and Superose), so measure it with blue dextran or use a large standard for real work */
 const SEC_COLUMNS = {
@@ -4362,7 +4367,7 @@ list.addEventListener('input', e => {
   const el = e.target, t = itemOf(el), k = el.dataset.k; if (!t || !k) return;
   if (k === 'plabel') t.peaks[+el.dataset.p].label = el.value;
   else if (k === 'visible' || k === 'inWf') t[k] = el.checked;
-  else if (k === 'secOn') { t.secMode = el.checked ? 'on' : 'off'; if (el.checked && !t.integ.length) autoIntegrate(t); renderList(); renderSec(); }
+  else if (k === 'secOn') { t.secMode = el.checked ? 'on' : 'off'; applyInjShift(t); if (el.checked && !t.integ.length) autoIntegrate(t); renderList(); renderSec(); }
   else if (k === 'secCal') { t.secCal = el.value; renderSec(); }
   else if (k === 'xc' || k === 'yc' || k === 'uvi') t[k] = +el.value;
   else if (k === 'offset' || k === 'xshift') t[k] = numOr(el.value, 0);
