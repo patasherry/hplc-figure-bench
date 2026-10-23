@@ -1,0 +1,17 @@
+LOCUS       pCOMP                 1000 bp    DNA     circular SYN 01-JAN-2025
+DEFINITION  Synthetic vector with complement strand CDS.
+FEATURES             Location/Qualifiers
+     rep_origin      1..80
+                     /label="pUC ori"
+     CDS             complement(100..864)
+                     /label="CompProtein"
+                     /translation="MHHHHHHSSGLVPRGSMSSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITLGMDELYK"
+     promoter        complement(880..930)
+                     /label="T7 promoter"
+     RBS             complement(866..875)
+                     /label="RBS"
+     CDS             complement(940..990)
+                     /label="kanamycin"
+ORIGIN
+        1 atcg
+//
