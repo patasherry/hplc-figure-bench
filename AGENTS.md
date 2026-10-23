@@ -14,7 +14,7 @@ The owner is a biochemistry graduate student who uses it for real lab data. Scie
 - `README.md`: user-facing documentation.
 - `AGENTS.md`: this file.
 - `CLAUDE.md`: points Claude Code to this file.
-- `.github/workflows/`: Claude Code GitHub Actions (automatic PR review, and `@claude` mentions).
+- `.github/workflows/`: GitHub Actions: Claude Code (automatic PR review, `@claude` mentions) and the test suite on every PR.
 - `tests/`: the automated browser test suite and its synthetic test data.
 
 ## How the code is organized
@@ -72,6 +72,8 @@ Figure defaults follow publication conventions: the Okabe-Ito colorblind-safe pa
 2. Paste the summary into the PR description: pass and fail counts per suite, and every regression (a check that passed on `main` and fails on your branch).
 3. A regression is either fixed, or explained in the PR as intended.
 4. When you fix a bug or add a feature, add a check for it to the suite it belongs to.
+
+The `Test suite` GitHub Action also runs this comparison on every PR that touches the app or the tests, and posts the results as a comment on the PR. A PR with regressions shows a failed check. Running it yourself first is still expected, so problems are found before the PR is opened.
 
 Checks that already fail on `main` are known problems. They are not yours to fix unless the task asks.
 
