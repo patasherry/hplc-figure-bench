@@ -19,6 +19,8 @@ The owner is a biochemistry graduate student who uses it for real lab data. Scie
 
 ## How the code is organized
 
+Read docs/CODEMAP.md first. Open only the lines you need from the HTML file.
+
 - One `<style>` block, then one `<script>` block.
 - All JavaScript lives inside a single strict-mode IIFE: `(function(){ "use strict"; ... })();`. There are no modules, no build step, no package manager and no framework. Keep it that way.
 - The script is divided into sections marked with comments like `/* ---------- peak integration ---------- */`. Search for these markers to find code. Put new code in the section it belongs to, and add a new marker only for a genuinely new area.
