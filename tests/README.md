@@ -28,6 +28,7 @@ After running tests, read the output of node failures.js, not the full logs.
 |---|---|---|
 | `00_smoke.js` | Smoke | The page loads, a project opens, a run loads. Proves the harness works. |
 | `10_data_truth.js` | Data | Synthetic files with known answers: SEC detection, column, flow, UV path, fraction labels, peak volumes, pool area and mg, NanoDrop means. |
+| `11_unicorn_zip.js` | UNICORN 7 | Parses UNICORN 7 .zip archives, verifies fraction/injection labels, valid files, missing curves, and invalid archives. |
 | `12_genbank.js` | GenBank | Synthetic files with known answers: complement CDS, join/wrap locations, multiline qualifiers, case sensitivity, no ORIGIN, Windows line endings, gene/product fallback labels, SnapGene .dna export. |
 | `20_science.js` | Science | Summary table arithmetic (mole-based yields across tag removal), methods text, panel letters, SEC elution volumes, consistency after moving or removing steps. |
 | `25_gels.js` | Gels | Gel image loading, auto-cropping, lane finding, band detection, ladder MW calibration, band tagging, and purity calculations. |
