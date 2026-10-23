@@ -25,6 +25,14 @@ As a single HTML file, you can run the application locally on Windows by double-
 *   **Data Summaries:** Summary tables, band size estimates, and peak integration tables can be saved as CSV files.
 *   **Project Files:** The complete state of a project can be exported as a single JSON file.
 
+## Protein mg from the UV area
+*   **Formula:** mg = A280 area (mAU·mL) / 1000 / (A280 of 1 mg/mL × UV path in cm).
+*   **AU traces** are shown and integrated in mAU.
+*   **Runs exported in minutes** are converted to mL with the run's flow rate, read from the file or typed under Flow. With no flow, no UV mg is given, and the run card says why.
+*   **Only the 280 nm curve** gives a mass. Other wavelengths (for example 260 nm) show the area but no mg.
+*   **UV path:** when the file does not record it, the app assumes 2 mm (the usual ÄKTA monitor) and says so on the run card, in the peak table, under the summary table and in the methods. HPLC flow cells are often 10 mm, so enter the real value on the run card.
+*   **Peak and pool areas** use the whole run, after smoothing and baseline, so zooming or cropping the plot never changes them.
+
 ## Storage and Backups
 *   **Browser Storage:** The application uses `localStorage` for user settings, SEC calibrations, and custom protein lists. It uses `IndexedDB` to store projects locally in the browser.
 *   **Host-Dependent Storage:** The code includes integration with an external environment (`window.claude`), which can provide cloud database and asset storage if the application is hosted there.

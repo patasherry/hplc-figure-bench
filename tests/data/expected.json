@@ -557,5 +557,42 @@
    "note": ""
   }
  ],
- "nd_note": "n           protein readings the app should keep (nucleic acid readings are not protein)\n  mean_abs1   mean mg/mL with \"1 Abs = 1 mg/mL\" (no coefficient set anywhere): the mean A280 (10 mm)\n  mean_eps    mean mg/mL when the A280 of a 1 mg/mL solution is set to EPS: mean A280 / EPS\n  sd_abs1     sample SD (n-1) of the readings with 1 Abs = 1 mg/mL\n  names       sample names exactly as they should be shown\n  r280        A260/A280 of each reading\nFixed values (no randomness), so the means are exact."
+ "nd_note": "n           protein readings the app should keep (nucleic acid readings are not protein)\n  mean_abs1   mean mg/mL with \"1 Abs = 1 mg/mL\" (no coefficient set anywhere): the mean A280 (10 mm)\n  mean_eps    mean mg/mL when the A280 of a 1 mg/mL solution is set to EPS: mean A280 / EPS\n  sd_abs1     sample SD (n-1) of the readings with 1 Abs = 1 mg/mL\n  names       sample names exactly as they should be shown\n  r280        A260/A280 of each reading\nFixed values (no randomness), so the means are exact.",
+ "mg": [
+  {
+   "file": "hplc_min_flow_known_u7.csv",
+   "note": "x in minutes, flow 0.5 mL/min in the file, mAU",
+   "unit": "min",
+   "flow": 0.5,
+   "pool": "F1-F6",
+   "path_mm": 10,
+   "eps": 1.0,
+   "area": 2506.63,
+   "mg": 1.2533
+  },
+  {
+   "file": "hplc_min_flow_missing_u7.csv",
+   "note": "x in minutes, no flow in the file: no mg until a flow is typed (0.5 mL/min)",
+   "unit": "min",
+   "flow": null,
+   "typed_flow": 0.5,
+   "pool": "F1-F6",
+   "path_mm": 10,
+   "eps": 1.0,
+   "area": 2506.63,
+   "mg": null,
+   "mg_with_flow": 1.2533
+  },
+  {
+   "file": "hplc_au_ml_u7.csv",
+   "note": "y in AU (not mAU), x in mL: the app shows it in mAU, so the area is in mAU*mL",
+   "unit": "mL",
+   "flow": null,
+   "pool": "F1-F6",
+   "path_mm": 10,
+   "eps": 1.0,
+   "area": 2506.63,
+   "mg": 2.5066
+  }
+ ]
 }

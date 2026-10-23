@@ -1716,7 +1716,7 @@ function poolBlocks(run){
 }
 
 /* ---------- peak integration ---------- */
-function runUV(run){ const uvC = uvOf(run), a = runAuto(run), lo = numOr(run.xmin, a.lo), hi = numOr(run.xmax, a.hi); return Object.assign(processXY(uvC.xs, uvC.ys, lo, hi, false, 1), {lo, hi}); }
+function runUV(run){ const a = runAuto(run), lo = numOr(run.xmin, a.lo), hi = numOr(run.xmax, a.hi); return Object.assign(windowXY(procFull(run), lo, hi), {lo, hi}); }
 function clipXY(xs, ys, a, b){
   a = Math.max(a, xs[0]); b = Math.min(b, xs[xs.length - 1]); if (!(b > a)) return {xs: [], ys: []};
   const at = x => { const i = lowerBound(xs, x); return i === 0 || xs[i] === x ? ys[i] : ys[i-1] + (ys[i] - ys[i-1])*(x - xs[i-1])/((xs[i] - xs[i-1]) || 1); };
@@ -1835,7 +1835,11 @@ function secLabel(info, kind){
   if (kind === 'olig' && info.ratio != null) return `${mw} (${fmt(info.ratio, 1)}× monomer)`;
   return mw;
 }
-const massOf = (area, run) => { const E = run && typeof ndEpsFor === 'function' ? ndEpsFor(run.id) : null, e = E ? E.e : numOr(opt.eps, 0), p = numOr(run && run.path, numOr(opt.path, 2)); return (!run || (xUnit(run) === 'mL' && (!uvWl(uvOf(run)) || uvWl(uvOf(run)) === '280'))) && e > 0 && p > 0 ? (area/1000)/(e*p/10) : null; };
+/* mg from a UV area needs the 280 nm curve and volume on the x axis (minutes are turned into mL with the flow). massWhy says what is missing, '' when nothing. A path not in the file is assumed (opt.path, 2 mm) and flagged by pathAssumed */
+const uvFlow = run => numOr(run && run.mFlow, numOr(run && run.flowAuto, 0));
+const massWhy = run => { if (!run || !run.uvs) return 'no UV trace'; const w = uvWl(uvOf(run)); return w && w !== '280' ? `the selected UV curve is ${w} nm, not 280 nm` : xUnit(run) === 'min' && !(uvFlow(run) > 0) ? 'the x axis is in minutes and the flow rate is not known (enter it under Flow)' : ''; };
+const pathAssumed = run => !!run && !(numOr(run.path, 0) > 0);
+const massOf = (area, run) => { if (run && massWhy(run)) return null; const E = run && typeof ndEpsFor === 'function' ? ndEpsFor(run.id) : null, e = E ? E.e : numOr(opt.eps, 0), p = numOr(run && run.path, numOr(opt.path, 2)), a = run && xUnit(run) === 'min' ? area*uvFlow(run) : area; return e > 0 && p > 0 ? (a/1000)/(e*p/10) : null; };
 /* least-squares fit of a sum of Gaussians (Levenberg-Marquardt). p = [H1, mu1, s1, H2, mu2, s2, ...] */
 function fitGaussians(xs, ys, p, lo, hi, smin){
   p = p.slice(); const n = p.length, m = xs.length, smax = Math.max(smin*2, hi - lo);
@@ -1894,8 +1898,12 @@ function gaussRows(uv, regs){
   });
   return out.sort((p, q) => p.apex - q.apex);
 }
+/* the processed trace of the whole run (smoothing and baseline over all of it), so areas, shading and the drawn trace agree whatever the zoom */
+let procMemo = new WeakMap();
+const procFull = run => { const cv = uvOf(run), k = `${opt.smooth}|${opt.baseline}|${cv.xs.length}|${cv.xs[0]}`, m = procMemo.get(cv.ys); if (m && m.k === k && m.xs === cv.xs) return m.q; const q = processXY(cv.xs, cv.ys, -Infinity, Infinity, false, 1); procMemo.set(cv.ys, {k, xs: cv.xs, q}); return q; };
+const windowXY = (q, lo, hi) => { const i0 = lowerBound(q.xs, lo); let i1 = q.xs.length; while (i1 > i0 && q.xs[i1-1] > hi) i1--; return {xs: q.xs.slice(i0, i1), ys: q.ys.slice(i0, i1)}; };
 function integRows(run){
-  const cv = uvOf(run), uv = processXY(cv.xs, cv.ys, -Infinity, Infinity, false, 1);
+  const uv = procFull(run);
   let rows = [];
   const regs = (run.integ || []).slice().sort((p, q) => p.a - q.a);
   if (opt.intMethod === 'gauss') rows = gaussRows(uv, regs);
@@ -2143,7 +2151,7 @@ function buildRunSVG(run, ov){
   const o = opt, S = style(ov), {W, H, fs, lw, aw, cw, tl, tOut} = S, idp = ov.idp || '';
   const uvC = uvOf(run), dEnd = uvC.xs[uvC.xs.length-1];
   const auto = runAuto(run), xlo = numOr(run.xmin, auto.lo); let xhi = numOr(run.xmax, auto.hi); if (!(xhi > xlo)) xhi = xlo + 1;
-  const uv = processXY(uvC.xs, uvC.ys, xlo, xhi, false, 1);
+  const uv = windowXY(procFull(run), xlo, xhi);
   if (uv.xs.length < 2) return {svg: null, geo: null};
   const secC = o.sec === 'grad' ? run.grad : o.sec === 'cond' ? run.cond : null;
   let sec = null;
@@ -4309,7 +4317,7 @@ function renderList(){
         ${PROJ ? '' : cardType}
         <label class="eye" title="UV flow cell path of the instrument this run was on (ÄKTA usually 2 mm, HPLC often 10 mm). Used for mg from the A280 area">UV path (mm)<input type="number" step="any" min="0.1" id="up${r.id}" data-k="path" value="${esc(r.path ?? '')}" placeholder="assumed: ${esc(String(numOr(opt.path, 2)))}" class="tiny autoval" title="Not in the file. ÄKTA monitors are usually 2 mm, HPLC flow cells often 10 mm"></label>
       </div>
-      ${r.inWf && !hasTxt(r.path) && !(poolRows(r) || {}).measured ? '<p class="hint uvhint">ÄKTA monitors are usually 2 mm, HPLC flow cells often 10 mm. The mg from the UV area depend on it.</p>' : ''}
+      ${r.inWf && !(poolRows(r) || {}).measured ? (massWhy(r) ? `<p class="hint uvhint">No mg from the UV area: ${esc(massWhy(r))}.</p>` : !hasTxt(r.path) ? `<p class="hint uvhint">UV path assumed ${esc(fmtAuto(numOr(opt.path, 2)))} mm (not in the file). ÄKTA monitors are usually 2 mm, HPLC flow cells often 10 mm. The mg from the UV area depend on it.</p>` : '') : ''}
       ${(() => { const c = runCond(r), f = (k, lab, ph, extra) => `<label class="f">${lab}<input type="${extra && extra.num ? 'number' : 'text'}"${extra && extra.num ? ' step="any" min="0"' : ''} id="${k}${r.id}" data-k="${k}" value="${esc(r[k] == null ? '' : r[k])}" placeholder="${esc(c.auto[k] ? 'auto: ' + c.auto[k] : ph)}"${c.auto[k] ? ` class="autoval" title="Read from the run: ${esc(c.auto[k])}. This is what the figure and methods use until you type your own."` : ''}></label>`;
         const filled = COND_KEYS.some(k => String(r[k] || '').trim());
         const miss = runNeeds(r).filter(n => !/UV path/.test(n)), sumT = [c.mCol, c.mFlow ? `${c.mFlow} mL/min` : ''].filter(Boolean).join(', ');
@@ -4709,7 +4717,7 @@ window.addEventListener('pointerup', () => {
 /* purification summary: one row per workflow step with its pool */
 function sumRows(){
   const out = [];
-  runs.filter(r => r.inWf).forEach(r => { let p = poolRows(r) || {label: '', area: null, mg: null, vol: null, none: true}; if (p.measured && p.src === 'btw') p = Object.assign({}, p, {mg: p.mgArea, measured: false, viaConc: true}); if (xUnit(r) !== 'mL' || (uvWl(uvOf(r)) && uvWl(uvOf(r)) !== '280')) p = Object.assign({}, p, {area: null}); const vol = xUnit(r) === 'mL' ? p.vol : null, pl = String(p.label || '').toUpperCase().replace(/–/g, '-');
+  runs.filter(r => r.inWf).forEach(r => { let p = poolRows(r) || {label: '', area: null, mg: null, vol: null, none: true}; if (p.measured && p.src === 'btw') p = Object.assign({}, p, {mg: p.mgArea, measured: false, viaConc: true}); if (massWhy(r)) p = Object.assign({}, p, {area: null}); else if (xUnit(r) === 'min' && p.area != null) p = Object.assign({}, p, {area: p.area*uvFlow(r)}); const vol = xUnit(r) === 'mL' ? p.vol : null, pl = String(p.label || '').toUpperCase().replace(/–/g, '-');
     let pur = null, purEst = false; const satL = []; gels.forEach(g => gelLabels(g).forEach((l, i) => { const L = String(l).trim().toUpperCase().replace(/–/g, '-'); if (pur != null || laneAssign(g, i) !== r.id || !(/POOL/.test(L) || (pl && L === pl))) return; if (gelSaturated(g).includes(laneShow(l))) { satL.push(laneShow(l)); return; } const ln = gelBands(g)[i], pu = ln && lanePurity(g, ln); if (pu && pu.purity != null) { pur = pu.purity; purEst = pu.est; } }));
     /* no lane named for the pool: use the lane whose fractions overlap the pool most (at least half of the lane inside it) */
     if (pur == null) { const sset = shadeSet(r); let best = null;
@@ -4771,8 +4779,8 @@ function renderSumTable(){
     { const wf = runs.filter(r => r.inWf), c = cutAfterIndex(); if (c >= 0 && !prep.cleave && !wf.some(r => PROT_NOTE.test(String(r.note || '')) && !PROT_NOT.test(String(r.note || '')))) notes.push(`The tag is assumed to be cut before step ${c + 2} (${stepTitle(wf[c + 1])}), so steps up to ${c + 1} use the tagged form. Add a cleavage step to set where it happens.`); wf.forEach((r, i) => { if ((String(r.stepName || '').trim() || guessStep(r)) === 'Reverse IMAC' && c >= 0 && i <= c) notes.push(`Step ${rows.findIndex(x => x.r === r) + 1} (Reverse IMAC) comes before the tag is cut, so the tagged protein would bind. Move the cleavage step before it.`); }); }
     const q = prep.on ? exprQuant() : {}; if (q.level || q.sol) notes.push(`Expression gel: ${q.level ? `the tagged protein is ≈${fmt(q.level.pct, 0)}% of the stain in lane ${q.level.lane}` : ''}${q.level && q.sol ? ', and ' : ''}${q.sol ? `≈${fmt(q.sol.pct, 0)}% of it is soluble (${q.sol.s} against ${q.sol.p}, assuming both were loaded from equal culture volumes)` : ''}. Bands within 8% of the tagged size are counted, so a co-migrating host protein adds to it.`); }
   rows.forEach((x, k) => { const nm = `Step ${k + 1} (${stepTitle(x.r) !== x.r.name ? stepTitle(x.r) : shortRunName(x.r)})`;
-    if (xUnit(x.r) !== 'mL') notes.push(`${nm}: time-based UV areas are in mAU·min, so UV mass and area yield need an mL-axis export. A NanoDrop concentration with a measured volume can still give mg.`);
-    else if (uvWl(uvOf(x.r)) && uvWl(uvOf(x.r)) !== '280') notes.push(`${nm}: select the 280 nm curve to use the A280 coefficient for UV mass and area yield.`);
+    if (!x.p.none && !x.p.measured && massWhy(x.r)) notes.push(`${nm}: no protein mg or area yield from the UV area, because ${massWhy(x.r)}. A NanoDrop concentration with a measured volume can still give mg.`);
+    else if (!x.p.none && !x.p.measured && pathAssumed(x.r) && x.p.mg > 0) notes.push(`${nm}: the UV path is not in the file, so ${fmtAuto(numOr(opt.path, 2))} mm is assumed. Enter it on the run card if it differs (HPLC cells are often 10 mm).`);
     if (x.yld > 100) notes.push(`${nm}: above 100% of ${rows.baseMan ? `the ${rows.baseMan.name} step` : 'step 1'}. Check each run's UV path (mm), then the yield basis and volumes.`);
     else if (x.stepY > 105) notes.push(`${nm}: ${fmt(x.stepY, 0)}% of ${x.fromKept ? 'the amount measured before it was loaded' : 'the step before'}, which can't be a real gain. Check its UV path (mm) on the run card (HPLC cells are often 10 mm), then whether the pool was concentrated before loading.`);
     else if (x.stepY != null && x.stepY < 20) notes.push(`${nm}: only ${fmt(x.stepY, 0)}% of the step before was recovered, so most protein was lost here. Check the unpooled peaks and the flow-through.`);
@@ -4821,7 +4829,8 @@ function renderIntTable(run){
   const blank = n => '<td></td>'.repeat(n);
   const pr = pool ? `<tr class="pool" title="UV area across the pooled fractions, same baseline as the regions"><td><span class="sw" style="background:${esc(opt.poolColor)}"></span>Pool ${esc(pool.label)}</td><td>${fmt(pool.a, 2)}</td><td>${fmt(pool.b, 2)}</td>${blank(1 + (hasKav ? 1 : 0) + (hasMw ? 1 : 0) + (hasOl ? 1 : 0) + 1)}${gs ? '<td></td>' : ''}<td>${fmtAuto(pool.area)}</td><td></td>${hasMg ? `<td>${pool.mg == null ? '' : fmt(pool.mg, 2)}</td>` : ''}${rat ? '<td></td>' : ''}${gs ? '<td></td>' : ''}<td></td></tr>` : '';
   const note = sec && !hasMw && opt.secStds ? `<tr><td colspan="${cols}" class="empty-row">Add a column calibration under Size exclusion (SEC) to see apparent molecular weights and oligomer states.</td></tr>` : '';
-  $('#intTable').innerHTML = head + (body + pr || `<tr><td colspan="${cols}" class="empty-row">No regions yet. Drag across the chromatogram, or click Detect peaks.</td></tr>`) + note;
+  const mgWhy = hasMg ? massWhy(run) : '', mgNote = mgWhy ? `<tr><td colspan="${cols}" class="empty-row">No protein mg: ${esc(mgWhy)}.</td></tr>` : hasMg && pathAssumed(run) ? `<tr><td colspan="${cols}" class="empty-row">Protein mg use an assumed UV path of ${esc(fmtAuto(numOr(opt.path, 2)))} mm. Enter the real path on the run card.</td></tr>` : '';
+  $('#intTable').innerHTML = head + (body + pr || `<tr><td colspan="${cols}" class="empty-row">No regions yet. Drag across the chromatogram, or click Detect peaks.</td></tr>`) + note + mgNote;
   /* FWHM, fit quality and A260/A280 wait behind More columns */
   { const tb = $('#intTable'), hd = [...(tb.rows[0] || {cells: []}).cells].map(c => c.textContent), extra = hd.map(t => /FWHM|Fit R|A₂₆₀\/A₂₈₀|Height/.test(t));
     [...tb.rows].forEach(r => { if (r.cells.length !== hd.length) return; [...r.cells].forEach((c, i) => c.classList.toggle('xc', !!extra[i])); });
