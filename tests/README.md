@@ -33,6 +33,7 @@ After running tests, read the output of node failures.js, not the full logs.
 | `25_gels.js` | Gels | Gel image loading, auto-cropping, lane finding, band detection, ladder MW calibration, band tagging, and purity calculations. |
 | `30_robust.js` | Robustness | Bad inputs, a seeded 150-action fuzz test with invariants, save and reload (browser and cloud storage), export and import, speed budgets. |
 | `40_visual.js` | Visual | DOM and visual layout checks: text overlap, horizontal scrolling, toolbars covering titles, across window widths and themes. |
+| `42_figures.js` | Figures | Checks that figure settings reach the exported SVG and PNG (width, font, palette, axes, legend). |
 
 ## Rules for the suites
 
