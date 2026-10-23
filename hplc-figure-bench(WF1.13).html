@@ -2843,6 +2843,9 @@ function calib(g){
   return y => { let i = 0; while (i < m.length - 2 && y > m[i+1].y) i++; const a = m[i], b = m[i+1], t = (y - a.y)/((b.y - a.y) || 1e-9);
     return Math.pow(10, Math.log10(a.kda) + t*(Math.log10(b.kda) - Math.log10(a.kda))); };
 }
+/* ladder marks that stop calib: same position, or sizes not decreasing down the gel */
+function calibBad(g){ const m = g.marks.filter(k => k.kda > 0).slice().sort((a, b) => a.y - b.y), bad = [];
+  m.forEach((q, i) => { if (!isFinite(q.y)) bad.push(q.kda + ' (no position)'); else if (i && (+q.y <= +m[i-1].y || +q.kda >= +m[i-1].kda)) bad.push(m[i-1].kda + ' and ' + q.kda); }); return bad; }
 function gelBands(g){
   if (!g.pix) return [];
   const ed = g.edits || (g.edits = {added: [], removed: []});
@@ -2855,7 +2858,11 @@ function gelBands(g){
     let bands = r.bands.filter(b => !ed.removed.some(x => x.lane === i && Math.abs(x.y - b.yRot) <= Math.max(tolE, Math.min(x.half || 0, bandHalf(g, b)))));
     ed.added.filter(x => x.lane === i).forEach(x => { const b = bandAt(g, r.sig, x.y); if (!bands.some(q => Math.abs(q.yRot - b.yRot) <= tolE)) bands.push(b); });
     bands.sort((a, b) => a.row - b.row);
-    if (!DET.fit) { for (let j = 1; j < bands.length; j++) { const a = bands[j-1], b = bands[j]; if (b.l > a.r) continue; let cut = a.row; for (let y = a.row + 1; y < b.row; y++) if (r.sig[y] < r.sig[cut]) cut = y; a.l = Math.min(a.l, b.l); b.r = Math.max(a.r, b.r); a.r = cut; b.l = cut + 1; } bands.forEach(b => { b.area = 0; for (let y = b.l; y <= b.r; y++) b.area += r.sig[y]; }); }
+    /* overlapping bands: split each cluster once at the signal minimum between neighbours, so every row belongs to exactly one band */
+    if (!DET.fit) { for (let j = 0; j < bands.length;) { let e = j, hi = bands[j].r, lo = bands[j].l; while (e + 1 < bands.length && bands[e+1].l <= hi) { e++; hi = Math.max(hi, bands[e].r); lo = Math.min(lo, bands[e].l); }
+      if (e > j) { let start = lo; for (let k = j; k <= e; k++) { const b = bands[k]; let end = hi; if (k < e) { end = b.row; for (let y = b.row + 1; y < bands[k+1].row; y++) if (r.sig[y] < r.sig[end]) end = y; } b.l = start; b.r = end; start = end + 1; } }
+      j = e + 1; }
+      bands.forEach(b => { b.area = 0; for (let y = b.l; y <= b.r; y++) b.area += r.sig[y]; }); }
     const total = r.total; bands.sort((a, b) => a.row - b.row).forEach(b => { b.pct = total > 0 ? 100*b.area/total : 0; b.mw = cal ? cal(b.yRot) : null; });
     return {i, label: l, bands}; });
   g._bands = {key, pix: g.pix, lanes}; return lanes;
@@ -4552,7 +4559,7 @@ function renderBandTable(g){
   const hint = `<tr><td colspan="6" class="empty-row">Click a band chip to cycle it through unmarked, untagged target, tagged form and contaminant for that lane only. × (or Delete) removes the band. Dashed chips were added by hand.</td></tr>`;
   const cols = anyG ? 8 : 6;
   const anySat = lanes.some(ln => !ln.marker && ln.bands.some(b => b.sat));
-  const note = (anySat ? 'Saturated bands read low, so a shorter exposure gives truer percentages. ' : '') + (!cal ? (g.marks.length >= 2 ? 'Check the ladder: each band must have a distinct position, with sizes decreasing from top to bottom.' : 'Find or mark the ladder to get sizes in kDa.') : !anyT ? 'Mark the target band to estimate purity.' : !anyC && opt.purBase === 'tagged' ? 'Mark one contaminant band to calculate purity.' : '');
+  const note = (anySat ? 'Saturated bands read low, so a shorter exposure gives truer percentages. ' : '') + (!cal ? (g.marks.length >= 2 ? 'Check the ladder: ' + (calibBad(g).length ? 'marks ' + calibBad(g).join(', ') + ' kDa are at the same position or out of order. ' : '') + 'Each band must have a distinct position, with sizes decreasing from top to bottom.' : 'Find or mark the ladder to get sizes in kDa.') : !anyT ? 'Mark the target band to estimate purity.' : !anyC && opt.purBase === 'tagged' ? 'Mark one contaminant band to calculate purity.' : '');
   el.innerHTML = head + rows + (note ? `<tr><td colspan="${cols}" class="empty-row">${note}</td></tr>` : '');
 }
 document.querySelectorAll('[data-tagmode]').forEach(b => b.addEventListener('click', () => { tagMode = b.dataset.tagmode; if (tagMode) marking = null; render(); }));
