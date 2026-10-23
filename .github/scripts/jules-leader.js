@@ -8,7 +8,8 @@
 //   4. Follow up: after a merge, "New checks failing" in the PR's test report and "Ready-to-file issues" in an audit
 //      report become new issues labelled `needs-triage`. A person or the coordinator moves them to `jules-queue`.
 // State lives on the issues: labels plus one hidden JSON comment per issue.
-const MAX_RUNNING = 3, MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, API = 'https://jules.googleapis.com/v1alpha/';
+/* Jules Pro runs 15 sessions at once. Sessions that change the app file are capped lower, because their PRs all edit the same large file and collide when merged. */
+const MAX_RUNNING = 15, MAX_APP = 4, LIGHT = i => /^(tests?|audit|docs?)\b/i.test(i.title || ''), MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, API = 'https://jules.googleapis.com/v1alpha/';
 const L = {queue: 'jules-queue', run: 'jules-running', done: 'jules-done', fail: 'needs-coordinator', triage: 'needs-triage'};
 const MARK = '<!-- jules-leader ';
 const SAFE = f => /^(tests\/|docs\/|\.github\/ISSUE_TEMPLATE\/)/.test(f) || f === 'README.md' || f === 'tests/README.md';
@@ -75,9 +76,9 @@ module.exports = async ({github, context, core}) => {
       else { await putState(i.number, s, `Jules leader: ${MAX_ATTEMPTS} attempts ended without a PR (${why}). Needs the coordinator.`); await setLabels(i.number, [L.fail], [L.run]); freed.add(i.number); say(`#${i.number}: gave up`); } } }
 
   /* ---------- 1. start queued work ---------- */
-  if (key) { let free = MAX_RUNNING - (await issues(L.run)).filter(i => !freed.has(i.number)).length;
-    for (const i of (await issues(L.queue)).filter(i => !labels(i).includes(L.run)).sort((a, b) => a.number - b.number)) { if (free <= 0) break;
-      try { await start(i, 1); free--; } catch (e) { say(`#${i.number}: could not start: ${e.message}`); } } }
+  if (key) { const run = (await issues(L.run)).filter(i => !freed.has(i.number)); let free = MAX_RUNNING - run.length, freeApp = MAX_APP - run.filter(i => !LIGHT(i)).length;
+    for (const i of (await issues(L.queue)).filter(i => !labels(i).includes(L.run)).sort((a, b) => a.number - b.number)) { if (free <= 0) break; if (!LIGHT(i) && freeApp <= 0) continue;
+      try { await start(i, 1); free--; if (!LIGHT(i)) freeApp--; } catch (e) { say(`#${i.number}: could not start: ${e.message}`); } } }
 
   /* ---------- 3. merge safe PRs ---------- */
   const prs = await github.paginate(github.rest.pulls.list, {owner, repo, state: 'open', per_page: 100});
