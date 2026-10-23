@@ -104,6 +104,18 @@ In every PR description, say exactly what you tested and how. Do not claim testi
 - Agents never push to another agent's branch: a revision goes on a new branch.
 - Only one PR at a time should change the HTML file, because changes to the same large file will conflict.
 
+## The Jules leader (automatic queue)
+
+`.github/workflows/jules-leader.yml` runs every 15 minutes. It is rule-based, with no AI:
+
+- **`jules-queue`:** issues with this label get a Jules session through the Jules API, at most 3 at a time. Label: `jules-running`.
+- **Failures:** a failed session is retried with "work in smaller steps", up to 3 attempts. After that the issue gets `needs-coordinator`.
+- **Finished:** the issue gets `jules-done` and a link to the PR.
+- **Merging:** a PR that touches only `tests/`, `docs/`, `README.md` or issue templates, with a clean Test suite report, is merged automatically. Any other PR gets `needs-coordinator`.
+- **Follow-ups:** "New checks failing" in a merged PR's test report, and "Ready-to-file issues" in a merged `docs/*audit*.md`, become issues labelled `needs-triage`. A person or the coordinator moves them to `jules-queue` after checking scope and scientific impact.
+
+The older `jules` label still starts Jules directly, without the leader's retries.
+
 ## Reviewing a pull request
 
 When reviewing, check:
