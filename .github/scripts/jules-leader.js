@@ -12,6 +12,11 @@ const MAX_RUNNING = 3, MAX_ATTEMPTS = 3, API = 'https://jules.googleapis.com/v1a
 const L = {queue: 'jules-queue', run: 'jules-running', done: 'jules-done', fail: 'needs-coordinator', triage: 'needs-triage'};
 const MARK = '<!-- jules-leader ';
 const SAFE = f => /^(tests\/|docs\/|\.github\/ISSUE_TEMPLATE\/)/.test(f) || f === 'README.md' || f === 'tests/README.md';
+/* a few edits outside those folders are routine for test and docs PRs: adding a suite to the Test suite matrix, or adding up to 3 lines to AGENTS.md */
+const changed = patch => String(patch || '').split('\n').filter(l => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l));
+const SAFE_FILE = f => SAFE(f.filename)
+  || (f.filename === '.github/workflows/tests.yml' && changed(f.patch).length > 0 && changed(f.patch).every(l => /^[+-]\s*(suite: \[|names = \{)/.test(l)))
+  || (f.filename === 'AGENTS.md' && f.deletions === 0 && f.additions <= 3);
 
 module.exports = async ({github, context, core}) => {
   const {owner, repo} = context.repo, key = process.env.JULES_API_KEY, log = [];
@@ -56,9 +61,9 @@ module.exports = async ({github, context, core}) => {
   /* ---------- 3. merge safe PRs ---------- */
   const prs = await github.paginate(github.rest.pulls.list, {owner, repo, state: 'open', per_page: 100});
   for (const p of prs) { if (p.draft) continue;
-    const files = (await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: p.number, per_page: 100})).map(f => f.filename);
+    const fobj = await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: p.number, per_page: 100}), files = fobj.map(f => f.filename);
     const labels = p.labels.map(l => l.name);
-    if (!files.every(SAFE)) { if (!labels.includes(L.fail)) { await setLabels(p.number, [L.fail], []); say(`PR #${p.number}: changes the app or workflows, flagged for the coordinator`); } continue; }
+    if (!fobj.every(SAFE_FILE)) { if (!labels.includes(L.fail)) { await setLabels(p.number, [L.fail], []); say(`PR #${p.number}: changes the app or workflows, flagged for the coordinator`); } continue; }
     const runs = (await github.rest.actions.listWorkflowRunsForRepo({owner, repo, head_sha: p.head.sha, per_page: 20})).data.workflow_runs.filter(r => r.name === 'Test suite');
     const cs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: p.number, per_page: 100}), rep = cs.reverse().find(c => c.body.includes('<!-- test-suite-report -->'));
     const testsTouched = files.some(f => f.startsWith('tests/'));
@@ -66,6 +71,7 @@ module.exports = async ({github, context, core}) => {
     const full = (await github.rest.pulls.get({owner, repo, pull_number: p.number})).data;
     if (full.mergeable_state === 'dirty') { if (!labels.includes(L.fail)) { await setLabels(p.number, [L.fail], []); await github.rest.issues.createComment({owner, repo, issue_number: p.number, body: 'Jules leader: this PR has merge conflicts with main. Needs the coordinator.'}); } continue; }
     if (full.mergeable !== true) continue;
+    if (p.labels.some(l => l.name === L.fail)) await setLabels(p.number, [], [L.fail]);
     await github.rest.pulls.merge({owner, repo, pull_number: p.number, merge_method: 'squash', commit_title: `${p.title} (#${p.number})`});
     say(`PR #${p.number}: merged (tests/docs only, no regressions)`);
     /* ---------- 4. follow-ups from what was merged ---------- */
