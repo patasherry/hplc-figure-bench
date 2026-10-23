@@ -43,7 +43,9 @@ HPLC Figure Bench runs directly in any modern web browser. Open `hplc-figure-ben
 *   **Band Tagging & Purity:** Band detection with tagging (target protein, tag, contaminant, known contaminant) and automatic purity percentage calculation across lanes.
 
 * Display dark/light points and color affect the figure, not measured intensities. Invert selects signal polarity.
-* In the default area mode, overlapping bands are partitioned without counting rows twice. Hand-added duplicates are checked after snapping. All-stain purity uses the same full-lane background-corrected signal as band percentages.
+* In the default area mode, overlapping bands are partitioned without counting rows twice. Hand-added duplicates are checked after snapping. All-stain purity and band percentages share one denominator: the background-corrected signal between the wells and the dye front (the top 3% and bottom 2% of the lane are left out). Removing a band takes it out of that total.
+* Cleavage % is molar everywhere (band table, CSV, cleavage panel and Methods): Coomassie stain scales with mass, so each band's area is divided by its mass before comparing cleaved and uncleaved forms.
+* When a gel measures the final pool's purity and no QC purity is typed in, the Methods text reports it ("Purity was about 68% by SDS-PAGE.").
 * Manual contaminant/exclusion tags override automatic purity estimates. Lane-specific protein marks affect that lane.
 * Calibration requires finite marks at distinct positions, with sizes decreasing top to bottom. Invalid marks remain available to correct; derived sizes are withheld.
 * Lane edits, processed pixels and ladder positions invalidate the corresponding analysis caches.

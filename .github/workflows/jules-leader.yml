@@ -15,29 +15,51 @@ on:
   issue_comment:
     types: [created]
 
-concurrency:
-  group: jules-leader
-  cancel-in-progress: false
-
 permissions:
   contents: write
   issues: write
   pull-requests: write
-  actions: read
+  actions: write
 
 jobs:
   lead:
     if: (github.event_name != 'issues' || github.event.label.name == 'jules-queue') && (github.event_name != 'issue_comment' || contains(github.event.comment.user.login, 'jules'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # one leader at a time; the heartbeat below waits outside this lock
+    concurrency:
+      group: jules-leader
+      cancel-in-progress: false
+    outputs:
+      active: ${{ steps.lead.outputs.active }}
     steps:
       - uses: actions/checkout@v4
         with:
           sparse-checkout: .github/scripts
-      - uses: actions/github-script@v7
+      - id: lead
+        uses: actions/github-script@v7
         env:
           JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
         with:
           script: |
             const lead = require('./.github/scripts/jules-leader.js');
             await lead({github, context, core});
+
+  # While Jules has queued or running work, wait 10 minutes and start the leader again.
+  # This job has its own concurrency group, so the leader is free to run on events while it waits,
+  # and a newer wait replaces an older one (only one chain at a time). Actions minutes are free on public repositories.
+  heartbeat:
+    needs: lead
+    if: needs.lead.outputs.active == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: jules-leader-heartbeat
+      cancel-in-progress: true
+    steps:
+      - name: Check again in 10 minutes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sleep 600
+          gh workflow run jules-leader.yml --repo "$GITHUB_REPOSITORY" --ref main
