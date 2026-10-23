@@ -11,6 +11,7 @@ const card = p => p.locator('.trace.run.sel').first();
 const cardText = async p => (await card(p).innerText()).replace(/\s+/g, ' ');
 const field = async (p, k) => { const el = card(p).locator(`[data-k=${k}]`).first(); if (!(await el.count())) return ''; const v = await el.inputValue().catch(() => ''); return v || (await el.getAttribute('placeholder')) || ''; };
 const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, String(v)]);
+const setRun = async (p, k, v) => { const l = p.locator(`.trace.run.sel [data-k=${k}]`).first(); await l.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } }); await l.fill(String(v)); await l.dispatchEvent('change'); await p.waitForTimeout(400); };
 const detect = async p => { await p.evaluate(() => { const b = document.getElementById('intAuto'); if (b) b.click(); }); await p.waitForTimeout(900); };
 /* the peak table as objects keyed by header, with the Ve/apex column under "ve" */
 async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return {head: [], rows: []}; const head = t[0];
@@ -94,7 +95,36 @@ async function ndFile(e, withEps){ const id = e.file.replace(/\.[^.]+$/, '') + (
   } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
 }
 
+
+/* mg from the UV area follows the units: minutes only with a flow, AU shown as mAU, and a UV path not in the file assumed (2 mm) and said so */
+async function mgFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
+  const {p, errs, close} = await open(), h = H(p), pool = async () => (await peaks(p, h)).rows.find(r => /^pool/i.test(r.name)) || {}, tbl = async () => (await p.locator('#intTable').innerText()).replace(/\s+/g, ' '), tol = x => Math.max(0.011, x*0.05);
+  try {
+    await h.newProject('mg ' + id); await h.addRun(path.join(CH, e.file)); await setOpt(p, 'o-eps', e.eps); await h.pool(e.pool);
+    // guards: the pool area is read in the unit the app shows (mAU*mL, or mAU*min on a time axis; AU files are shown in mAU)
+    const area = (await pool()).area; T.check(`${id}/area`, Math.abs(area - e.area) <= e.area*0.05, `expected ${e.area}, got ${area}`);
+    if (e.mg == null) { // guards: minutes without a known flow give no mg, and the peak table says it is the flow
+      T.check(`${id}/no-mg-without-flow`, Number.isNaN((await pool()).mg), `mg shown on a time axis without a flow: ${(await pool()).mg}`);
+      T.check(`${id}/flow-note`, /flow/i.test(await tbl()), (await tbl()).slice(-200));
+      await setRun(p, 'mFlow', e.typed_flow); e.mg = e.mg_with_flow; }
+    // guards: with no path in the file, mg use an assumed 2 mm, and the peak table says it is assumed
+    const mg2 = (await pool()).mg, want2 = e.mg*e.path_mm/2; T.check(`${id}/mg-assumed-2mm`, Math.abs(mg2 - want2) <= tol(want2), `expected ${want2.toFixed(3)} mg at an assumed 2 mm, got ${mg2}`);
+    T.check(`${id}/path-assumed-note`, /assumed/i.test(await tbl()), (await tbl()).slice(-200));
+    await setRun(p, 'path', e.path_mm);
+    // guards: mg = area (mAU*mL) / 1000 / (eps x path/10); minutes become mL with the flow
+    const mg = (await pool()).mg; T.check(`${id}/pool-mg`, Math.abs(mg - e.mg) <= tol(e.mg), `expected ${e.mg} mg, got ${mg}`);
+    await detect(p);
+    // guards: a detected peak follows the same units as the pool
+    const pr = (await peaks(p, h)).rows.filter(r => !/^pool/i.test(r.name)).sort((a, b) => b.area - a.area)[0];
+    T.check(`${id}/peak-mg`, pr && Math.abs(pr.mg - e.mg) <= tol(e.mg), `expected about ${e.mg} mg, peak row ${pr && pr.mg}`);
+    // guards: no NaN, undefined or null in the summary table and methods
+    await h.step('figure'); const st = (await h.sumTable()).map(r => r.join(' | ')).join('\n');
+    T.check(`${id}/summary-clean`, !/NaN|undefined|null/.test(st + (await h.methods())), st.slice(0, 300));
+  } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
+}
+
 (async () => {
+  for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
   T.done(); })();
