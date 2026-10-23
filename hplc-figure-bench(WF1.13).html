@@ -1621,8 +1621,8 @@ function runAuto(run){
   /* crop to the fractions around the peaks (peaks with 5% of the largest area, and the pool) or around the pool alone */
   if (run.crop === 'peaks' || run.crop === 'pool') { const B = poolBlocks(run); let lo = Infinity, hi = -Infinity;
     B.forEach(k => { lo = Math.min(lo, k.a); hi = Math.max(hi, k.b); });
-    if (run.crop === 'peaks') { const hOf = (a0, b0) => { let m = -Infinity; for (let k = Math.max(0, lowerBound(uv.xs, a0)); k < uv.xs.length && uv.xs[k] <= b0; k++) m = Math.max(m, uv.ys[k]); return m; };
-      const base = arrMin(uv.ys.slice(Math.max(0, lowerBound(uv.xs, a)), Math.max(1, lowerBound(uv.xs, b)))), rw = (run.integ || []).map(g => ({a: Math.min(g.a, g.b), b: Math.max(g.a, g.b)})).map(q => Object.assign(q, {h: hOf(q.a, q.b) - base})), top = Math.max(0, ...rw.map(q => q.h));
+    if (run.crop === 'peaks') { const pf = procFull(run), hOf = (a0, b0) => { let m = -Infinity; for (let k = Math.max(0, lowerBound(pf.xs, a0)); k < pf.xs.length && pf.xs[k] <= b0; k++) m = Math.max(m, pf.ys[k]); return m; };
+      const base = arrMin(pf.ys.slice(Math.max(0, lowerBound(pf.xs, a)), Math.max(1, lowerBound(pf.xs, b)))), rw = (run.integ || []).map(g => ({a: Math.min(g.a, g.b), b: Math.max(g.a, g.b)})).map(q => Object.assign(q, {h: hOf(q.a, q.b) - base})), top = Math.max(0, ...rw.map(q => q.h));
       rw.forEach(q => { if (top > 0 && q.h >= 0.05*top) { lo = Math.min(lo, q.a); hi = Math.max(hi, q.b); } }); }
     if (isFinite(lo) && hi > lo) { const fw = segs.length ? (b - a)/segs.length : 0, m = Math.max(2*fw, 0.12*(hi - lo));
       /* snap to whole fractions so no fraction is cut in half */
@@ -1946,7 +1946,7 @@ function poolRows(run){
     k: meas && mgA > 0 ? mg/mgA : null};
 }
 function autoIntegrate(run){
-  const {xs, ys} = runUV(run.xmin === '' && run.xmax === '' ? Object.assign({}, run, {crop: ''}) : run), n = ys.length; if (n < 10) return 0;
+  const {xs, ys} = runUV(Object.assign({}, run, {crop: ''})), n = ys.length; if (n < 10) return 0;
   const mn = arrMin(ys), range = arrMax(ys) - mn; if (!(range > 0)) return 0;
   const dn = []; for (let i=1;i<n;i++) dn.push(Math.abs(ys[i] - ys[i-1])); dn.sort((p, q) => p - q); const nsd = (dn[dn.length >> 1] || 0)*1.4826/Math.SQRT2;
   const sec = isSec(run), thr = Math.max(10*nsd, range*(sec ? Math.min(numOr(opt.intProm, 5), 2) : numOr(opt.intProm, 5))/100), w = Math.max(2, Math.round(n*0.004)), span = Math.max(10, Math.round(n*0.15));
@@ -1967,7 +1967,7 @@ function autoIntegrate(run){
       let lm = true; for (let k=Math.max(sw,i-sw);k<=Math.min(n-sw-1,i+sw);k++) if (d2[k] < d2[i]) { lm = false; break; } if (!lm) continue;
       if (pk.some(j => Math.abs(j - i) < 3*sw) || extra.some(j => Math.abs(j - i) < 3*sw)) continue;
       const near = pk.filter(j => Math.abs(j - i) < span).sort((p, q) => Math.abs(p - i) - Math.abs(q - i))[0]; if (near === undefined || ys[near] < 1.3*ys[i]) continue;
-      let sep = false; for (let k=Math.min(i,near);k<=Math.max(i,near);k++) if (d2[k] > 0.25*d2[i]) { sep = true; break; } if (!sep) continue;
+      let sep = false; for (let k=Math.max(sw,Math.min(i,near));k<=Math.min(n-sw-1,Math.max(i,near));k++) if (d2[k] > 0.25*d2[i]) { sep = true; break; } if (!sep) continue;
       extra.push(i); }
     extra.forEach(i => pk.push(i)); pk.sort((p, q) => p - q); }
   const by = n > 500 ? sgSmooth(ys, 9) : ys, d = []; for (let i=1;i<n;i+=Math.max(1, Math.floor(n/2000))) d.push(Math.abs(ys[i] - ys[i-1])); d.sort((p,q)=>p-q);
@@ -1975,7 +1975,7 @@ function autoIntegrate(run){
   const bound = (i, dir, stop) => { let j = i, m = i;
     for (;;) { const nj = j + dir; if (nj < 0 || nj >= n || (stop !== undefined && (dir < 0 ? nj <= stop : nj >= stop))) break; j = nj;
       if (by[j] < by[m]) m = j; const hgt = by[i] - by[m];
-      if (by[j] - by[m] > Math.max(noise, 0.03*hgt)) break; if (by[m] - mn <= 0.01*range) break; }
+      if (by[j] - by[m] > Math.max(noise, 0.03*hgt, 0.001*range)) break; /* the 0.1% floor stops a noise-free trace ending its region on the smoothed apex's last-digit wobble */ if (by[m] - mn <= 0.01*range) break; }
     return m; };
   const regs = pk.map((i, k) => ({i, l: bound(i, -1, k > 0 ? pk[k-1] : undefined), r: bound(i, 1, k < pk.length-1 ? pk[k+1] : undefined)}));
   for (let k=1;k<regs.length;k++) {
@@ -4807,7 +4807,7 @@ $('#methodsCopy').addEventListener('click', () => { const ta = $('#methodsText')
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(() => { toast('Methods copied'); const b = $('#methodsCopy'); b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy methods'; }, 1500); }, fb); else fb(); });
 $('#sumMore').addEventListener('click', () => { $('#sumTable').classList.toggle('all'); renderSumTable(); });
 $('#sumCsv').addEventListener('click', () => { const q = v => `"${String(v).replace(/"/g, '""')}"`, rows = sumRows(); if (!rows.length) return toast('Set pooled fractions first');
-  saveFile('purification_summary.csv', ['Step,Run,Pool,Pool volume from fractions (mL),A280 area (mAU*mL),Protein from area (mg),NanoDrop mg/mL,NanoDrop SD,NanoDrop n,NanoDrop volume used (mL),NanoDrop mg,A280 of 1 mg/mL used,Yield (%),Step yield (%),Yield basis,Purity (%),mg per L culture,mg per g cells,Column,Buffer A,Buffer B,Flow (mL/min),Temperature (C),Gradient,Sample loaded'].concat(sumDisplay(rows).map(d => { if (d.conc) { const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, E = ndEpsFor(d.conc.r.id); return ['', q(d.name), q('NanoDrop'), d.vol ? d.vol.toFixed(2) : '', '', '', d.mgml ? d.mgml.toFixed(3) : '', d.sd != null ? d.sd.toFixed(3) : '', '', d.vol ? d.vol.toFixed(2) : '', d.mg > 0 ? d.mg.toFixed(3) : '', E ? E.e.toFixed(3) : '', d.yld == null ? '' : d.yld.toFixed(1), d.stepY == null ? '' : d.stepY.toFixed(1), rows.basis, '', cL > 0 && d.mg > 0 ? (d.mg/cL).toFixed(2) : '', cG > 0 && d.mg > 0 ? (d.mg/cG).toFixed(3) : '', '', '', '', '', '', '', ''].join(','); } if (d.man) { const m = d.man.man, cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0;
+  saveFile('purification_summary.csv', ['Step,Run,Pool,Pool volume from fractions (mL),A280 area (mAU*mL),Protein from area (mg),NanoDrop mg/mL,NanoDrop SD,NanoDrop n,NanoDrop volume used (mL),NanoDrop mg,A280 of 1 mg/mL used,Yield (%),Step yield (%),Yield basis,Purity (%),mg per L culture,mg per g cells,Column,Buffer A,Buffer B,Flow (mL/min),Temperature (C),Gradient,Sample loaded'].concat(sumDisplay(rows).map(d => { if (d.conc) { const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, E = ndEpsFor(d.conc.r.id); return ['', q(d.name), q('NanoDrop'), '', '', '', d.mgml ? d.mgml.toFixed(3) : '', d.sd != null ? d.sd.toFixed(3) : '', '', d.vol ? d.vol.toFixed(2) : '', d.mg > 0 ? d.mg.toFixed(3) : '', E ? E.e.toFixed(3) : '', d.yld == null ? '' : d.yld.toFixed(1), d.stepY == null ? '' : d.stepY.toFixed(1), rows.basis, '', cL > 0 && d.mg > 0 ? (d.mg/cL).toFixed(2) : '', cG > 0 && d.mg > 0 ? (d.mg/cG).toFixed(3) : '', '', '', '', '', '', '', ''].join(','); } if (d.man) { const m = d.man.man, cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0;
       return ['', q(d.man.name), q('no chromatogram'), d.vol ? d.vol.toFixed(2) : '', '', d.mg > 0 ? d.mg.toFixed(3) : '', '', '', '', '', '', '', d.yld == null ? '' : d.yld.toFixed(1), d.stepY == null ? '' : d.stepY.toFixed(1), rows.basis, '', cL > 0 && d.mg > 0 ? (d.mg/cL).toFixed(2) : '', cG > 0 && d.mg > 0 ? (d.mg/cG).toFixed(3) : '', q(m.resin || ''), q(m.buffer || ''), '', '', '', q(m.elution || ''), ''].join(','); }
     const x = d.run, k = d.k, n = x.nd, st = n && (n.F || n.P), E = ndEpsFor(x.r.id);
     return [k + 1, q(x.r.name), q(x.p.label), x.vol == null ? '' : x.vol.toFixed(2), x.p.area == null ? '' : x.p.area.toFixed(2), x.p.mg == null ? '' : x.p.mg.toFixed(3), st ? st.m.toFixed(3) : '', st && st.sd != null ? st.sd.toFixed(3) : '', st ? st.n : '', n ? ((n.F ? n.fv : n.pv) || '') : '', n && n.mg != null ? n.mg.toFixed(3) : '', E ? E.e.toFixed(3) : '', x.yld == null ? '' : x.yld.toFixed(1), x.stepY == null ? '' : x.stepY.toFixed(1), rows.basis, x.pur == null ? '' : x.pur.toFixed(1), (cL => cL > 0 && rows.mgOf(x) > 0 ? (rows.mgOf(x)/cL).toFixed(2) : '')(prep.on ? numOr(prep.cultureL, 0) : 0), (cG => cG > 0 && rows.mgOf(x) > 0 ? (rows.mgOf(x)/cG).toFixed(3) : '')(prep.on ? numOr(prep.pellet, 0) : 0), ...(c => [c.mCol, c.mBufA, c.mBufB, c.mFlow, c.mTemp, c.mGrad, c.mLoad].map(q))(runCond(x.r))].join(','); })).join('\r\n')); });
@@ -4953,8 +4953,8 @@ async function loadFiles(files){
     } catch (err) { bad.push(f.size === 0 ? `${f.name} (the file is empty)` : `${f.name} (no columns of numbers found)`); }
   }
   if ((added.length || newRuns.length) && traces.length && traces.every(t => t.ex)) { traces = []; opt.xmin = opt.xmax = opt.ymin = opt.ymax = ''; }
-  /* a run already loaded (same file and points) is skipped */
-  const dup = newRuns.filter(n => runs.some(r => r.file === n.file && r.uvs && n.uvs && r.uvs[0].xs.length === n.uvs[0].xs.length));
+  /* a run already loaded (same file and points) is added again, but left out of the workflow until it is ticked in */
+  const dup = newRuns.filter(n => runs.some(r => r.file === n.file && r.uvs && n.uvs && r.uvs[0].xs.length === n.uvs[0].xs.length)); dup.forEach(d => { d.inWf = false; });
   newRuns.sort((a,b) => (a.time ?? -Infinity) - (b.time ?? -Infinity)).forEach(r => { runs.push(r); if (isSec(r) && !r.integ.length) autoIntegrate(r); });
   addParsed(added, true);
   const steps = runs.filter(r => r.inWf);
@@ -4963,7 +4963,7 @@ async function loadFiles(files){
   renderList(); syncControls(); render();
   const n = added.length + newRuns.length;
   if (bad.length) toast(`Could not read ${bad.join(', ')}. Use an ÄKTA (UNICORN) export or a text file with time and signal columns.`);
-  else if (n) toast(dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded (added again)` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}` : `Loaded ${n} trace${n > 1 ? 's' : ''}`);
+  else if (n) toast(dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}` : `Loaded ${n} trace${n > 1 ? 's' : ''}`);
   if (imgs.length) addGelFiles(imgs);
 }
 function addParsed(added, quiet){
