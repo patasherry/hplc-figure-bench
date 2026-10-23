@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: ['00_', '10_', '12_', '20_', '26_', '30_', '40_', '50_']
+        suite: ['00_', '10_', '12_', '20_', '22_', '26_', '30_', '40_', '50_']
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,7 +72,7 @@ jobs:
         run: |
           python3 - <<'EOF'
           import json, glob, os, re
-          names = {'00_': 'smoke', '10_': 'data truth', '12_': 'genbank', '20_': 'science', '26_': 'SEC calibration', '30_': 'robustness', '40_': 'visual', '50_': 'export'}
+          names = {'00_': 'smoke', '10_': 'data truth', '12_': 'genbank', '20_': 'science', '22_': 'protein', '26_': 'SEC calibration', '30_': 'robustness', '40_': 'visual', '50_': 'export'}
           rows, regs, fixes, total_reg, missing, newfail = [], [], [], 0, [], []
           for key, label in names.items():
               d = f'results/results-{key}'
