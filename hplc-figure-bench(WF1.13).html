@@ -2776,7 +2776,7 @@ function bandAt(g, sig, yRot){
   return {row: y, h: v, area, l, r, hl, hr, yRot: c.t + (y + 0.5)/h*(c.b - c.t), manual: true};
 }
 function mwText(g, mw){
-  if (mw == null) return '?'; const ks = g.marks.map(m => m.kda); if (!ks.length) return '?';
+  if (mw == null) return '?'; const ks = g.marks.filter(k => k.kda > 0).map(m => m.kda); if (!ks.length) return '?';
   const hi = Math.max(...ks), lo = Math.min(...ks);
   if (mw > hi*1.08) return '>' + hi; if (mw < lo*0.92) return '<' + lo;
   return mw >= 100 ? String(Math.round(mw)) : fmt(mw, 1);
