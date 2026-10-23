@@ -1,0 +1,9 @@
+LOCUS       pCASE                 500 bp     DNA     circular SYN 01-JAN-2025
+FEATURES             Location/Qualifiers
+     CDS             1..90
+                     /label="TestCDS"
+                     /translation="MHHHHHHSSGLVPRGSMSSKGEELFTGVVP"
+ORIGIN
+        1 atcgATCGat cgATCGatcg ATCGatcgAT CGatcgATCG
+       51 atcgATCGat cgATCGatcg ATCGatcgAT CGatcgATCG
+//

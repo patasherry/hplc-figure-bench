@@ -28,6 +28,8 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__)); OUT = os.path.join(HERE, 'chrom'); os.makedirs(OUT, exist_ok=True)
 RNG = np.random.default_rng(20261022)
 POOL_EPS = 1.0
+STEP_TOL_NOTE = ('The app draws a straight baseline under the pool between the low points outside it (it corrects the UV rise from imidazole on a step), while this area is on a zero baseline. '
+                 'A pool cut on a peak tail reads 4-7% lower that way. Agreed with the lead as a known, accepted difference.')
 
 def gauss(x, c, s, h): return h*np.exp(-0.5*((x - c)/s)**2)
 def signal(x, comps): return sum((gauss(x, *c) for c in comps), np.zeros_like(x))
@@ -140,7 +142,7 @@ def imac_step():
     add(dict(file=fn, format='UNICORN 7 CSV, comma, UTF-8', kind='imac', step='IMAC', unit='mL', column='HisTrap FF 1 mL', cv=0.962, flow=None, path_mm=2,
              frac=dict(n=12, first='T1', last='T12'), injection=0.0,
              peaks=[dict(ve=51.6, tol=0.08, must=True, note='step elution peak'), dict(ve=12.0, tol=0.5, must=False, note='flow-through, outside the fraction window')],
-             pool=dict(label='T1-T3', a=a, b=b, area=round(ar, 2), area_tol_pct=4, eps=POOL_EPS, mg=round(mg_of(ar, 2), 4))))
+             pool=dict(label='T1-T3', a=a, b=b, area=round(ar, 2), area_tol_pct=9, eps=POOL_EPS, mg=round(mg_of(ar, 2), 4), tol_note=STEP_TOL_NOTE)))
 
 # ---------------------------------------------------------------- B. IMAC linear gradient, tab, UTF-16 LE BOM, flow and temperature curves
 def imac_grad():
@@ -190,7 +192,7 @@ def u5():
     add(dict(file=fn, format='UNICORN 5 .asc with run prefix', kind='imac', step='IMAC', unit='mL', column='HisTrap 5 mL', cv=None, flow=None, path_mm=2,
              frac=dict(n=12, first='A1', last='A12'), injection=None,
              peaks=[dict(ve=42.4, tol=0.12, must=True, note='step elution peak'), dict(ve=8.0, tol=0.5, must=False, note='flow-through, outside the window')],
-             pool=dict(label='A2-A5', a=a, b=b, area=round(ar, 2), area_tol_pct=4, eps=POOL_EPS, mg=round(mg_of(ar, 2), 4))))
+             pool=dict(label='A2-A5', a=a, b=b, area=round(ar, 2), area_tol_pct=9, eps=POOL_EPS, mg=round(mg_of(ar, 2), 4), tol_note=STEP_TOL_NOTE)))
 
 # ---------------------------------------------------------------- E. SEC in minutes, UNICORN 7 CSV
 def sec_min():
@@ -311,9 +313,26 @@ def au_trace():
     fn = 'hplc_au_ml_u7.csv'; ar = mg_run(fn, 'ml', 'AU', False, 0.001)
     MG.append(dict(file=fn, note='y in AU (not mAU), x in mL: the app shows it in mAU, so the area is in mAU*mL', unit='mL', flow=None, pool='F1-F6', path_mm=10, eps=POOL_EPS, area=round(ar, 2), mg=round(ar/1000/(POOL_EPS*1.0), 4)))
 
+# ---------------------------------------------------------------- K. pool volume when the pool includes the last fraction
+# The trace runs about 24 mL past the last fraction (wash, re-equilibration) and there is no Waste mark, so the last fraction must not run to the end of the trace.
+# Own generator per file: the files above keep their noise. Fractions are 1 mL unless stated; vol = the pool volume the app should show.
+LF = []
+def last_frac(fn, fr_ev, log, pool, vol, n, first, last, note, card_note):
+    rng = np.random.default_rng(20261023 + len(LF)); x = np.round(np.arange(0, 80.0001, 0.05), 4); y = signal(x, [(52.5, 0.6, 800.0)]) + rng.normal(0, 0.5, x.size)
+    write_unicorn_csv(os.path.join(OUT, fn), [('UV', 'ml', 'mAU', x, y), ('Fraction', 'ml', 'Fraction', fr_ev, None), ('Injection', 'ml', 'Injection', [(0.0, '')], None), ('Run Log', 'ml', 'Logbook', log, None)])
+    LF.append(dict(file=fn, note=note, pool=pool, vol=vol, n=n, first=first, last=last, card_note=card_note))
+def last_frac_runs():
+    log = [(0.0, 'Method Run 10/23/2026 9:00:00 AM -07:00 Method: HisTrap step Result: /DefaultHome/lastfrac 001')]
+    ev = [(50.0 + i, f'T{i + 1}') for i in range(6)]
+    last_frac('lastfrac_median_u7.csv', ev, log, 'T4-T6', 3.0, 6, 'T1', 'T6', 'no logged end: the last fraction is one median width (1 mL), not 30 mL to the end of the trace', 'not logged')
+    last_frac('lastfrac_logged_end_u7.csv', ev, log + [(56.4, 'Fractionation stopped')], 'T5-T6', 2.4, 6, 'T1', 'T6', 'logged end of fractionation at 56.4 mL: the last fraction is 1.4 mL', None)
+    last_frac('lastfrac_wide_logged_u7.csv', ev, log + [(56.7, 'End Fractionation')], 'T5-T6', 2.7, 6, 'T1', 'T6', 'logged end gives a last fraction of 1.7 mL, more than 1.5 times the median: the card warns', '1.5 times')
+    gap = [(50.0 + i, f'T{i + 1}') for i in range(4)] + [(58.0 + i, f'T{i + 8}') for i in range(3)]
+    last_frac('lastfrac_tube_gap_u7.csv', gap, log, 'T3-T4', 2.0, 7, 'T1', 'T10', 'T4 is followed by T8, 5 mL later: T4 counts as one median width (1 mL), not 5 mL', None)
+
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
-    doc['mg'] = MG
+    doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()
     json.dump(doc, open(p, 'w'), indent=1); print(f'{len(EXP)} chromatograms -> {OUT}')
