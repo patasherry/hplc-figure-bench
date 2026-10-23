@@ -594,5 +594,47 @@
    "area": 2506.63,
    "mg": 2.5066
   }
+ ],
+ "lastfrac": [
+  {
+   "file": "lastfrac_median_u7.csv",
+   "note": "no logged end: the last fraction is one median width (1 mL), not 30 mL to the end of the trace",
+   "pool": "T4-T6",
+   "vol": 3.0,
+   "n": 6,
+   "first": "T1",
+   "last": "T6",
+   "card_note": "not logged"
+  },
+  {
+   "file": "lastfrac_logged_end_u7.csv",
+   "note": "logged end of fractionation at 56.4 mL: the last fraction is 1.4 mL",
+   "pool": "T5-T6",
+   "vol": 2.4,
+   "n": 6,
+   "first": "T1",
+   "last": "T6",
+   "card_note": null
+  },
+  {
+   "file": "lastfrac_wide_logged_u7.csv",
+   "note": "logged end gives a last fraction of 1.7 mL, more than 1.5 times the median: the card warns",
+   "pool": "T5-T6",
+   "vol": 2.7,
+   "n": 6,
+   "first": "T1",
+   "last": "T6",
+   "card_note": "1.5 times"
+  },
+  {
+   "file": "lastfrac_tube_gap_u7.csv",
+   "note": "T4 is followed by T8, 5 mL later: T4 counts as one median width (1 mL), not 5 mL",
+   "pool": "T3-T4",
+   "vol": 2.0,
+   "n": 7,
+   "first": "T1",
+   "last": "T10",
+   "card_note": null
+  }
  ]
 }
