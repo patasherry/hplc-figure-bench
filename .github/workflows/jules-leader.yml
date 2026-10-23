@@ -15,10 +15,6 @@ on:
   issue_comment:
     types: [created]
 
-concurrency:
-  group: jules-leader
-  cancel-in-progress: false
-
 permissions:
   contents: write
   issues: write
@@ -29,7 +25,13 @@ jobs:
   lead:
     if: (github.event_name != 'issues' || github.event.label.name == 'jules-queue') && (github.event_name != 'issue_comment' || contains(github.event.comment.user.login, 'jules'))
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
+    # one leader at a time; the heartbeat below waits outside this lock
+    concurrency:
+      group: jules-leader
+      cancel-in-progress: false
+    outputs:
+      active: ${{ steps.lead.outputs.active }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,14 +44,22 @@ jobs:
           script: |
             const lead = require('./.github/scripts/jules-leader.js');
             await lead({github, context, core});
-      # While Jules has queued or running work, wait 10 minutes and run the leader again.
-      # Public repositories get Actions minutes free, so this costs nothing.
+
+  # While Jules has queued or running work, wait 10 minutes and start the leader again.
+  # This job has its own concurrency group, so the leader is free to run on events while it waits,
+  # and a newer wait replaces an older one (only one chain at a time). Actions minutes are free on public repositories.
+  heartbeat:
+    needs: lead
+    if: needs.lead.outputs.active == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: jules-leader-heartbeat
+      cancel-in-progress: true
+    steps:
       - name: Check again in 10 minutes
-        if: steps.lead.outputs.active == 'true' && github.event_name != 'issue_comment'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           sleep 600
-          # if another leader run is already waiting, it will do the next check, so do not start a second chain
-          waiting=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow jules-leader.yml --json databaseId,status --jq "[.[] | select(.databaseId != $GITHUB_RUN_ID and (.status == \"queued\" or .status == \"pending\" or .status == \"waiting\" or .status == \"in_progress\"))] | length")
-          if [ "$waiting" = "0" ]; then gh workflow run jules-leader.yml --repo "$GITHUB_REPOSITORY" --ref main; else echo "another leader run is waiting, not starting a new one"; fi
+          gh workflow run jules-leader.yml --repo "$GITHUB_REPOSITORY" --ref main
