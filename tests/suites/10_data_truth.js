@@ -43,6 +43,13 @@ async function chromFile(e){ const id = e.file.replace(/\.[^.]+$/, ''), t0 = Dat
     // guards: the UV path stored in a UNICORN archive (CurveUVInfo/UVPathLength) is used, and the "UV cell path length" curve is not a trace
     if (/\.zip$/.test(e.file)) { const pv = num(await field(p, 'path')); T.check(`${id}/uv-path`, Math.abs(pv - e.path_mm) < 0.01, `expected ${e.path_mm} mm, got ${pv}`); }
     await setOpt(p, 'o-eps', e.pool ? e.pool.eps : 1); await detect(p);
+    // guards (#10): the figure's display smoothing and baseline change the picture only, never the peak areas or % (peaks measured from zero, so an offset would show)
+    { const big = async () => (await peaks(p, h)).rows.filter(r => !/^pool/i.test(r.name)).sort((a, b) => b.area - a.area)[0];
+      await setOpt(p, 'o-intBase', 'zero'); await p.waitForTimeout(300); const before = await big();
+      if (before) { await setOpt(p, 'o-smooth', 21); await setOpt(p, 'o-baseline', 'min'); await p.waitForTimeout(400); const after = await big() || {};
+        T.check(`${id}/peak-area-ignores-display`, Math.abs(after.area - before.area) <= Math.abs(before.area)*0.001 && after.pct === before.pct, `before ${before.area} (${before.pct}%), after strong smoothing and zero-at-minimum ${after.area} (${after.pct}%)`);
+        await setOpt(p, 'o-smooth', 0); await setOpt(p, 'o-baseline', 'none'); }
+      await setOpt(p, 'o-intBase', 'line'); await p.waitForTimeout(300); }
     const P = await peaks(p, h), pk = P.rows.filter(r => !/^pool/i.test(r.name));
     // guards: the axis unit follows the file (mL, or min for a time-based export)
     T.check(`${id}/unit`, P.unit === e.unit, `expected ${e.unit}, table header "${P.head.join(' | ')}"`);
