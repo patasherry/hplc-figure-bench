@@ -2749,8 +2749,8 @@ function detectBands(g, i, sensPct, gelMax){
   /* a band must clear: an absolute floor, a share of this lane's strongest band, a multiple of the point-to-point noise,
      a multiple of the lane's typical background level, and a share of the gel's strongest band */
   const thr = Math.max(DET.minAbs, mx*sensPct/100, noise*DET.noiseK, bgLevel*DET.madK, (gelMax || 0)*DET.gelRel), sep = Math.max(2, Math.round(h*DET.sep)), bands = [];
-  let total = 0; for (let y=0;y<h;y++) total += sig[y];
   const yTop = Math.round(h*DET.edgeTop), yBot = h - 1 - Math.round(h*DET.edgeBot);
+  let total = 0; for (let y=yTop;y<=yBot;y++) total += sig[y];
   for (let y=Math.max(1, yTop);y<Math.min(h-1, yBot);y++){
     const v = sig[y]; if (v < thr || v < sig[y-1] || v < sig[y+1]) continue;
     let ok = true; for (let j=Math.max(0,y-sep); j<=Math.min(h-1,y+sep); j++) if (sig[j] > v || (sig[j] === v && j < y)) { ok = false; break; } if (!ok) continue;
@@ -2849,7 +2849,7 @@ function calibBad(g){ const m = g.marks.filter(k => k.kda > 0).slice().sort((a, 
 function gelBands(g){
   if (!g.pix) return [];
   const ed = g.edits || (g.edits = {added: [], removed: []});
-  const key = gelLabels(g).join(',') + '|' + numOr(opt.bandSens, 8) + '|' + g.marks.map(m => m.kda + ':' + m.y.toFixed(4)).join(',') + '|' + (g.assign || []).join(',') + '|' + JSON.stringify(ed);
+  const key = gelLabels(g).join(',') + '|' + numOr(opt.bandSens, 8) + '|' + g.marks.map(m => m.kda + ':' + m.y.toFixed(4)).join(',') + '|' + JSON.stringify(g.assign || []) + '|' + lanesFor(g, 'marker').join(',') + '|' + JSON.stringify(ed);
   if (g._bands && ((g._bands.key === key && g._bands.pix === g.pix) || g._live)) return g._bands.lanes;
   const cal = calib(g), labs = gelLabels(g);
   let gelMax = 0; if (DET.gelRel > 0) labs.forEach((l, i) => { if (laneAssign(g, i) !== 'marker') gelMax = Math.max(gelMax, arrMax(laneProfile(g, i))); });
@@ -2863,8 +2863,9 @@ function gelBands(g){
       if (e > j) { let start = lo; for (let k = j; k <= e; k++) { const b = bands[k]; let end = hi; if (k < e) { end = b.row; for (let y = b.row + 1; y < bands[k+1].row; y++) if (r.sig[y] < r.sig[end]) end = y; } b.l = start; b.r = end; start = end + 1; } }
       j = e + 1; }
       bands.forEach(b => { b.area = 0; for (let y = b.l; y <= b.r; y++) b.area += r.sig[y]; }); }
-    const total = r.total; bands.sort((a, b) => a.row - b.row).forEach(b => { b.pct = total > 0 ? 100*b.area/total : 0; b.mw = cal ? cal(b.yRot) : null; });
-    return {i, label: l, bands}; });
+    /* a band the user removed is taken out of the lane total too, so removing an artifact changes % of lane and purity */
+    const total = Math.max(bands.reduce((t, b) => t + b.area, 0), r.total - r.bands.reduce((t, b) => t + (bands.includes(b) ? 0 : b.area), 0)); bands.sort((a, b) => a.row - b.row).forEach(b => { b.pct = total > 0 ? 100*b.area/total : 0; b.mw = cal ? cal(b.yRot) : null; });
+    return {i, label: l, bands, total}; });
   g._bands = {key, pix: g.pix, lanes}; return lanes;
 }
 /* band edit history: every add, remove, mark or clear is undoable, and Reset goes back to plain detection */
@@ -2906,7 +2907,7 @@ function laneCtx(g, i){
   const typ = x => String(x.stepName || '').trim() || guessStep(x);
   /* whole-proteome lanes (lysate, pellet, flow-through, load) carry no information in a size match, so they get no co-purifier calls */
   const imacLab = /wash|elu|imac|\bni\b|nickel|his[\s.-]*trap|^e\d+\b|eluate/i.test(lab), proteome = /^(lys|crude|sup|pel|load|input|ft\b|flow|cleared|total|sol|insol|induc|uninduc|pre)/i.test(lab);
-  const postLab = /cleav|ulp|tev|digest|after|post|\bcut\b|reverse|ortho|\brimac\b/i.test(lab);
+  const postLab = a === 'cleave' || /cleav|ulp|tev|digest|after|post|\bcut\b|reverse|ortho|\brimac\b/i.test(lab);
   const imacL = imacLab && !postLab;
   const iImac = wf.findIndex(x => typ(x) === 'IMAC'), iRev = wf.findIndex(x => typ(x) === 'Reverse IMAC'), k = r ? wf.indexOf(r) : -1;
   const cut = iRev >= 0 ? iRev : iImac >= 0 ? iImac + 1 : -1;
@@ -3035,11 +3036,12 @@ function lanePurity(g, ln){
     const ms = [F[0].mass/1000].concat(F[1] && tagStep && opt.tagCounts !== false ? [F[1].mass/1000] : []);
     ln.bands.forEach(b => { if (!tagRaw(g, ln.i, b) && b.mw != null && ms.some(m => Math.abs(Math.log(b.mw/m)) < Math.log(1.08))) { tgt += b.area; est = true; mws.push(b.mw); } }); } }
   let flagged = 0; if (opt.knownCount) ln.bands.forEach(b => { if (!tagOf(g, ln.i, b) && knownShown(g, ln.i, b).some(k => k.kind === 'contam' || k.kind === 'freetag')) { con += b.area; flagged++; } });
-  let cleaved = (g.tags || []).some(t => t.kind === 'tagged' && (t.lane == null || t.lane === ln.i)) && un + tg > 0 ? 100*un/(un + tg) : null, cleavedEst = false;
-  if (cleaved == null && cleavePlan(g)) { let cu = un, cg = 0;
+  const F0 = protForms(), cp = cleavePlan(g), mC = F0[1] ? F0[0].mass/1000 : cp ? cp.P : mws[0] || 1, mT = F0[1] ? F0[1].mass/1000 : cp ? cp.P + cp.T : tmws[0] || mC, cMol = (u, t) => 100*(u/mC)/((u/mC) + (t/mT));
+  let cleaved = (g.tags || []).some(t => t.kind === 'tagged' && (t.lane == null || t.lane === ln.i)) && un + tg > 0 ? cMol(un, tg) : null, cleavedEst = false;
+  if (cleaved == null && cp) { let cu = un, cg = tg;
     ln.bands.forEach(b => { if (tagOf(g, ln.i, b)) return; const k = knownFor(g, ln.i, b).find(x => x.kind === 'cleaved' || x.kind === 'uncleaved'); if (!k) return; if (k.kind === 'cleaved') cu += b.area; else cg += b.area; });
-    if (cu > 0 && cg > 0 || (cg > 0 && un === 0)) { cleaved = 100*cu/(cu + cg); cleavedEst = true; } else if (cu > 0 && cg === 0 && un === 0) { cleaved = 100; cleavedEst = true; } }
-  const P = g.pix; const sig = laneProfile(g, ln.i); for (let y=0; y<sig.length; y++) tot += sig[y];
+    if (cu > 0 && cg > 0 || (cg > 0 && cu === 0 && laneCtx(g, ln.i).post)) { cleaved = cMol(cu, cg); cleavedEst = true; } else if (cu > 0 && cg === 0 && (un === 0 || laneCtx(g, ln.i).post)) { cleaved = 100; cleavedEst = true; } }
+  tot = ln.total ?? 0;
   /* purity needs at least one contaminant marked for this lane (on all lanes, or on this lane alone) */
   const hasCon = flagged > 0 || (g.tags || []).some(t => t.kind === 'contam' && (t.lane == null || t.lane === ln.i));
   if (!(tgt > 0) || (!hasCon && opt.purBase === 'tagged')) return {purity: null, tgt, con, tot, mws, tmws, cleaved, cleavedEst, needCon: tgt > 0 && !hasCon && opt.purBase === 'tagged'};
@@ -3255,7 +3257,7 @@ function gelPart(g, ix, y, iw, maxH, laneIdx, extraW, view){
     else if (vert) s.push(`<text transform="translate(${r2(X + vf*0.35)} ${r2(iy - 2 - lb)}) rotate(-90)" font-size="${r2(vf)}"${pc}>${esc(laneShow(l))}</text>`);
     else s.push(`<text transform="translate(${r2(X - lf*0.2)} ${r2(iy - 3 - lb)}) rotate(-45)"${pc}>${esc(laneShow(l))}</text>`); });
   s.push('</g>');
-  gx.forEach(({x, gr}) => { const w = gr.length*laneW, sw = gr.length*srcW, lo = gt ? gr.reduce((m, i) => { const o = laneTrack(g, i); return m + (o[Math.max(0, Math.min(o.length - 1, Math.round(yMid)))] || 0); }, 0)/gr.length : 0,
+  gx.forEach(({x, gr}) => { const w = gr.length*laneW, sw = gr.length*srcW, lo = gt ? gr.reduce((m, i) => { const o = laneTrack(g, i); return m + (o[Math.max(0, Math.min(o.length - 1, Math.round(yMid)))] || 0) + (i + 0.5)*g.out.w/n - lx(i); }, 0)/gr.length : 0,
       sx = Math.max(0, Math.min(g.out.w - sw, lx(gr[0]) + lo - srcW/2));
     s.push(`<svg x="${r2(x)}" y="${r2(iy)}" width="${r2(w)}" height="${r2(ih)}" viewBox="${r2(sx)} ${r2(wa*g.out.h)} ${r2(sw)} ${r2(span*g.out.h)}" preserveAspectRatio="none"><use href="#${imgId}" xlink:href="#${imgId}"/></svg>`);
     if (opt.gelFrame) s.push(`<rect x="${r2(x)}" y="${r2(iy)}" width="${r2(w)}" height="${r2(ih)}" fill="none" stroke="#000000" stroke-width="${r2(Math.max(0.1, numOr(opt.lw, 0.75)))}"/>`); });
@@ -3308,7 +3310,7 @@ function gelPart(g, ix, y, iw, maxH, laneIdx, extraW, view){
     grp.forEach(q => { const xa = pos[q[0]] - laneW*0.45, xb = pos[q[q.length - 1]] + laneW*0.45; s.push(`<path d="M${r2(xa)} ${r2(yb)}V${r2(yb + fs*0.3)}H${r2(xb)}V${r2(yb)}"/>`); });
     s.push('</g>'); grp.forEach(q => { const xm = (pos[q[0]] + pos[q[q.length - 1]])/2; s.push(`<text x="${r2(xm)}" y="${r2(yb + fs*1.15)}" text-anchor="middle" font-size="${r2(fs*0.8)}" fill="${pc}">pool</text>`); });
     extraH += fs*1.4; } }
-  if (g.pix && ((g.tags || []).length || (opt.known || []).some(k => k.on))) {
+  if (g.pix && ((g.tags || []).length || (opt.known || []).some(k => k.on) || opt.cleaveDetect || opt.purRow)) {
     const bl = gelBands(g), P = g.pix;
     if (opt.tagShow) {
       const shownArrow = new Set(opt.knownShow === 'arrows' ? knownArrows(g, idx).flatMap(a => (a.lanes ? [...a.lanes] : []).map(li => a.name + '|' + li)) : []);
@@ -3335,13 +3337,13 @@ function gelPart(g, ix, y, iw, maxH, laneIdx, extraW, view){
       s.push('</g>');
     }
     if (opt.purRow) {
-      const pf = Math.max(4, fs*0.75); extraH = pf*1.6;
+      const pf = Math.max(4, fs*0.75), py = iy + ih + (extraH ? extraH + fs*0.35 : 0) + pf*1.15;
       s.push(`<g font-size="${r2(pf)}" fill="${lerpHex(TAG_COL.target, '#000000', 0.25)}" text-anchor="middle">`);
       let anyP = false;
       idx.forEach(i => { const pu = lanePurity(g, bl[i]); if (!pu || pu.purity == null) return; anyP = true;
         const lk = LL.get(g.id + ':' + i), fc = lk ? ` fill="${lerpHex(lk.color, '#000000', 0.2)}" font-weight="bold"` : '';
-        s.push(`<text x="${r2(pos[i])}" y="${r2(iy + ih + pf*1.15)}"${fc}>${fmt(pu.purity, 0)}%</text>`); });
-      if (anyP) s.push(`<text x="${r2(x0 - 4)}" y="${r2(iy + ih + pf*1.15)}" text-anchor="end" fill="#000000">Purity</text>`); else extraH = 0;
+        s.push(`<text x="${r2(pos[i])}" y="${r2(py)}"${fc}>${fmt(pu.purity, 0)}%</text>`); });
+      if (anyP) { s.push(`<text x="${r2(x0 - 4)}" y="${r2(py)}" text-anchor="end" fill="#000000">Purity</text>`); extraH = (extraH ? extraH + fs*0.35 : 0) + pf*1.6; }
       s.push('</g>');
     }
   }
@@ -3735,11 +3737,13 @@ const PREP_OPT = () => (prep.on ? '<option value="expr">Expression</option><opti
 const EXP_S = /^(s|sol|soluble|sup|supernatant)$/i, EXP_P = /^(p|insol|insoluble|pel|pellet)$/i;
 /* how much was cut: in the after lane, cleaved protein against the remaining fusion, in moles */
 function cleaveQuant(){
-  const F = protForms(); if (!F[1]) return null; const mT = F[1].mass/1000, mC = F[0].mass/1000; let out = null;
-  gels.forEach(g => { if (out) return; const idx = lanesFor(g, 'cleave'); if (!idx.length || !calib(g)) return; const labs = gelLabels(g), ln = gelBands(g), sat = gelSaturatedIdx(g);
+  const F = protForms(); let out = null;
+  gels.forEach(g => { if (out) return; const cp = cleavePlan(g), mC = F[1] ? F[0].mass/1000 : cp ? cp.P : 0, mT = F[1] ? F[1].mass/1000 : cp ? cp.P + cp.T : 0; if (!(mC > 0 && mT > 0)) return;
+    const idx = lanesFor(g, 'cleave'); if (!idx.length || !calib(g)) return; const labs = gelLabels(g), ln = gelBands(g), sat = gelSaturatedIdx(g);
     const post = idx.filter(i => CLV_POST.test(String(labs[i] || '').trim())).pop(); if (post == null || sat.has(post)) return;
-    const sum = kda => (ln[post] ? ln[post].bands : []).filter(b => b.mw != null && Math.abs(b.mw/kda - 1) <= 0.06).reduce((t, b) => t + b.area, 0);
-    const t = sum(mT), c = sum(mC); if (t + c <= 0) return; out = {pct: 100*(c/mC)/((c/mC) + (t/mT)), lane: String(labs[post]).trim()}; });
+    const bs = ln[post] ? ln[post].bands : [], sumo = /sumo/i.test(opt.tagPreset || ''), fit = (b, kda, app) => b.mw != null && (Math.abs(b.mw/kda - 1) <= 0.06 || (app && Math.abs(b.mw/app - 1) <= 0.06));
+    let c = 0, t = 0; bs.forEach(b => { const tg = tagOf(g, post, b); if (tg) { if (tg.kind === 'target') c += b.area; else if (tg.kind === 'tagged') t += b.area; } else if (fit(b, mC)) c += b.area; else if (fit(b, mT, sumo ? mT + 4 : 0)) t += b.area; });
+    if (t + c <= 0) return; out = {pct: 100*(c/mC)/((c/mC) + (t/mT)), lane: String(labs[post]).trim()}; });
   return out; }
 function exprQuant(){
   const out = {level: null, sol: null, solLanes: false, legend: []};
@@ -4140,7 +4144,7 @@ function methodsText(){
   if (y) { const E = ndEpsFor(y.fin.r.id), pr = poolRows(y.fin.r), vol = pr && pr.measured ? pr.measVol : y.fin.nd && y.fin.nd.fv ? y.fin.nd.fv : pr && pr.vol, path = numOr(y.fin.r.path, numOr(opt.path, 2));
     wf.forEach(r => { if (r.prep === 'manual') { const a = manMg(r.man); if (a) R.push(`After the ${r.name} step, the sample held ${sig2(a)} mg (${fmtAuto(+r.man.conc)} mg/mL in ${fmtAuto(+r.man.vol)} mL).`); return; } const bw = btwOf(r), kp = btwMg(r); if (bw && kp) { const epStr = poolMeas(r).nd ? epPhrase(ndEpsUsed(r)) : ''; R.push(`After ${lc(stepTitle(r))}, ${bw.how === 'conc' ? 'concentration' : 'that step'} left ${sig2(kp.mg)} mg (${(ms => ms.nd ? `${fmt(ms.c, 2)} mg/mL in ${fmtAuto(+bw.vOut)} mL by NanoDrop${ms.nd.n > 1 ? `, mean of ${ms.nd.n} readings` : ''}${epStr}` : `${fmtAuto(+bw.conc)} mg/mL in ${fmtAuto(+bw.vOut)} mL`)(poolMeas(r))}).`); } });
     /* one final amount: the measured final sample, else the concentrated pool said above, else the last pool */
-    if (!y.meas && !(y.fin.p && y.fin.p.viaConc && btwMg(y.fin.r))) R.push(`The ${y.meas ? 'last' : 'final'} pool held ${sig2(y.poolMg)} mg${vol > 0 ? ` in ${fmtAuto(vol)} mL (${sig2(y.poolMg/vol)} mg/mL)` : ''}${y.poolPerL != null ? `, ${sig2(y.poolPerL)} mg per L of culture` : ''}, by ${y.fin.p && y.fin.p.measured ? `NanoDrop A280 of the ${y.fin.p.concentrated ? 'concentrated ' : ''}pool (` : ['mg', 'mgmol', 'area'].includes(y.poolBasis) ? `the A280 area of the pool (${path} mm path${hasTxt(y.fin.r.path) ? '' : ' [assumed, check]'}` : `NanoDrop A280 (`}${E ? `, A280 of ${fmt(E.e, 2)} for 1 mg/mL of the ${E.src === 'set' ? 'protein' : E.src + ' form'}` : ''}).${y.pur == null && !hasTxt(prep.qcPurity) ? ' Its purity was not measured by gel.' : ''}${y.odd ? (o => ` This amount is unverified, because ${o ? `the ${lc(stepTitle(o.r))} step yield is ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'one step yield is above 100%'}.`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''}`); }
+    if (!y.meas && !(y.fin.p && y.fin.p.viaConc && btwMg(y.fin.r))) R.push(`The ${y.meas ? 'last' : 'final'} pool held ${sig2(y.poolMg)} mg${vol > 0 ? ` in ${fmtAuto(vol)} mL (${sig2(y.poolMg/vol)} mg/mL)` : ''}${y.poolPerL != null ? `, ${sig2(y.poolPerL)} mg per L of culture` : ''}, by ${y.fin.p && y.fin.p.measured ? `NanoDrop A280 of the ${y.fin.p.concentrated ? 'concentrated ' : ''}pool (` : ['mg', 'mgmol', 'area'].includes(y.poolBasis) ? `the A280 area of the pool (${path} mm path${hasTxt(y.fin.r.path) ? '' : ' [assumed, check]'}` : `NanoDrop A280 (`}${E ? `, A280 of ${fmt(E.e, 2)} for 1 mg/mL of the ${E.src === 'set' ? 'protein' : E.src + ' form'}` : ''}).${y.pur == null && !hasTxt(prep.qcPurity) ? ' Its purity was not measured by gel.' : !hasTxt(prep.qcPurity) && !(y.purEst && y.pur < 15) ? ` Purity was ${y.purEst ? 'about ' : ''}${fmt(y.pur, 0)}% by SDS-PAGE.` : ''}${y.odd ? (o => ` This amount is unverified, because ${o ? `the ${lc(stepTitle(o.r))} step yield is ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'one step yield is above 100%'}.`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''}`); }
   if (prep.on) { const fc = numOr(prep.finConc, 0), fv = numOr(prep.finVol, 0), ra = v(prep.finRatio), cL = numOr(prep.cultureL, 0);
     if (fc > 0 && fv > 0) R.push(`The final sample was ${fmtAuto(fc)} mg/mL in ${fmtAuto(fv)} mL, ${sig2(fc*fv)} mg${cL > 0 ? ` or ${sig2(fc*fv/cL)} mg per L of culture` : ''}${ra ? `, with an A260/A280 of ${ra}` : ''}.`);
     else if (ra) R.push(`The final sample had an A260/A280 of ${ra}.`);
@@ -4193,9 +4197,9 @@ $('#moreBtn').addEventListener('click', () => { document.body.classList.toggle('
 /* the ladder is detected automatically whenever the crop, lanes or ladder sizes change, until you mark it by hand */
 function ensureLadder(g){
   if (!g || !g.pix || g.marksManual || marking || g._live) return;
-  const key = [g.cl, g.cr, g.ct, g.cb, g.rot, g.fine, g.nLanes, g.labels, g.ladder, (g.assign || []).join(','), JSON.stringify(DET)].join('|');
+  const key = [g.cl, g.cr, g.ct, g.cb, g.rot, g.fine, g.nLanes, g.labels, g.ladder, lanesFor(g, 'marker').join(','), JSON.stringify(DET)].join('|');
   if (g._ladKey === key) return; g._ladKey = key;
-  if (!lanesFor(g, 'marker').length || ladderVals(g).length < 2) { g.ladderMsg = lanesFor(g, 'marker').length ? '' : 'No ladder lane yet. Label it M or pick Ladder in the lane list.'; return; }
+  if (!lanesFor(g, 'marker').length || ladderVals(g).length < 2) { g.marks = g.marks.filter(m => !m.auto); g._bands = null; g.ladderMsg = lanesFor(g, 'marker').length ? '' : 'No ladder lane yet. Label it M or pick Ladder in the lane list.'; return; }
   const r = autoLadder(g); g._bands = null;
   if (r.err) { g.marks = g.marks.filter(m => !m.auto); g.ladderMsg = r.err; }
   else { const q = ladderFitErr(g); g.ladderMsg = `Ladder found: ${r.n} of ${r.of} sizes matched.${q != null && q > 25 ? ` One mark is off a smooth curve by ${Math.round(q)}%, so check the ladder choice and the marks.` : ''}`; }
@@ -4648,12 +4652,12 @@ function updatePrompt(){
 }
 $('#g-mark').addEventListener('click', () => {
   const g = curGel(); if (!g) return;
-  if (marking) { marking = null; render(); return; }
+  if (marking) { if (g.marks.length < 2 && marking.prev && marking.prev.length) { g.marks = marking.prev; g.marksManual = marking.prevMan; g.ladderMsg = marking.prevMsg; } g._bands = null; marking = null; render(); return; }
   if (!ladderVals(g).length) { toast('Enter the ladder band sizes first'); return; }
-  g.marks = []; g.marksManual = true; g.ladderMsg = 'Marked by hand. Auto-detect ladder switches back to automatic.'; marking = {gelId: g.id, idx: 0}; tagMode = ''; render();
+  marking = {gelId: g.id, idx: 0, prev: g.marks.slice(), prevMan: g.marksManual, prevMsg: g.ladderMsg}; g.marks = []; g.marksManual = true; g._bands = null; g.ladderMsg = 'Marked by hand. Auto-detect ladder switches back to automatic.'; tagMode = ''; render();
 });
 $('#g-skip').addEventListener('click', () => { if (marking) { marking.idx++; render(); } });
-$('#g-undo').addEventListener('click', () => { const g = curGel(); if (!g || !g.marks.length) return; g.marksManual = true; g.marks.pop(); if (marking) marking.idx = Math.max(0, marking.idx - 1); render(); });
+$('#g-undo').addEventListener('click', () => { const g = curGel(); if (!g) return; if (marking && marking.gelId === g.id) { if (!marking.idx) return; marking.idx--; if (g.marks.length && g.marks[g.marks.length - 1].idx === marking.idx) { g.marks.pop(); g._bands = null; } render(); return; } if (!g.marks.length) return; g.marksManual = true; g.marks.pop(); g._bands = null; render(); });
 $('#g-clear').addEventListener('click', () => { const g = curGel(); if (!g) return; g.marksManual = true; g.ladderMsg = 'Marks cleared. Auto-detect ladder switches back to automatic.'; g.marks = []; if (marking) marking.idx = 0; render(); });
 
 /* figure clicks: peak labels, ladder marking, hover readout */
@@ -4910,7 +4914,7 @@ paper.addEventListener('click', e => {
     if (!marking || marking.gelId !== G.gel.id) return;
     const p = svgPoint(e), P = G.p; if (!p || p.y < P.imgTop || p.y > P.imgTop + P.ih) return;
     const g = G.gel, c = g.crop, vals = ladderVals(g);
-    g.marks.push({kda: vals[marking.idx], y: c.t + (p.y - P.imgTop)/P.ih*(c.b - c.t)}); marking.idx++;
+    g.marks.push({kda: vals[marking.idx], y: c.t + (p.y - P.imgTop)/P.ih*(c.b - c.t), idx: marking.idx}); g._bands = null; marking.idx++;
     if (marking.idx >= vals.length) { marking = null; toast('Ladder marked. The kDa labels now appear with every run that uses this gel.'); }
     render(); return;
   }
