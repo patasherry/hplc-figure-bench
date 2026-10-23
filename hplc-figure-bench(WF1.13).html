@@ -1333,12 +1333,12 @@ const LADDERS = {
 $('#g-preset').innerHTML = Object.entries(LADDERS).map(([k,v]) => `<option value="${k}">${v.name}</option>`).join('');
 
 let opt = Object.assign({}, DEF);
-try { const s = JSON.parse(localStorage.getItem('hplc-fig-opt') || 'null'); if (s) Object.assign(opt, s); } catch(e) {}
+try { const s = JSON.parse(localStorage.getItem('hplc-fig-opt') || 'null'); if (s && typeof s === 'object' && !Array.isArray(s)) Object.assign(opt, s); } catch(e) {}
 opt.xmin = opt.xmax = opt.ymin = opt.ymax = '';
 /* the tidier defaults reach settings saved before them once */
 const tidyOpt = () => { if (!opt.tidy13) { opt.wfYield = false; opt.secStds = false; opt.tidy13 = true; } if (!opt.tidy14) { opt.noGelSlot = false; if (numOr(opt.wfGelH, 1.8) === 1.8) opt.wfGelH = 1.3; opt.tidy14 = true; } }; tidyOpt();
 if (!Array.isArray(opt.known)) opt.known = KNOWN_DEFAULT.map(k => Object.assign({}, k));
-else opt.known.forEach(k => { const d = KNOWN_DEFAULT.find(x => x.name === k.name && x.kind === k.kind); if (d) { k.kda = d.kda; k.ctx = d.ctx; k.src = d.src; if (d.app) k.app = d.app; else delete k.app; } });
+else { opt.known = opt.known.filter(k => k && typeof k === 'object'); opt.known.forEach(k => { const d = KNOWN_DEFAULT.find(x => x.name === k.name && x.kind === k.kind); if (d) { k.kda = d.kda; k.ctx = d.ctx; k.src = d.src; if (d.app) k.app = d.app; else delete k.app; } }); }
 function saveOpt(){ try { localStorage.setItem('hplc-fig-opt', JSON.stringify(opt)); } catch(e) {} }
 
 let wfSel = null, wfSelKey = '', gelMovedAt = 0;
@@ -4933,7 +4933,8 @@ async function addGelFiles(files){
   if (bad.length) toast(`Could not open ${bad.join(', ')}. Try exporting the gel as PNG or JPEG.`);
 }
 async function loadFiles(files){
-  const proj = files.find(f => /\.json$/i.test(f.name)); if (proj && MODE !== 'quick') { let d = null; try { d = JSON.parse(await proj.text()); } catch (e) { toast(`Could not open ${proj.name}`); } if (d) await importAsProject(d, proj.name); return; }
+  const proj = files.find(f => /\.json$/i.test(f.name)); if (proj && MODE !== 'quick') { let d = null; try { d = JSON.parse(await proj.text()); } catch (e) { toast(`Could not open ${proj.name}`); } if (d) await importAsProject(d, proj.name);
+    const rest = files.length - 1; if (rest) toast(`${rest} other file${rest === 1 ? ' was' : 's were'} dropped with the project and not loaded. Drop ${rest === 1 ? 'it' : 'them'} again once the project is open.`); return; }
   if (proj) { try { await openProject(JSON.parse(await proj.text()), proj.name); } catch (e) { toast(`Could not open ${proj.name}`); } files = files.filter(f => f !== proj); if (!files.length) return; }
   const gbf = files.filter(f => /\.(gb|gbk|genbank|ape|dna)$/i.test(f.name)); for (const f of gbf) await loadGenBank(f); files = files.filter(f => !gbf.includes(f)); if (!files.length) return;
   const sf = files.filter(f => /\.(cif|mmcif|pdb|ent)$/i.test(f.name)); for (const f of sf) await loadStructFile(f); files = files.filter(f => !sf.includes(f)); if (!files.length) return;
@@ -4941,6 +4942,8 @@ async function loadFiles(files){
   const added = [], newRuns = [], bad = [];
   for (const f of data) {
     try {
+      if (/\.(heic|heif|pdf|svg|dng|raw|cr2|nef)$/i.test(f.name)) { bad.push(`${f.name} (a picture format this tool cannot open: export the gel as PNG, JPEG or TIFF)`); continue; }
+      if (/\.(xlsx?|xlsm|ods|docx?)$/i.test(f.name)) { bad.push(`${f.name} (a spreadsheet or document: save the data as CSV or tab-separated text first)`); continue; }
       if (/\.zip$/i.test(f.name)) { if (typeof DecompressionStream === 'undefined') { bad.push(`${f.name} (this browser cannot unpack it, export the run as .csv from UNICORN)`); continue; }
         const ak = await isUnicornZip(f) ? await parseUnicornZip(await f.arrayBuffer(), f.name.replace(/\.[^.]+$/, '')) : null;
         if (ak) newRuns.push(makeRun(ak)); else bad.push(`${f.name} (not a UNICORN result archive)`); continue; }
@@ -5548,8 +5551,18 @@ function projectData(){
   return {app: 'HPLC Figure Bench', version: 1, saved: new Date().toISOString(), cur, opt: plain(opt), runs: runs.map(r => noId(r, 'blobId')), traces: traces.filter(t => !t.ex).map(t => noId(t, 'blobId')), gels: gs, struct: struct ? noId(struct, 'blobId') : null, nanodrop: ndSamples.map(n => noId(n, 'specId')), prep};
 }
 let projUndo = null, failedGels = [];
+/* a project file can be partial or damaged: keep what can be used and count what was skipped */
+function cleanProject(d){
+  const isO = o => o && typeof o === 'object' && !Array.isArray(o), hasXY = c => isO(c) && Array.isArray(c.xs) && Array.isArray(c.ys); let skipped = 0;
+  const keep = (list, ok) => { const a = Array.isArray(list) ? list : []; const out = a.filter(ok); skipped += a.length - out.length; return out; };
+  d.runs = keep(d.runs, r => isO(r) && r.id && Array.isArray(r.uvs) && r.uvs.length && r.uvs.every(hasXY));
+  d.traces = keep(d.traces, t => isO(t) && Array.isArray(t.rows) && Array.isArray(t.cols));
+  d.gels = keep(d.gels, isO); d.nanodrop = keep(d.nanodrop, isO);
+  if (!isO(d.struct)) d.struct = null; if (!isO(d.opt)) d.opt = null;
+  return skipped; }
 async function openProject(data, name, noUndo){
   if (!data || data.app !== 'HPLC Figure Bench' || !Array.isArray(data.runs)) { toast(`${name || 'That file'} is not a project saved by this tool`); return; }
+  const skipped = cleanProject(data);
   projUndo = !noUndo && (runs.length || gels.length || traces.some(t => !t.ex)) ? projectData() : null;
   const ng = []; failedGels = [];
   for (const sg of data.gels || []) { try { const img = new Image(); await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = sg.image; });
@@ -5564,7 +5577,7 @@ async function openProject(data, name, noUndo){
   let mx = 0; [...runs, ...gels].forEach(x => { const m = String(x.id).match(/\d+/); if (m) mx = Math.max(mx, +m[0]); }); traces.forEach(t => { mx = Math.max(mx, +t.id || 0); }); uid = Math.max(mx + 1, numOr(prep.nextUid, 0));
   cur = data.cur || 'overlay'; marking = null; tagMode = '';
   renderList(); syncControls(); render(); saveOpt();
-  toast(`Opened ${name || 'project'}: ${runs.length} run${runs.length === 1 ? '' : 's'}, ${traces.length} trace${traces.length === 1 ? '' : 's'}, ${gels.length} gel${gels.length === 1 ? '' : 's'}`);
+  toast(`Opened ${name || 'project'}: ${runs.length} run${runs.length === 1 ? '' : 's'}, ${traces.length} trace${traces.length === 1 ? '' : 's'}, ${gels.length} gel${gels.length === 1 ? '' : 's'}${skipped ? `. Skipped ${skipped} damaged or incomplete item${skipped === 1 ? '' : 's'} in the file` : ''}`);
   nextHidden.delete('undoOpen'); renderNext();
 }
 $('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex)) { toast('Load some data first'); return; }
@@ -5577,7 +5590,7 @@ $('#projFile').addEventListener('change', async e => { const f = e.target.files[
 /* from the home screen or a project, a project file opens as a project of its own and never replaces the open one */
 async function importAsProject(data, fname){
   if (!data || data.app !== 'HPLC Figure Bench' || !Array.isArray(data.runs)) { toast(`${fname} is not a project saved by this tool`); return; }
-  await leaveWorkspace(); resetWorkspace(); await openProject(data, fname, true); stripBlobIds(); traces = traces.filter(t => !t.ex);
+  await leaveWorkspace(); resetWorkspace(); try { await openProject(data, fname, true); } catch (e) { console.warn('import failed', e); toast(`Could not open ${fname}: the file is damaged`); showHome(); return; } stripBlobIds(); traces = traces.filter(t => !t.ex);
   PROJ = mkProj(newPid(), fname.replace(/(_project)?\.json$/i, '').replace(/_/g, ' '), Date.now());
   if (failedGels.length) PROJ.lost.gels = failedGels.map(g => Object.assign({}, g, {imageId: undefined}));
   prep.on = true; MODE = 'proj'; enterApp(); applyProjUI(); renderList();

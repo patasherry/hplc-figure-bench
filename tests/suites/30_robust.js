@@ -106,6 +106,41 @@ for (const cloud of [false, true]) await T.t(cloud ? 'persist-cloud' : 'persist-
     T.check('persist.export-import.same', !diff(a, c), diff(a, c)); } // an exported file imports to the same project
   T.check(`persist.${tag}.no-error`, !errs.length, errs.join(' | ')); await close(); });
 
+/* ---------------- damaged or partial files ---------------- */
+/* a project file with unusable entries opens with what is usable, says what was skipped, and raises no error */
+await T.t('partial-project', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Partial source'); await h.dropFiles(F.his);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const good = path.join(ROOT, 'results', 'partial_src.json'); await dl.saveAs(good);
+  const d = JSON.parse(fs.readFileSync(good, 'utf8')); d.runs.push(null, {id: 'r999'}); d.traces = {}; d.nanodrop = 'none'; d.gels = [null, 5]; d.struct = 'none'; d.opt = [1];
+  await p.click(SEL.home); await p.waitForTimeout(600); await watchToasts(p); const e0 = errs.length;
+  await p.setInputFiles(SEL.importFile, {name: 'partial_project.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))}); await p.waitForTimeout(3000);
+  const ts = await takeToasts(p), tl = await h.timeline();
+  T.check('partial.no-error', errs.length === e0, errs.slice(e0).join(' | ')); // no crash on null, empty or wrongly typed entries
+  T.check('partial.keeps-usable-run', tl.some(x => x.k.startsWith('run:')), `timeline: ${tl.map(x => x.k).join(', ')}`); // the good run is not lost
+  T.check('partial.says-skipped', ts.some(t => /skipped 4/i.test(t)), `toasts: ${ts.join(' | ') || 'none'}`); // the user is told 4 entries were unusable
+  await close(); });
+/* a project file dropped together with other files: the others are not loaded, and the user is told */
+await T.t('project-with-others', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Mixed drop'); await watchToasts(p); const e0 = errs.length;
+  await p.setInputFiles('#file', [{name: 'tiny_project.json', mimeType: 'application/json', buffer: Buffer.from('{"app":"HPLC Figure Bench","version":1,"runs":[]}')}, {name: path.basename(F.his), mimeType: 'text/csv', buffer: fs.readFileSync(F.his)}]); await p.waitForTimeout(3000);
+  const ts = await takeToasts(p);
+  T.check('mixed.toast', ts.some(t => /not loaded/i.test(t)), `toasts: ${ts.join(' | ') || 'none'}`); // no silent drop of the second file
+  T.check('mixed.no-error', errs.length === e0, errs.slice(e0).join(' | ')); await close(); });
+/* pictures in formats the browser cannot read, and spreadsheets, get a message that says what to do */
+await T.t('unsupported-formats', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Formats'); await watchToasts(p);
+  for (const [id, name, re] of [['heic', 'gel_scan.heic', /PNG/], ['xlsx', 'run_export.xlsx', /CSV/]]) { const e0 = errs.length, c0 = await counts(p, h);
+    await p.setInputFiles('#file', {name, mimeType: 'application/octet-stream', buffer: Buffer.from('PK\u0003\u0004 not really a file, just bytes '.repeat(20))}); await p.waitForTimeout(1500);
+    const ts = await takeToasts(p), c1 = await counts(p, h);
+    T.check(`format.${id}.says-what-to-do`, ts.some(t => re.test(t)), `toasts: ${ts.join(' | ') || 'none'}`); // names the format to export instead
+    T.check(`format.${id}.nothing-added`, c1.tl === c0.tl && c1.tabs === c0.tabs, `timeline ${c0.tl}->${c1.tl}`);
+    T.check(`format.${id}.no-error`, errs.length === e0, errs.slice(e0).join(' | ')); }
+  await close(); });
+/* settings saved in this browser that are damaged (a null in the known-proteins list) must not stop the page from starting */
+await T.t('damaged-settings', async () => { const {ctx, p, errs, close} = await open(), h = H(p);
+  await ctx.addInitScript(() => { try { localStorage.setItem('hplc-fig-opt', JSON.stringify({known: [null, 5, {name: 'Keep me', kda: 10, kind: 'contaminant'}], palette: 'okabe'})); } catch (e) {} });
+  await p.reload(); await p.waitForTimeout(1500);
+  T.check('settings.no-error-on-start', !errs.length, errs.join(' | ')); // the script gets to the end
+  await h.newProject('After damaged settings'); T.check('settings.app-usable', (await h.timeline()).length > 0, 'a new project should open a timeline'); // buttons are wired
+  await close(); });
+
 /* ---------------- performance budgets ---------------- */
 await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Perf');
   { const n0 = (await h.timeline()).length, t0 = Date.now(); await p.setInputFiles('#file', F.big); let ms = null;
