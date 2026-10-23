@@ -5258,7 +5258,7 @@ function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) {
     if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) return {i, d, H, rows: 'samples'};
     if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1) return {i, d, H, rows: 'wavelengths'}; } return null; }
 function looksNanoDrop(text){ const L = text.split(/\r?\n/).filter(l => l.trim()); return !!ndHeader(L) || (L.slice(0, 6).some(l => /^wavelength/i.test(l.trim()) && /absorbance/i.test(l)) && L.some(l => /^a?\s?260\s*\/\s*a?280\b/i.test(l.trim()))); }
-const ndNum = v => { const s = String(v ?? '').replace(/\s/g, ''), m = s.match(/^[+-]?\d*,(\d+)(?:[eE][+-]?\d+)?$/), x = parseFloat(m && m[1].length !== 3 ? s.replace(',', '.') : s.replace(/,/g, '')); return isFinite(x) ? x : null; };
+const ndNum = v => { const s = String(v ?? '').replace(/\s/g, ''), m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/), x = parseFloat(m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, '')); return isFinite(x) ? x : null; };
 const CRUDE_RE = /lys|load|flow|\bft\b|supernat|pellet|crude|input|clarif/i;
 function ndNew(o){ return Object.assign({id: 'nd' + (ndUid++), name: '', kind: 'protein', a280: null, a260: null, a230: null, a340: null, r280: null, r230: null, conc: null, unit: 'mg/mL', runId: '', stage: 'pool', dil: 1, hide: false}, o); }
 /* NanoDrop One per-sample file: name, date, a "Wavelength (nm) / 10mm Absorbance" header, calibration comments, A260/A280 and A280 lines, then the spectrum */
@@ -5311,11 +5311,13 @@ function ndGuessRun(name){
 }
 function addNanoDrop(list, name, to){
   if (!list.length) { toast(`No readings found in ${name}`); return; }
-  const key = s => s.name.trim().toLowerCase() + '|' + (s.a280 != null ? s.a280.toFixed(3) : s.conc) + '|' + (s.when || ('row:' + (s.row ?? ''))), have = new Map(ndSamples.map(s => [key(s), s])); let merged = 0;
-  const fresh = list.filter(s => { const o = have.get(key(s)); if (!o) return true; let add = false; Object.keys(s).forEach(k => { if (['id', 'runId', 'stage', 'dil', 'hide'].includes(k)) return; if ((o[k] == null || o[k] === '') && s[k] != null && s[k] !== '') { o[k] = s[k]; add = true; } }); if (add) merged++; return false; });
+  const base = s => s.name.trim().toLowerCase() + '|' + (s.a280 != null ? s.a280.toFixed(3) : s.conc), key = s => base(s) + '|' + (s.when || ('row:' + (s.row ?? ''))), have = new Map(ndSamples.map(s => [key(s), s])); let merged = 0;
+  /* readings saved before row numbers were kept have no row: match them by name and A280 alone */
+  const find = s => have.get(key(s)) || (s.when ? null : ndSamples.find(o => !o.when && o.row == null && base(o) === base(s)));
+  const fresh = list.filter(s => { const o = find(s); if (!o) return true; let add = false; Object.keys(s).forEach(k => { if (['id', 'runId', 'stage', 'dil', 'hide'].includes(k)) return; if ((o[k] == null || o[k] === '') && s[k] != null && s[k] !== '') { o[k] = s[k]; add = true; } }); if (add) merged++; return false; });
   fresh.forEach(s => { if (to && s.kind !== 'nucleic') { s.runId = to; s.stage = 'conc'; ndSamples.push(s); return; } s.runId = s.kind === 'nucleic' || CRUDE_RE.test(s.name) ? '' : ndGuessRun(s.name); if (/conc|final|dialy|after/i.test(s.name)) s.stage = 'final'; ndSamples.push(s); });
   /* a file loaded on a Concentrated step: readings already loaded elsewhere move to it too */
-  if (to) list.forEach(s => { const o = have.get(key(s)); if (o && o.kind !== 'nucleic') { o.runId = to; o.stage = 'conc'; } });
+  if (to) list.forEach(s => { const o = find(s); if (o && o.kind !== 'nucleic') { o.runId = to; o.stage = 'conc'; } });
   const dup = list.length - fresh.length - merged, sp = fresh.some(s => s.spec);
   toast(`Added ${fresh.length} NanoDrop reading${fresh.length === 1 ? '' : 's'}${merged ? `, filled in ${merged} already loaded` : ''}${dup ? `, skipped ${dup} already loaded` : ''}${to ? '' : sp ? '. Spectra are on the NanoDrop spectra tab' : ''}`);
   $('#ndList')._n = -1; renderND(); render();
@@ -5491,10 +5493,10 @@ $('#sec-read').addEventListener('click', () => {
   pk = pk.filter(q => isFinite(q.x) && q.x >= numOr(c.v0, -Infinity) && q.x <= numOr(c.vt, Infinity));
   if (pk.length < 2) { toast('Could not find peaks in that run within V0 and Vt'); return; }
   const top = pk.slice().sort((p, q) => p.x - q.x).slice(0, want.length);
-  if (!confirm('Apply these proposed standard matches? Check peak identities against the run.\n\n' + top.map((q, i) => want[i].name + ' (' + want[i].kda + ' kDa): ' + Math.round(q.x*1000)/1000 + ' ' + c.unit).join('\n') + (top.length < want.length ? '\n\nUnmatched standards will keep their existing volumes.' : ''))) return;
-  top.forEach((q, i) => { want[i].ve = Math.round(q.x*1000)/1000; });
+  if (!confirm('Apply these proposed standard matches? Check peak identities against the run.\n\n' + top.map((q, i) => want[i].name + ' (' + want[i].kda + ' kDa): ' + Math.round(q.x*1000)/1000 + ' ' + c.unit).join('\n') + (top.length < want.length ? '\n\nNot matched, volume will be cleared:\n' + want.slice(top.length).map(q => q.name + ' (' + q.kda + ' kDa)').join('\n') : ''))) return;
+  top.forEach((q, i) => { want[i].ve = Math.round(q.x*1000)/1000; }); want.slice(top.length).forEach(q => { q.ve = ''; });
   saveOpt(); renderSec(); render();
-  toast(top.length < want.length ? `Found ${top.length} peaks for ${want.length} standards. Unmatched standards kept their existing volumes, so check the volumes.` : `Read ${top.length} standard volumes. Check them against the run.`);
+  toast(top.length < want.length ? `Found ${top.length} peaks for ${want.length} standards. The unmatched smallest standards were cleared, so check the volumes.` : `Read ${top.length} standard volumes. Check them against the run.`);
 });
 
 /* ---------- collapsible panel sections (remembered), each with a one-line summary when closed ---------- */

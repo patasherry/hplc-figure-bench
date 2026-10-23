@@ -43,6 +43,14 @@ async function fresh(id, fn){
     // Guards: confirmed matches survive an ordinary project export.
     T.check('sec/export-matches', data.opt.secCals.find(c => c.id === 'scTest').stds[1].ve === 2);
   });
+  await fresh('sec-unmatched', async p => {
+    const fixture = F.project(); fixture.opt.secCals.find(c => c.id === 'scTest').vt = 5; await loadProject(p, fixture);
+    let proposal = ''; p.on('dialog', async d => { proposal = d.message(); await d.accept(); });
+    await click(p, SEL.read); const stds = (await saved(p)).opt.secCals.find(c => c.id === 'scTest').stds;
+    // Guards: with Vt at 5 mL only two standard peaks remain, the dialog names the standard left over, and its old volume is cleared rather than mixed with this run.
+    T.check('sec/unmatched-listed', /Small \(30 kDa\)/.test(proposal.split('cleared')[1] || ''), proposal);
+    T.check('sec/unmatched-cleared', stds[0].ve === '' && stds[1].ve === 2, JSON.stringify(stds.map(q => q.ve)));
+  });
   await fresh('unicorn-comma', async (p, h) => {
     await h.newProject('Synthetic comma numbers');
     await h.addRun(F.unicorn('sec_comma.tsv', true)); const data = await saved(p), r = data.runs[0];
@@ -71,13 +79,16 @@ async function fresh(id, fn){
       ['Decimal', '1,25', '1,25', '2026-01-01', '09:00'],
       ['Mixed', '1,234.5', '1,234.5', '2026-01-01', '09:00'],
       ['Grouped', '1,234,567', '1,234,567', '2026-01-01', '09:00'],
-      ['Leading decimal', ',5', ',5', '2026-01-01', '09:00']]));
+      ['Leading decimal', ',5', ',5', '2026-01-01', '09:00'],
+      ['Zero decimal', '0,123', '0,123', '2026-01-01', '09:00']]));
     let data = await saved(p), ns = data.nanodrop;
     // Guards: a three-digit comma group is thousands, while a lone two-digit comma is decimal.
     T.check('nd/thousands', ns.find(s => s.name === 'Thousands').a280 === 1234, ns.find(s => s.name === 'Thousands').a280);
     T.check('nd/decimal', ns.find(s => s.name === 'Decimal').a280 === 1.25);
     // Guards: decimal commas without a leading zero remain supported.
     T.check('nd/leading-decimal', ns.find(s => s.name === 'Leading decimal')?.a280 === 0.5);
+    // Guards: a European export's 0,123 is 0.123, never 123 (a thousands group cannot start with 0).
+    T.check('nd/zero-decimal', ns.find(s => s.name === 'Zero decimal')?.a280 === 0.123, ns.find(s => s.name === 'Zero decimal')?.a280);
     T.check('nd/mixed-separators', ns.find(s => s.name === 'Mixed').a280 === 1234.5, ns.find(s => s.name === 'Mixed').a280);
     T.check('nd/multiple-groups', ns.find(s => s.name === 'Grouped').a280 === 1234567, ns.find(s => s.name === 'Grouped').a280);
     const first = F.nd('replicate1.tsv', [['Replicate', '2.25', '2.25', '2026-01-01', '09:00']]);
@@ -95,6 +106,9 @@ async function fresh(id, fn){
     T.check('nd/row-replicates', data.nanodrop.filter(s => s.name === 'Row replicate').length === 2);
     // Guards: old projects without timestamp or row metadata retain their readings.
     T.check('nd/legacy-reading', data.nanodrop.find(s => s.id === 'ndLegacy').a280 === 2.5);
+    const n = data.nanodrop.length; await add(F.nd('legacy.tsv', [['Legacy reading', '2.5', '2.5']], false)); data = await saved(p);
+    // Guards: re-importing a reading that an older project saved without row or time does not add it twice.
+    T.check('nd/legacy-reimport', data.nanodrop.length === n, data.nanodrop.length + ' vs ' + n);
   });
   T.done();
 })();

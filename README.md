@@ -43,9 +43,9 @@ HPLC Figure Bench runs directly in any modern web browser. Open `hplc-figure-ben
 *   **Band Tagging & Purity:** Band detection with tagging (target protein, tag, contaminant, known contaminant) and automatic purity percentage calculation across lanes.
 
 ## Import and SEC calibration
-SEC "Read from run" skips unticked standards, takes peaks in elution order within any entered V0/Vt limits, and asks you to confirm the proposed matching before applying it. Check peak identities in the proposal; unrelated peaks inside the limits still need manual review. Superdex 75 and 200 Increase 5/150 columns are distinguished by name; the 75 5/150 bed volume is 3 mL ([Cytiva specifications](https://www.cytivalifesciences.co.jp/catalog/0063.html)).
+SEC "Read from run" skips unticked standards, takes peaks in elution order within any entered V0/Vt limits, and asks you to confirm the proposed matching before applying it. If there are fewer peaks than standards, the smallest standards left over are listed and their volumes are cleared, so one fit never mixes two runs. Check peak identities in the proposal. Unrelated peaks inside the limits still need manual review. Superdex 75 and 200 Increase 5/150 columns are distinguished by name; the 75 5/150 bed volume is 3 mL ([Cytiva specifications](https://www.cytivalifesciences.co.jp/catalog/0063.html)).
 
-Tab-delimited UNICORN files support decimal commas. NanoDrop imports treat a lone comma as decimal except when followed by three digits; grouping commas are removed. Reading timestamps and row positions distinguish replicates when checking for duplicate imports.
+Tab-delimited UNICORN files support decimal commas. NanoDrop imports treat a lone comma as decimal (0,123 is 0.123), except a comma followed by three digits after a nonzero number (1,234 is 1234). Other grouping commas are removed. Reading timestamps and row positions distinguish replicates when checking for duplicate imports, and readings saved by older versions are matched by name and A280.
 
 ## Storage and Backups
 
