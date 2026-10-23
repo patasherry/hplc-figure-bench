@@ -26,6 +26,7 @@ node run.js 00_ 10_                # only some suites
 | `00_smoke.js` | Smoke | The page loads, a project opens, a run loads. Proves the harness works. |
 | `10_data_truth.js` | Data | Synthetic files with known answers: SEC detection, column, flow, fraction labels, peak volumes, pool area and mg, NanoDrop means. |
 | `20_science.js` | Science | Summary table arithmetic (mole-based yields across tag removal), methods text, panel letters, SEC elution volumes, consistency after moving or removing steps. |
+| `25_gels.js` | Gels | Synthetic gel images: measurements unchanged by display contrast, bands counted once, purity at most 100%, invalid ladders withhold sizes, manual tags respected, caches refreshed. |
 | `30_robust.js` | Robustness | Bad inputs, a seeded 150-action fuzz with invariants, save and reload (browser and cloud storage), export and import, speed budgets. |
 | `40_visual.js` | Visual | Overlapping text, horizontal scrolling, toolbars covering titles, at several window widths and in dark mode. |
 

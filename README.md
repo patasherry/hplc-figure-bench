@@ -33,6 +33,15 @@ As a single HTML file, you can run the application locally on Windows by double-
 *   **UV path:** when the file does not record it, the app assumes 2 mm (the usual ÄKTA monitor) and says so on the run card, in the peak table, under the summary table and in the methods. HPLC flow cells are often 10 mm, so enter the real value on the run card.
 *   **Peak and pool areas** use the whole run, after smoothing and baseline, so zooming or cropping the plot never changes them.
 
+## Gel measurements
+
+* Display dark/light points and color affect the figure, not measured intensities. Invert selects signal polarity.
+* In the default area mode, overlapping bands are partitioned without counting rows twice. Hand-added duplicates are checked after snapping. All-stain purity uses the same full-lane background-corrected signal as band percentages.
+* Manual contaminant/exclusion tags override automatic purity estimates. Lane-specific protein marks affect that lane.
+* Calibration requires finite marks at distinct positions, with sizes decreasing top to bottom. Invalid marks remain available to correct; derived sizes are withheld.
+* Lane edits, processed pixels and ladder positions invalidate the corresponding analysis caches.
+* Saturation, manual marks after fine rotation, native image precision, and size-based expression/cleavage inference remain limitations.
+
 ## Storage and Backups
 *   **Browser Storage:** The application uses `localStorage` for user settings, SEC calibrations, and custom protein lists. It uses `IndexedDB` to store projects locally in the browser.
 *   **Host-Dependent Storage:** The code includes integration with an external environment (`window.claude`), which can provide cloud database and asset storage if the application is hosted there.
