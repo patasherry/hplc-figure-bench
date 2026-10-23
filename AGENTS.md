@@ -14,7 +14,7 @@ The owner is a biochemistry graduate student who uses it for real lab data. Scie
 - `README.md`: user-facing documentation.
 - `AGENTS.md`: this file.
 - `CLAUDE.md`: points Claude Code to this file.
-- `.github/workflows/`: GitHub Actions: Claude Code (automatic PR review, `@claude` mentions) and the test suite on every PR.
+- `.github/workflows/`: GitHub Actions: Claude Code (automatic PR review on app changes, `@claude` mentions) and the test suite on every PR.
 - `tests/`: the automated browser test suite and its synthetic test data.
 
 ## How the code is organized
@@ -104,7 +104,7 @@ In every PR description, say exactly what you tested and how. Do not claim testi
 ## How agents divide the work
 
 - **Jules** works from issues labeled `jules`.
-- **Claude** reviews every PR automatically and is called with `@claude`.
+- **Claude** reviews PRs changing the app automatically and is called on any PR with `@claude`.
 - Agents never push to another agent's branch: a revision goes on a new branch.
 - Only one PR at a time should change the HTML file, because changes to the same large file will conflict.
 
