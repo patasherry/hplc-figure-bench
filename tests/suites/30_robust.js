@@ -111,6 +111,24 @@ for (const cloud of [false, true]) await T.t(cloud ? 'persist-cloud' : 'persist-
     T.check('persist.export-import.same', !diff(a, c), diff(a, c)); } // an exported file imports to the same project
   T.check(`persist.${tag}.no-error`, !errs.length, errs.join(' | ')); await close(); });
 
+/* ---------------- older and partial project files ---------------- */
+await T.t('partial-project', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p);
+  await h.newProject('Partial base'); await h.dropFiles(F.his); await h.addConc(F.ndSpec, 0.25);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]);
+  const origPath = path.join(ROOT, 'results', 'partial_orig.json'); await dl.saveAs(origPath);
+  const origJson = JSON.parse(fs.readFileSync(origPath, 'utf8'));
+  for (const sec of ['gels', 'nanodrop', 'traces', 'opt']) {
+    const mod = JSON.parse(JSON.stringify(origJson)); delete mod[sec];
+    const modPath = path.join(ROOT, 'results', `partial_no_${sec}.json`); fs.writeFileSync(modPath, JSON.stringify(mod));
+    const e0 = errs.length; await p.setInputFiles(SEL.importFile, modPath); await p.waitForTimeout(3000); const ts = await takeToasts(p);
+    T.check(`partial.${sec}.no-error`, errs.length === e0, errs.slice(e0).join(' | '));
+    const tl = await h.timeline(), hasRun = tl.some(x => x.k.startsWith('run:')), hasND = tl.some(x => /mg\/mL/.test(x.s || ''));
+    if (sec === 'nanodrop') T.check(`partial.${sec}.remaining-data`, hasRun && !hasND, `run=${hasRun}, nd=${hasND}`);
+    else T.check(`partial.${sec}.remaining-data`, hasRun && hasND, `run=${hasRun}, nd=${hasND}`);
+    T.check(`partial.${sec}.message`, ts.length > 0, `toasts: ${ts.join(' | ') || 'none'}`);
+  }
+  await close(); });
+
 /* ---------------- performance budgets ---------------- */
 await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Perf');
   { const n0 = (await h.timeline()).length, t0 = Date.now(); await p.setInputFiles('#file', F.big); let ms = null;
