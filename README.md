@@ -32,6 +32,7 @@ As a single HTML file, you can run the application locally on Windows by double-
 *   **Only the 280 nm curve** gives a mass. Other wavelengths (for example 260 nm) show the area but no mg.
 *   **UV path:** when the file does not record it, the app assumes 2 mm (the usual ÄKTA monitor) and says so on the run card, in the peak table, under the summary table and in the methods. HPLC flow cells are often 10 mm, so enter the real value on the run card.
 *   **Peak and pool areas** use the whole run, after smoothing and baseline, so zooming or cropping the plot never changes them.
+*   **Pool volume** counts each fraction from its mark to the next one. The last fraction ends at the logged end of fractionation if the run log has one, otherwise one median fraction width after its start. A fraction before a jump in tube numbers (T4 then T8) is cut to one median width when it is longer than 1.5 times it. The run card notes pooled fractions wider than 1.5 times the median and ends that were assumed.
 
 ## Storage and Backups
 *   **Browser Storage:** The application uses `localStorage` for user settings, SEC calibrations, and custom protein lists. It uses `IndexedDB` to store projects locally in the browser.

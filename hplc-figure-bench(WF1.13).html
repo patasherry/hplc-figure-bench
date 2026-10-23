@@ -1505,12 +1505,14 @@ function aktaFromCurves(curves, fname, extra){
   const injX = !shift && injEv && injEv.x > 0.5 ? injEv.x : null;
   const phases = log.filter(e => /^Phase /.test(e.label) && !/Method Settings/i.test(e.label)).map(e => ({x: e.x - shift, label: e.label.replace(/^Phase /, '')}));
   const mrun = (log.find(e => /Method Run/.test(e.label)) || {}).label || '', rt = parseRunTime(mrun), method = ((mrun.match(/Method:\s*(.*?)(?:\s+Result:|\s+User\s|$)/) || [])[1] || '').trim();
+  /* the logged end of fractionation, worded loosely ("Fractionation stopped", "End fractionation", "Frac off"); the last such entry wins */
+  const feEv = log.filter(e => /frac\w*[\s_:,.-]*(stop|end|off|finish|complet)|(stop|end|finish|complet)\w*[\s_:,.-]*frac/i.test(e.label) && !/start/i.test(e.label)).map(e => e.x), fracEnd = feEv.length ? Math.max(...feEv) : null;
   const med = c => { if (!c || c.ys.length < 3) return null; const v = c.ys.filter(y => y > 0).sort((a, b) => a - b); return v.length ? v[v.length >> 1] : null; };
   const flowMed = med(pick('flow')), tempMed = med(pick('temp'));
   /* UNICORN logs the column it was told: "Base CV, 0.962 {ml}, HisTrap FF, 1 ml" */
   const cvl = log.map(e => /Base CV,\s*(?:Vc\s*=\s*)?([\d.]+)\s*\{ml\},\s*([^,]+)(?:,\s*([\d.]+)\s*ml)?/i.exec(e.label)).find(Boolean), colLog = cvl && !/^any$/i.test(cvl[2].trim()) ? `${cvl[2].trim()}${cvl[3] ? ` ${+cvl[3]} mL` : ''}` : '', cvLog = cvl ? +cvl[1] : null;
   return {name: tidyName(fname), file: fname, flowAuto: flowMed, tempAuto: tempMed, colLog, cvLog, uvs: uvs.map(c => ({name: c.name, yu: c.yu, xs: c.xs, ys: c.ys})), grad: pick('grad'), cond: pick('cond'),
-    fracs: fr.map(e => ({x: e.x - shift, label: e.label})), phases, shift, injX, injShift: null, xu: uvs[0].xu, method, time: rt ? rt.t : null, timeStr: rt ? rt.str : '', ...(extra || {})};
+    fracs: fr.map(e => ({x: e.x - shift, label: e.label})), fracEnd: fracEnd == null ? null : fracEnd - shift, phases, shift, injX, injShift: null, xu: uvs[0].xu, method, time: rt ? rt.t : null, timeStr: rt ? rt.str : '', ...(extra || {})};
 }
 /* ---------- UNICORN 7 result archive (.zip) ---------- */
 /* the archive and each curve inside it are zip files, the curves in zip64 form; their points are .NET float arrays */
@@ -1610,7 +1612,23 @@ function detectPeaks(t){
 function fracSegments(run, dataEnd){
   const F = run.fracs, out = [];
   for (let i=0;i<F.length;i++){ const a = F[i].x, b = i+1 < F.length ? F[i+1].x : dataEnd; if (b > a) out.push({i, a, b, label: F[i].label, waste: /waste/i.test(F[i].label)}); }
+  /* the last fraction would run to the end of the trace (wash, re-equilibration), and so would a fraction before a jump in tube numbers:
+     end the last one at the logged end of fractionation, else one median width; cut a jump to one median width when it is over 1.5 times it */
+  const tube = s => { const m = /(\d+)\D*$/.exec(s.label); return m ? +m[1] : NaN; };
+  out.forEach((s, k) => { const n = out[k+1]; s.gap = !!n && !s.waste && !n.waste && tube(n) - tube(s) > 1; });
+  const L = out[out.length-1], fe = +run.fracEnd, ws = out.filter((s, k) => !s.waste && !s.gap && k + 1 < out.length).map(s => s.b - s.a).sort((p, q) => p - q);
+  const med = ws.length ? (ws.length % 2 ? ws[ws.length >> 1] : (ws[ws.length/2 - 1] + ws[ws.length/2])/2) : 0;
+  out.forEach(s => { s.med = med; if (s.gap && med && s.b - s.a > 1.5*med) { s.b = s.a + med; s.capped = true; } });
+  if (L && !L.waste && L.i === F.length - 1) { if (run.fracEnd != null && run.fracEnd !== '' && isFinite(fe) && fe > L.a) L.b = Math.min(L.b, fe); else if (med && L.a + med < L.b) { L.b = L.a + med; L.assumed = true; } }
   return out;
+}
+/* a note for the run card when a pooled fraction is much wider than the others, or its end is assumed */
+function fracNotes(run){
+  const uv = uvOf(run), set = shadeSet(run), segs = fracSegments(run, uv.xs[uv.xs.length-1]).filter(s => !s.waste && set.has(s.i)), nm = a => a.map(s => esc(s.label)).join(', ');
+  const wide = segs.filter(s => s.med && s.b - s.a > 1.5*s.med + 1e-9), asm = segs.filter(s => s.assumed), t = [];
+  if (wide.length) t.push(`${nm(wide)} ${wide.length > 1 ? 'are' : 'is'} more than 1.5 times the median fraction width, so the pool volume may be too high.`);
+  if (asm.length) t.push(`The end of ${nm(asm)} was not logged, so it is taken as one median fraction width.`);
+  return t.length ? `<br>${t.join(' ')}` : '';
 }
 const uvOf = run => { run.uvs.forEach(c => { if (/^au$/i.test(String(c.yu || '').trim())) { c.ys = c.ys.map(v => v*1000); c.yu = 'mAU'; } }); return run.uvs[run.uvi] || run.uvs[0]; };
 function runAuto(run){
@@ -1749,6 +1767,7 @@ function applyInjShift(r){
   r.injX = ix; if (!d) return;
   const mv = c => { if (c && c.xs) c.xs = c.xs.map(x => x - d); };
   (r.uvs || []).forEach(mv); mv(r.grad); mv(r.cond);
+  if (r.fracEnd != null && isFinite(+r.fracEnd)) r.fracEnd = +r.fracEnd - d;
   r.fracs = (r.fracs || []).map(e => ({x: e.x - d, label: e.label})).filter(e => !want || e.x >= 0 || !/^waste$/i.test(e.label));
   r.phases = (r.phases || []).map(e => ({x: e.x - d, label: e.label}));
   r.integ = (r.integ || []).map(g => Object.assign({}, g, {a: g.a - d, b: g.b - d}));
@@ -4308,7 +4327,7 @@ function renderList(){
         <button type="button" class="icon" data-act="up" title="Move earlier in the workflow" aria-label="Move earlier" ${idx === 0 ? 'disabled' : ''}>↑</button>
         <button type="button" class="icon" data-act="del" title="Remove run" aria-label="Remove run">✕</button>
       </div>
-      <div class="meta"><span class="mk">${r.inWf ? `Step ${runs.filter(x => x.inWf).indexOf(r) + 1}` : r.isStd ? 'Standards' : 'Not in workflow'}</span>${r.timeStr ? `<span>${esc(r.timeStr)}</span>` : ''}<br>${segs.length ? `${segs.length} fractions, ${esc(segs[0].label)} to ${esc(segs[segs.length-1].label)}` : 'No fractions collected'}${r.shift || r.injShift ? `, ${xUnit(r) === 'min' ? 'times' : 'volumes'} from injection` : ''}${nGel ? `, ${nGel} gel${nGel > 1 ? 's' : ''}` : ''}${fracRepeats(r) ? `<br>Tube names repeat after a full rack, so write T5#2 for the second T5.` : ''}</div>
+      <div class="meta"><span class="mk">${r.inWf ? `Step ${runs.filter(x => x.inWf).indexOf(r) + 1}` : r.isStd ? 'Standards' : 'Not in workflow'}</span>${r.timeStr ? `<span>${esc(r.timeStr)}</span>` : ''}<br>${segs.length ? `${segs.length} fractions, ${esc(segs[0].label)} to ${esc(segs[segs.length-1].label)}` : 'No fractions collected'}${r.shift || r.injShift ? `, ${xUnit(r) === 'min' ? 'times' : 'volumes'} from injection` : ''}${nGel ? `, ${nGel} gel${nGel > 1 ? 's' : ''}` : ''}${fracRepeats(r) ? `<br>Tube names repeat after a full rack, so write T5#2 for the second T5.` : ''}${fracNotes(r)}</div>
       ${segs.length ? '' : '<!--'}<label class="f">Pooled fractions<span class="joined"><input type="text" id="sh${r.id}" data-k="shade" value="${esc(r.shade)}" placeholder="${isPlate(r) ? 'e.g. E6-F9, plate 2: #2A1' : 'e.g. T3-T6'}"${isPlate(r) ? ' title="Plate 1 wells by name (E6-F9). Another plate with # and its number: #2A1-#2A6"' : ''}><button type="button" class="btn" data-act="suggest" title="Pick the fractions under the main peak. You can edit the result.">Suggest</button></span></label>${segs.length ? '' : '-->'}
       ${segs.length && r.inWf ? (pr0 => (ms => ms.src !== 'card' ? (pr0 && pr0.measured ? `<p class="hint">${sig2(pr0.mg)} mg after concentrating (${fmt(pr0.conc, 2)} mg/mL × ${fmtAuto(pr0.measVol)} mL, from ${fmt(pr0.vol, 1)} ${xUnit(r)}). The peak mg use this amount. Change it on the Concentrated step.</p>` : '') : `<div class="row"><label class="f" title="Your NanoDrop reading. If you concentrated the pool first, this is the reading of the concentrated protein">NanoDrop (mg/mL)<input type="number" step="any" min="0" id="pc${r.id}" data-k="poolConc" value="${esc(ms.src === 'card' || (ms.src === 'btw' && !ms.nd) ? ms.c : '')}" placeholder="${ms.nd ? `${fmt(ms.nd.m, 2)}, from NanoDrop file` : 'mg/mL'}"></label><label class="f" title="The volume the reading was taken in. After concentrating, the volume left in the concentrator. Empty means the pool volume from the fractions">Volume after concentrating (mL)<input type="number" step="any" min="0" id="pv${r.id}" data-k="poolFinalVol" value="${esc((ms.src === 'card' || ms.src === 'btw') && ms.v > 0 ? ms.v : '')}" placeholder="${pr0 && xUnit(r) === 'mL' && pr0.vol > 0 ? `not concentrated: ${fmt(pr0.vol, 1)}` : 'pool volume'}"></label></div>${pr0 && pr0.measured ? `<p class="hint">Measured ${sig2(pr0.mg)} mg (${fmtAuto(pr0.conc)} mg/mL × ${fmtAuto(pr0.measVol)} mL${pr0.concentrated ? `, concentrated from ${fmt(pr0.vol, 1)} ${xUnit(r)}` : ''})${pr0.mgArea > 0 ? `, ${fmt(100*pr0.mg/pr0.mgArea, 0)}% of the ${sig2(pr0.mgArea)} mg from the UV area` : ''}. Every peak on this run is scaled by the same factor, so any loss while concentrating is folded into the peak mg.${pr0.src === 'btw' ? ' Also shown on the Concentrated step after this column.' : pr0.src === 'nd' ? ' From the NanoDrop readings marked Final.' : ''}</p>` : ''}`)(poolMeas(r)))(poolRows(r)) : ''}
       ${uvSel}
