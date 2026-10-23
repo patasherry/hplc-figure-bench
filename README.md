@@ -42,8 +42,6 @@ HPLC Figure Bench runs directly in any modern web browser. Open `hplc-figure-ben
 *   **Molecular Weight Estimation:** Estimates band molecular weights using standard protein ladder presets.
 *   **Band Tagging & Purity:** Band detection with tagging (target protein, tag, contaminant, known contaminant) and automatic purity percentage calculation across lanes.
 
-## Gel measurements
-
 * Display dark/light points and color affect the figure, not measured intensities. Invert selects signal polarity.
 * In the default area mode, overlapping bands are partitioned without counting rows twice. Hand-added duplicates are checked after snapping. All-stain purity and band percentages share one denominator: the background-corrected signal between the wells and the dye front (the top 3% and bottom 2% of the lane are left out). Removing a band takes it out of that total.
 * Cleavage % is molar everywhere (band table, CSV, cleavage panel and Methods): Coomassie stain scales with mass, so each band's area is divided by its mass before comparing cleaved and uncleaved forms.
@@ -52,6 +50,11 @@ HPLC Figure Bench runs directly in any modern web browser. Open `hplc-figure-ben
 * Calibration requires finite marks at distinct positions, with sizes decreasing top to bottom. Invalid marks remain available to correct; derived sizes are withheld.
 * Lane edits, processed pixels and ladder positions invalidate the corresponding analysis caches.
 * Saturation, manual marks after fine rotation, native image precision, and size-based expression/cleavage inference remain limitations.
+
+## Import and SEC calibration
+SEC "Read from run" skips unticked standards, takes peaks in elution order within any entered V0/Vt limits, and asks you to confirm the proposed matching before applying it. If there are fewer peaks than standards, the smallest standards left over are listed and their volumes are cleared, so one fit never mixes two runs. Check peak identities in the proposal. Unrelated peaks inside the limits still need manual review. Superdex 75 and 200 Increase 5/150 columns are distinguished by name; the 75 5/150 bed volume is 3 mL ([Cytiva specifications](https://www.cytivalifesciences.co.jp/catalog/0063.html)).
+
+Tab-delimited UNICORN files support decimal commas. NanoDrop imports treat a lone comma as decimal (0,123 is 0.123), except a comma followed by three digits after a nonzero number (1,234 is 1234). Other grouping commas are removed. Reading timestamps and row positions distinguish replicates when checking for duplicate imports, and readings saved by older versions are matched by name and A280.
 
 ## Storage and Backups
 
