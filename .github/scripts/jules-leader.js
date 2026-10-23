@@ -47,9 +47,12 @@ module.exports = async ({github, context, core}) => {
   for (const i of running) { const {s} = await getState(i.number); if (!s.session) continue; let ses;
     try { ses = await jules(s.session); } catch (e) { say(`#${i.number}: could not read session: ${e.message}`); continue; }
     const st = String(ses.state || '').toUpperCase(), pr = (ses.outputs || []).map(o => o.pullRequest && o.pullRequest.url).find(Boolean);
+    /* keep the last seen state on the issue, so a stuck session is easy to spot */
+    if (s.state !== st) { s.state = st; await putState(i.number, s, `Jules leader: attempt ${s.attempt} is ${st || 'in an unknown state'}.`); }
     if (st === 'AWAITING_PLAN_APPROVAL') { await jules(`${s.session}:approvePlan`, {}).catch(() => {}); say(`#${i.number}: approved plan`); continue; }
     /* Jules asked a question: post it on the issue, and tell Jules to decide by the rules and list open questions in the PR */
-    if (st === 'AWAITING_USER_FEEDBACK') { let q = '';
+    /* a session paused with a question also waits for the user: treat it the same way */
+    if (st === 'AWAITING_USER_FEEDBACK' || st === 'PAUSED') { let q = '';
       try { const acts = []; let tok = ''; do { const a = await jules(`${s.session}/activities?pageSize=100${tok ? '&pageToken=' + tok : ''}`); acts.push(...(a.activities || [])); tok = a.nextPageToken || ''; } while (tok && acts.length < 1000);
         const last = acts.filter(a => a.agentMessaged).sort((a, b) => String(a.createTime).localeCompare(String(b.createTime))).pop(); q = last ? last.agentMessaged.agentMessage : ''; } catch (e) { say(`#${i.number}: could not read the question: ${e.message}`); }
       const n = (s.replies || 0) + 1, quote = (q || '(question text not available)').slice(0, 3000).split('\n').map(l => '> ' + l).join('\n');
