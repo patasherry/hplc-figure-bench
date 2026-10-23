@@ -8,7 +8,7 @@
 //   4. Follow up: after a merge, "New checks failing" in the PR's test report and "Ready-to-file issues" in an audit
 //      report become new issues labelled `needs-triage`. A person or the coordinator moves them to `jules-queue`.
 // State lives on the issues: labels plus one hidden JSON comment per issue.
-const MAX_RUNNING = 3, MAX_ATTEMPTS = 3, API = 'https://jules.googleapis.com/v1alpha/';
+const MAX_RUNNING = 3, MAX_ATTEMPTS = 3, MAX_REPLIES = 3, API = 'https://jules.googleapis.com/v1alpha/';
 const L = {queue: 'jules-queue', run: 'jules-running', done: 'jules-done', fail: 'needs-coordinator', triage: 'needs-triage'};
 const MARK = '<!-- jules-leader ';
 const SAFE = f => /^(tests\/|docs\/|\.github\/ISSUE_TEMPLATE\/)/.test(f) || f === 'README.md' || f === 'tests/README.md';
@@ -48,6 +48,16 @@ module.exports = async ({github, context, core}) => {
     try { ses = await jules(s.session); } catch (e) { say(`#${i.number}: could not read session: ${e.message}`); continue; }
     const st = String(ses.state || '').toUpperCase(), pr = (ses.outputs || []).map(o => o.pullRequest && o.pullRequest.url).find(Boolean);
     if (st === 'AWAITING_PLAN_APPROVAL') { await jules(`${s.session}:approvePlan`, {}).catch(() => {}); say(`#${i.number}: approved plan`); continue; }
+    /* Jules asked a question: post it on the issue, and tell Jules to decide by the rules and list open questions in the PR */
+    if (st === 'AWAITING_USER_FEEDBACK') { let q = '';
+      try { const acts = []; let tok = ''; do { const a = await jules(`${s.session}/activities?pageSize=100${tok ? '&pageToken=' + tok : ''}`); acts.push(...(a.activities || [])); tok = a.nextPageToken || ''; } while (tok && acts.length < 1000);
+        const last = acts.filter(a => a.agentMessaged).sort((a, b) => String(a.createTime).localeCompare(String(b.createTime))).pop(); q = last ? last.agentMessaged.agentMessage : ''; } catch (e) { say(`#${i.number}: could not read the question: ${e.message}`); }
+      const n = (s.replies || 0) + 1, quote = (q || '(question text not available)').slice(0, 3000).split('\n').map(l => '> ' + l).join('\n');
+      if (n > MAX_REPLIES) { await putState(i.number, s, `Jules leader: Jules is still asking after ${MAX_REPLIES} automatic replies. Needs the coordinator. Latest question:\n\n${quote}`); await setLabels(i.number, [L.fail], [L.run]); say(`#${i.number}: question needs the coordinator`); continue; }
+      await jules(`${s.session}:sendMessage`, {prompt: 'No one is available to answer questions during this session. Decide using AGENTS.md and the issue text, choosing the smallest safe option. Do not change scientific values. Then finish the task and open the PR, and list every open question and the choice you made for it under "Open questions" in the PR description.'});
+      await putState(i.number, Object.assign(s, {replies: n}), `Jules leader: attempt ${s.attempt} asked a question (automatic reply ${n} of ${MAX_REPLIES}: decide by the rules and list it in the PR):\n\n${quote}`);
+      await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: `Jules asked:\n\n${quote}\n\nThe leader told Jules to decide using AGENTS.md and list this under "Open questions" in its PR.`});
+      say(`#${i.number}: answered a question`); continue; }
     if (st === 'COMPLETED' && pr) { await putState(i.number, Object.assign(s, {pr}), `Jules leader: attempt ${s.attempt} finished. PR: ${pr}`); await setLabels(i.number, [L.done], [L.run]); say(`#${i.number}: PR ${pr}`); continue; }
     if (st === 'FAILED' || (st === 'COMPLETED' && !pr)) { const why = st === 'FAILED' ? 'session failed' : 'session finished without a PR';
       if ((s.attempt || 1) < MAX_ATTEMPTS) await start(i, (s.attempt || 1) + 1, why);
