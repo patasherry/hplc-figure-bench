@@ -33,6 +33,7 @@ After running tests, read the output of node failures.js, not the full logs.
 | `14_peaks.js` | Peaks | Peak integration with known answers: isolated, separated, overlapping, and sloped baseline peaks. Tests both Gaussian and trapezoidal integration with and without baseline subtraction. |
 | `15_import_sec.js` | Import and SEC | Synthetic UI checks for reviewed SEC peak matching, UNICORN decimal commas, 5/150 column identity, NanoDrop number formats and replicate retention. |
 | `20_science.js` | Science | Summary table arithmetic (mole-based yields across tag removal), methods text, panel letters, SEC elution volumes, consistency after moving or removing steps. |
+| `21_methods.js` | Methods | The Methods and summary text says what the data says. |
 | `25_gels.js` | Gels | Synthetic gel images: measurements unchanged by display contrast, bands counted once, purity at most 100%, invalid ladders withhold sizes, manual tags respected, caches refreshed. |
 | `30_robust.js` | Robustness | Bad inputs, a seeded 150-action fuzz test with invariants, save and reload (browser and cloud storage), export and import, speed budgets. |
 | `40_visual.js` | Visual | DOM and visual layout checks: text overlap, horizontal scrolling, toolbars covering titles, across window widths and themes. |
