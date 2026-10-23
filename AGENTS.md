@@ -77,6 +77,8 @@ The `Test suite` GitHub Action also runs this comparison on every PR that touche
 
 Checks that already fail on `main` are known problems. They are not yours to fix unless the task asks.
 
+After running tests, read the output of node failures.js, not the full logs.
+
 **Rules for the suite:**
 
 - Tests drive the app only through its UI and DOM, never internal functions.
