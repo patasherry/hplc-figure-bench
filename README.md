@@ -42,8 +42,6 @@ HPLC Figure Bench runs directly in any modern web browser. Open `hplc-figure-ben
 *   **Molecular Weight Estimation:** Estimates band molecular weights using standard protein ladder presets.
 *   **Band Tagging & Purity:** Band detection with tagging (target protein, tag, contaminant, known contaminant) and automatic purity percentage calculation across lanes.
 
-## Gel measurements
-
 * Display dark/light points and color affect the figure, not measured intensities. Invert selects signal polarity.
 * In the default area mode, overlapping bands are partitioned without counting rows twice. Hand-added duplicates are checked after snapping. All-stain purity uses the same full-lane background-corrected signal as band percentages.
 * Manual contaminant/exclusion tags override automatic purity estimates. Lane-specific protein marks affect that lane.
