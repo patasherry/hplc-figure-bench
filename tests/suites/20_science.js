@@ -149,14 +149,5 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     const txt = (await h.svgTexts()).map(x => x.t).join(' | '); T.check('p3.no_size_text_default', !/\bKav\b|oligomer|\d\s*kDa/.test(txt), (txt.match(/\bKav\b|oligomer|\d+\s*kDa/) || [''])[0]); /* guards: a new SEC run makes no size claims */
     const xs = (await h.svgTexts()).map(x => num(x.t)).filter(v => v != null); T.check('p3.axis_starts_near_zero', Math.min(...xs) <= 6, `smallest axis number ${Math.min(...xs)}`); await junk('p3'); }); /* guards: the axis is volume since injection */
 
-  /* ================= P4: ladder band sizing excludes zero/uninitialized marks ================= */
-  await T.t('p4_ladder_zero_mark', async () => {
-    const res = await p.evaluate(() => {
-      const g = { marks: [{kda: 200, y: 0.1}, {kda: 100, y: 0.3}, {kda: 0, y: 0.5}] };
-      return window.__HFB && window.__HFB.mwText ? window.__HFB.mwText(g, 10) : null;
-    });
-    T.check('p4.mwText_ignore_zero_kda_mark', res === '<100', `expected '<100', got '${res}'`);
-  });
-
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(',')); /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();

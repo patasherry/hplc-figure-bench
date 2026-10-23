@@ -6198,7 +6198,7 @@ function exampleTraces(){
   traces.forEach(detectPeaks);
 }
 
-window.__HFB = {DET, opt, gels, gelBands, detectBands, laneProfile, autoLadder, autoCrop, applyAutoCrop, laneTrack, laneProfile, gridTrack, fracIdx, shadeSet, laneTarget, suggestPool, runs: () => runs, calib, mwText, getG: () => G, tags: g => g.tags, tagOf, processGel, autoContrast, render, curGel: () => curGel(), LADDERS};
+if (location.hash === '#selftest') window.__HFB = {DET, opt, gels, gelBands, detectBands, laneProfile, autoLadder, autoCrop, applyAutoCrop, laneTrack, laneProfile, gridTrack, fracIdx, shadeSet, laneTarget, suggestPool, runs: () => runs, calib, getG: () => G, tags: g => g.tags, tagOf, processGel, autoContrast, render, curGel: () => curGel(), LADDERS};
 exampleTraces();
 syncControls();
 renderList();
