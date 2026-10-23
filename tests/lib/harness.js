@@ -64,8 +64,9 @@ const H = p => ({
   pool: async t => { await p.locator('.trace.run.sel [data-k=shade]').fill(t); await p.waitForTimeout(400); },
   suggest: async () => { await p.click('.trace.run.sel [data-act=suggest]'); await p.waitForTimeout(500); return p.locator('.trace.run.sel [data-k=shade]').inputValue(); },
   addConc: async (ndFile, vol) => { await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await p.waitForTimeout(400);
-    if (ndFile) { await p.setInputFiles('#btwNdFile', ndFile); await p.waitForTimeout(700); }
-    if (vol != null) { await p.fill('#btw-vOut', String(vol)); await p.dispatchEvent('#btw-vOut', 'change'); await p.waitForTimeout(600); } },
+    if (ndFile && await p.isVisible('#btwNdAdd')) { await p.setInputFiles('#btwNdFile', ndFile); await p.waitForTimeout(700); }
+    if (vol != null) { const sel = (await p.isVisible('#btw-vOut')) ? '#btw-vOut' : '#man-vol';
+      if (await p.isVisible(sel)) { await p.fill(sel, String(vol)); await p.dispatchEvent(sel, 'change'); await p.waitForTimeout(600); } } },
   gb: async f => { await p.click('#tl [data-step=construct]'); await p.waitForTimeout(300); await p.setInputFiles('#gbFile', f); await p.waitForTimeout(1200); },
   toasts: () => p.$$eval('.toast, #toast', e => e.map(x => x.textContent)),
   peakTable: () => p.$$eval('#intTable tr', rs => rs.filter(r => r.offsetParent !== null).map(r => [...r.cells].filter(c => getComputedStyle(c).display !== 'none').map(c => (c.querySelector('input') ? c.querySelector('input').value : c.textContent).trim()))),
