@@ -56,6 +56,11 @@ await T.t('bad', async () => { const {p, errs, close} = await open(), h = H(p); 
     T.check(`bad.${id}.toast`, ts.some(t => t.length > 15), `toasts: ${ts.join(' | ') || 'none'}`); // says why nothing was used
     T.check(`bad.${id}.no-protein-reading`, !/mg\/mL/.test(st.s || ''), `step now reads: ${st.s}`); // DNA or a photo must not become a protein concentration
     T.check(`bad.${id}.no-error`, errs.length === e0, errs.slice(e0).join(' | ')); }
+  /* adding a second Concentrated step when all column runs already have one adds a manual conc step without timing out */
+  const cBefore = (await h.timeline()).length;
+  await h.addConc(null, '0.5');
+  const cAfter = (await h.timeline()).length;
+  T.check('ok.second-conc-step', cAfter === cBefore + 1, `timeline ${cBefore}->${cAfter}`);
   await close(); });
 
 /* ---------------- operation fuzz, fixed seed ---------------- */
