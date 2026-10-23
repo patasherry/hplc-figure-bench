@@ -1333,12 +1333,12 @@ const LADDERS = {
 $('#g-preset').innerHTML = Object.entries(LADDERS).map(([k,v]) => `<option value="${k}">${v.name}</option>`).join('');
 
 let opt = Object.assign({}, DEF);
-try { const s = JSON.parse(localStorage.getItem('hplc-fig-opt') || 'null'); if (s) Object.assign(opt, s); } catch(e) {}
+try { const s = JSON.parse(localStorage.getItem('hplc-fig-opt') || 'null'); if (s && typeof s === 'object' && !Array.isArray(s)) Object.assign(opt, s); } catch(e) {}
 opt.xmin = opt.xmax = opt.ymin = opt.ymax = '';
 /* the tidier defaults reach settings saved before them once */
 const tidyOpt = () => { if (!opt.tidy13) { opt.wfYield = false; opt.secStds = false; opt.tidy13 = true; } if (!opt.tidy14) { opt.noGelSlot = false; if (numOr(opt.wfGelH, 1.8) === 1.8) opt.wfGelH = 1.3; opt.tidy14 = true; } }; tidyOpt();
 if (!Array.isArray(opt.known)) opt.known = KNOWN_DEFAULT.map(k => Object.assign({}, k));
-else opt.known.forEach(k => { const d = KNOWN_DEFAULT.find(x => x.name === k.name && x.kind === k.kind); if (d) { k.kda = d.kda; k.ctx = d.ctx; k.src = d.src; if (d.app) k.app = d.app; else delete k.app; } });
+else { opt.known = opt.known.filter(k => k && typeof k === 'object'); opt.known.forEach(k => { const d = KNOWN_DEFAULT.find(x => x.name === k.name && x.kind === k.kind); if (d) { k.kda = d.kda; k.ctx = d.ctx; k.src = d.src; if (d.app) k.app = d.app; else delete k.app; } }); }
 function saveOpt(){ try { localStorage.setItem('hplc-fig-opt', JSON.stringify(opt)); } catch(e) {} }
 
 let wfSel = null, wfSelKey = '', gelMovedAt = 0;
@@ -2541,15 +2541,14 @@ function processGel(g){
   const sc = Math.min(1, 1400/cw), ow = Math.max(2, Math.round(cw*sc)), oh = Math.max(2, Math.round(ch*sc));
   const c2 = document.createElement('canvas'); c2.width = ow; c2.height = oh; const x2 = c2.getContext('2d');
   x2.imageSmoothingQuality = 'high'; x2.drawImage(c1, cx, cy, cw, ch, 0, 0, ow, oh);
-  const img = x2.getImageData(0, 0, ow, oh), d = img.data, hist = new Uint32Array(256);
+  const img = x2.getImageData(0, 0, ow, oh), d = img.data, hist = new Uint32Array(256), dk = new Float32Array(ow*oh);
   const bl = +g.black, wh = Math.max(bl + 1, +g.white), k = 255/(wh - bl);
   for (let i=0;i<d.length;i+=4){
-    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++;
+    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++; dk[i/4] = g.invert ? gray : 255 - gray;
     if (g.color) for (let j=0;j<3;j++){ let v = (d[i+j] - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; d[i+j] = g.invert ? 255 - v : v; }
     else { let v = (gray - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; if (g.invert) v = 255 - v; d[i] = d[i+1] = d[i+2] = v; }
   }
   x2.putImageData(img, 0, 0);
-  const dk = new Float32Array(ow*oh); for (let i=0, j=0; i<d.length; i+=4, j++) dk[j] = 255 - (0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]);
   g.pix = {w: ow, h: oh, d: dk}; g._bands = null;
   g.out = {url: c2.toDataURL('image/jpeg', 0.92), w: ow, h: oh}; g.hist = hist; g.crop = {l, r: rr, t, b};
 }
@@ -2841,21 +2840,30 @@ function ladderFitErr(g, deg = 3){
   const co = S.map((r, i) => r[D]/r[i]);
   return Math.max(...m.map(k => Math.abs(100*(Math.pow(10, co.reduce((t, c, j) => t + c*k.y**j, 0))/k.kda - 1)))); }
 function calib(g){
-  const m = g.marks.filter(k => k.kda > 0).slice().sort((a, b) => a.y - b.y); if (m.length < 2) return null;
+  const m = g.marks.filter(k => k.kda > 0).slice().sort((a, b) => a.y - b.y); if (m.length < 2 || m.some((q, i) => !isFinite(q.y) || !isFinite(q.kda) || (i > 0 && (+q.y <= +m[i-1].y || +q.kda >= +m[i-1].kda)))) return null;
   return y => { let i = 0; while (i < m.length - 2 && y > m[i+1].y) i++; const a = m[i], b = m[i+1], t = (y - a.y)/((b.y - a.y) || 1e-9);
     return Math.pow(10, Math.log10(a.kda) + t*(Math.log10(b.kda) - Math.log10(a.kda))); };
 }
+/* ladder marks that stop calib: same position, or sizes not decreasing down the gel */
+function calibBad(g){ const m = g.marks.filter(k => k.kda > 0).slice().sort((a, b) => a.y - b.y), bad = [];
+  m.forEach((q, i) => { if (!isFinite(q.y)) bad.push(q.kda + ' (no position)'); else if (i && (+q.y <= +m[i-1].y || +q.kda >= +m[i-1].kda)) bad.push(m[i-1].kda + ' and ' + q.kda); }); return bad; }
 function gelBands(g){
   if (!g.pix) return [];
   const ed = g.edits || (g.edits = {added: [], removed: []});
-  const key = gelLabels(g).length + '|' + numOr(opt.bandSens, 8) + '|' + g.marks.map(m => m.kda + ':' + m.y.toFixed(4)).join(',') + '|' + (g.assign || []).join(',') + '|' + JSON.stringify(ed);
+  const key = gelLabels(g).join(',') + '|' + numOr(opt.bandSens, 8) + '|' + g.marks.map(m => m.kda + ':' + m.y.toFixed(4)).join(',') + '|' + (g.assign || []).join(',') + '|' + JSON.stringify(ed);
   if (g._bands && ((g._bands.key === key && g._bands.pix === g.pix) || g._live)) return g._bands.lanes;
   const cal = calib(g), labs = gelLabels(g);
   let gelMax = 0; if (DET.gelRel > 0) labs.forEach((l, i) => { if (laneAssign(g, i) !== 'marker') gelMax = Math.max(gelMax, arrMax(laneProfile(g, i))); });
   const lanes = labs.map((l, i) => { if (laneAssign(g, i) === 'marker') return {i, label: l, marker: true, bands: []};
     const r = detectBands(g, i, numOr(opt.bandSens, 8), gelMax), tolE = 0.006*(g.crop.b - g.crop.t);
     let bands = r.bands.filter(b => !ed.removed.some(x => x.lane === i && Math.abs(x.y - b.yRot) <= Math.max(tolE, Math.min(x.half || 0, bandHalf(g, b)))));
-    ed.added.filter(x => x.lane === i).forEach(x => { if (bands.some(b => Math.abs(b.yRot - x.y) <= tolE)) return; bands.push(bandAt(g, r.sig, x.y)); });
+    ed.added.filter(x => x.lane === i).forEach(x => { const b = bandAt(g, r.sig, x.y); if (!bands.some(q => Math.abs(q.yRot - b.yRot) <= tolE)) bands.push(b); });
+    bands.sort((a, b) => a.row - b.row);
+    /* overlapping bands: split each cluster once at the signal minimum between neighbours, so every row belongs to exactly one band */
+    if (!DET.fit) { for (let j = 0; j < bands.length;) { let e = j, hi = bands[j].r, lo = bands[j].l; while (e + 1 < bands.length && bands[e+1].l <= hi) { e++; hi = Math.max(hi, bands[e].r); lo = Math.min(lo, bands[e].l); }
+      if (e > j) { let start = lo; for (let k = j; k <= e; k++) { const b = bands[k]; let end = hi; if (k < e) { end = b.row; for (let y = b.row + 1; y < bands[k+1].row; y++) if (r.sig[y] < r.sig[end]) end = y; } b.l = start; b.r = end; start = end + 1; } }
+      j = e + 1; }
+      bands.forEach(b => { b.area = 0; for (let y = b.l; y <= b.r; y++) b.area += r.sig[y]; }); }
     const total = r.total; bands.sort((a, b) => a.row - b.row).forEach(b => { b.pct = total > 0 ? 100*b.area/total : 0; b.mw = cal ? cal(b.yRot) : null; });
     return {i, label: l, bands}; });
   g._bands = {key, pix: g.pix, lanes}; return lanes;
@@ -2927,7 +2935,7 @@ function knownFor(g, laneI, b){
     if (sumo && own.length) { const P0 = F.length ? F[0].mass/1000 : cp ? cp.P : own[0], T0 = F[2] ? F[2].mass/1000 : cp ? cp.T : 12.5; own.push(P0 + T0 + 4, 15, 17, 19, 20); }
     const mk = g.marks.filter(k => k.kda > 0).map(k => k.kda), inLadder = mk.length >= 2 && b.mw <= 0.97*Math.max(...mk) && b.mw >= 1.03*Math.min(...mk);
     /* a ladder that does not hold together (markers typed against the wrong bands) gets no calls: median marker residual over 10% */
-    if (!g._fe || g._fe.k !== mk.join(',')) { const r = ladderResid(g), e = r ? r.map(x => x.e).sort((p, q) => p - q) : []; g._fe = {k: mk.join(','), v: e.length ? e[e.length >> 1] : 0}; }
+    if (!g._fe || g._fe.k !== g.marks.map(m => m.kda + ':' + m.y).join(',')) { const r = ladderResid(g), e = r ? r.map(x => x.e).sort((p, q) => p - q) : []; g._fe = {k: g.marks.map(m => m.kda + ':' + m.y).join(','), v: e.length ? e[e.length >> 1] : 0}; }
     const ln = gelBands(g)[laneI], ws = ln ? ln.bands.map(x => x.hr - x.hl).sort((p, q) => p - q) : [], wMed = ws.length ? ws[ws.length >> 1] : 0;
     const distinct = !b.shoulder && !b.sat && !(wMed > 0 && (b.hr - b.hl) > 2.5*wMed) && !gelSaturatedIdx(g).has(laneI);
     if (!out.length && inLadder && distinct && !(g._fe.v > 10) && !own.some(m => Math.abs(Math.log(b.mw/m)) <= lt)) {
@@ -3023,16 +3031,16 @@ function lanePurity(g, ln){
   if (opt.tagCounts !== false) tgt = un + tg; else { tgt = un; con += tg; }
   /* nothing marked on this gel: estimate from bands within 8% of the protein's expected sizes (tagged and cleaved) */
   let est = false;
-  if (!(tgt > 0) && !(g.tags || []).some(t => t.kind === 'target' || t.kind === 'tagged')) { const F = protForms(); if (F.length) { const rr = runs.find(x => x.id === laneAssign(g, ln.i)), tagStep = !rr || ndForm(rr) === 'tagged';
+  if (!(tgt > 0) && !(g.tags || []).some(t => isProt(t.kind) && (t.lane == null || t.lane === ln.i))) { const F = protForms(); if (F.length) { const rr = runs.find(x => x.id === laneAssign(g, ln.i)), tagStep = !rr || ndForm(rr) === 'tagged';
     /* before cleavage the tagged protein is the product; after it, only the cleaved form counts */
     const ms = [F[0].mass/1000].concat(F[1] && tagStep && opt.tagCounts !== false ? [F[1].mass/1000] : []);
-    ln.bands.forEach(b => { if (b.mw != null && ms.some(m => Math.abs(Math.log(b.mw/m)) < Math.log(1.08))) { tgt += b.area; est = true; mws.push(b.mw); } }); } }
+    ln.bands.forEach(b => { if (!tagRaw(g, ln.i, b) && b.mw != null && ms.some(m => Math.abs(Math.log(b.mw/m)) < Math.log(1.08))) { tgt += b.area; est = true; mws.push(b.mw); } }); } }
   let flagged = 0; if (opt.knownCount) ln.bands.forEach(b => { if (!tagOf(g, ln.i, b) && knownShown(g, ln.i, b).some(k => k.kind === 'contam' || k.kind === 'freetag')) { con += b.area; flagged++; } });
-  let cleaved = (g.tags || []).some(t => t.kind === 'tagged') && un + tg > 0 ? 100*un/(un + tg) : null, cleavedEst = false;
+  let cleaved = (g.tags || []).some(t => t.kind === 'tagged' && (t.lane == null || t.lane === ln.i)) && un + tg > 0 ? 100*un/(un + tg) : null, cleavedEst = false;
   if (cleaved == null && cleavePlan(g)) { let cu = un, cg = 0;
     ln.bands.forEach(b => { if (tagOf(g, ln.i, b)) return; const k = knownFor(g, ln.i, b).find(x => x.kind === 'cleaved' || x.kind === 'uncleaved'); if (!k) return; if (k.kind === 'cleaved') cu += b.area; else cg += b.area; });
     if (cu > 0 && cg > 0 || (cg > 0 && un === 0)) { cleaved = 100*cu/(cu + cg); cleavedEst = true; } else if (cu > 0 && cg === 0 && un === 0) { cleaved = 100; cleavedEst = true; } }
-  const P = g.pix; const sig = laneProfile(g, ln.i); for (let y=Math.round(sig.length*0.03); y<sig.length - Math.round(sig.length*0.02); y++) tot += sig[y];
+  const P = g.pix; const sig = laneProfile(g, ln.i); for (let y=0; y<sig.length; y++) tot += sig[y];
   /* purity needs at least one contaminant marked for this lane (on all lanes, or on this lane alone) */
   const hasCon = flagged > 0 || (g.tags || []).some(t => t.kind === 'contam' && (t.lane == null || t.lane === ln.i));
   if (!(tgt > 0) || (!hasCon && opt.purBase === 'tagged')) return {purity: null, tgt, con, tot, mws, tmws, cleaved, cleavedEst, needCon: tgt > 0 && !hasCon && opt.purBase === 'tagged'};
@@ -3172,12 +3180,12 @@ function gelWinForMass(g, mw, sp, lowK){
 /* lanes that are mostly solid black: more than a third of their pixels at the darkest level */
 function gelSaturatedIdx(g){ gelSaturated(g); return g._sat ? g._sat.idx : new Set(); }
 function gelSaturated(g){
-  if (!g.pix) return []; const key = g.out && g.out.url.length + ':' + gelLabels(g).join('|') + ':' + (g.assign || []).join(','); if (g._sat && g._sat.key === key) return g._sat.v;
+  if (!g.pix) return []; const key = g.out && g.out.url.length + ':' + gelLabels(g).join('|') + ':' + (g.assign || []).join(','); if (g._sat && g._sat.key === key && g._sat.pix === g.pix) return g._sat.v;
   const P = g.pix, labs = gelLabels(g), n = labs.length, out = [], idx = new Set();
   labs.forEach((l, i) => { if (laneAssign(g, i) === 'marker') return; const x0 = Math.floor((i + 0.2)*P.w/n), x1 = Math.ceil((i + 0.8)*P.w/n); let dark = 0, tot = 0;
     for (let y = 0; y < P.h; y += 2) for (let x = x0; x < x1; x += 2) { tot++; if (P.d[y*P.w + x] >= 248) dark++; }
     if (tot && dark/tot > 0.33) { out.push(laneShow(l) || 'Lane ' + (i + 1)); idx.add(i); } });
-  g._sat = {key, v: out, idx}; return out;
+  g._sat = {key, pix: P, v: out, idx}; return out;
 }
 function gelPart(g, ix, y, iw, maxH, laneIdx, extraW, view){
   const empty = {s: '', defs: '', id: g.id, h: 0, laneX: () => ix, labels: [], top: y, imgTop: y, ix, iw: 0, ih: 0, laneW: 0};
@@ -4552,7 +4560,7 @@ function renderBandTable(g){
   const hint = `<tr><td colspan="6" class="empty-row">Click a band chip to cycle it through unmarked, untagged target, tagged form and contaminant for that lane only. × (or Delete) removes the band. Dashed chips were added by hand.</td></tr>`;
   const cols = anyG ? 8 : 6;
   const anySat = lanes.some(ln => !ln.marker && ln.bands.some(b => b.sat));
-  const note = (anySat ? 'Saturated bands read low, so a shorter exposure gives truer percentages. ' : '') + (!cal ? 'Find or mark the ladder to get sizes in kDa.' : !anyT ? 'Mark the target band to estimate purity.' : !anyC && opt.purBase === 'tagged' ? 'Mark one contaminant band to calculate purity.' : '');
+  const note = (anySat ? 'Saturated bands read low, so a shorter exposure gives truer percentages. ' : '') + (!cal ? (g.marks.length >= 2 ? 'Check the ladder: ' + (calibBad(g).length ? 'marks ' + calibBad(g).join(', ') + ' kDa are at the same position or out of order. ' : '') + 'Each band must have a distinct position, with sizes decreasing from top to bottom.' : 'Find or mark the ladder to get sizes in kDa.') : !anyT ? 'Mark the target band to estimate purity.' : !anyC && opt.purBase === 'tagged' ? 'Mark one contaminant band to calculate purity.' : '');
   el.innerHTML = head + rows + (note ? `<tr><td colspan="${cols}" class="empty-row">${note}</td></tr>` : '');
 }
 document.querySelectorAll('[data-tagmode]').forEach(b => b.addEventListener('click', () => { tagMode = b.dataset.tagmode; if (tagMode) marking = null; render(); }));
@@ -4955,7 +4963,8 @@ async function addGelFiles(files){
   if (bad.length) toast(`Could not open ${bad.join(', ')}. Try exporting the gel as PNG or JPEG.`);
 }
 async function loadFiles(files){
-  const proj = files.find(f => /\.json$/i.test(f.name)); if (proj && MODE !== 'quick') { let d = null; try { d = JSON.parse(await proj.text()); } catch (e) { toast(`Could not open ${proj.name}`); } if (d) await importAsProject(d, proj.name); return; }
+  const proj = files.find(f => /\.json$/i.test(f.name)); if (proj && MODE !== 'quick') { let d = null; try { d = JSON.parse(await proj.text()); } catch (e) { toast(`Could not open ${proj.name}`); } if (d) await importAsProject(d, proj.name);
+    const rest = files.length - 1; if (rest) toast(`${rest} other file${rest === 1 ? ' was' : 's were'} dropped with the project and not loaded. Drop ${rest === 1 ? 'it' : 'them'} again once the project is open.`); return; }
   if (proj) { try { await openProject(JSON.parse(await proj.text()), proj.name); } catch (e) { toast(`Could not open ${proj.name}`); } files = files.filter(f => f !== proj); if (!files.length) return; }
   const gbf = files.filter(f => /\.(gb|gbk|genbank|ape|dna)$/i.test(f.name)); for (const f of gbf) await loadGenBank(f); files = files.filter(f => !gbf.includes(f)); if (!files.length) return;
   const sf = files.filter(f => /\.(cif|mmcif|pdb|ent)$/i.test(f.name)); for (const f of sf) await loadStructFile(f); files = files.filter(f => !sf.includes(f)); if (!files.length) return;
@@ -4963,6 +4972,8 @@ async function loadFiles(files){
   const added = [], newRuns = [], bad = [];
   for (const f of data) {
     try {
+      if (/\.(heic|heif|pdf|svg|dng|raw|cr2|nef)$/i.test(f.name)) { bad.push(`${f.name} (a picture format this tool cannot open: export the gel as PNG, JPEG or TIFF)`); continue; }
+      if (/\.(xlsx?|xlsm|ods|docx?)$/i.test(f.name)) { bad.push(`${f.name} (a spreadsheet or document: save the data as CSV or tab-separated text first)`); continue; }
       if (/\.zip$/i.test(f.name)) { if (typeof DecompressionStream === 'undefined') { bad.push(`${f.name} (this browser cannot unpack it, export the run as .csv from UNICORN)`); continue; }
         const ak = await isUnicornZip(f) ? await parseUnicornZip(await f.arrayBuffer(), f.name.replace(/\.[^.]+$/, '')) : null;
         if (ak) newRuns.push(makeRun(ak)); else bad.push(`${f.name} (not a UNICORN result archive)`); continue; }
@@ -5574,8 +5585,18 @@ function projectData(){
   return {app: 'HPLC Figure Bench', version: 1, saved: new Date().toISOString(), cur, opt: plain(opt), runs: runs.map(r => noId(r, 'blobId')), traces: traces.filter(t => !t.ex).map(t => noId(t, 'blobId')), gels: gs, struct: struct ? noId(struct, 'blobId') : null, nanodrop: ndSamples.map(n => noId(n, 'specId')), prep};
 }
 let projUndo = null, failedGels = [];
+/* a project file can be partial or damaged: keep what can be used and count what was skipped */
+function cleanProject(d){
+  const isO = o => o && typeof o === 'object' && !Array.isArray(o), hasXY = c => isO(c) && Array.isArray(c.xs) && Array.isArray(c.ys); let skipped = 0;
+  const keep = (list, ok) => { const a = Array.isArray(list) ? list : []; const out = a.filter(ok); skipped += a.length - out.length; return out; };
+  d.runs = keep(d.runs, r => isO(r) && r.id && Array.isArray(r.uvs) && r.uvs.length && r.uvs.every(hasXY));
+  d.traces = keep(d.traces, t => isO(t) && Array.isArray(t.rows) && Array.isArray(t.cols));
+  d.gels = keep(d.gels, isO); d.nanodrop = keep(d.nanodrop, isO);
+  if (!isO(d.struct)) d.struct = null; if (!isO(d.opt)) d.opt = null;
+  return skipped; }
 async function openProject(data, name, noUndo){
   if (!data || data.app !== 'HPLC Figure Bench' || !Array.isArray(data.runs)) { toast(`${name || 'That file'} is not a project saved by this tool`); return; }
+  const skipped = cleanProject(data);
   projUndo = !noUndo && (runs.length || gels.length || traces.some(t => !t.ex)) ? projectData() : null;
   const ng = []; failedGels = [];
   for (const sg of data.gels || []) { try { const img = new Image(); await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = sg.image; });
@@ -5590,7 +5611,7 @@ async function openProject(data, name, noUndo){
   let mx = 0; [...runs, ...gels].forEach(x => { const m = String(x.id).match(/\d+/); if (m) mx = Math.max(mx, +m[0]); }); traces.forEach(t => { mx = Math.max(mx, +t.id || 0); }); uid = Math.max(mx + 1, numOr(prep.nextUid, 0));
   cur = data.cur || 'overlay'; marking = null; tagMode = '';
   renderList(); syncControls(); render(); saveOpt();
-  toast(`Opened ${name || 'project'}: ${runs.length} run${runs.length === 1 ? '' : 's'}, ${traces.length} trace${traces.length === 1 ? '' : 's'}, ${gels.length} gel${gels.length === 1 ? '' : 's'}`);
+  toast(`Opened ${name || 'project'}: ${runs.length} run${runs.length === 1 ? '' : 's'}, ${traces.length} trace${traces.length === 1 ? '' : 's'}, ${gels.length} gel${gels.length === 1 ? '' : 's'}${skipped ? `. Skipped ${skipped} damaged or incomplete item${skipped === 1 ? '' : 's'} in the file` : ''}`);
   nextHidden.delete('undoOpen'); renderNext();
 }
 $('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex)) { toast('Load some data first'); return; }
@@ -5603,7 +5624,7 @@ $('#projFile').addEventListener('change', async e => { const f = e.target.files[
 /* from the home screen or a project, a project file opens as a project of its own and never replaces the open one */
 async function importAsProject(data, fname){
   if (!data || data.app !== 'HPLC Figure Bench' || !Array.isArray(data.runs)) { toast(`${fname} is not a project saved by this tool`); return; }
-  await leaveWorkspace(); resetWorkspace(); await openProject(data, fname, true); stripBlobIds(); traces = traces.filter(t => !t.ex);
+  await leaveWorkspace(); resetWorkspace(); try { await openProject(data, fname, true); } catch (e) { console.warn('import failed', e); toast(`Could not open ${fname}: the file is damaged`); showHome(); return; } stripBlobIds(); traces = traces.filter(t => !t.ex);
   PROJ = mkProj(newPid(), fname.replace(/(_project)?\.json$/i, '').replace(/_/g, ' '), Date.now());
   if (failedGels.length) PROJ.lost.gels = failedGels.map(g => Object.assign({}, g, {imageId: undefined}));
   prep.on = true; MODE = 'proj'; enterApp(); applyProjUI(); renderList();
