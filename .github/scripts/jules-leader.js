@@ -44,7 +44,7 @@ module.exports = async ({github, context, core}) => {
   if (!key) { core.warning('JULES_API_KEY secret is not set: skipping session work, doing merges and follow-ups only.'); }
 
   /* ---------- 2. watch running sessions ---------- */
-  const running = key ? await issues(L.run) : [];
+  const running = key ? await issues(L.run) : [], freed = new Set(); /* issues this run moved out of running (GitHub's label list can lag a few seconds) */
   for (const i of running) { const {s} = await getState(i.number); if (!s.session) continue; let ses;
     try { ses = await jules(s.session); } catch (e) { say(`#${i.number}: could not read session: ${e.message}`); continue; }
     const st = String(ses.state || '').toUpperCase(), pr = (ses.outputs || []).map(o => o.pullRequest && o.pullRequest.url).find(Boolean);
@@ -62,21 +62,21 @@ module.exports = async ({github, context, core}) => {
       try { const acts = []; let tok = ''; do { const a = await jules(`${s.session}/activities?pageSize=100${tok ? '&pageToken=' + tok : ''}`); acts.push(...(a.activities || [])); tok = a.nextPageToken || ''; } while (tok && acts.length < 1000);
         const last = acts.filter(a => a.agentMessaged).sort((a, b) => String(a.createTime).localeCompare(String(b.createTime))).pop(); q = last ? last.agentMessaged.agentMessage : ''; } catch (e) { say(`#${i.number}: could not read the question: ${e.message}`); }
       const n = (s.replies || 0) + 1, quote = (q || '(question text not available)').slice(0, 3000).split('\n').map(l => '> ' + l).join('\n');
-      if (n > MAX_REPLIES) { await putState(i.number, s, `Jules leader: Jules is still asking after ${MAX_REPLIES} automatic replies. Needs the coordinator. Latest question:\n\n${quote}`); await setLabels(i.number, [L.fail], [L.run]); say(`#${i.number}: question needs the coordinator`); continue; }
+      if (n > MAX_REPLIES) { await putState(i.number, s, `Jules leader: Jules is still asking after ${MAX_REPLIES} automatic replies. Needs the coordinator. Latest question:\n\n${quote}`); await setLabels(i.number, [L.fail], [L.run]); freed.add(i.number); say(`#${i.number}: question needs the coordinator`); continue; }
       await jules(`${s.session}:sendMessage`, {prompt: n === 1
         ? 'Yes, go ahead with the approach you think is best. Nobody can answer questions during this session, so do not wait for approval or a review. Decide using AGENTS.md and the issue text, choosing the smallest safe option, and do not change scientific values the issue does not ask for. If a check fails because the app looks wrong, keep the check failing and explain it in the PR. Finish now: commit, open the pull request, and list each open question and the choice you made under "Open questions" in the PR description.'
         : 'Approved. Please stop asking and finish now: commit your work as it is and open the pull request. Put anything unfinished or uncertain under "Open questions" in the PR description. The coordinator will review the PR.'});
       await putState(i.number, Object.assign(s, {replies: n}), `Jules leader: attempt ${s.attempt} asked a question (automatic reply ${n} of ${MAX_REPLIES}: decide by the rules and list it in the PR):\n\n${quote}`);
       await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: `Jules asked:\n\n${quote}\n\nThe leader told Jules to decide using AGENTS.md and list this under "Open questions" in its PR.`});
       say(`#${i.number}: answered a question`); continue; }
-    if (st === 'COMPLETED' && pr) { await putState(i.number, Object.assign(s, {pr}), `Jules leader: attempt ${s.attempt} finished. PR: ${pr}`); await setLabels(i.number, [L.done], [L.run]); say(`#${i.number}: PR ${pr}`); continue; }
+    if (st === 'COMPLETED' && pr) { await putState(i.number, Object.assign(s, {pr}), `Jules leader: attempt ${s.attempt} finished. PR: ${pr}`); await setLabels(i.number, [L.done], [L.run]); freed.add(i.number); say(`#${i.number}: PR ${pr}`); continue; }
     if (st === 'FAILED' || (st === 'COMPLETED' && !pr)) { const why = st === 'FAILED' ? 'session failed' : 'session finished without a PR';
       if ((s.attempt || 1) < MAX_ATTEMPTS) await start(i, (s.attempt || 1) + 1, why);
-      else { await putState(i.number, s, `Jules leader: ${MAX_ATTEMPTS} attempts ended without a PR (${why}). Needs the coordinator.`); await setLabels(i.number, [L.fail], [L.run]); say(`#${i.number}: gave up`); } } }
+      else { await putState(i.number, s, `Jules leader: ${MAX_ATTEMPTS} attempts ended without a PR (${why}). Needs the coordinator.`); await setLabels(i.number, [L.fail], [L.run]); freed.add(i.number); say(`#${i.number}: gave up`); } } }
 
   /* ---------- 1. start queued work ---------- */
-  if (key) { let free = MAX_RUNNING - (await issues(L.run)).length;
-    for (const i of (await issues(L.queue)).sort((a, b) => a.number - b.number)) { if (free <= 0) break;
+  if (key) { let free = MAX_RUNNING - (await issues(L.run)).filter(i => !freed.has(i.number)).length;
+    for (const i of (await issues(L.queue)).filter(i => !labels(i).includes(L.run)).sort((a, b) => a.number - b.number)) { if (free <= 0) break;
       try { await start(i, 1); free--; } catch (e) { say(`#${i.number}: could not start: ${e.message}`); } } }
 
   /* ---------- 3. merge safe PRs ---------- */
