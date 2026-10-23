@@ -56,6 +56,11 @@ await T.t('bad', async () => { const {p, errs, close} = await open(), h = H(p); 
     T.check(`bad.${id}.toast`, ts.some(t => t.length > 15), `toasts: ${ts.join(' | ') || 'none'}`); // says why nothing was used
     T.check(`bad.${id}.no-protein-reading`, !/mg\/mL/.test(st.s || ''), `step now reads: ${st.s}`); // DNA or a photo must not become a protein concentration
     T.check(`bad.${id}.no-error`, errs.length === e0, errs.slice(e0).join(' | ')); }
+  /* adding a second Concentrated step when all column runs already have one adds a manual conc step without timing out */
+  const cBefore = (await h.timeline()).length;
+  await h.addConc(null, '0.5');
+  const cAfter = (await h.timeline()).length;
+  T.check('ok.second-conc-step', cAfter === cBefore + 1, `timeline ${cBefore}->${cAfter}`);
   await close(); });
 
 /* ---------------- operation fuzz, fixed seed ---------------- */
@@ -105,6 +110,24 @@ for (const cloud of [false, true]) await T.t(cloud ? 'persist-cloud' : 'persist-
     await p.click(SEL.home); await p.waitForTimeout(600); await p.setInputFiles(SEL.importFile, f); await p.waitForTimeout(3500); const c = await snapshot(p, h);
     T.check('persist.export-import.same', !diff(a, c), diff(a, c)); } // an exported file imports to the same project
   T.check(`persist.${tag}.no-error`, !errs.length, errs.join(' | ')); await close(); });
+
+/* ---------------- older and partial project files ---------------- */
+await T.t('partial-project', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p);
+  await h.newProject('Partial base'); await h.dropFiles(F.his); await h.addConc(F.ndSpec, 0.25);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]);
+  const origPath = path.join(ROOT, 'results', 'partial_orig.json'); await dl.saveAs(origPath);
+  const origJson = JSON.parse(fs.readFileSync(origPath, 'utf8'));
+  for (const sec of ['gels', 'nanodrop', 'traces', 'opt']) {
+    const mod = JSON.parse(JSON.stringify(origJson)); delete mod[sec];
+    const modPath = path.join(ROOT, 'results', `partial_no_${sec}.json`); fs.writeFileSync(modPath, JSON.stringify(mod));
+    const e0 = errs.length; await p.setInputFiles(SEL.importFile, modPath); await p.waitForTimeout(3000); const ts = await takeToasts(p);
+    T.check(`partial.${sec}.no-error`, errs.length === e0, errs.slice(e0).join(' | '));
+    const tl = await h.timeline(), hasRun = tl.some(x => x.k.startsWith('run:')), hasND = tl.some(x => /mg\/mL/.test(x.s || ''));
+    if (sec === 'nanodrop') T.check(`partial.${sec}.remaining-data`, hasRun && !hasND, `run=${hasRun}, nd=${hasND}`);
+    else T.check(`partial.${sec}.remaining-data`, hasRun && hasND, `run=${hasRun}, nd=${hasND}`);
+    T.check(`partial.${sec}.message`, ts.length > 0, `toasts: ${ts.join(' | ') || 'none'}`);
+  }
+  await close(); });
 
 /* ---------------- performance budgets ---------------- */
 await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Perf');

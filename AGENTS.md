@@ -59,7 +59,7 @@ Figure defaults follow publication conventions: the Okabe-Ito colorblind-safe pa
 
 ## Testing
 
-`tests/` holds an automated browser test suite (Playwright, headless Chromium). See `tests/README.md` for details.
+`tests/` holds an automated browser test suite (Playwright, headless Chromium, including `25_gels.js`). See `tests/README.md` for details.
 
 **Before opening a PR that changes the HTML file:**
 
@@ -73,7 +73,7 @@ Figure defaults follow publication conventions: the Okabe-Ito colorblind-safe pa
 3. A regression is either fixed, or explained in the PR as intended.
 4. When you fix a bug or add a feature, add a check for it to the suite it belongs to.
 
-The `Test suite` GitHub Action also runs this comparison on every PR that touches the app or the tests, and posts the results as a comment on the PR. A PR with regressions shows a failed check. Running it yourself first is still expected, so problems are found before the PR is opened.
+The `Test suite` GitHub Action also runs this comparison on every PR that touches the app or the tests, and posts a results table on every PR. A PR with regressions shows a failed check. Running it yourself first is still expected, so problems are found before the PR is opened.
 
 Checks that already fail on `main` are known problems. They are not yours to fix unless the task asks.
 
@@ -95,14 +95,26 @@ In every PR description, say exactly what you tested and how. Do not claim testi
 4. **Update `README.md`** when user-visible behavior, supported formats, exports or network dependencies change.
 5. **Never commit real lab data** (chromatograms, gel images, sequences). The owner's results may be unpublished.
 6. **Explain the change** in the PR description: what changed, why, how it was tested, and anything uncertain.
-7. Do not merge. The owner reviews and merges every PR.
+7. Do not merge. The coordinator (Claude, working from chat) merges PRs after the Test suite passes. Changes to scientific values need the owner's OK first.
 
 ## How agents divide the work
 
-- **Jules** implements tasks from GitHub issues labeled `jules`.
-- **Claude** reviews every pull request automatically, and implements tasks when someone writes `@claude` in an issue or PR comment.
-- An agent should not push to a branch another agent is working on. Revisions go back to the agent that wrote the PR.
+- **Jules** works from issues labeled `jules`.
+- **Claude** reviews every PR automatically and is called with `@claude`.
+- Agents never push to another agent's branch: a revision goes on a new branch.
 - Only one PR at a time should change the HTML file, because changes to the same large file will conflict.
+
+## The Jules leader (automatic queue)
+
+`.github/workflows/jules-leader.yml` runs every 15 minutes. It is rule-based, with no AI:
+
+- **`jules-queue`:** issues with this label get a Jules session through the Jules API, at most 3 at a time. Label: `jules-running`.
+- **Failures:** a failed session is retried with "work in smaller steps", up to 3 attempts. After that the issue gets `needs-coordinator`.
+- **Finished:** the issue gets `jules-done` and a link to the PR.
+- **Merging:** a PR that touches only `tests/`, `docs/`, `README.md` or issue templates, with a clean Test suite report, is merged automatically. Any other PR gets `needs-coordinator`.
+- **Follow-ups:** "New checks failing" in a merged PR's test report, and "Ready-to-file issues" in a merged `docs/*audit*.md`, become issues labelled `needs-triage`. A person or the coordinator moves them to `jules-queue` after checking scope and scientific impact.
+
+The older `jules` label still starts Jules directly, without the leader's retries.
 
 ## Reviewing a pull request
 
