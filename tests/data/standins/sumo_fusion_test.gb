@@ -1,0 +1,43 @@
+LOCUS       sumo_fusion_test       1013 bp    DNA     circular SYN 01-OCT-2026
+DEFINITION  Synthetic stand-in: His6-SUMO fusion construct with QIGG cleavage site.
+FEATURES             Location/Qualifiers
+     source          1..1013
+                     /organism="synthetic construct"
+     promoter        61..79
+                     /label="T7 promoter"
+     protein_bind    86..110
+                     /label="lac operator"
+     RBS             114..126
+                     /label="RBS"
+     CDS             130..939
+                     /label="His6-SUMO-target"
+                     /translation="MGSSHHHHHHGSGLVPRGSASMSDSEVNQEAKPEVKPEVKPETHINLKVSDGSSEIFF
+                     KIKKTTPLRRLMEAFAKRQGKEMDSLRFLYDGIRIQADQTPEDLDMEDNDIIEAHREQ
+                     IGGMPKSFYVNKLAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEA
+                     EAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEA
+                     EAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAEAE"
+     misc_feature    130..189
+                     /label="6xHis"
+     misc_feature    190..486
+                     /label="SUMO"
+     terminator      946..993
+                     /label="T7 terminator"
+ORIGIN
+        1 atttgccgcc tgacaagtca atgcgatccg taggggcagc gcagtatgcc aagactatag
+       61 taatacgact cactatagga agcttggaat tgtgagcgga taacaattcc accaaggaga
+      121 tataccacca tgggcagcag ccatcatcat catcatcatg gcagcggcct ggtgccgcgt
+      181 ggcagcgcga gcatgagcga tagcgaagtg aaccaggaag cgaaaccgga agtgaaaccg
+      241 gaagtgaaac cggaaaccca tattaacctg aaagtgagcg atggcagcag cgaaattttt
+      301 tttaaaatta aaaaaaccac cccgctgcgt cgtctgatgg aagcgtttgc gaaacgtcag
+      361 ggcaaagaaa tggatagcct gcgttttctg tatgatggca ttcgtattca ggcggatcag
+      421 accccggaag atctggatat ggaagataac gatattattg aagcgcatcg tgaacagatt
+      481 ggcggcatgc cgaaaagctt ttatgtgaac aaactggcgg aagcggaagc ggaagcggaa
+      541 gcggaagcgg aagcggaagc ggaagcggaa gcggaagcgg aagcggaagc ggaagcggaa
+      601 gcggaagcgg aagcggaagc ggaagcggaa gcggaagcgg aagcggaagc ggaagcggaa
+      661 gcggaagcgg aagcggaagc ggaagcggaa gcggaagcgg aagcggaagc ggaagcggaa
+      721 gcggaagcgg aagcggaagc ggaagcggaa gcggaagcgg aagcggaagc ggaagcggaa
+      781 gcggaagcgg aagcggaagc ggaagcggaa gcggaagcgg aagcggaagc ggaagcggaa
+      841 gcggaagcgg aagcggaagc ggaagcggaa gcggaagcgg aagcggaagc ggaagcggaa
+      901 gcggaagcgg aagcggaagc ggaagcggaa gcggaataaa aacccctagc ataacccctt
+      961 ggggcctcta aacgggtctt gaggggtttt ttgatgcatg catgcatgca tgc
+//
