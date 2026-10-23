@@ -1,6 +1,25 @@
-# Performance Audit: Part 2 (Find Causes)
+# Performance audit
 
-## Top 5 functions by self time
+## Part 1: measured times
+
+> **Coordinator note (2026-10-23):** the three ">5000" rows are the script's 5 s timeout, not measurements. The `60_perf` suite loads the 200k-point run in under 2 s and the 3000×2000 gel in under 3 s on GitHub's machines, so treat those rows as unconfirmed. PNG export at 600 dpi has no timing check yet.
+
+| Action | Median Time (ms) | Feels Slow? (>1s, or >200ms for typing) |
+|---|---|---|
+| Page load | 269.4 | No |
+| Load `tests/data/qa/akta_200k_HisTrap_5mL.csv` | >5000.0 | Yes |
+| Typing 10 characters in Pooled fractions box | 54.0 | No |
+| Change smoothing with 8-step workflow | 50.3 | No |
+| Change layout with 8-step workflow | 50.6 | No |
+| Load 3000x2000 PNG gel | >5000.0 | Yes |
+| Open a saved project | 52.1 | No |
+| Export PNG at 600 dpi | >5000.0 | Yes |
+
+*Note: Some measurements reflect timeouts (>5000ms limit) encountered via Playwright testing indicating actions that likely need optimization.*
+
+## Part 2: causes
+
+### Top 5 functions by self time
 
 1. `render` (line 4211)
 2. `pathD` (line 2023)
@@ -8,7 +27,7 @@
 4. `buildSVG` (line 2042)
 5. `processTrace` (line 1583)
 
-## Cause analysis
+### Cause analysis
 
 - **`render` / `buildSVG`**: The `render()` function performs a full layout recalculation and DOM update of the entire Workflow figure, sidebar, and summary tables synchronously on every single keystroke. When a user types in a title input, `syncControls()` and `renderList()` execute, triggering a complete `render()`.
 - **`pathD` and `processTrace`**: These functions process large arrays of chromatography data. `processTrace` creates new point arrays, and `pathD` iterates over these arrays to generate long SVG `<path>` strings. This work is repeated identically on every render cycle even if the trace and figure dimensions have not changed.
@@ -18,7 +37,7 @@
   - `fracSegments(run)` re-slices arrays and computes boundary indices inside tight filtering loops.
 - **Large Arrays**: The chromatography raw data arrays (`xs`, `ys`) are repeatedly traversed and copied without caching the intermediate SVG geometric paths or layout variables.
 
-## Suggested Fixes
+### Suggested Fixes
 
 ### 1. Debounce `render` on text input events
 - **Fix**: Apply a small debounce (e.g., 150-250ms) to text input event listeners before calling `render()`, or selectively update only the modified text fields rather than triggering a full workflow rebuild on every keystroke.
