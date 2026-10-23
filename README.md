@@ -34,6 +34,11 @@ As a single HTML file, you can run the application locally on Windows by double-
 *   **Peak and pool areas** use the whole run, after smoothing and baseline, so zooming or cropping the plot never changes them.
 *   **Pool volume** counts each fraction from its mark to the next one. The last fraction ends at the logged end of fractionation if the run log has one, otherwise one median fraction width after its start. A fraction before a jump in tube numbers (T4 then T8) is cut to one median width when it is longer than 1.5 times it. The run card notes pooled fractions wider than 1.5 times the median and ends that were assumed.
 
+## Import and SEC calibration
+SEC "Read from run" skips unticked standards, takes peaks in elution order within any entered V0/Vt limits, and asks you to confirm the proposed matching before applying it. Check peak identities in the proposal; unrelated peaks inside the limits still need manual review. Superdex 75 and 200 Increase 5/150 columns are distinguished by name; the 75 5/150 bed volume is 3 mL ([Cytiva specifications](https://www.cytivalifesciences.co.jp/catalog/0063.html)).
+
+Tab-delimited UNICORN files support decimal commas. NanoDrop imports treat a lone comma as decimal except when followed by three digits; grouping commas are removed. Reading timestamps and row positions distinguish replicates when checking for duplicate imports.
+
 ## Storage and Backups
 *   **Browser Storage:** The application uses `localStorage` for user settings, SEC calibrations, and custom protein lists. It uses `IndexedDB` to store projects locally in the browser.
 *   **Host-Dependent Storage:** The code includes integration with an external environment (`window.claude`), which can provide cloud database and asset storage if the application is hosted there.

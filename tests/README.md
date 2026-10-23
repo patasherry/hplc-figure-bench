@@ -25,6 +25,7 @@ node run.js 00_ 10_                # only some suites
 |---|---|---|
 | `00_smoke.js` | Smoke | The page loads, a project opens, a run loads. Proves the harness works. |
 | `10_data_truth.js` | Data | Synthetic files with known answers: SEC detection, column, flow, fraction labels, peak volumes, pool area and mg, NanoDrop means. |
+| `15_import_sec.js` | Import and SEC | Synthetic UI checks for reviewed SEC peak matching, UNICORN decimal commas, 5/150 column identity, NanoDrop number formats and replicate retention. |
 | `20_science.js` | Science | Summary table arithmetic (mole-based yields across tag removal), methods text, panel letters, SEC elution volumes, consistency after moving or removing steps. |
 | `30_robust.js` | Robustness | Bad inputs, a seeded 150-action fuzz with invariants, save and reload (browser and cloud storage), export and import, speed budgets. |
 | `40_visual.js` | Visual | Overlapping text, horizontal scrolling, toolbars covering titles, at several window widths and in dark mode. |
@@ -43,6 +44,7 @@ Everything under `data/` is synthetic, made by the generators next to it, with f
 - `data/gen_nd.py`: NanoDrop exports with known answers.
 - `data/science/gen_science.py`: the science suite's SEC run and NanoDrop readings.
 - `data/qa/gen_qa.py`: broken and unusual files for the robustness suite.
+- `data/gen_import_sec.js`: deterministic in-memory files and a legacy project for the import and SEC suite.
 - `data/standins/gen_standins.py`: stand-ins for private lab files (see below), plus the QA fixtures that were once copies of real files.
 
 Some suites were first written against the owner's real runs, plasmid map and gel photos. Those files are unpublished and

@@ -1482,10 +1482,10 @@ function parseAkta(text, fname){
     /* UNICORN 6/7 names (UV 1_280, Conductivity) and UNICORN 5 names with a run prefix (run12:10_UV1_280nm, run12:10_Cond) */
     curves.push({name: nm, xu: units[c], yu: units[c+1], col: c, kind: curveKind(nm, units[c+1]), xs: [], ys: [], ev: []}); }
   for (let i=u+1;i<lines.length;i++){ const L = lines[i]; if (!L) continue; const f = sp(L);
-    for (const cv of curves){ const xs = f[cv.col]; if (xs === undefined || xs === '') continue; const x = parseFloat(xs); if (!isFinite(x)) continue;
+    for (const cv of curves){ const xs = f[cv.col]; if (xs === undefined || xs === '') continue; const x = toNum(xs, d === '\t'); if (!isFinite(x)) continue;
       const v = (f[cv.col+1] || '').trim().replace(/^"|"$/g, '');
       if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
-      else { const y = parseFloat(v); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
+      else { const y = toNum(v, d === '\t'); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
   return aktaFromCurves(curves, fname);
 }
 /* what a UNICORN curve is, from its name and unit. UV path length (cm) and derived UV curves (UV_CUT_TEMP@100) are not traces */
@@ -1779,12 +1779,13 @@ const SEC_COLUMNS = {
   s200i: {name: 'Superdex 200 Increase 10/300 GL', vt: 24, re: /200\s*inc|s200\s*i\b|sd200\s*i|200i|s200|sd ?200|superdex ?200(?!.*(16|26)\s*[\/-]?\s*600)/i},
   s75i: {name: 'Superdex 75 Increase 10/300 GL', vt: 24, re: /75\s*inc|s75\s*i\b|s75|sd ?75|superdex ?75(?!.*(16|26)\s*[\/-]?\s*600)/i},
   s6i: {name: 'Superose 6 Increase 10/300 GL', vt: 24, re: /superose\s*6|s6\s*i\b|\bs6\b/i},
-  s200i5: {name: 'Superdex 200 Increase 5/150 GL', vt: 3, re: /5\s*[\/-]\s*150/i},
+  s200i5: {name: 'Superdex 200 Increase 5/150 GL', vt: 3, re: /200.*5\s*[\/-]\s*150|5\s*[\/-]\s*150.*200/i},
+  s75i5: {name: 'Superdex 75 Increase 5/150 GL', vt: 3, re: /75.*5\s*[\/-]\s*150|5\s*[\/-]\s*150.*75/i},
   hl16s200: {name: 'HiLoad 16/600 Superdex 200 pg', vt: 120, re: /16\s*[\/-]?\s*600.*200|200.*16\s*[\/-]?\s*600|hiload(?!.*(26|75))/i},
   hl16s75: {name: 'HiLoad 16/600 Superdex 75 pg', vt: 120, re: /16\s*[\/-]?\s*600.*75|75.*16\s*[\/-]?\s*600/i},
   hl26s200: {name: 'HiLoad 26/600 Superdex 200 pg', vt: 320, re: /26\s*[\/-]?\s*600/i},
   custom: {name: 'Other column', vt: '', re: null}};
-const SEC_ORDER = ['s200i5', 'hl26s200', 'hl16s75', 'hl16s200', 's6i', 's75i', 's200i'];
+const SEC_ORDER = ['s200i5', 's75i5', 'hl26s200', 'hl16s75', 'hl16s200', 's6i', 's75i', 's200i'];
 function secColumnGuess(r){ const t = (r.colLog || '') + ' ' + (r.file || '') + ' ' + (r.method || '') + ' ' + (r.name || ''); return SEC_ORDER.find(k => SEC_COLUMNS[k].re.test(t)) || 'custom'; }
 const SEC_STD_SETS = {
   biorad: {name: 'Bio-Rad gel filtration standard', stds: [['Thyroglobulin', 670], ['γ-globulin', 158], ['Ovalbumin', 44], ['Myoglobin', 17], ['Vitamin B12', 1.35, true]]},
@@ -5255,7 +5256,7 @@ function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) {
     if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) return {i, d, H, rows: 'samples'};
     if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1) return {i, d, H, rows: 'wavelengths'}; } return null; }
 function looksNanoDrop(text){ const L = text.split(/\r?\n/).filter(l => l.trim()); return !!ndHeader(L) || (L.slice(0, 6).some(l => /^wavelength/i.test(l.trim()) && /absorbance/i.test(l)) && L.some(l => /^a?\s?260\s*\/\s*a?280\b/i.test(l.trim()))); }
-const ndNum = v => { const x = parseFloat(String(v ?? '').replace(/\s/g, '').replace(/,(\d+)$/, '.$1')); return isFinite(x) ? x : null; };
+const ndNum = v => { const s = String(v ?? '').replace(/\s/g, ''), m = s.match(/^[+-]?\d*,(\d+)(?:[eE][+-]?\d+)?$/), x = parseFloat(m && m[1].length !== 3 ? s.replace(',', '.') : s.replace(/,/g, '')); return isFinite(x) ? x : null; };
 const CRUDE_RE = /lys|load|flow|\bft\b|supernat|pellet|crude|input|clarif/i;
 function ndNew(o){ return Object.assign({id: 'nd' + (ndUid++), name: '', kind: 'protein', a280: null, a260: null, a230: null, a340: null, r280: null, r230: null, conc: null, unit: 'mg/mL', runId: '', stage: 'pool', dil: 1, hide: false}, o); }
 /* NanoDrop One per-sample file: name, date, a "Wavelength (nm) / 10mm Absorbance" header, calibration comments, A260/A280 and A280 lines, then the spectrum */
@@ -5276,7 +5277,7 @@ function parseNanoDrop(text){
   /* spectra laid out as rows: one column per sample, one row per wavelength */
   if (hd.rows === 'wavelengths') { return H.slice(1).map((nm, k) => { const wl = [], ab = []; data.forEach(r => { const w = ndNum(r[0]), v = ndNum(r[k + 1]); if (w != null && v != null) { wl.push(w); ab.push(v); } });
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }, a280 = at(280), a260 = at(260);
-      return ndNew({name: nm, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null); }
+      return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null); }
   const hn = H.map(h => h.toLowerCase().replace(/\s+/g, ' ')), col = f => hn.findIndex(f);
   const cName = col(h => ND_NAME.test(h)), cR280 = col(h => /a?\s?260\s*\/\s*a?\s?280/.test(h)), cR230 = col(h => /a?\s?260\s*\/\s*a?\s?230/.test(h));
   const absCol = w => col(h => new RegExp(`\\ba ?${w}\\b|^${w}$`).test(h) && !/\//.test(h) && !/conc|mg|µg|ug|ng|raw/.test(h));
@@ -5286,12 +5287,12 @@ function parseNanoDrop(text){
   const cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
   const wcols = H.map((h, i) => ({i, w: parseFloat(h)})).filter(x => isWl(H[x.i]) && x.w >= 190 && x.w <= 850);
   const headAll = hn.join(' '), dyeFile = /dye|degree of label/.test(headAll);
-  return data.filter(r => r.length > 2 && (r[cName] || '').length).map(r => {
+  return data.filter(r => r.length > 2 && (r[cName] || '').length).map((r, i) => {
     const typ = cType >= 0 ? r[cType] : '', unitTxt = ((cUnit >= 0 ? r[cUnit] : '') + ' ' + (cConc >= 0 ? hn[cConc] : '')).toLowerCase();
     const kind = /ng\s*\/\s*[µu]l|nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
     let conc = cConc >= 0 ? ndNum(r[cConc]) : null; if (conc != null && /[µu]g\s*\/\s*ml/.test(unitTxt)) conc /= 1000;
     const g = c => c >= 0 ? ndNum(r[c]) : null, a280 = g(cA280), a260 = g(cA260);
-    const s = ndNew({name: r[cName], when: [cDate >= 0 ? r[cDate] : '', cTime >= 0 ? r[cTime] : ''].filter(Boolean).join(' '), type: typ, kind, a280, a260, a230: g(cA230), a340: g(cA340), r280: g(cR280), r230: g(cR230),
+    const s = ndNew({name: r[cName], row: i, when: [cDate >= 0 ? r[cDate] : '', cTime >= 0 ? r[cTime] : ''].filter(Boolean).join(' '), type: typ, kind, a280, a260, a230: g(cA230), a340: g(cA340), r280: g(cR280), r230: g(cR230),
       conc, unit: kind === 'nucleic' ? 'ng/µL' : 'mg/mL', base: cBase >= 0 ? r[cBase] : '', baseA: g(cBaseA), corr: g(cCorr), imp: cImp >= 0 && r[cImp] ? {name: r[cImp], a280: g(cImpA)} : null, hide: CRUDE_RE.test(r[cName])});
     if (s.r280 == null && a260 != null && a280 > 0) s.r280 = a260/a280; if (s.r230 == null && a260 != null && s.a230 > 0) s.r230 = a260/s.a230;
     if (wcols.length > 10) { const wl = [], ab = []; wcols.forEach(x => { const v = ndNum(r[x.i]); if (v != null) { wl.push(x.w); ab.push(v); } }); if (wl.length > 10) s.spec = {wl, ab};
@@ -5308,7 +5309,7 @@ function ndGuessRun(name){
 }
 function addNanoDrop(list, name, to){
   if (!list.length) { toast(`No readings found in ${name}`); return; }
-  const key = s => s.name.trim().toLowerCase() + '|' + (s.a280 != null ? s.a280.toFixed(3) : s.conc), have = new Map(ndSamples.map(s => [key(s), s])); let merged = 0;
+  const key = s => s.name.trim().toLowerCase() + '|' + (s.a280 != null ? s.a280.toFixed(3) : s.conc) + '|' + (s.when || ('row:' + (s.row ?? ''))), have = new Map(ndSamples.map(s => [key(s), s])); let merged = 0;
   const fresh = list.filter(s => { const o = have.get(key(s)); if (!o) return true; let add = false; Object.keys(s).forEach(k => { if (['id', 'runId', 'stage', 'dil', 'hide'].includes(k)) return; if ((o[k] == null || o[k] === '') && s[k] != null && s[k] !== '') { o[k] = s[k]; add = true; } }); if (add) merged++; return false; });
   fresh.forEach(s => { if (to && s.kind !== 'nucleic') { s.runId = to; s.stage = 'conc'; ndSamples.push(s); return; } s.runId = s.kind === 'nucleic' || CRUDE_RE.test(s.name) ? '' : ndGuessRun(s.name); if (/conc|final|dialy|after/i.test(s.name)) s.stage = 'final'; ndSamples.push(s); });
   /* a file loaded on a Concentrated step: readings already loaded elsewhere move to it too */
@@ -5478,18 +5479,20 @@ $('#sec-new').addEventListener('click', () => { const r = curRun(), c = newSecCa
   const f = curFig(); if (f && f.kind === 'run') f.run.secCal = c.id; else if (f && f.kind === 'overlay') opt.ovSecCal = c.id; saveOpt(); renderList(); renderSec(); render(); });
 $('#sec-delCal').addEventListener('click', () => { const c = activeCal(); if (!c) return; const L = secCals(); if (L.length <= 1 && runs.some(isSec)) { toast('Keep at least one calibration while SEC runs are loaded. Clear its standards instead.'); return; }
   L.splice(L.indexOf(c), 1); runs.forEach(r => { if (r.secCal === c.id) r.secCal = ''; }); if (opt.ovSecCal === c.id) opt.ovSecCal = ''; saveOpt(); renderList(); renderSec(); render(); toast('Calibration deleted'); });
-/* standards run: its largest peaks, one per standard, matched biggest protein first (biggest elutes first) */
+/* standards run: eligible peaks in elution order, matched biggest protein first, confirmed before applying */
 $('#sec-read').addEventListener('click', () => {
   const c = activeCal(), id = $('#sec-from').value; if (!c || !id) { toast('Load the standards run first'); return; }
-  const want = (c.stds || []).filter(q => +q.kda > 0).sort((p, q) => q.kda - p.kda); if (want.length < 2) { toast('Enter at least two standards with their sizes first'); return; }
+  const want = (c.stds || []).filter(q => !q.off && +q.kda > 0).sort((p, q) => q.kda - p.kda); if (want.length < 2) { toast('Enter at least two standards with their sizes first'); return; }
   let pk = [];
   if (id[0] === 't') { const t = traces.find(x => 't' + x.id === id); if (!t) return; if (!t.peaks.length) detectPeaks(t); const pr = processTrace(t); pk = t.peaks.map(q => { const i = peakApex(pr.xs, pr.ys, q.x); return {x: pr.xs[i], h: pr.ys[i]}; }); }
   else { const r = runs.find(x => x.id === id); if (!r) return; if (!(r.integ || []).length) autoIntegrate(r); pk = integRows(r).map(q => ({x: q.apex, h: q.area})); }
-  if (pk.length < 2) { toast('Could not find peaks in that run'); return; }
-  const top = pk.slice().sort((p, q) => q.h - p.h).slice(0, want.length).sort((p, q) => p.x - q.x);
+  pk = pk.filter(q => isFinite(q.x) && q.x >= numOr(c.v0, -Infinity) && q.x <= numOr(c.vt, Infinity));
+  if (pk.length < 2) { toast('Could not find peaks in that run within V0 and Vt'); return; }
+  const top = pk.slice().sort((p, q) => p.x - q.x).slice(0, want.length);
+  if (!confirm('Apply these proposed standard matches? Check peak identities against the run.\n\n' + top.map((q, i) => want[i].name + ' (' + want[i].kda + ' kDa): ' + Math.round(q.x*1000)/1000 + ' ' + c.unit).join('\n') + (top.length < want.length ? '\n\nUnmatched standards will keep their existing volumes.' : ''))) return;
   top.forEach((q, i) => { want[i].ve = Math.round(q.x*1000)/1000; });
   saveOpt(); renderSec(); render();
-  toast(top.length < want.length ? `Found ${top.length} peaks for ${want.length} standards. The smallest standards were left blank, so check the volumes.` : `Read ${top.length} standard volumes. Check them against the run.`);
+  toast(top.length < want.length ? `Found ${top.length} peaks for ${want.length} standards. Unmatched standards kept their existing volumes, so check the volumes.` : `Read ${top.length} standard volumes. Check them against the run.`);
 });
 
 /* ---------- collapsible panel sections (remembered), each with a one-line summary when closed ---------- */
