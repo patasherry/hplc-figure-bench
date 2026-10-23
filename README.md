@@ -1,16 +1,28 @@
 # HPLC Figure Bench
 
-## Purpose and Main Workflows
+## How to use
 
-HPLC Figure Bench is a single-file HTML application for making publication-quality protein purification figures, SDS-PAGE gel figures, SEC calibrations, and summarizing multi-step purification workflows.
+HPLC Figure Bench runs directly in any web browser. Double-click `hplc-figure-bench(WF1.13).html` to open it.
 
-It supports two main modes:
-*   **Project Mode:** Documents an entire protein purification project across multiple steps (e.g., construct, expression, lysis, chromatography columns, cleavage, final sample). The figure, step timeline, written summary, and methods text build progressively.
-*   **Quick-Figure Mode:** A fast, stateless mode (`#quick`) to create publication-ready chromatograms and figures directly from dropped data files without creating a full project.
+Here is a short guide to the main features:
 
-## How to Open
+**1. Quick figure from one chromatogram**
+Click "Make a quick figure without a project" on the home screen. Drop a CSV or ZIP file from the ÄKTA. Drag across the chart to integrate peaks. Copy the SVG or save a PNG to use in your report.
 
-HPLC Figure Bench runs directly in any modern web browser. Open `hplc-figure-bench(WF1.13).html` locally by double-clicking it or dragging it into a browser window.
+**2. A full project**
+From the home screen, start a new project to document an entire purification. Use the steps panel on the left to build a timeline (e.g., Lysis, Ni-NTA, TEV cleavage, SEC). For each step, drop in your runs. Type in fraction names (like A4 and B2) to mark the pool. Drop in gel images and NanoDrop exports. The app calculates yields and builds a summary table and Methods text at the bottom.
+
+**3. SEC calibration**
+Open the SEC panel. Type in your standard proteins and their sizes. Drop a standards run file, and the app will read the peak volumes. It plots the curve, calculates the fit, and applies it to your SEC runs to estimate molecular weights.
+
+**4. Gels**
+Drop a gel image. The app automatically crops it, finds the lanes, and plots the bands. Pick your ladder from the menu to estimate sizes. You can click bands to tag them as your target or as contaminants. The app uses these to calculate lane purity and cleavage percentages based on molecular weights.
+
+**5. Exports**
+Below the figure, you can copy the figure or save it as an SVG or PNG at standard journal widths. You can also save CSV tables of the summary or band measurements. Click the "Save project" button at the top to download a backup file of your entire project.
+
+**6. Troubleshooting**
+If something goes wrong, the app shows messages at the bottom of the screen. For example, if it says "Load some data first before saving a project", load your files first. If your UV protein mass is not calculating, it might tell you "Flow rate required to calculate UV peak volume and mg yield." Read these hints to see what is missing.
 
 ## Supported Inputs and Exports
 
