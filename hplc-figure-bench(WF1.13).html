@@ -99,7 +99,6 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .ss-quick .qchip:hover{border-color:var(--accent)} .ss-quick .qchip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .ss-quick .qchip.mine{border-style:dashed}
 .ss-quick .qx{font:inherit;font-size:12px;border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0 4px;margin-left:-6px}
-.ss-quick .qdone{color:var(--muted);font-size:12.5px}
 .ss-quick .qmine{display:inline-flex;align-items:center;max-width:100%}
 .ss-quick .ql{flex-basis:100%}
 .uvhint{color:var(--warn);margin:0}
@@ -1281,7 +1280,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   xlabel:'Retention time (min)', ylabel:'Absorbance (mAU)', showY:true, frame:false, ticksOut:true,
   scalebar:false, sbValue:'', sbUnit:'mAU', legend:'inside',
   runPad:15, sec:'grad', fracFmt:'full', fracEvery:0, phases:false, runTitle:false, bandSens:5, gelAutoCrop:true, bandLabels:'none', purBase:'lane', tagTol:2, tagShow:true, purRow:false, known: null, knownTol:6, knownMin:5, cleaveDetect:false, tagPreset:'sumo', tagKda:'', protKda:'', knownShow:'arrows', knownOn:false, knownCount:false,
-  secStds:false, targetName:'', taggedName:'', targetArrow:false, tagCounts:true, gelPos:'below', gelAlign:'center', gelScale:100, gelHAdj:100, laneMark:'fill', gelView:'focus', ndNorm:'raw', ndFrom:240, ndCorr:true, ndFig:'conc', gelSpan:2.5, gelFocusKda:'', gelGap:0, gelSide:60, runGel:true, connectors:true, linkFrom:'axis', laneColors:true, laneAlpha:0.55,
+  secStds:false, targetName:'', taggedName:'', targetArrow:false, tagCounts:true, gelPos:'below', gelAlign:'center', gelScale:100, laneMark:'fill', gelView:'focus', ndNorm:'raw', ndFrom:240, ndCorr:true, ndFig:'conc', gelSpan:2.5, gelFocusKda:'', gelGap:0, gelSide:60, runGel:true, connectors:true, linkFrom:'axis', laneColors:true, laneAlpha:0.55,
   rxlabel:'Volume (mL)', rylabel:'Absorbance (mAU)', y2grad:'Buffer B (%)', y2cond:'Conductivity (mS/cm)',
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
   intMethod:'gauss', poolStyle:'band', poolColor:'#E69F00', poolAlpha:0.3, intBase:'line', intLabel:'num', intProm:5, intFill:true, eps:'', path:2,
@@ -3052,26 +3051,6 @@ function lanePurity(g, ln){
 }
 /* Match detected ladder bands to the ladder sizes: try every order-preserving pairing and keep the one whose
    positions best follow a straight line against log(MW); strong unmatched bands are penalised. */
-/* residual sum of squares of a least-squares polynomial fit (degree 1 or 2); null if the fit is not monotonic decreasing */
-function polyRss(xs, ys, deg){
-  const n = xs.length, k = deg + 1; if (n <= k) return 0;
-  const A = Array.from({length: k}, () => new Float64Array(k + 1));
-  for (let j=0;j<n;j++){ const pw = []; for (let a=0;a<k;a++) pw.push(Math.pow(xs[j], a)); for (let a=0;a<k;a++){ for (let b=0;b<k;b++) A[a][b] += pw[a]*pw[b]; A[a][k] += pw[a]*ys[j]; } }
-  for (let c=0;c<k;c++){ let pv = c; for (let r=c+1;r<k;r++) if (Math.abs(A[r][c]) > Math.abs(A[pv][c])) pv = r; [A[c], A[pv]] = [A[pv], A[c]];
-    for (let r=0;r<k;r++){ if (r === c) continue; const f = A[r][c]/(A[c][c] || 1e-12); for (let q=c;q<=k;q++) A[r][q] -= f*A[c][q]; } }
-  const co = A.map((row, a) => row[k]/(row[a] || 1e-12)), f = x => co.reduce((t, cf, a) => t + cf*Math.pow(x, a), 0);
-  const lo = Math.min(...xs), hi = Math.max(...xs); let prev = null;
-  for (let t=0;t<=20;t++){ const v = f(lo + (hi - lo)*t/20); if (prev !== null && v > prev + 1e-9) return null; prev = v; }
-  let rss = 0; for (let j=0;j<n;j++){ const e = ys[j] - f(xs[j]); rss += e*e; } return rss;
-}
-function polyFit(xs, ys, deg){
-  const n = xs.length, k = deg + 1; if (n < k) return null;
-  const A = Array.from({length: k}, () => new Float64Array(k + 1));
-  for (let j=0;j<n;j++){ let pw = 1; const p = []; for (let a=0;a<k;a++){ p.push(pw); pw *= xs[j]; } for (let a=0;a<k;a++){ for (let b=0;b<k;b++) A[a][b] += p[a]*p[b]; A[a][k] += p[a]*ys[j]; } }
-  for (let c=0;c<k;c++){ let pv = c; for (let r=c+1;r<k;r++) if (Math.abs(A[r][c]) > Math.abs(A[pv][c])) pv = r; [A[c], A[pv]] = [A[pv], A[c]]; if (Math.abs(A[c][c]) < 1e-12) return null;
-    for (let r=0;r<k;r++){ if (r === c) continue; const f = A[r][c]/A[c][c]; for (let q=c;q<=k;q++) A[r][q] -= f*A[c][q]; } }
-  return A.map((row, a) => row[k]/row[a]);
-}
 /* ladder matching: the strongest bands in the ladder lane are matched in order to the ladder sizes, trying every way of
    leaving out a few ladder sizes (a faint or missing band) and a few detected bands (a stray band from a neighbouring lane).
    Each matching is scored by how smoothly position follows log size, how much band signal it leaves unexplained, and whether
@@ -4532,7 +4511,7 @@ document.querySelectorAll('#panel .grp, #panel details.sub, #bandPanel, #sumPane
   const d = document.createElement('details'); d.className = 'tip'; d.innerHTML = '<summary>Tips</summary>'; ps.forEach(p => d.appendChild(p)); box.appendChild(d); });
 /* every slider shows its value beside its label */
 const RANGE_FMT = {fine: v => `${fmt(v, 1)}°`, cl: v => `${fmt(v, 1)}%`, cr: v => `${fmt(v, 1)}%`, ct: v => `${fmt(v, 1)}%`, cb: v => `${fmt(v, 1)}%`, black: v => String(Math.round(v)), white: v => String(Math.round(v)),
-  gelScale: v => `${Math.round(v)}%`, gelHAdj: v => `${Math.round(v)}%`, laneAlpha: v => `${Math.round(v*100)}%`};
+  gelScale: v => `${Math.round(v)}%`, laneAlpha: v => `${Math.round(v*100)}%`};
 document.querySelectorAll('label.f > input[type=range]').forEach(r => { const o = document.createElement('output'); o.className = 'val'; o.setAttribute('aria-hidden', 'true'); r.parentNode.classList.add('rng'); r.parentNode.insertBefore(o, r); });
 function rangeVals(){ document.querySelectorAll('label.rng > input[type=range]').forEach(r => { const k = r.dataset.gel || r.dataset.opt, f = RANGE_FMT[k] || (v => fmt(v, 2)); r.previousElementSibling.textContent = f(+r.value); }); }
 $('#panel').addEventListener('input', e => { if (e.target.type === 'range') rangeVals(); });
@@ -6275,7 +6254,7 @@ function exampleTraces(){
   traces.forEach(detectPeaks);
 }
 
-if (location.hash === '#selftest') window.__HFB = {DET, opt, gels, gelBands, detectBands, laneProfile, autoLadder, autoCrop, applyAutoCrop, laneTrack, laneProfile, gridTrack, fracIdx, shadeSet, laneTarget, suggestPool, runs: () => runs, calib, getG: () => G, tags: g => g.tags, tagOf, processGel, autoContrast, render, curGel: () => curGel(), LADDERS};
+if (location.hash === '#selftest') window.__HFB = {DET, opt, gels, gelBands, detectBands, laneProfile, autoLadder, autoCrop, applyAutoCrop, laneTrack, gridTrack, fracIdx, shadeSet, laneTarget, suggestPool, runs: () => runs, calib, getG: () => G, tags: g => g.tags, tagOf, processGel, autoContrast, render, curGel: () => curGel(), LADDERS};
 exampleTraces();
 syncControls();
 renderList();
