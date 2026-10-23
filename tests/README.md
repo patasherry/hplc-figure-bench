@@ -29,6 +29,7 @@ After running tests, read the output of node failures.js, not the full logs.
 | `00_smoke.js` | Smoke | The page loads, a project opens, a run loads. Proves the harness works. |
 | `10_data_truth.js` | Data | Synthetic files with known answers: SEC detection, column, flow, UV path, fraction labels, peak volumes, pool area and mg, NanoDrop means. |
 | `12_genbank.js` | GenBank | Synthetic files with known answers: complement CDS, join/wrap locations, multiline qualifiers, case sensitivity, no ORIGIN, Windows line endings, gene/product fallback labels, SnapGene .dna export. |
+| `14_peaks.js` | Peaks | Peak integration with known answers: isolated, separated, overlapping, and sloped baseline peaks. Tests both Gaussian and trapezoidal integration with and without baseline subtraction. |
 | `20_science.js` | Science | Summary table arithmetic (mole-based yields across tag removal), methods text, panel letters, SEC elution volumes, consistency after moving or removing steps. |
 | `25_gels.js` | Gels | Gel image loading, auto-cropping, lane finding, band detection, ladder MW calibration, band tagging, and purity calculations. |
 | `30_robust.js` | Robustness | Bad inputs, a seeded 150-action fuzz test with invariants, save and reload (browser and cloud storage), export and import, speed budgets. |
