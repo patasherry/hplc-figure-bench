@@ -85,6 +85,9 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
       T.check('conc.nd_mean', eps != null && (T.near(eps, 1, 0.01) || quoted.some(q => T.near(q, eps, 0.012)) || T.near(eps, 0.70, 0.012)), `mean Abs 1.42 / conc ${c} = ${eps && eps.toFixed(3)}; coefficients stated ${quoted}`);
       /* 0.70 is the A280 of 1 mg/mL of His6-SUMO-NADK from this GenBank ORF, the fixture's known value */
       T.check('meth.nd_coefficient_stated', T.near(eps || 0, 1, 0.01) || quoted.some(q => T.near(q, eps, 0.012)), `NanoDrop converted with ${eps && eps.toFixed(2)} per mg/mL, methods state ${quoted.length ? quoted : 'no coefficient'}`); /* guards: a reader can redo the mg/mL from the absorbance */
+      /* guards: the sentence that reports the NanoDrop measurement names the coefficient actually used and which protein form it is for (the fixture has a GenBank, so tagged or untagged) */
+      { const ndS = m.split(/(?<=\.)\s+(?=[A-Z])/).filter(x => /by NanoDrop/.test(x)), hit = ndS.map(x => x.match(/A280 of ([\d.]+) for 1 mg\/mL of the (tagged|untagged) form/)).filter(Boolean);
+        T.check('meth.nd_coefficient_source', eps != null && hit.some(x => T.near(+x[1], eps, 0.012)), `converted with ${eps && eps.toFixed(2)}; NanoDrop sentences: ${ndS.join(' | ') || 'none'}`); }
       T.check('meth.nd_readings', /mean of 3 readings|3 readings|n\s*=\s*3/i.test(m), m.match(/[^.]*NanoDrop[^.]*\./g)); /* guards: the number of readings is reported */
       T.check('meth.nd_value', c != null && m.includes(c.toFixed(2) + ' mg/mL'), `${c} mg/mL in: ${(m.match(/[^.]*NanoDrop[^.]*\./g) || []).join(' ')}`); /* guards: methods quote the measured concentration */
       T.check('meth.conc_volume', /to 0\.50 mL|0\.50 mL/.test(m), (m.match(/[^.]*concentrat[^.]*\./gi) || []).join(' ')); /* guards: the volume after concentrating */
