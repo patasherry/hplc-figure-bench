@@ -1921,8 +1921,9 @@ function gaussRows(uv, regs){
 let procMemo = new WeakMap();
 const procFull = run => { const cv = uvOf(run), k = `${opt.smooth}|${opt.baseline}|${cv.xs.length}|${cv.xs[0]}`, m = procMemo.get(cv.ys); if (m && m.k === k && m.xs === cv.xs) return m.q; const q = processXY(cv.xs, cv.ys, -Infinity, Infinity, false, 1); procMemo.set(cv.ys, {k, xs: cv.xs, q}); return q; };
 const windowXY = (q, lo, hi) => { const i0 = lowerBound(q.xs, lo); let i1 = q.xs.length; while (i1 > i0 && q.xs[i1-1] > hi) i1--; return {xs: q.xs.slice(i0, i1), ys: q.ys.slice(i0, i1)}; };
+/* peak areas read the recorded trace, like pool areas: the figure's smoothing and baseline change the picture only; integration has its own baseline (opt.intBase) */
 function integRows(run){
-  const uv = procFull(run);
+  const uv = uvOf(run);
   let rows = [];
   const regs = (run.integ || []).slice().sort((p, q) => p.a - q.a);
   if (opt.intMethod === 'gauss') rows = gaussRows(uv, regs);
