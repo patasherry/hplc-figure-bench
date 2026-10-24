@@ -98,8 +98,8 @@ def flags(diff):
         out.append('A check passes if any one of several conditions holds. Confirm each one really shows the behaviour: `' + loose[0][:120] + '`')
     if '.github/workflows/tests.yml' in diff:
         out.append('Edits `.github/workflows/tests.yml`. New suites are found by file name and need no edit there.')
-    if re.search(r'^\+\+\+ b/tests/suites/', diff, re.M) is None and APP in diff:
-        out.append('Changes the app but adds or edits no test suite. AGENTS.md asks for a check that fails before the fix.')
+    if re.search(r'^\+\+\+ b/tests/(suites/|data/.*expected[^/]*\.json$)', diff, re.M) is None and APP in diff:
+        out.append('Changes the app but adds or edits no test suite or expected-values file. AGENTS.md asks for a check that fails before the fix.')
     if any(re.search(r'https?://(?!github\.com|www\.ncbi|web\.expasy|research-figure)', l) and re.search(r'fetch\(|src=|href=', l) for l in added):
         out.append('Adds a network address. AGENTS.md lists the only allowed external resources.')
     return out
