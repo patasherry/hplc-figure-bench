@@ -1935,7 +1935,7 @@ function integRows(run){
   const uv = uvOf(run);
   const pr = run.shade ? poolRows(run) : null;
   const prKey = pr ? `${pr.area}|${pr.measured}|${pr.mg}|${pr.k}` : 'null';
-  const cacheKey = `${opt.intMethod}|${opt.intBase}|${JSON.stringify(run.integ)}|${run.shade}|${run.uvi}|${uv.xs.length}|${isSec(run)}|${opt.eps}|${opt.path}|${prKey}`;
+  const cacheKey = `${opt.intMethod}|${opt.intBase}|${JSON.stringify(run.integ)}|${run.shade}|${run.uvi}|${uv.xs.length}|${isSec(run)}|${opt.eps}|${opt.path}|${prKey}|${run.mFlow}|${run.flowAuto}|${run.path}`;
   if (run._integCache && run._integCache.key === cacheKey) return run._integCache.val;
 
   const compute = () => {
@@ -1973,7 +1973,7 @@ function measToStep(r){ const b = prep.btw && prep.btw[r.id], c = numOr(r.poolCo
 /* pooled UV uses the same baseline choice as the peak regions: a line across each pooled block, or 0 mAU */
 function poolRows(run){
   const uv = uvOf(run);
-  const cacheKey = `${uv.xs.length}|${uv.xs[0]}|${run.shade}|${opt.intBase}|${JSON.stringify(poolMeas(run))}|${opt.eps}|${opt.path}|${run.fracEnd}|${JSON.stringify(run.fracs)}`;
+  const cacheKey = `${uv.xs.length}|${uv.xs[0]}|${run.shade}|${opt.intBase}|${JSON.stringify(poolMeas(run))}|${opt.eps}|${opt.path}|${run.fracEnd}|${JSON.stringify(run.fracs)}|${run.mFlow}|${run.flowAuto}|${run.path}`;
   if (run._poolCache && run._poolCache.key === cacheKey) return run._poolCache.val;
 
   const compute = () => {
