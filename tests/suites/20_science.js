@@ -152,5 +152,35 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     const txt = (await h.svgTexts()).map(x => x.t).join(' | '); T.check('p3.no_size_text_default', !/\bKav\b|oligomer|\d\s*kDa/.test(txt), (txt.match(/\bKav\b|oligomer|\d+\s*kDa/) || [''])[0]); /* guards: a new SEC run makes no size claims */
     const xs = (await h.svgTexts()).map(x => num(x.t)).filter(v => v != null); T.check('p3.axis_starts_near_zero', Math.min(...xs) <= 6, `smallest axis number ${Math.min(...xs)}`); await junk('p3'); }); /* guards: the axis is volume since injection */
 
-  if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(',')); /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
+
+  /* ================= P4: missing mass on one step does not revert everything to area ================= */
+  await T.t('p4_partial_mass', async () => {
+    await p.click('text=All projects').catch(() => {}); await h.wait(600); await h.newProject('Partial mass'); await h.gb(F.gb);
+    await h.addRun(F.imac); await h.pool('T1-T6'); await setRun('path', 2);
+    await h.addRun(F.q); await h.pool('T11-T16'); await setRun('path', 2);
+    await h.addRun(F.sec); await h.pool('1.D.12'); await setRun('path', '');
+
+    await h.step('figure');
+    const t = await table();
+    const yK = col(t, /^Yield/);
+    const mK = col(t, /^Protein/);
+
+    // Check run 2
+    const run2 = t.rows.find(r => /anion|q/i.test(r.Step));
+    T.check('p4.yield_retained', run2 && run2[yK] != null && run2[yK] !== '', `Run 2 has yield: ${run2 && run2[yK]}`);
+
+    // Check if the step with no mass has missing mass but valid run 2
+    const run3 = t.rows.find(r => /sec|size/i.test(r.Step));
+    const mg3 = num(run3[mK]);
+    T.check('p4.mg_missing', !mg3 || isNaN(mg3) || mg3 === 0, `Run 3 has mass: ${mg3}`);
+
+    // Also check it has actual mass value
+    const mg2 = num(run2[mK]);
+    T.check('p4.mg_retained', mg2 > 0, `Run 2 has mass: ${mg2}`);
+
+    await gapCheck('p4'); await junk('p4');
+  });
+
+  if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
+ /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
