@@ -1469,7 +1469,7 @@ function parseRunTime(s){
 }
 function parseAkta(text, fname){
   const lines = text.split(/\r\n|\n|\r/); let u = -1, d = ',';
-  for (let i=0;i<Math.min(8, lines.length) && u < 0;i++) for (const dd of [',', '\t']) {
+  for (let i=0;i<Math.min(50, lines.length) && u < 0;i++) for (const dd of [',', '\t']) {
     const c = (dd === ',' ? csvSplit(lines[i]) : lines[i].split('\t')).map(s => s.trim());
     if (c.length >= 4 && /^(ml|min)$/i.test(c[0]) && c.filter((s,k) => k%2 === 0 && /^(ml|min)$/i.test(s)).length >= 2) { u = i; d = dd; break; }
   }

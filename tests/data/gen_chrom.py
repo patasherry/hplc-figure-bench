@@ -49,19 +49,21 @@ def pool_span(ev, first, last):
 EXP = []
 
 # ---------------------------------------------------------------- writers
-def write_unicorn_csv(path, curves, delim=',', enc='utf-8', bom=False, top='Chrom.1'):
+def write_unicorn_csv(path, curves, delim=',', enc='utf-8', bom=False, top='Chrom.1', extra_top_lines=0):
     """curves: list of (name, xunit, yunit, xs, ys) with ys None for event curves where xs are (x, text) pairs"""
     cols = []
     for name, xu, yu, xs, ys in curves:
         if ys is None: cols.append((name, xu, yu, [f'{x:.4f}' for x, _ in xs], [t for _, t in xs]))
         else: cols.append((name, xu, yu, [f'{v:.4f}' for v in xs], [f'{v:.3f}' for v in ys]))
     n = max(len(c[3]) for c in cols); buf = io.StringIO(); w = csv.writer(buf, delimiter=delim, lineterminator='\r\n')
+    for i in range(extra_top_lines): w.writerow([f'Extra header line {i+1}'])
     w.writerow(sum(([top, ''] for _ in cols), [])); w.writerow(sum(([c[0], ''] for c in cols), [])); w.writerow(sum(([c[1], c[2]] for c in cols), []))
     for i in range(n): w.writerow(sum(([c[3][i], c[4][i]] if i < len(c[3]) else ['', ''] for c in cols), []))
     data = buf.getvalue()
     with open(path, 'wb') as f:
         if enc == 'utf-16-le': f.write(b'\xff\xfe' + data.encode('utf-16-le'))
         else: f.write((b'\xef\xbb\xbf' if bom else b'') + data.encode('utf-8'))
+
 
 def write_u5_asc(path, prefix, curves):
     """UNICORN 5 .asc: tab separated, curve names carry the run prefix (run12:10_UV1_280nm), units row, then data"""
@@ -330,8 +332,20 @@ def last_frac_runs():
     gap = [(50.0 + i, f'T{i + 1}') for i in range(4)] + [(58.0 + i, f'T{i + 8}') for i in range(3)]
     last_frac('lastfrac_tube_gap_u7.csv', gap, log, 'T3-T4', 2.0, 7, 'T1', 'T10', 'T4 is followed by T8, 5 mL later: T4 counts as one median width (1 mL), not 5 mL', None)
 
+
+def large_header_run():
+    fn = 'large_header_sec_u7.csv'; x = np.round(np.arange(0, 30.0001, 0.05), 4)
+    y = signal(x, [(15.0, 0.5, 2000.0)])
+    ev = frac_events(12.0, 1.0, [f'F{i}' for i in range(1, 10)]); cur = [('UV', 'ml', 'mAU', x, y), ('Fraction', 'ml', 'Fraction', ev, None), ('System flow', 'ml', 'ml/min', x[::10], np.full(x[::10].size, 0.5))]
+    log = [(0.0, 'Method: sec_run'), (0.0, 'Base CV, Vc=24.000 {ml}, Superdex 200 Increase 10/300 GL')]
+    cur.append(('Run Log', 'ml', 'Logbook', log, None))
+    write_unicorn_csv(os.path.join(OUT, fn), cur, extra_top_lines=12)
+    add(dict(file=fn, note='12 lines of extra header metadata before the curve table', format='csv', kind='sec', step='Size exclusion', unit='mL', column='Superdex 200 Increase 10/300 GL', cv=24.0, flow=0.5, path_mm=2,
+             frac=dict(n=9, first='F1', last='F9'), injection=0.0, peaks=[dict(ve=15.0, tol=0.1, must=True, note='main peak')], pool=None))
+
+
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()
