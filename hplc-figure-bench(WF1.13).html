@@ -1344,6 +1344,9 @@ let wfSel = null, wfSelKey = '', gelMovedAt = 0;
 let traces = [], runs = [], gels = [], uid = 1, G = null, cur = 'overlay', marking = null, tagMode = '';
 
 /* ---------- helpers ---------- */
+const csvQuote = v => `"${String(v).replace(/"/g, '""')}"`;
+const RANGE_SPLIT_RE = /\s*[-–]\s*/;
+const FRAC_NAME_RE = /^[A-Z]{0,3}\d{1,3}$|^\d+\.[A-Z]\.\d+$/;
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const r2 = v => Math.round(v*100)/100;
 function arrMin(a){ let m=Infinity; for (let i=0;i<a.length;i++) if (a[i]<m) m=a[i]; return m; }
@@ -1698,7 +1701,7 @@ function shadeSet(run){
   if (run._shade && run._shade.k === run.shade && run._shade.f === run.fracs) return run._shade.set;
   const set = new Set();
   String(run.shade || '').split(/[,;]+/).forEach(part => {
-    const m = part.split(/\s*[-–]\s*/); const a = fracIdx(run, m[0]), b = m.length > 1 ? fracIdx(run, m[1], a) : a;
+    const m = part.split(RANGE_SPLIT_RE); const a = fracIdx(run, m[0]), b = m.length > 1 ? fracIdx(run, m[1], a) : a;
     if (a >= 0 && b >= 0) for (let i=Math.min(a,b); i<=Math.max(a,b); i++) set.add(i);
   });
   run._shade = {k: run.shade, f: run.fracs, set};
@@ -2508,7 +2511,7 @@ function autoAssign(g){
       const toks = String(l).toUpperCase().split(/\s*[-–]\s*|[\s_,;:/+]+/).map(t => parseFracTok(t).base).filter(Boolean); if (!toks.length) return null;
       let best = 0, who = [];
       fr.forEach(f => { let sc = 0; toks.forEach(t => { if (f.pool.has(t)) sc = Math.max(sc, 3); else if (f.all.has(t)) sc = Math.max(sc, 1); }); if (sc && f.r.id === gelRun) sc += 2.5; if (sc > best) { best = sc; who = [f.r.id]; } else if (sc && sc === best) who.push(f.r.id); });
-      if (!best) return toks.some(t => /^[A-Z]{0,3}\d{1,3}$|^\d+\.[A-Z]\.\d+$/.test(t)) ? 'none' : null; if (who.length === 1) return who[0]; if (who.includes(g.runId)) return g.runId; amb[i] = who; return 'amb'; });
+      if (!best) return toks.some(t => FRAC_NAME_RE.test(t)) ? 'none' : null; if (who.length === 1) return who[0]; if (who.includes(g.runId)) return g.runId; amb[i] = who; return 'amb'; });
     labs.forEach((l, i) => { if (known[i] && known[i] !== 'amb' && known[i] !== 'none') map[i] = known[i]; });
     const near = (i, dir) => { for (let j = i + dir; j >= 0 && j < labs.length; j += dir) { if (MARKER_RE.test(labs[j])) continue; if (map[j]) return map[j]; } return null; };
     /* a fraction found in more than one run goes with a neighbour only when the neighbour's run is one of them, else it stays unassigned and is flagged */
@@ -3225,7 +3228,7 @@ function gelPart(g, ix, y, iw, maxH, laneIdx, extraW, view){
   const LL = laneLinks(), bars = opt.laneColors && idx.some(i => LL.has(g.id + ':' + i)), barH = Math.max(1.2, fs*0.2), lb = bars ? barH + 1.6 : 0;
   const labH = Math.max(view && view.labH || 0, lb + (fits ? lf*1.3 : vert ? maxLen*vf*0.56 + lf*0.5 : maxLen*lcw*0.72 + lf*0.9)), iy = y + labH;
   const pooled = i => { const r = runs.find(x => x.id === laneAssign(g, i)); if (!r) return false; const l = (labs[i] || '').trim();
-    if (/^pool|\bpool(ed)?\b/i.test(l)) return true; const ps = poolLabelSet(r), parts = l.split(/\s*[-–]\s*/);
+    if (/^pool|\bpool(ed)?\b/i.test(l)) return true; const ps = poolLabelSet(r), parts = l.split(RANGE_SPLIT_RE);
     const sset = shadeSet(r);
     if (parts.length === 2) { let a = fracIdx(r, parts[0], null, sset), b = a < 0 ? -1 : fracIdx(r, parts[1], a); if (a < 0 || b < 0) return false; if (a > b) [a, b] = [b, a]; for (let k = a; k <= b; k++) if (!/WASTE/i.test(r.fracs[k].label) && !sset.has(k)) return false; return true; }
     const fi = fracIdx(r, l, null, sset); return fi >= 0 && sset.has(fi); };
@@ -3356,7 +3359,7 @@ function laneTarget(r, label, cg){
   const clip = (a, b) => { if (cg) { a = Math.max(a, cg.xlo); b = Math.min(b, cg.xhi); } return b > a ? {a, b} : null; };
   if (/^pool|\bpool(ed)?\b/i.test(L)) { const bl = poolBlocks(r); if (!bl.length) return null; const c = clip(bl[0].a, bl[bl.length-1].b); return c && Object.assign(c, {pool: true}); }
   const find = (tok, from) => { const fi = fracIdx(r, tok, from, pset); return fi < 0 ? -1 : segs.findIndex(sg => sg.i === fi); };
-  const parts = L.split(/\s*[-–]\s*/);
+  const parts = L.split(RANGE_SPLIT_RE);
   if (parts.length === 2 && parts[0] && parts[1]) {
     let ia = find(parts[0]), ib = ia < 0 ? -1 : find(parts[1], segs[ia].i); if (ia < 0 || ib < 0) return null; if (ia > ib) [ia, ib] = [ib, ia];
     const c = clip(segs[ia].a, segs[ib].b); if (!c) return null;
@@ -4593,7 +4596,7 @@ $('#g-autoLadder').addEventListener('click', () => {
   render(); toast(`Matched ${r.n} of ${r.of} ladder sizes to ${r.found} detected bands. Check the kDa marks against the gel.`);
 });
 $('#bandCsv').addEventListener('click', () => {
-  const g = curGel(); if (!g) return; const q = v => `"${String(v).replace(/"/g, '""')}"`;
+  const g = curGel(); if (!g) return; const q = csvQuote;
   const lines = [['Gel','Lane','Label','Goes with','Band','Estimated size (kDa)','% of lane','Saturated','Marked as','Possible identity (size match)','Lane purity (%)','Purity basis','Cleaved in lane (%)','Position (fraction of trimmed height)'].join(',')];
   gelBands(g).forEach(ln => { if (ln.marker) return; const a = laneAssign(g, ln.i), r = runs.find(x => x.id === a);
     const pu = lanePurity(g, ln), basis = opt.purBase === 'tagged' ? 'target + marked contaminants' : 'all stain in lane';
@@ -4740,7 +4743,7 @@ function sumRows(){
     let pur = null, purEst = false; const satL = []; gels.forEach(g => gelLabels(g).forEach((l, i) => { const L = String(l).trim().toUpperCase().replace(/–/g, '-'); if (pur != null || laneAssign(g, i) !== r.id || !(/POOL/.test(L) || (pl && L === pl))) return; if (gelSaturated(g).includes(laneShow(l))) { satL.push(laneShow(l)); return; } const ln = gelBands(g)[i], pu = ln && lanePurity(g, ln); if (pu && pu.purity != null) { pur = pu.purity; purEst = pu.est; } }));
     /* no lane named for the pool: use the lane whose fractions overlap the pool most (at least half of the lane inside it) */
     if (pur == null) { const sset = shadeSet(r); let best = null;
-      gels.forEach(g => gelLabels(g).forEach((l, i) => { if (laneAssign(g, i) !== r.id) return; const parts = String(l).trim().split(/\s*[-–]\s*/); let a = fracIdx(r, parts[0], null, sset), b = parts[1] ? fracIdx(r, parts[1], a) : a; if (a < 0 || b < 0) return; if (a > b) [a, b] = [b, a];
+      gels.forEach(g => gelLabels(g).forEach((l, i) => { if (laneAssign(g, i) !== r.id) return; const parts = String(l).trim().split(RANGE_SPLIT_RE); let a = fracIdx(r, parts[0], null, sset), b = parts[1] ? fracIdx(r, parts[1], a) : a; if (a < 0 || b < 0) return; if (a > b) [a, b] = [b, a];
         let inP = 0, n = 0; for (let k = a; k <= b; k++) { if (/WASTE/i.test((r.fracs[k] || {}).label || '')) continue; n++; if (sset.has(k)) inP++; } if (!n || inP/n < 0.5) return;
         if (gelSaturated(g).includes(laneShow(l))) { satL.push(laneShow(l)); return; }
         const ln = gelBands(g)[i], pu = ln && lanePurity(g, ln); if (!pu || pu.purity == null) return;
@@ -4823,7 +4826,7 @@ $('#methodsCopy').addEventListener('click', () => { const ta = $('#methodsText')
   const fb = () => { ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} toast(ok ? 'Methods copied' : 'Select the text and copy it'); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(() => { toast('Methods copied'); const b = $('#methodsCopy'); b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy methods'; }, 1500); }, fb); else fb(); });
 $('#sumMore').addEventListener('click', () => { $('#sumTable').classList.toggle('all'); renderSumTable(); });
-$('#sumCsv').addEventListener('click', () => { const q = v => `"${String(v).replace(/"/g, '""')}"`, rows = sumRows(); if (!rows.length) return toast('Set pooled fractions first');
+$('#sumCsv').addEventListener('click', () => { const q = csvQuote, rows = sumRows(); if (!rows.length) return toast('Set pooled fractions first');
   saveFile('purification_summary.csv', ['Step,Run,Pool,Pool volume from fractions (mL),A280 area (mAU*mL),Protein from area (mg),NanoDrop mg/mL,NanoDrop SD,NanoDrop n,NanoDrop volume used (mL),NanoDrop mg,A280 of 1 mg/mL used,Yield (%),Step yield (%),Yield basis,Purity (%),mg per L culture,mg per g cells,Column,Buffer A,Buffer B,Flow (mL/min),Temperature (C),Gradient,Sample loaded'].concat(sumDisplay(rows).map(d => { if (!d.man && d.conc) { const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, E = ndEpsFor(d.conc.r.id); return ['', q(d.name), q('NanoDrop'), '', '', '', d.mgml ? d.mgml.toFixed(3) : '', d.sd != null ? d.sd.toFixed(3) : '', '', d.vol ? d.vol.toFixed(2) : '', d.mg > 0 ? d.mg.toFixed(3) : '', E ? E.e.toFixed(3) : '', d.yld == null ? '' : d.yld.toFixed(1), d.stepY == null ? '' : d.stepY.toFixed(1), rows.basis, '', cL > 0 && d.mg > 0 ? (d.mg/cL).toFixed(2) : '', cG > 0 && d.mg > 0 ? (d.mg/cG).toFixed(3) : '', '', '', '', '', '', '', ''].join(','); } if (d.man) { const m = d.man.man, cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0;
       return ['', q(d.man.name), q('no chromatogram'), d.vol ? d.vol.toFixed(2) : '', '', d.mg > 0 ? d.mg.toFixed(3) : '', '', '', '', '', '', '', d.yld == null ? '' : d.yld.toFixed(1), d.stepY == null ? '' : d.stepY.toFixed(1), rows.basis, '', cL > 0 && d.mg > 0 ? (d.mg/cL).toFixed(2) : '', cG > 0 && d.mg > 0 ? (d.mg/cG).toFixed(3) : '', q(m.resin || ''), q(m.buffer || ''), '', '', '', q(m.elution || ''), ''].join(','); }
     const x = d.run, k = d.k, n = x.nd, st = n && (n.F || n.P), E = ndEpsFor(x.r.id);
@@ -4863,7 +4866,7 @@ $('#intTable').addEventListener('click', e => { const b = e.target.closest('[dat
 $('#intAuto').addEventListener('click', () => { const r = curRun(); if (!r) return; const n = autoIntegrate(r); render(); toast(n ? `Found ${n} peak${n > 1 ? 's' : ''}. Adjust start and end in the table if needed.` : 'No peaks above the detection prominence'); });
 $('#intClear').addEventListener('click', () => { const r = curRun(); if (!r) return; r.integ = []; render(); });
 $('#intCsv').addEventListener('click', () => {
-  const q = v => `"${String(v).replace(/"/g, '""')}"`, lines = [['Run','Region','Start','End','Apex or center','X unit','Height (mAU)','Area (mAU*x unit)','% of regions','Protein (mg)','Baseline','Method','FWHM','Fit R2','SEC calibration','Kav','Apparent MW (kDa)','Oligomer (MW / monomer)'].join(',')];
+  const q = csvQuote, lines = [['Run','Region','Start','End','Apex or center','X unit','Height (mAU)','Area (mAU*x unit)','% of regions','Protein (mg)','Baseline','Method','FWHM','Fit R2','SEC calibration','Kav','Apparent MW (kDa)','Oligomer (MW / monomer)'].join(',')];
   runs.forEach(r => { const u = xUnit(r), cal = isSec(r) ? secCalFor(r) : null;
     integRows(r).forEach(x => { const si = x.sec || {}; lines.push([q(r.name), x.name, x.a.toFixed(3), x.b.toFixed(3), x.apex.toFixed(3), u, x.height.toFixed(2), x.area.toFixed(3), x.pct == null ? '' : x.pct.toFixed(2), x.mg == null ? '' : x.mg.toFixed(4), opt.intBase === 'zero' ? 'zero' : 'valley to valley', x.gauss ? 'Gaussian fit' : 'trapezoid', x.fwhm == null ? '' : x.fwhm.toFixed(3), x.r2 == null ? '' : x.r2.toFixed(4),
       cal ? q(cal.name) : '', si.kav == null ? '' : si.kav.toFixed(4), si.void ? 'void' : si.mw == null ? '' : (si.extrap ? '~' : '') + si.mw.toFixed(1), si.ratio == null ? '' : si.ratio.toFixed(2)].join(',')); });
@@ -5551,7 +5554,7 @@ function nextStep(){
     /* lanes that name a fraction the run never collected, and lanes out of elution order (their connectors cross) */
     { const labsG = gelLabels(g), go = () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) { d.open = true; $('#g-labels').scrollIntoView({behavior: smooth(), block: 'center'}); } };
       const miss = [], seq = new Map();
-      labsG.forEach((l, i) => { const id = laneAssign(g, i), r = runs.find(x => x.id === id); if (!r) return; const tok = String(l).trim().split(/\s*[-–]\s*/)[0]; if (!/^[A-Z]{0,3}\d{1,3}('|#\d+|\(\d+\))?$|^\d+\.[A-Z]\.\d+$/i.test(tok)) return;
+      labsG.forEach((l, i) => { const id = laneAssign(g, i), r = runs.find(x => x.id === id); if (!r) return; const tok = String(l).trim().split(RANGE_SPLIT_RE)[0]; if (!/^[A-Z]{0,3}\d{1,3}('|#\d+|\(\d+\))?$|^\d+\.[A-Z]\.\d+$/i.test(tok)) return;
         const k = fracIdx(r, tok, null, shadeSet(r)); if (k < 0) miss.push(laneShow(l)); else { if (!seq.has(id)) seq.set(id, []); seq.get(id).push({k, l: laneShow(l)}); } });
       if (miss.length) { const _n = {k: 'miss:' + g.id + ':' + miss.join(','), t: `${miss.slice(0, 3).join(', ')} on ${g.name} ${miss.length === 1 ? "isn't a fraction" : "aren't fractions"} of its run, so ${miss.length === 1 ? 'it gets' : 'they get'} no connector. Check the label or the run.`, go: 'Go to lanes', act: go}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
       for (const [id, q] of seq) { const bad = q.findIndex((v, j) => j && v.k < q[j - 1].k); if (bad > 0) { const _n = {k: 'order:' + g.id + ':' + id, t: `On ${g.name}, ${q[bad].l} comes after ${q[bad - 1].l} but eluted before it, so its connector crosses the others. Reorder the lanes or check the label.`, go: 'Go to lanes', act: go}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; } } }
