@@ -25,6 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools' / 'local-reviewer'))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import reviewer as rv  # noqa: E402  (shares the token, model and GitHub helper)
 
 cfg, REPO, gh = rv.cfg, rv.REPO, rv.gh
@@ -33,6 +34,7 @@ TRACK = cfg.get('tracking_issue', 17)
 DIGEST_HOUR = cfg.get('digest_hour', 7)
 GEMINI_KEY = cfg.get('gemini_key') or os.environ.get('GEMINI_API_KEY', '')
 STATE = Path.home() / '.hfb-manager-state.json'
+LOG = Path(cfg.get('log', str(Path.home() / 'hfb-manager.log')))  # where the Startup loop writes the output
 DRY = '--dry' in sys.argv
 SIGN = '\n\n_From the local manager on the owner\'s PC ({}). Advisory: the lead reviews every app change._'
 
@@ -329,25 +331,35 @@ def one_pass():
         except Exception as e:
             log(f'{name} failed: {e}')
         save(s)
+    s['last_pass'] = time.time()
+    save(s)
 
 
-def selftest():
-    """Ping every agent once (one tiny question each) and print OK or FAIL. Posts nothing."""
+def agent_checks():
+    """Ask every agent one tiny question. Returns (name, ok, seconds, answer or error) per agent. Posts nothing."""
     q = 'Reply with the single word OK.'
     checks = (('GitHub (token)', lambda: gh(f'repos/{REPO}')['full_name']),
               ('Local model (Ollama)', lambda: rv.ask_model('You are a test.', q)),
               ('Gemini (REST API)', lambda: ask_gemini(q)),
               ('Claude Code (read-only)', lambda: ask_claude(q)),
               ('ChatGPT (Codex, read-only)', lambda: ask_codex(q)))
-    bad = 0
+    res = []
     for name, f in checks:
         t0 = time.time()
         try:
             out = re.sub(r'<think>.*?</think>', '', str(f()), flags=re.S).strip().replace('\n', ' ')
-            print(f'OK    {name:28} {int(time.time() - t0):>4} s  {out[:60]}', flush=True)
+            res.append((name, True, int(time.time() - t0), out[:60]))
         except Exception as e:
-            bad += 1
-            print(f'FAIL  {name:28} {int(time.time() - t0):>4} s  {str(e)[:200]}', flush=True)
+            res.append((name, False, int(time.time() - t0), str(e)[:200]))
+    return res
+
+
+def selftest():
+    """Print agent_checks() as OK or FAIL lines."""
+    bad = 0
+    for name, ok, secs, text in agent_checks():
+        bad += not ok
+        print(f"{'OK  ' if ok else 'FAIL'}  {name:28} {secs:>4} s  {text}", flush=True)
     print('Antigravity: no automatic route. The manager labels issues for-antigravity for you to paste in by hand.')
     print('All agents reachable.' if not bad else f'{bad} agent(s) not reachable.')
     sys.exit(1 if bad else 0)
@@ -359,6 +371,9 @@ if __name__ == '__main__':
     if '--selftest' in sys.argv:
         selftest()
     log(f'manager started ({rv.MODEL}; caps {CAP}){" DRY RUN" if DRY else ""}')
+    if not DRY and '--once' not in sys.argv and '--no-console' not in sys.argv:
+        import console
+        console.start(sys.modules[__name__], cfg.get('console_port', 8765))
     while True:
         one_pass()
         if '--once' in sys.argv or DRY:

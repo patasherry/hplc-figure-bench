@@ -15,6 +15,7 @@
 }
 @media (prefers-color-scheme: dark) { :root { --bg: #12161c; --panel: #1a2029; --line: #2c3440; --fg: #e8ecf1; --muted: #9aa5b4; --accent: #56b4e9; --accent2: #f0b445; --quiet: #4a5566; --ok: #4cc27f; --warn: #f0a83c; --bad: #ff6b5e; color-scheme: dark; } }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); }
 .wrap { max-width: 72rem; margin: 0 auto; padding: 28px 16px 48px; display: flex; flex-direction: column; gap: 20px; }
 h1 { font: 400 2.2rem/1.1 var(--serif); margin: 0; }
@@ -59,6 +60,17 @@ td:first-child { color: var(--muted); white-space: nowrap; }
 .notes ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 3px; }
 .notes .src { color: var(--muted); font-size: .78rem; }
 .err { color: var(--bad); font-size: .85rem; }
+.ai-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.ai-row input { flex: 1 1 16rem; min-width: 0; font: inherit; padding: .45rem .7rem; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.ai-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.btn:disabled { opacity: .55; cursor: default; }
+.answer { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: .9rem; }
+.checks { display: grid; gap: 4px 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); font-size: .85rem; }
+.checks div { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.checks .d { color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; }
+details.log summary { cursor: pointer; font-size: .82rem; color: var(--muted); }
+details.log pre { font-size: .75rem; max-height: 16rem; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin: 6px 0 0; }
 @media (max-width: 40rem) { .wide { display: none; } h1 { font-size: 1.8rem; } }
 </style>
 </head>
@@ -80,6 +92,22 @@ td:first-child { color: var(--muted); white-space: nowrap; }
     <div><h2>Needs you</h2><p class="note">Decisions only you can make: changes to numbers the app reports, and jobs to paste into Antigravity.</p></div>
     <div id="inbox"></div>
     <p class="cta">Hit a problem while using the app? <a href="https://github.com/patasherry/hplc-figure-bench/issues/new?template=from-patrick.md" target="_blank" rel="noopener">Report it with the From Patrick form</a>. Those go to the front of the queue.</p>
+  </section>
+
+  <section class="card" id="ai">
+    <div><h2>Your local AI</h2><p class="note" id="ai-note">The manager running on your PC. Ask it anything about how the automation is doing.</p></div>
+    <div id="ai-off" hidden><p class="note">To talk to your local AI, open this page from the manager instead of from the file: <a href="http://localhost:8765" target="_blank" rel="noopener">http://localhost:8765</a>. That address works while the manager is running on this PC.</p></div>
+    <div id="ai-on" hidden style="display:flex;flex-direction:column;gap:12px">
+      <div class="checks" id="ai-checks"></div>
+      <div class="ai-row">
+        <input id="ai-q" type="text" placeholder="Ask your local AI, for example: is everything working?" aria-label="Question for your local AI">
+        <button class="btn primary" id="ai-ask" type="button">Ask</button>
+        <button class="btn" id="ai-quick" type="button">Is everything working?</button>
+        <button class="btn" id="ai-agents" type="button" title="Asks Ollama, Gemini, Claude Code and Codex one tiny question each. Takes about a minute.">Check every agent</button>
+      </div>
+      <div class="answer" id="ai-answer" hidden></div>
+      <details class="log"><summary>Manager log, newest last</summary><pre id="ai-log"></pre></details>
+    </div>
   </section>
 
   <section class="tiles">
@@ -262,6 +290,41 @@ function chart(merged) {
   });
   box.append(svg, tip);
 }
+
+const LOCAL = /^(localhost|127\.0\.0\.1):8765$/.test(location.host);
+async function api(path, body) {
+  const r = await fetch(path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
+  if (!r.ok) throw new Error('The manager answered ' + r.status);
+  return r.json();
+}
+function drawChecks(st) {
+  const box = $('ai-checks'); box.replaceChildren();
+  const rows = st.checks.slice();
+  for (const a of st.agents || []) rows.push({part: a.part + ' (live test)', ok: a.ok, detail: (a.ok ? 'answered in ' + a.secs + ' s' : a.detail)});
+  for (const c of rows) { const d = el('div'); d.append(dot(c.ok ? '' : 'bad'), el('span', '', c.part), el('span', 'd', c.detail)); box.append(d); }
+  const use = el('div'); use.append(dot('idle'), el('span', '', 'Use today'), el('span', 'd', Object.entries(st.use).map(([k, v]) => `${k} ${v}`).join(', '))); box.append(use);
+  $('ai-log').textContent = st.log.join('\n');
+}
+async function aiStatus() { try { drawChecks(await api('/api/status')); } catch (e) { $('ai-checks').replaceChildren(el('div', 'err', 'The manager is not answering. Is it running? ' + e.message)); } }
+async function ask(q) {
+  if (!q) return;
+  const out = $('ai-answer'); out.hidden = false; out.textContent = 'Thinking… the local model can take up to a minute.';
+  for (const b of ['ai-ask', 'ai-quick']) $(b).disabled = true;
+  try { out.textContent = (await api('/api/ask', {q})).answer; } catch (e) { out.textContent = 'No answer: ' + e.message; }
+  finally { for (const b of ['ai-ask', 'ai-quick']) $(b).disabled = false; aiStatus(); }
+}
+if (LOCAL) {
+  $('ai-on').hidden = false; aiStatus(); setInterval(() => { if (!document.hidden) aiStatus(); }, 60 * 1000);
+  $('ai-ask').onclick = () => ask($('ai-q').value.trim());
+  $('ai-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') ask($('ai-q').value.trim()); });
+  $('ai-quick').onclick = () => ask('Is everything working? Go through each part and say what, if anything, needs attention.');
+  $('ai-agents').onclick = async () => {
+    const b = $('ai-agents'); b.disabled = true; b.textContent = 'Checking, about a minute…';
+    try { const r = await api('/api/check-agents', {}); const st = await api('/api/status'); st.agents = r.agents; drawChecks(st); }
+    catch (e) { $('ai-checks').append(el('div', 'err', e.message)); }
+    finally { b.disabled = false; b.textContent = 'Check every agent'; }
+  };
+} else { $('ai-off').hidden = false; }
 
 $('refresh').onclick = load;
 addEventListener('resize', () => data && chart(data.merged));
