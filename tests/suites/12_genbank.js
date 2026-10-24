@@ -60,13 +60,11 @@ const files = {
     await h.gb(files.wrap);
     const st = await status();
 
-    // App bug: gbCassette filters out CDS with f.wrap === true via `!f.wrap`
-    const foundOrf = /ORF \d+ residues/.test(st);
-    T.check(
-      'wrap.origin_spanning_orf_found',
-      foundOrf,
-      `Expected ORF of 255 residues for origin-spanning join(800..1000,1..564), but got status: "${st}". (App bug: gbCassette filters out f.wrap === true)`
-    );
+    // App bug fixed: wrap is true but length is right
+    const txt = await svgText();
+    T.check('wrap.origin_spanning_orf_found', st.includes('255 residues'), `status: ${st}`);
+    T.check('wrap.tagged_mass', st.includes('28.7 kDa') || txt.includes('28.7 kDa'), `status: ${st}, svg: ${txt}`);
+    T.check('wrap.cleaved_mass', txt.includes('27.1 kDa'), `svg: ${txt}`);
   });
 
   /* 4. Multi-line qualifiers (/translation and /label) */
