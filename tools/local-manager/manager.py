@@ -369,7 +369,7 @@ def jules_questions(s):
         path = ' → '.join(trail)
         if who == 'owner':
             label(i['number'], add=['needs-owner'])
-            post(i['number'], f"**Needs your OK, Patrick:** {ans}\n\nJules asked:\n> {text[:600]}\n\n_Path: {path}._" + SIGN.format(rv.MODEL))
+            post(i['number'], f"**Needs your OK, Patrick:** {ans} Reply **OK** to approve or **No** to decline.\n\nJules asked:\n> {text[:600]}\n\n_Path: {path}._" + SIGN.format(rv.MODEL))
             log(f'#{i["number"]} question sent to Patrick ({path})')
         elif who == 'lead':
             label(i['number'], add=['for-coordinator'])
@@ -403,9 +403,36 @@ def triage(s):
             log(f'#{n} queued for Jules')
         else:
             label(i['number'], add=['needs-owner'], remove=['needs-triage'])
-            post(i['number'], f"**Needs your OK, Patrick:** {r.get('summary') or 'This would change a number the app reports.'} Reply here or tell the lead in chat, and it will be queued." + SIGN.format(rv.MODEL))
+            post(i['number'], f"**Needs your OK, Patrick:** {r.get('summary') or 'This would change a number the app reports.'} Reply **OK** on this issue to approve, or **No** to decline (a reason after it helps)." + SIGN.format(rv.MODEL))
             log(f'#{n} sent to the owner')
         s['triaged'][n] = kind
+
+
+OWNER = REPO.split('/')[0]
+YES = re.compile(r'^\W*(ok|okay|yes|yep|approved?|go ahead|lgtm)\b', re.I)
+NO = re.compile(r'^\W*(no|nope|declined?|reject(ed)?|don.?t)\b', re.I)
+
+
+def owner_replies(s):
+    """Act on Patrick's answer to a "Needs your OK" question: a reply starting with OK/Yes/Approved approves, No/Decline declines."""
+    s.setdefault('owner', {})
+    for i in issues('needs-owner'):
+        cs = comments(i['number'])
+        ask = max((c['id'] for c in cs if c['body'].lstrip().startswith('**Needs your OK')), default=0)
+        reply = next((c for c in reversed(cs) if c['id'] > ask and c['user']['login'] == OWNER and (YES.match(c['body']) or NO.match(c['body']))), None)
+        if not reply or str(reply['id']) in s['owner']:
+            continue
+        names = {l['name'] for l in i.get('labels', [])}
+        if YES.match(reply['body']):
+            add = ['owner-approved'] + ([] if names & {'jules-running', 'jules-done', 'jules-queue'} or 'pull_request' in i else ['jules-queue'])
+            label(i['number'], add=add, remove=['needs-owner'])
+            post(i['number'], 'Approved by Patrick. ' + ('Queued for Jules. ' if 'jules-queue' in add else '') + 'The lead will merge the fix once its tests pass.' + SIGN.format(rv.MODEL))
+            log(f'#{i["number"]} approved by Patrick')
+        else:
+            label(i['number'], add=['owner-declined'], remove=['needs-owner', 'jules-queue'])
+            post(i['number'], 'Declined by Patrick. Taken out of the queue. The lead will close it or change it as his reply says.' + SIGN.format(rv.MODEL))
+            log(f'#{i["number"]} declined by Patrick')
+        s['owner'][str(reply['id'])] = 1
 
 
 def stuck(s):
@@ -502,7 +529,7 @@ def self_update(s):
 
 def one_pass():
     s = load()
-    for name, duty in (('review', lambda s: None if DRY else rv.one_pass()), ('questions', jules_questions), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    for name, duty in (('review', lambda s: None if DRY else rv.one_pass()), ('questions', jules_questions), ('owner', owner_replies), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         try:
             duty(s)
         except Exception as e:
