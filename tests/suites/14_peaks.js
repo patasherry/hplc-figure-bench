@@ -90,6 +90,24 @@ async function peakFile(e) {
       }
       T.check(`${id}/area-sum`, Math.abs(sumArea - e.total_area) / e.total_area <= 0.02, `Overlapping area sum ${sumArea} within 2% of total ${e.total_area}`);
     }
+    else if (e.type === 'ratio') {
+      const P_res = await peaks(p, h);
+      const pk_res = P_res.rows.filter(r => !/^pool/i.test(r.name));
+            const moreBtn = await p.$('#intMore'); if (moreBtn) await p.evaluate(() => document.getElementById('intMore').click()); await p.waitForTimeout(300);
+            const t = await h.peakTable();
+      const head = t[0];
+      const ratCol = head.findIndex(c => c.includes('A260/A280') || c.includes('A₂₆₀/A₂₈₀'));
+      let ratioStr = '';
+      if (pk_res.length > 0 && ratCol >= 0) {
+         // Re-fetch the table because the raw array from peaks() doesn't include the ratio column if we didn't parse it.
+         // Let's modify `peaks` or just parse the table here.
+         const row = t[1];
+         ratioStr = row[ratCol];
+      }
+
+      T.check(`${id}/ratio-col-exists`, ratCol >= 0, `A260/A280 column exists`);
+      T.check(`${id}/ratio-val`, Math.abs(parseFloat(ratioStr) - e.expected_ratio) <= 0.05, `Ratio ${ratioStr} is near ${e.expected_ratio}`);
+    }
     else if (e.type === 'sloped') {
       // 1. check area with baseline subtraction (line)
       await setOpt(p, 'o-intBase', 'line');

@@ -12,15 +12,25 @@ def signal(x, comps): return sum((gauss(x, *c) for c in comps), np.zeros_like(x)
 
 def frac_events(start, size, labels): return [(round(start + i*size, 4), l) for i, l in enumerate(labels)] + [(round(start + len(labels)*size, 4), 'Waste')]
 
-def write_unicorn_csv(path, x, y, fr):
-    lines = ['Chrom.1,,Chrom.1,', 'UV,,Fraction,', 'ml,mAU,ml,Fraction']
-    for i in range(len(x)):
-        f_val = ''
-        if i < len(fr):
-            f_val = f'{fr[i][0]:.4f},{fr[i][1]}'
-        else:
-            f_val = ','
-        lines.append(f'{x[i]:.4f},{y[i]:.4f},{f_val}')
+def write_unicorn_csv(path, x, y, fr, y260=None):
+    if y260 is not None:
+        lines = ['Chrom.1,,Chrom.1,,Chrom.1,', 'UV 280,,UV 260,,Fraction,', 'ml,mAU,ml,mAU,ml,Fraction']
+        for i in range(len(x)):
+            f_val = ''
+            if i < len(fr):
+                f_val = f'{fr[i][0]:.4f},{fr[i][1]}'
+            else:
+                f_val = ','
+            lines.append(f'{x[i]:.4f},{y[i]:.4f},{x[i]:.4f},{y260[i]:.4f},{f_val}')
+    else:
+        lines = ['Chrom.1,,Chrom.1,', 'UV 280,,Fraction,', 'ml,mAU,ml,Fraction']
+        for i in range(len(x)):
+            f_val = ''
+            if i < len(fr):
+                f_val = f'{fr[i][0]:.4f},{fr[i][1]}'
+            else:
+                f_val = ','
+            lines.append(f'{x[i]:.4f},{y[i]:.4f},{f_val}')
     with open(path, 'w') as f:
         f.write('\n'.join(lines))
 
@@ -63,6 +73,15 @@ def gen_peaks():
     y4 = signal(x, [(c1, s1, h1)]) + y_base
     write_unicorn_csv(os.path.join(CHROM, 'peak_sloped.csv'), x, y4, ev)
     EXPECT.append(dict(file='peak_sloped.csv', type='sloped', pool='F12-F18', true_area=area1, true_ve=c1))
+
+    # 5. Peak on a sloped baseline with UV260
+    # Protein peak at c1 (A280 = h1). Protein A260 = h1 * 0.57.
+    # Buffer A280 baseline = 10 (flat). Buffer A260 baseline = 100 (flat).
+    # True ratio of the peak should be 0.57.
+    y5_280 = signal(x, [(c1, s1, h1)]) + 10.0
+    y5_260 = signal(x, [(c1, s1, h1 * 0.57)]) + 100.0
+    write_unicorn_csv(os.path.join(CHROM, 'peak_ratio.csv'), x, y5_280, ev, y260=y5_260)
+    EXPECT.append(dict(file='peak_ratio.csv', type='ratio', pool='F12-F18', expected_ratio=0.57))
 
     json.dump(EXPECT, open(os.path.join(OUT, 'expected_peaks.json'), 'w'), indent=1)
 
