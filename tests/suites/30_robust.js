@@ -171,6 +171,20 @@ await T.t('damaged-settings', async () => { const {ctx, p, errs, close} = await 
   T.check('settings.no-error-on-start', !errs.length, errs.join(' | ')); // the script gets to the end
   await h.newProject('After damaged settings'); T.check('settings.app-usable', (await h.timeline()).length > 0, 'a new project should open a timeline'); // buttons are wired
   await close(); });
+
+/* a project file with a damaged opt object (arrays containing null or invalid types) must load without error */
+await T.t('damaged-project-arrays', async () => { const {p, errs, close} = await open(), h = H(p);
+  await h.newProject('Damaged arrays source'); await h.dropFiles(F.his);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const good = path.join(ROOT, 'results', 'partial_arrays.json'); await dl.saveAs(good);
+  const d = JSON.parse(fs.readFileSync(good, 'utf8')); d.opt = { known: [null, {name: 'My Custom Contaminant', kda: 42, kind: 'contam'}], secCals: "invalid" };
+  await p.click(SEL.home); await p.waitForTimeout(600); const e0 = errs.length;
+  await p.setInputFiles(SEL.importFile, {name: 'damaged_arrays_project.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))}); await p.waitForTimeout(3000);
+  T.check('damaged-arrays.no-error', errs.length === e0, errs.slice(e0).join(' | '));
+  await p.click('[data-panel="sec"]'); await p.waitForTimeout(300);
+  const knownListText = await p.evaluate(() => { const e = document.querySelector('#knownList'); return e ? e.textContent : ''; });
+  T.check('damaged-arrays.known-rendered', knownListText.includes('My Custom Contaminant'), 'custom contaminant was preserved and rendered');
+  await close(); });
+
 /* ---------------- older and partial project files ---------------- */
 await T.t('partial-project', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p);
   await h.newProject('Partial base'); await h.dropFiles(F.his); await h.addConc(F.ndSpec, 0.25);
