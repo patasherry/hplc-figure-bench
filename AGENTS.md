@@ -114,7 +114,7 @@ In every PR description, say exactly what you tested and how. Do not claim testi
 `.github/workflows/jules-leader.yml` is rule-based, with no AI:
 
 - **`jules-queue`:** issues with this label get a Jules session through the Jules API, at most 15 at a time (Jules Pro), of which at most 4 change the app. Issues whose title starts with Tests, Audit or Docs don't count toward the 4. Label: `jules-running`.
-- **Questions:** when Jules asks something, the leader posts the question on the issue and tells Jules to decide by these rules and open the PR. After 6 replies the issue gets `needs-coordinator`.
+- **Questions:** when Jules asks something, the leader posts the question on the issue and tells Jules to decide by these rules and open the PR. After 6 replies the issue gets `needs-coordinator`. A person (or the coordinator) can answer instead by commenting on the issue with a line starting `Answer for Jules:`. The leader passes that text to the running session.
 - **Checks:** every 10 minutes while work is queued or running, and whenever Jules comments or a test run finishes.
 - **Failures:** a failed session is retried with "work in smaller steps", up to 3 attempts. After that the issue gets `needs-coordinator`.
 - **Finished:** the issue gets `jules-done` and a link to the PR.

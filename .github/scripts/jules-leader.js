@@ -49,6 +49,11 @@ module.exports = async ({github, context, core}) => {
   for (const i of running) { const {s} = await getState(i.number); if (!s.session) continue; let ses;
     try { ses = await jules(s.session); } catch (e) { say(`#${i.number}: could not read session: ${e.message}`); continue; }
     const st = String(ses.state || '').toUpperCase(), pr = (ses.outputs || []).map(o => o.pullRequest && o.pullRequest.url).find(Boolean);
+    /* relay the coordinator's or owner's own answers: a human comment starting "Answer for Jules:" goes to the session as written */
+    { const cs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: i.number, per_page: 100});
+      const ans = cs.filter(c => c.id > (s.relayed || 0) && c.user && c.user.type !== 'Bot' && /^answer for jules:/i.test(c.body.trim()));
+      for (const c of ans) { await jules(`${s.session}:sendMessage`, {prompt: c.body.trim().replace(/^answer for jules:\s*/i, '') + '\n\nThen finish, commit and open the pull request.'}).catch(e => say(`#${i.number}: relay failed: ${e.message}`));
+        s.relayed = c.id; await putState(i.number, s, `Jules leader: relayed an answer from @${c.user.login} to Jules.`); say(`#${i.number}: relayed answer`); } }
     /* keep the last seen state on the issue, so a stuck session is easy to spot */
     if (s.state !== st) { s.state = st; await putState(i.number, s, `Jules leader: attempt ${s.attempt} is ${st || 'in an unknown state'}.`); }
     /* a session running much longer than usual gets one nudge to wrap up, then goes to the coordinator */
