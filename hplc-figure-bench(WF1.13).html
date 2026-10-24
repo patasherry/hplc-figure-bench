@@ -5334,7 +5334,7 @@ function cutAfterIndex(){ const wf = runs.filter(r => r.inWf); if (prep.cleave) 
   const rv = wf.findIndex(r => (String(r.stepName || '').trim() || guessStep(r)) === 'Reverse IMAC'); return rv > 0 ? rv - 1 : -1; }
 const ndForm = r => { if (!r) return 'untagged'; if (r.ndForm) return r.ndForm; const wf = runs.filter(x => x.inWf), i = wf.indexOf(r), c = cutAfterIndex(); if (i < 0) return 'untagged'; return c < 0 || i <= c ? 'tagged' : 'untagged'; };
 function ndEpsFor(runId){ const r = runs.find(x => x.id === runId), F = protForms(), form = ndForm(r);
-  if (F.length) { const f = form === 'tagged' && F[1] ? F[1] : F[0]; if (f.a280) return {e: f.a280, kda: f.mass/1000, src: form === 'tagged' && F[1] ? 'tagged' : 'untagged'}; }
+  if (F.length) { const f = form === 'tagged' ? F[1] : F[0]; if (f && f.a280) return {e: f.a280, kda: f.mass/1000, src: form === 'tagged' ? 'tagged' : 'untagged'}; }
   return numOr(opt.eps, 0) > 0 ? {e: +opt.eps, kda: numOr(opt.protKda, 0) || null, src: 'set'} : null; }
 /* the methods phrase for the A280 coefficient, said only when a reading of this run was actually converted with it (not for instrument, A205 or typed concentrations) */
 const epPhrase = E => E ? `, A280 of ${fmt(E.e, 2)} for 1 mg/mL of the ${E.src === 'set' ? 'protein' : E.src + ' form'}` : '';

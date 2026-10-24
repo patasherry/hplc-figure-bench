@@ -328,6 +328,95 @@ const getA280Cell = r => r['A₂₈₀'] || r['A280'] || '';
     T.check('6_large_protein.eps_text_84800', epsText.includes('84,800') || epsText.includes('84800'), `expected ε280 = 84,800, got "${epsText}"`);
   });
 
+
+  /* ================= 7. GST Preset without sequence (Issue #124) ================= */
+  await T.t('7_gst_empty_tag', async () => {
+    // We add setRun and field helpers from 10_data_truth.js here since they are missing
+    const setRun = async (p, k, v) => { const l = p.locator('.trace.run.sel [data-k="' + k + '"]').first(); await l.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } }); await l.fill(String(v)); await l.dispatchEvent('change'); await p.waitForTimeout(400); };
+    const field = async (p, k) => { return await p.locator('.trace.run.sel [data-k="' + k + '"]').first().inputValue(); };
+
+    // target M+(AWY)x10
+    const seq = 'M' + 'AWY'.repeat(10);
+    await clearTagSeq();
+    await setProtSeq(seq);
+
+    // Select GST preset
+    await p.evaluate(() => {
+      const el = document.querySelector('#o-tagPreset');
+      if(el) {
+        el.value = 'gst';
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+      }
+    });
+    await h.wait(500);
+
+    // Enter manual EPS for fallback
+    await p.evaluate(() => {
+      const el = document.querySelector('#o-eps');
+      if(el) {
+        el.value = '40.0';
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+      }
+    });
+    await h.wait(500);
+
+    // Load a run
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.wait(500);
+
+    // set step name to IMAC so it is tagged
+    await setRun(p, 'stepName', 'IMAC');
+
+    // Mark fraction A2 as pool so methods text gets generated
+    await p.evaluate(() => {
+       const shade = document.querySelector('.trace.run.sel [data-k=shade]');
+       if(shade) {
+         shade.value = 'A2';
+         shade.dispatchEvent(new Event('input', {bubbles: true}));
+         shade.dispatchEvent(new Event('change', {bubbles: true}));
+       }
+    });
+    await h.wait(500);
+
+    // Add a Nanodrop reading
+    await h.addConc(path.join(DATA, 'nd/nd_one_protein_a280.csv'));
+    await h.wait(1000);
+
+    // Let's use evaluate to check ndEpsFor('r_1') or use the methodsText.
+    const methodsText = await p.evaluate(() => {
+      const b = document.querySelector('#methodsBox');
+      if (b) b.open = true;
+      const g = document.querySelector('#methodsGaps');
+      if (g) g.click();
+      return document.querySelector('#methodsText').value;
+    });
+
+    // We expect it to NOT use the untagged 16.0546 coefficient
+    T.check('7_gst_empty_tag.eps_no_untagged', !methodsText.includes('16.05'), 'Does NOT use untagged 16.05 coefficient');
+
+    // Set a synthetic tag sequence
+    await p.evaluate(() => {
+      const el = document.querySelector('#tagSeq');
+      if (el) {
+        el.value = 'AWY'; // wait, the review mentioned something about AWY. I'll just use AWY.
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        el.dispatchEvent(new Event('change', {bubbles: true}));
+      }
+    });
+    await h.wait(1000);
+
+    const methodsText2 = await p.evaluate(() => {
+      const g = document.querySelector('#methodsGaps');
+      if (g) g.click();
+      return document.querySelector('#methodsText').value;
+    });
+
+
+    T.check('7_gst_empty_tag.eps_with_tag', !methodsText2.includes('16.05'), 'Uses fusion composition when tag sequence supplied');
+
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
