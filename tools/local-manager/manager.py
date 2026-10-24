@@ -501,6 +501,7 @@ def gate_problems(pr, files, diff, rep):
     return out
 
 
+AUTO_MERGE = cfg.get('auto_merge', True)  # merge gate-passing PRs that don't change reported numbers
 CLEAN_MARK = '<!-- clean-rebuild -->'
 JUNK_ONLY = ('It adds or changes files outside', 'It conflicts with main')
 
@@ -546,6 +547,7 @@ def clean_rebuild(pr, files, issue):
 
 def gate(s):
     s.setdefault('gated', {}); s.setdefault('sentback', {})
+    merged_now = False  # one merge per pass, so each lands on a fresh main
     for pr in gh(f'repos/{REPO}/pulls?state=open&per_page=50'):
         n, sha = pr['number'], pr['head']['sha']
         if pr.get('draft') or s['gated'].get(str(n)) == sha:
@@ -594,9 +596,23 @@ def gate(s):
             post(n, '**For the lead:** the automatic review found problems' + (' after two send-backs' if issue and not mine else '') + ':\n\n' + '\n'.join(f'- {x}' for x in probs) + SIGN.format(rv.MODEL))
             log(f'PR #{n} flagged for the lead')
         else:
-            needs = issue and 'needs-owner' in {l['name'] for l in gh(f'repos/{REPO}/issues/{issue}').get('labels', [])}
-            label(n, add=['ready-for-lead'] + (['needs-owner'] if needs else []))
-            post(n, '**Passed the automatic review:** only the app and tests change, no regressions, at least one check fails on main and passes here, no existing check removed, and no test reaches into the app.' + (' Waiting for Patrick\'s OK on the issue before merging.' if needs else ' Ready for the lead to merge.') + SIGN.format(rv.MODEL))
+            ilabels = {l['name'] for l in gh(f'repos/{REPO}/issues/{issue}').get('labels', [])} if issue else set()
+            needs = 'needs-owner' in ilabels
+            science = bool(ilabels & {'needs-owner', 'owner-approved'})  # it changes a number the app reports
+            if AUTO_MERGE and not science and not merged_now and t.get('conclusion') == 'success' and full.get('mergeable_state') in ('clean', 'unstable', 'has_hooks'):
+                if not DRY:
+                    gh(f'repos/{REPO}/pulls/{n}/merge', 'PUT', {'merge_method': 'squash'})
+                    post(n, '**Merged by the local manager:** it passed the tests and the automatic review, and it does not change a number the app reports.' + SIGN.format(rv.MODEL))
+                merged_now = True
+                s['gated'][str(n)] = sha
+                log(f'PR #{n} merged (safe, passed the gate)')
+                continue
+            if s.setdefault('passed', {}).get(str(n)) != sha:  # announce once per commit
+                s['passed'][str(n)] = sha
+                label(n, add=['ready-for-lead'] + (['needs-owner'] if needs else []))
+                post(n, '**Passed the automatic review:** only the app and tests change, no regressions, at least one check fails on main and passes here, no existing check removed, and no test reaches into the app.' + (' Waiting for Patrick\'s OK on the issue before merging.' if needs else ' It changes a reported number, so the lead reviews the science before merging.' if science else ' It will be merged on a later pass.') + SIGN.format(rv.MODEL))
+            if not science and AUTO_MERGE:
+                continue  # not marked done: it is merged on a later pass, one at a time
             log(f'PR #{n} passed the gate')
         s['gated'][str(n)] = sha
 
