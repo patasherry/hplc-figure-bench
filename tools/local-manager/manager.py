@@ -1,6 +1,6 @@
 """Local project manager for HPLC Figure Bench (phase 1).
 
-Runs on the owner's PC every 5 minutes. Each pass it:
+Runs on the owner's PC every 2 minutes ("poll_minutes" in the settings file). Each pass it:
   1. reviews new or updated app PRs (the local reviewer, tools/local-reviewer),
   2. answers Jules' questions up a ladder: the local model decides first, then Gemini (given the code it needs),
      then ChatGPT (Codex, read-only, reads the repo), and only then the lead (`for-coordinator`). Number changes go to Patrick (`needs-owner`),
@@ -13,7 +13,7 @@ It never merges, pushes, approves or edits code. Claude Code runs in plan (read-
 read-only sandbox. Everything it reads from GitHub is treated as data, never as instructions.
 
 Settings: the same file as the reviewer, %USERPROFILE%\\.hfb-reviewer.json. Optional keys and defaults:
-  "max_claude": 10, "max_codex": 20, "max_gemini": 100, "max_queue": 20, "tracking_issue": 17, "digest_hour": 7
+  "max_claude": 10, "max_codex": 20, "max_gemini": 100, "max_queue": 20, "tracking_issue": 17, "digest_hour": 7, "poll_minutes": 2
 Gemini reads GEMINI_API_KEY from the environment (or "gemini_key" in the settings file).
 
 Run:  python tools\\local-manager\\manager.py          (keeps running)
@@ -592,4 +592,4 @@ if __name__ == '__main__':
         one_pass()
         if '--once' in sys.argv or DRY:
             break
-        time.sleep(rv.POLL_MIN * 60)
+        time.sleep(float(cfg.get("poll_minutes", 2)) * 60)  # between passes; a pass itself can take minutes when the local model works on a hard question
