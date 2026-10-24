@@ -21,6 +21,10 @@ An app Patrick can trust with his real purification data: every number it report
 - Rewrites, reformatting, frameworks or build tools.
 - Audit findings about things Patrick doesn't use, unless they make a number wrong.
 
+## Who decides
+
+The local AI on Patrick's PC decides first. When it can't, it asks Gemini, then ChatGPT, and only then the lead (Claude). Numbers the app reports are Patrick's call.
+
 ## How direction is checked
 
 Once a day the lead (Claude) reads what the manager and Jules did against this file, fixes anything that went the wrong way, and posts a **Lead check-in** on issue #17. The manager reads the newest check-in before it routes questions or triages issues, so the check-in steers what it does next.
