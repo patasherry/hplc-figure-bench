@@ -104,6 +104,8 @@ In every PR description, say exactly what you tested and how. Do not claim testi
 
 ## How agents divide the work
 
+`docs/GOALS.md` is the owner's list of priorities. Every agent weighs its work by it. Once a day the lead posts a **Lead check-in** on issue #17, and the local manager follows the newest one.
+
 - **Jules** works from issues labeled `jules`.
 - **Claude** reviews PRs changing the app automatically and is called on any PR with `@claude`.
 - Agents never push to another agent's branch: a revision goes on a new branch.
@@ -113,6 +115,7 @@ In every PR description, say exactly what you tested and how. Do not claim testi
 
 `.github/workflows/jules-leader.yml` is rule-based, with no AI:
 
+- **`from-patrick`:** issues the owner reports. They start before any other queued issue. `docs/GOALS.md` sets the order of everything else.
 - **`jules-queue`:** issues with this label get a Jules session through the Jules API, at most 15 at a time (Jules Pro), of which at most 4 change the app. Issues whose title starts with Tests, Audit or Docs don't count toward the 4. Label: `jules-running`.
 - **Questions:** when Jules asks something, the leader posts the question on the issue and tells Jules to decide by these rules and open the PR. After 6 replies the issue gets `needs-coordinator`. A person (or the coordinator) can answer instead by commenting on the issue with a line starting `Answer for Jules:`. The leader passes that text to the running session.
 - **Checks:** every 10 minutes while work is queued or running, and whenever Jules comments or a test run finishes.
