@@ -23,6 +23,8 @@ Optional settings in `~/.hfb-reviewer.json`: `max_claude` (10 a day), `max_codex
 python tools\local-manager\manager.py --dry    # one pass, prints what it would do, changes nothing
 python tools\local-manager\manager.py --once   # one real pass
 python tools\local-manager\manager.py --selftest   # asks each agent (Ollama, Gemini, Claude Code, Codex) one tiny question, prints OK or FAIL
+python tools\local-manager\manager.py --ladder "question"           # runs the escalation ladder on a question and prints each step (posts nothing)
+python tools\local-manager\manager.py --ladder "question" --force   # the same, but climbs every step so every agent answers
 python tools\local-manager\manager.py          # keeps running
 ```
 
