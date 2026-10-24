@@ -103,6 +103,26 @@ async function ndFile(e, withEps){ const id = e.file.replace(/\.[^.]+$/, '') + (
 }
 
 
+/* an older project's typed pool concentration (on the run card, no volume after concentrating) uses the pool volume;
+   on a time axis that volume is the pool's minutes x the flow, as on an mL axis it is the pool's mL (issue #100) */
+async function poolConcMinutes(){ const id = 'hplc_min_flow_known_u7';
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('pool conc ' + id); await h.addRun(path.join(CH, id + '.csv')); await setOpt(p, 'o-eps', 1); await h.pool('F1-F6'); await setRun(p, 'path', 10);
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]); const f = path.join(__dirname, '..', 'results', 'pool_conc_minutes.json'); await dl.saveAs(f);
+    const d = JSON.parse(fs.readFileSync(f, 'utf8')), r = (d.runs || []).find(x => x && x.shade);
+    if (!T.check(`${id}/typed-conc/export-has-pooled-run`, !!r, `runs: ${JSON.stringify((d.runs || []).map(x => x && x.id))}`)) return;
+    r.poolConc = 4; delete r.poolFinalVol; if (d.prep && d.prep.btw) delete d.prep.btw[r.id];
+    await p.click('#homeBtn'); await p.waitForTimeout(600);
+    await p.setInputFiles('#projFile', {name: 'pool_conc_minutes.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))}); await p.waitForTimeout(3500);
+    const rn = (await h.timeline()).find(x => x.k.startsWith('run:')); if (rn) { await h.step(rn.k); await p.waitForTimeout(600); }
+    const pr = (await peaks(p, h)).rows.find(x => /^pool/i.test(x.name)) || {}, vol = (pr.b - pr.a)*0.5, want = 4*vol;
+    // guards: 4 mg/mL x (6 min x 0.5 mL/min = 3 mL) = 12 mg; before the fix the reading was ignored and the UV area gave 1.25 mg
+    T.check(`${id}/typed-conc/pool-mg`, Math.abs(pr.mg - want) <= want*0.02, `expected ${want.toFixed(2)} mg (4 mg/mL x ${vol.toFixed(2)} mL), got ${pr.mg} (pool ${pr.a} to ${pr.b} min)`);
+    T.check(`${id}/typed-conc/no-error`, !errs.length, errs.join(' | '));
+  } finally { await close(); }
+}
+
 /* mg from the UV area follows the units: minutes only with a flow, AU shown as mAU, and a UV path not in the file assumed (2 mm) and said so */
 async function mgFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
   const {p, errs, close} = await open(), h = H(p), pool = async () => (await peaks(p, h)).rows.find(r => /^pool/i.test(r.name)) || {}, tbl = async () => (await p.locator('#intTable').innerText()).replace(/\s+/g, ' '), tol = x => Math.max(0.011, x*0.05);
@@ -153,6 +173,7 @@ async function lastFracFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
 (async () => {
   for (const e of EXP.lastfrac || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => lastFracFile(e)); }
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
+  if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
   for (const e of EXP.time_tests || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => timeFile(e)); }

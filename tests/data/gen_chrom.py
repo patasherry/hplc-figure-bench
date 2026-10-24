@@ -49,12 +49,14 @@ def pool_span(ev, first, last):
 EXP = []
 
 # ---------------------------------------------------------------- writers
-def write_unicorn_csv(path, curves, delim=',', enc='utf-8', bom=False, top='Chrom.1', extra_top_lines=0):
-    """curves: list of (name, xunit, yunit, xs, ys) with ys None for event curves where xs are (x, text) pairs"""
+def write_unicorn_csv(path, curves, delim=',', enc='utf-8', bom=False, top='Chrom.1', extra_top_lines=0, decimal_comma=False):
+    """curves: list of (name, xunit, yunit, xs, ys) with ys None for event curves where xs are (x, text) pairs.
+    decimal_comma: write 12,5 instead of 12.5, as a European-locale UNICORN does with a semicolon delimiter"""
+    dc = (lambda v: v.replace('.', ',')) if decimal_comma else (lambda v: v)
     cols = []
     for name, xu, yu, xs, ys in curves:
-        if ys is None: cols.append((name, xu, yu, [f'{x:.4f}' for x, _ in xs], [t for _, t in xs]))
-        else: cols.append((name, xu, yu, [f'{v:.4f}' for v in xs], [f'{v:.3f}' for v in ys]))
+        if ys is None: cols.append((name, xu, yu, [dc(f'{x:.4f}') for x, _ in xs], [t for _, t in xs]))
+        else: cols.append((name, xu, yu, [dc(f'{v:.4f}') for v in xs], [dc(f'{v:.3f}') for v in ys]))
     n = max(len(c[3]) for c in cols); buf = io.StringIO(); w = csv.writer(buf, delimiter=delim, lineterminator='\r\n')
     for i in range(extra_top_lines): w.writerow([f'Extra header line {i+1}'])
     w.writerow(sum(([top, ''] for _ in cols), [])); w.writerow(sum(([c[0], ''] for c in cols), [])); w.writerow(sum(([c[1], c[2]] for c in cols), []))
@@ -214,6 +216,17 @@ def sec_min():
              pool=dict(label='1.C.10-1.D.4', a=a - inj, b=b - inj, area=round(ar, 2), area_tol_pct=4, eps=POOL_EPS, mg=None, unit_note='area in mAU*min, no mg on a time axis without a flow')))
 
 # ---------------------------------------------------------------- F. SEC with two plates, UNICORN 7 CSV, tab, UTF-8, injection at 4.0 mL
+
+# ---------------------------------------------------------------- G. Semicolon delimited UNICORN CSV
+def sec_semicolon_csv():
+    fn = 'sec_semicolon_unicorn7.csv'; inj = 3.0; flow = 0.5; t = np.round(np.arange(0, 60.0001, 0.02), 4)
+    y = signal(t, [(inj + 12.0, 1.0, 80.0), (inj + 14.0, 0.4, 30.0)])
+    write_unicorn_csv(os.path.join(OUT, fn), [('UV 1_280', 'min', 'mAU', t, y), ('Cond', 'min', 'mS/cm', t, np.full(t.size, 15.2)), ('Conc B', 'min', '%B', t, np.zeros(t.size)),
+                                              ('Fraction', 'min', 'Fraction', [(0.0, 'Waste'), (13.0, '1.A.1'), (13.5, '1.A.2'), (14.0, '1.A.3'), (14.5, 'Waste')], None), ('Injection', 'min', 'Injection', [(inj, '')], None), ('Run Log', 'min', 'Logbook', [(0.0, 'Method Run 10/22/2026 1:00:00 PM -07:00 Method: S200 Increase sizing Result: /DefaultHome/s200 001'), (0.0, 'Method Started'), (inj, 'Injection'), (60.0, 'Method Ended')], None)], delim=';', decimal_comma=True)
+    add(dict(file=fn, format='UNICORN 7 CSV, semicolon, UTF-8, time axis in minutes', kind='sec', step='Size exclusion', unit='min', column='Superdex 200 Increase 10/300 GL', cv=None, flow=None, path_mm=2,
+             frac=dict(n=3, first='1.A.1', last='1.A.3'), injection=inj,
+             peaks=[dict(note='big', ve=12.0, tol=0.3, must=False), dict(note='shoulder', ve=14.0, tol=0.3, must=False)]))  # optional until issue #215: detection finds no peaks in this run on any version
+
 def sec_plates_csv():
     fn = 'sec_Superose6_plates_u7_tab.csv'; inj = 4.0; x = np.round(np.arange(0, 32.0001, 0.01), 4)
     vs = [(9.0, 0.3, 10.0), (15.6, 0.45, 95.0), (18.4, 0.35, 25.0)]
@@ -376,7 +389,7 @@ def time_formats():
 
 
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, time_formats): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, time_formats): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()
