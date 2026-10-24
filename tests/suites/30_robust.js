@@ -149,6 +149,16 @@ await T.t('damaged-project', async () => { const {p, errs, close} = await open()
   T.check('partial.keeps-usable-run', tl.some(x => x.k.startsWith('run:')), `timeline: ${tl.map(x => x.k).join(', ')}`); // the good run is not lost
   T.check('partial.says-skipped', ts.some(t => /skipped 4/i.test(t)), `toasts: ${ts.join(' | ') || 'none'}`); // the user is told 4 entries were unusable
   await close(); });
+/* a project file whose prep sub-objects are null or the wrong type (hand-edited, or from another tool) opens, and every step still renders (#146) */
+await T.t('malformed-prep', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Malformed prep'); await h.dropFiles(F.his); await h.pool('T1-T6');
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const src = path.join(ROOT, 'results', 'malformed_prep_src.json'); await dl.saveAs(src);
+  const d = JSON.parse(fs.readFileSync(src, 'utf8')); d.prep = Object.assign({}, d.prep, {btw: null, manual: null, skip: 'x', stepMeta: [], offs: 5, titles: null});
+  await p.click(SEL.home); await p.waitForTimeout(600); const e0 = errs.length;
+  await p.setInputFiles(SEL.importFile, {name: 'malformed_prep.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))}); await p.waitForTimeout(3000);
+  const tl = await h.timeline(); T.check('malformed-prep.opens', tl.some(x => x.k.startsWith('run:')), `timeline: ${tl.map(x => x.k).join(', ')}`);
+  for (const x of tl) { await h.step(x.k); await p.waitForTimeout(250); } // every step, including the run's, renders from the normalized prep
+  T.check('malformed-prep.no-error', errs.length === e0, errs.slice(e0).join(' | '));
+  await close(); });
 /* a project file dropped together with other files: the others are not loaded, and the user is told */
 await T.t('project-with-others', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Mixed drop'); await watchToasts(p); const e0 = errs.length;
   await p.setInputFiles('#file', [{name: 'tiny_project.json', mimeType: 'application/json', buffer: Buffer.from('{"app":"HPLC Figure Bench","version":1,"runs":[]}')}, {name: path.basename(F.his), mimeType: 'text/csv', buffer: fs.readFileSync(F.his)}]); await p.waitForTimeout(3000);
