@@ -71,15 +71,15 @@ module.exports = async ({github, context, core}) => {
       try { const acts = []; let tok = ''; do { const a = await jules(`${s.session}/activities?pageSize=100${tok ? '&pageToken=' + tok : ''}`); acts.push(...(a.activities || [])); tok = a.nextPageToken || ''; } while (tok && acts.length < 1000);
         const last = acts.filter(a => a.agentMessaged).sort((a, b) => String(a.createTime).localeCompare(String(b.createTime))).pop(); q = last ? last.agentMessaged.agentMessage : ''; qt = last ? String(last.createTime || '') : ''; } catch (e) { say(`#${i.number}: could not read the question: ${e.message}`); }
       /* answer each question once: the session stays waiting until Jules reads the reply, so later checks must not repeat it, and a person's relayed answer replaces the automatic one */
-      /* answered already: if Jules still hasn't moved 45 minutes after the answer, send it once more (sessions sometimes miss a message) */
+      /* answered already: if Jules still hasn't moved 20 minutes after the answer, send it once more (sessions sometimes miss a message) */
       const byPerson = qt && s.relayedAt && Date.parse(s.relayedAt) > Date.parse(qt);
       if (qt && (s.asked === qt || byPerson)) {
         const at = byPerson ? Date.parse(s.relayedAt) : Date.parse(s.answeredAt || s.relayedAt || 0);
-        if (s.nudgedFor !== qt && at && Date.now() - at > 45 * 60e3) {
+        if (s.nudgedFor !== qt && at && Date.now() - at > 20 * 60e3) {
           let text = 'Approved. Please stop asking and finish now: commit your work as it is and open the pull request. Put anything unfinished under "Open questions" in the PR description.';
           if (byPerson) { const cs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: i.number, per_page: 100}); const c = cs.find(x => x.id === s.relayed); if (c) text = 'Repeating the answer to your last question, in case it did not reach you:\n\n' + c.body.trim().replace(/^answer for jules:\s*/i, '') + '\n\nThen finish, commit and open the pull request.'; }
           await jules(`${s.session}:sendMessage`, {prompt: text}).catch(e => say(`#${i.number}: resend failed: ${e.message}`));
-          s.nudgedFor = qt; s.asked = qt; await putState(i.number, s, `Jules leader: Jules was still waiting 45 minutes after the answer, so the leader sent it again.`); say(`#${i.number}: answer resent`);
+          s.nudgedFor = qt; s.asked = qt; await putState(i.number, s, `Jules leader: Jules was still waiting 20 minutes after the answer, so the leader sent it again.`); say(`#${i.number}: answer resent`);
         } else if (byPerson && s.asked !== qt) { s.asked = qt; await putState(i.number, s, `Jules leader: Jules' question was already answered by a person, waiting for Jules.`); }
         continue; }
       const n = (s.replies || 0) + 1, quote = (q || '(question text not available)').slice(0, 3000).split('\n').map(l => '> ' + l).join('\n');
