@@ -71,14 +71,23 @@ module.exports = async ({github, context, core}) => {
       try { const acts = []; let tok = ''; do { const a = await jules(`${s.session}/activities?pageSize=100${tok ? '&pageToken=' + tok : ''}`); acts.push(...(a.activities || [])); tok = a.nextPageToken || ''; } while (tok && acts.length < 1000);
         const last = acts.filter(a => a.agentMessaged).sort((a, b) => String(a.createTime).localeCompare(String(b.createTime))).pop(); q = last ? last.agentMessaged.agentMessage : ''; qt = last ? String(last.createTime || '') : ''; } catch (e) { say(`#${i.number}: could not read the question: ${e.message}`); }
       /* answer each question once: the session stays waiting until Jules reads the reply, so later checks must not repeat it, and a person's relayed answer replaces the automatic one */
-      if (qt && s.asked === qt) continue;
-      if (qt && s.relayedAt && Date.parse(s.relayedAt) > Date.parse(qt)) { s.asked = qt; await putState(i.number, s, `Jules leader: Jules' question was already answered by a person, waiting for Jules.`); continue; }
+      /* answered already: if Jules still hasn't moved 45 minutes after the answer, send it once more (sessions sometimes miss a message) */
+      const byPerson = qt && s.relayedAt && Date.parse(s.relayedAt) > Date.parse(qt);
+      if (qt && (s.asked === qt || byPerson)) {
+        const at = byPerson ? Date.parse(s.relayedAt) : Date.parse(s.answeredAt || s.relayedAt || 0);
+        if (s.nudgedFor !== qt && at && Date.now() - at > 45 * 60e3) {
+          let text = 'Approved. Please stop asking and finish now: commit your work as it is and open the pull request. Put anything unfinished under "Open questions" in the PR description.';
+          if (byPerson) { const cs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: i.number, per_page: 100}); const c = cs.find(x => x.id === s.relayed); if (c) text = 'Repeating the answer to your last question, in case it did not reach you:\n\n' + c.body.trim().replace(/^answer for jules:\s*/i, '') + '\n\nThen finish, commit and open the pull request.'; }
+          await jules(`${s.session}:sendMessage`, {prompt: text}).catch(e => say(`#${i.number}: resend failed: ${e.message}`));
+          s.nudgedFor = qt; s.asked = qt; await putState(i.number, s, `Jules leader: Jules was still waiting 45 minutes after the answer, so the leader sent it again.`); say(`#${i.number}: answer resent`);
+        } else if (byPerson && s.asked !== qt) { s.asked = qt; await putState(i.number, s, `Jules leader: Jules' question was already answered by a person, waiting for Jules.`); }
+        continue; }
       const n = (s.replies || 0) + 1, quote = (q || '(question text not available)').slice(0, 3000).split('\n').map(l => '> ' + l).join('\n');
       if (n > MAX_REPLIES) { await putState(i.number, s, `Jules leader: Jules is still asking after ${MAX_REPLIES} automatic replies. Needs the coordinator. Latest question:\n\n${quote}`); await setLabels(i.number, [L.fail], [L.run]); freed.add(i.number); say(`#${i.number}: question needs the coordinator`); continue; }
       await jules(`${s.session}:sendMessage`, {prompt: n === 1
         ? 'Yes, go ahead with the approach you think is best. Nobody can answer questions during this session, so do not wait for approval or a review. Decide using AGENTS.md and the issue text, choosing the smallest safe option, and do not change scientific values the issue does not ask for. If a check fails because the app looks wrong, keep the check failing and explain it in the PR. Finish now: commit, open the pull request, and list each open question and the choice you made under "Open questions" in the PR description.'
         : 'Approved. Please stop asking and finish now: commit your work as it is and open the pull request. Put anything unfinished or uncertain under "Open questions" in the PR description. The coordinator will review the PR.'});
-      await putState(i.number, Object.assign(s, {replies: n, asked: qt}), `Jules leader: attempt ${s.attempt} asked a question (automatic reply ${n} of ${MAX_REPLIES}: decide by the rules and list it in the PR):\n\n${quote}`);
+      await putState(i.number, Object.assign(s, {replies: n, asked: qt, answeredAt: new Date().toISOString()}), `Jules leader: attempt ${s.attempt} asked a question (automatic reply ${n} of ${MAX_REPLIES}: decide by the rules and list it in the PR):\n\n${quote}`);
       await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: `Jules asked:\n\n${quote}\n\nThe leader told Jules to decide using AGENTS.md and list this under "Open questions" in its PR.`});
       say(`#${i.number}: answered a question`); continue; }
     if (st === 'COMPLETED' && pr) { await putState(i.number, Object.assign(s, {pr}), `Jules leader: attempt ${s.attempt} finished. PR: ${pr}`); await setLabels(i.number, [L.done], [L.run]); freed.add(i.number); say(`#${i.number}: PR ${pr}`); continue; }
