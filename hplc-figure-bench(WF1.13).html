@@ -4481,10 +4481,11 @@ function saneNum(el, v, key){
 }
 document.addEventListener('change', e => { const el = e.target; if (!el || el.type !== 'number' || el.value === '') return; const key = el.dataset.opt || el.dataset.gel || el.dataset.k; if (!key) return;
   const v = saneNum(el, +el.value, key); if (v !== null && v !== +el.value) el.value = v; }, true);
+let optT = 0;
 function onOpt(e){
-  const el = e.target;
+  const el = e.target, isTxt = el.type === 'text' || el.type === 'number' || el.type === 'search';
   if (el.dataset && el.dataset.known !== undefined) { const k = opt.known[+el.dataset.known]; if (!k) return; const f = el.dataset.kf;
-    k[f] = f === 'on' ? el.checked : f === 'kda' ? numOr(el.value, k.kda) : el.value; if (f !== 'on' && f !== 'kind') k.src = k.src && !/edited/.test(k.src) ? k.src + ', edited' : (k.src || 'added by you'); render(); return; }
+    k[f] = f === 'on' ? el.checked : f === 'kda' ? numOr(el.value, k.kda) : el.value; if (f !== 'on' && f !== 'kind') k.src = k.src && !/edited/.test(k.src) ? k.src + ', edited' : (k.src || 'added by you'); if (isTxt) { clearTimeout(optT); optT = setTimeout(render, 200); } else render(); return; }
   if (el.dataset && el.dataset.lane !== undefined) { onLane(el); return; }
   if (el.dataset && el.dataset.sec !== undefined) { onSec(el); return; }
   if (el.dataset && el.dataset.gel) { onGel(el); return; }
@@ -4507,7 +4508,7 @@ function onOpt(e){
   }
   if (k === 'peakDec') renderList();
   if (k === 'runCond') syncControls();
-  render();
+  if (isTxt) { clearTimeout(optT); optT = setTimeout(render, 200); } else render();
 }
 $('#panel').addEventListener('input', onOpt);
 /* static guidance folds into one Tips line per section, live status lines stay visible */
@@ -5391,11 +5392,12 @@ function renderND(){
         <label class="nd-dil" title="Dilution factor before measuring">×<input type="number" step="any" min="1" data-ndk="dil" value="${s.dil ?? 1}" aria-label="Dilution factor"></label>
         ${s.spec ? `<label class="eye" title="Show in the spectra figure"><input type="checkbox" data-ndk="show" ${s.hide ? '' : 'checked'}>plot</label>` : ''}</div></details></div></div>`; }).join('')}</div>`).join('');
 }
-$('#ndList').addEventListener('input', e => { const t = e.target;
-  if (t.dataset.ndr) { const h = t.closest('[data-ndrun]'), r = h && runs.find(x => x.id === h.dataset.ndrun); if (!r) return; r[t.dataset.ndr] = t.type === 'number' ? (t.value === '' ? '' : +t.value) : t.value; if (t.tagName === 'SELECT') $('#ndList')._n = -1; renderND(); render(); return; }
+let ndT = 0;
+$('#ndList').addEventListener('input', e => { const t = e.target, isTxt = t.type === 'text' || t.type === 'number';
+  if (t.dataset.ndr) { const h = t.closest('[data-ndrun]'), r = h && runs.find(x => x.id === h.dataset.ndrun); if (!r) return; r[t.dataset.ndr] = t.type === 'number' ? (t.value === '' ? '' : +t.value) : t.value; if (t.tagName === 'SELECT') $('#ndList')._n = -1; renderND(); if (isTxt) { clearTimeout(ndT); ndT = setTimeout(render, 200); } else render(); return; }
   const row = t.closest('[data-nd]'), k = t.dataset.ndk; if (!row || !k) return; const s = ndSamples.find(x => x.id === row.dataset.nd); if (!s) return;
   if (k === 'show') s.hide = !t.checked; else if (k === 'dil') s.dil = numOr(t.value, 1) || 1; else s[k] = t.value;
-  if (t.tagName === 'SELECT') $('#ndList')._n = -1; renderND(); render(); });
+  if (t.tagName === 'SELECT') $('#ndList')._n = -1; renderND(); if (isTxt) { clearTimeout(ndT); ndT = setTimeout(render, 200); } else render(); });
 $('#ndList').addEventListener('click', e => { const b = e.target.closest('[data-nddel]'); if (!b) return; ndSamples = ndSamples.filter(x => x.id !== b.dataset.nddel); $('#ndList')._n = -1; renderND(); render(); });
 $('#ndAdd').addEventListener('click', () => $('#ndFile').click());
 $('#ndFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (f) addNanoDrop(parseNanoDrop(decode(await f.arrayBuffer())), f.name); });
@@ -6064,8 +6066,9 @@ function syncMan(){ const id = curStep.startsWith('man:') ? curStep.slice(4) : '
   const lab = {column: ['Column or resin', 'Binding and equilibration buffer', 'Elution buffer and volume'], batch: ['Resin', 'Binding buffer', 'Elution buffer and volume'], precip: ['Precipitant', 'Resuspended in', 'Conditions'], dialysis: ['Membrane or device', 'Buffer', 'Conditions'], conc: ['Device', 'Buffer', 'Conditions'], other: ['Material', 'Buffer', 'What was done']}[m.kind] || ['Column or resin', 'Buffer', 'Elution'];
   $('#manWashL').hidden = !(m.kind === 'column' || m.kind === 'batch'); $('#manResinT').textContent = lab[0]; $('#manBufT').textContent = lab[1]; $('#manElT').textContent = lab[2]; $('#man-name').placeholder = MAN_NAME[m.kind] || 'Other step';
   document.querySelectorAll('#prepPanel [data-man]').forEach(el => { if (el === document.activeElement) return; const v = m[el.dataset.man] ?? (el.dataset.man === 'kind' ? 'column' : ''); if (el.value !== String(v)) el.value = v; }); }
+let prepEditT = 0;
 const manEdit = e => { const el = e.target.closest('[data-man]'); if (!el || !curStep.startsWith('man:')) return; const m = (prep.manual || []).find(x => x.id === curStep.slice(4)); if (!m) return;
-  m[el.dataset.man] = el.value; if (el.dataset.man === 'after' && el.value === m.id) m.after = ''; render(); };
+  m[el.dataset.man] = el.value; if (el.dataset.man === 'after' && el.value === m.id) m.after = ''; if (el.type === 'text' || el.type === 'number') { clearTimeout(prepEditT); prepEditT = setTimeout(render, 200); } else render(); };
 $('#prepPanel').addEventListener('input', manEdit); $('#prepPanel').addEventListener('change', manEdit);
 let gelTarget = null;
 function addBtw(rid){ prep.btw = prep.btw || {}; if (!prep.btw[rid]) prep.btw[rid] = {how: 'conc'}; selectStep('btw:' + rid); }
@@ -6118,7 +6121,7 @@ const btwEdit = e => { const el = e.target.closest('[data-btw]'); if (!el || !cu
   prep.btw[rid] = Object.assign({how: 'conc'}, prep.btw[rid], {[el.dataset.btw]: el.value}); const r = runs.find(x => x.id === rid);
   /* one reading per pool: a value typed here replaces one left on the run card */
   if (r && ['conc', 'vOut'].includes(el.dataset.btw) && (r.poolConc != null || r.poolFinalVol != null)) { if (r.poolConc != null && prep.btw[rid].conc === '' && el.dataset.btw !== 'conc') prep.btw[rid].conc = r.poolConc; delete r.poolConc; delete r.poolFinalVol; }
-  btwCarry(); render(); if (e.type === 'change' && ['conc', 'vOut'].includes(el.dataset.btw)) setTimeout(() => { renderList(); render(); }, 0); };
+  btwCarry(); if (el.type === 'text' || el.type === 'number') { clearTimeout(prepEditT); prepEditT = setTimeout(render, 200); } else render(); if (e.type === 'change' && ['conc', 'vOut'].includes(el.dataset.btw)) setTimeout(() => { renderList(); render(); }, 0); };
 $('#prepPanel').addEventListener('input', btwEdit); $('#prepPanel').addEventListener('change', btwEdit);
 const metaSet = (k, f, v) => { const all = prep.stepMeta = prep.stepMeta || {}; all[k] = Object.assign({}, all[k], {[f]: v}); };
 $('#ssDate').addEventListener('change', e => { metaSet(curStep, 'date', e.target.value); render(); });
