@@ -33,6 +33,7 @@ After running tests, read the output of node failures.js, not the full logs.
 | `12_genbank.js` | GenBank | Synthetic files with known answers: complement CDS, join/wrap locations, multiline qualifiers, case sensitivity, no ORIGIN, Windows line endings, gene/product fallback labels, SnapGene .dna export. |
 | `14_peaks.js` | Peaks | Peak integration with known answers: isolated, separated, overlapping, and sloped baseline peaks. Tests both Gaussian and trapezoidal integration with and without baseline subtraction. |
 | `15_import_sec.js` | Import and SEC | Synthetic UI checks for reviewed SEC peak matching, UNICORN decimal commas, 5/150 column identity, NanoDrop number formats and replicate retention. |
+| `16_nanodrop.js` | NanoDrop | NanoDrop exports and their numbers. Checks protein concentration values, r280, names, proper nucleic acid readings handling, and SD/means calculated properly against expected synthetic standins. |
 | `20_science.js` | Science | Summary table arithmetic (mole-based yields across tag removal), methods text, panel letters, SEC elution volumes, consistency after moving or removing steps. |
 | `21_methods.js` | Methods | The Methods and summary text says what the data says. |
 | `25_gels.js` | Gels | Synthetic gel images: measurements unchanged by display contrast, bands counted once, purity at most 100%, invalid ladders withhold sizes, manual tags respected, caches refreshed. |
