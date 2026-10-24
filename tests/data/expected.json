@@ -404,6 +404,33 @@
     }
    ],
    "pool": null
+  },
+  {
+   "file": "large_header_sec_u7.csv",
+   "note": "12 lines of extra header metadata before the curve table",
+   "format": "csv",
+   "kind": "sec",
+   "step": "Size exclusion",
+   "unit": "mL",
+   "column": "Superdex 200 Increase 10/300 GL",
+   "cv": 24.0,
+   "flow": 0.5,
+   "path_mm": 2,
+   "frac": {
+    "n": 9,
+    "first": "F1",
+    "last": "F9"
+   },
+   "injection": 0.0,
+   "peaks": [
+    {
+     "ve": 15.0,
+     "tol": 0.1,
+     "must": true,
+     "note": "main peak"
+    }
+   ],
+   "pool": null
   }
  ],
  "chrom_note": "ve        apex (isolated peak) or Gaussian centre (overlapped) in the unit the app should show:\n            SEC: counted from the injection. Others: the file's own volume axis.\n  must      the app has to report a peak within tol. must=false: allowed but not required (tiny, shoulder, outside the fraction window)\n  pool      fractions you would pool, its span, its A280 area (mAU*unit) on a zero baseline, and the mg the app should show\n            with eps (A280 of 1 mg/mL, 1 cm) = POOL_EPS and the stated UV path: mg = area/1000/(eps*path_mm/10)",
@@ -539,8 +566,8 @@
    "format": "NanoDrop One, comma CSV, quoted names with commas, quotes and unicode",
    "n": 3,
    "names": [
-    "Pool 1.E.7–1.F.6, conc",
-    "KPP-MM α/β 4 °C",
+    "Pool 1.E.7\u20131.F.6, conc",
+    "KPP-MM \u03b1/\u03b2 4 \u00b0C",
     "Ulp1 cut, \"final\""
    ],
    "r280": [
