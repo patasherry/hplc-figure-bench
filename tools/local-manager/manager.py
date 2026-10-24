@@ -20,7 +20,7 @@ Run:  python tools\\local-manager\\manager.py          (keeps running)
       python tools\\local-manager\\manager.py --once   (one pass)
       python tools\\local-manager\\manager.py --dry    (one pass, prints what it would do, changes nothing)
 """
-import datetime as dt, json, os, re, shutil, subprocess, sys, time, urllib.request
+import datetime as dt, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -126,8 +126,14 @@ def ask_gemini(q):
     body = json.dumps({'contents': [{'parts': [{'text': q}]}]}).encode()
     req = urllib.request.Request('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent', data=body,
                                  headers={'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return json.loads(r.read())['candidates'][0]['content']['parts'][0]['text'].strip()
+    for tries in (1, 2):  # Gemini can be slow on long prompts: wait up to 5 minutes, and try once more after a timeout
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                return json.loads(r.read())['candidates'][0]['content']['parts'][0]['text'].strip()
+        except (TimeoutError, OSError) as e:
+            if tries == 2 or (isinstance(e, urllib.error.HTTPError) and e.code not in (429, 500, 503)):
+                raise
+            time.sleep(20)
 
 
 def local_json(system, user):
