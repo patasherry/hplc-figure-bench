@@ -25,3 +25,7 @@ python tools\local-manager\manager.py --once   # one real pass
 python tools\local-manager\manager.py --selftest   # asks each agent (Ollama, Gemini, Claude Code, Codex) one tiny question, prints OK or FAIL
 python tools\local-manager\manager.py          # keeps running
 ```
+
+## Console
+
+While the manager runs, open **http://localhost:8765** in a browser on this PC. It shows Mission Control (`tools/dashboard/mission-control.html`) with a **Your local AI** panel: quick status checks, a box to ask the local model questions (for example "is everything working?"), a **Check every agent** button (the same test as `--selftest`) and the manager's log. It listens on this PC only and accepts calls only from the page it serves. Change the port with `"console_port"` in `~/.hfb-reviewer.json`, or turn it off with `--no-console`.
