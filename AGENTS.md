@@ -112,6 +112,8 @@ Jules' questions go up a ladder, run by the local manager on the owner's PC: the
 
 **Claude Code jobs.** When Jules is out of tries (sent back twice by the gate, or 3 failed sessions), the issue gets `for-claude-code`. The local manager runs Claude Code on the owner's PC in a separate git worktree (`~/hfb-work/issue-N`, from `origin/main`), limited to editing files and running the test suites. The manager checks that only the app and `tests/` changed, commits, pushes the branch `claude/issue-N` (the only branches it ever pushes) and opens the PR. That PR goes through the Test suite and the gate like any other, and if it fails it goes to the lead. At most 3 jobs a day (`max_claude_jobs`). Claude Code (read-only) is also the last step of the question ladder before the lead.
 
+**Direction board (#222).** After every 10 merged PRs, weekly on Sunday, or when the owner comments **Discuss: <topic>** there, the local manager runs a round: the local model, Gemini and ChatGPT each propose up to 3 directions, then score all proposals 1 to 5. Proposals all three back (average 4+, none below 3) are adopted automatically as `needs-triage` + `from-board` issues, up to 3 a round and only while fewer than 10 jobs wait, so number changes still reach the owner through triage. The owner replies **OK n** to adopt others or **No n** to drop an adopted one.
+
 - **Jules** works from issues labeled `jules`.
 - **Claude** reviews PRs changing the app automatically and is called on any PR with `@claude`.
 - Agents never push to another agent's branch: a revision goes on a new branch.
