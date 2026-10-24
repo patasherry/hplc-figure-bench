@@ -2031,7 +2031,14 @@ function peakApex(xs, ys, x){
   let best = i; for (let k=Math.max(0,i-w); k<=Math.min(xs.length-1,i+w); k++) if (ys[k] > ys[best]) best = k;
   return best;
 }
-function yLabelText(){ return (opt.normalize && opt.ylabel === DEF.ylabel) ? 'Normalized absorbance' : opt.ylabel; }
+function yLabelText(){
+  if (opt.normalize && opt.ylabel === DEF.ylabel) return 'Normalized absorbance';
+  if (opt.ylabel === DEF.ylabel) {
+    const vis = traces.find(t => t.visible);
+    if (vis && vis.cols && vis.cols.length > vis.yc) return vis.cols[vis.yc];
+  }
+  return opt.ylabel;
+}
 function style(ov){
   ov = ov || {};
   const o = opt, W = ov.wPt || numOr(o.w,3.5)*72, H = ov.hPt || numOr(o.h,2.6)*72, fs = fontSize(), lw = Math.max(0.1, numOr(o.lw,0.75));
@@ -4989,9 +4996,23 @@ async function loadFiles(files){
 }
 function addParsed(added, quiet){
   if (!added.length) return;
-  if (traces.length && traces.every(t => t.ex)) { traces = []; opt.xmin = opt.xmax = opt.ymin = opt.ymax = ''; }
+  const isFirst = traces.length === 0 || traces.every(t => t.ex);
+  if (isFirst) { traces = []; opt.xmin = opt.xmax = opt.ymin = opt.ymax = ''; }
   added.forEach(a => { const t = makeTrace(a.name, a.parsed); traces.push(t); detectPeaks(t); });
   if (opt.palette === 'blues' || opt.palette === 'warm') applyPalette();
+
+  if (isFirst && traces.length > 0) {
+    const t0 = traces[0];
+    if (t0.cols && t0.cols.length > t0.xc) {
+      const xCol = t0.cols[t0.xc];
+      if (/volume|ml|time|min/i.test(xCol) && opt.xlabel === DEF.xlabel) { opt.xlabel = xCol; }
+    }
+    if (t0.cols && t0.cols.length > t0.yc) {
+      const yCol = t0.cols[t0.yc];
+      if (opt.ylabel === DEF.ylabel) { opt.ylabel = yCol; }
+    }
+  }
+
   if (!quiet) { cur = 'overlay'; renderList(); syncControls(); render(); }
 }
 $('#pick').addEventListener('click', () => $('#file').click());

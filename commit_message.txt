@@ -1,0 +1,9 @@
+Preserve source units on generic chromatogram figures
+
+Before: The figure title showed "Absorbance (mAU)" and peak value 1000.
+After: The figure title shows "Absorbance (AU)" and peak value 1.
+
+Fixes default title handling to parse generic CSV headers and retain user/declared source units. Avoids hardcoded auto-scaling to mAU.
+Includes UI-only synthetic CSV checks in 10_data_truth.js asserting peak and matching exported titles.
+
+Closes #123

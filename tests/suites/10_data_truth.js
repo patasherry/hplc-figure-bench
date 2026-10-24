@@ -42,7 +42,7 @@ async function chromFile(e){ const id = e.file.replace(/\.[^.]+$/, ''), t0 = Dat
     if (e.flow) { const f = num((await field(p, 'mFlow')).replace(/^auto:\s*/i, '')); T.check(`${id}/flow`, Math.abs(f - e.flow) < 0.01, `expected ${e.flow}, got ${f}`); }
     // guards: the UV path stored in a UNICORN archive (CurveUVInfo/UVPathLength) is used, and the "UV cell path length" curve is not a trace
     if (/\.zip$/.test(e.file)) { const pv = num(await field(p, 'path')); T.check(`${id}/uv-path`, Math.abs(pv - e.path_mm) < 0.01, `expected ${e.path_mm} mm, got ${pv}`); }
-    await setOpt(p, 'o-eps', e.pool ? e.pool.eps : 1); await detect(p);
+    await setOpt(p, 'o-eps', e.pool ? e.pool.eps : 1); await detect(p); await p.waitForTimeout(300);
     // guards (#10): the figure's display smoothing and baseline change the picture only, never the peak areas or % (peaks measured from zero, so an offset would show)
     { const big = async () => (await peaks(p, h)).rows.filter(r => !/^pool/i.test(r.name)).sort((a, b) => b.area - a.area)[0];
       await setOpt(p, 'o-intBase', 'zero'); await p.waitForTimeout(300); const before = await big();
@@ -151,8 +151,41 @@ async function lastFracFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
 }
 
 (async () => {
+  for (const e of EXP.synthetic || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => syntheticFile(e)); }
+
+  for (const e of EXP.synthetic || []) { await T.t(e.file, () => syntheticFile(e)); }
   for (const e of EXP.lastfrac || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => lastFracFile(e)); }
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
-  T.done(); })();
+
+  T.done();
+})();
+
+async function syntheticFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('synthetic ' + id); await h.addRun(path.join(CH, e.file));
+    await p.waitForTimeout(300);
+    await detect(p);
+
+    // Check if peak is at 5 mL
+    const pr = (await peaks(p, h)).rows.filter(r => !/^pool/i.test(r.name)).sort((a, b) => b.area - a.area)[0];
+    T.check(`${id}/peak-ve`, pr && Math.abs(pr.ve - 5.0) < 0.2, `expected peak at 5 mL, got ${pr && pr.ve}`);
+
+    // Check if the exported title retains the unit
+    const ct = await p.evaluate(() => {
+       const u = document.querySelector('#o-xlabel').value || document.querySelector('#o-xlabel').placeholder;
+       const v = document.querySelector('#o-ylabel').value || document.querySelector('#o-ylabel').placeholder;
+       return u + ' / ' + v;
+    });
+
+    T.check(`${id}/labels`, /Volume \(mL\)/.test(ct) && /Absorbance \(AU\)/.test(ct), `expected Volume (mL) and Absorbance (AU), got ${ct}`);
+
+    // Height should remain 1 AU since we no longer automatically convert it in generic csv parsing
+    const expectedHeight = 1;
+    const height = pr ? pr.height : NaN;
+    T.check(`${id}/peak-height`, pr && Math.abs(height - expectedHeight) < 0.1, `expected height ${expectedHeight}, got ${height}`);
+
+  } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
+}

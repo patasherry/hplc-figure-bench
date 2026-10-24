@@ -1,658 +1,663 @@
 {
- "chrom": [
-  {
-   "file": "imac_HisTrap_FF_1mL_step_u7.csv",
-   "format": "UNICORN 7 CSV, comma, UTF-8",
-   "kind": "imac",
-   "step": "IMAC",
-   "unit": "mL",
-   "column": "HisTrap FF 1 mL",
-   "cv": 0.962,
-   "flow": null,
-   "path_mm": 2,
-   "frac": {
-    "n": 12,
-    "first": "T1",
-    "last": "T12"
-   },
-   "injection": 0.0,
-   "peaks": [
+  "chrom": [
     {
-     "ve": 51.6,
-     "tol": 0.08,
-     "must": true,
-     "note": "step elution peak"
+      "file": "imac_HisTrap_FF_1mL_step_u7.csv",
+      "format": "UNICORN 7 CSV, comma, UTF-8",
+      "kind": "imac",
+      "step": "IMAC",
+      "unit": "mL",
+      "column": "HisTrap FF 1 mL",
+      "cv": 0.962,
+      "flow": null,
+      "path_mm": 2,
+      "frac": {
+        "n": 12,
+        "first": "T1",
+        "last": "T12"
+      },
+      "injection": 0,
+      "peaks": [
+        {
+          "ve": 51.6,
+          "tol": 0.08,
+          "must": true,
+          "note": "step elution peak"
+        },
+        {
+          "ve": 12,
+          "tol": 0.5,
+          "must": false,
+          "note": "flow-through, outside the fraction window"
+        }
+      ],
+      "pool": {
+        "label": "T1-T3",
+        "a": 50,
+        "b": 53,
+        "area": 1014.05,
+        "area_tol_pct": 9,
+        "eps": 1,
+        "mg": 5.0702,
+        "tol_note": "The app draws a straight baseline under the pool between the low points outside it (it corrects the UV rise from imidazole on a step), while this area is on a zero baseline. A pool cut on a peak tail reads 4-7% lower that way. Agreed with the lead as a known, accepted difference."
+      }
     },
     {
-     "ve": 12.0,
-     "tol": 0.5,
-     "must": false,
-     "note": "flow-through, outside the fraction window"
+      "file": "imac_HisTrap_HP_5mL_gradient_u7_tab_utf16.csv",
+      "format": "UNICORN 7 CSV, tab, UTF-16 LE with BOM",
+      "kind": "imac",
+      "step": "IMAC",
+      "unit": "mL",
+      "column": "HisTrap HP 5 mL",
+      "cv": 4.909,
+      "flow": 5,
+      "temp": 4,
+      "path_mm": 2,
+      "frac": {
+        "n": 40,
+        "first": "T1",
+        "last": "T40"
+      },
+      "injection": null,
+      "peaks": [
+        {
+          "ve": 48,
+          "tol": 0.3,
+          "must": true,
+          "note": "overlapping, left component"
+        },
+        {
+          "ve": 50.5,
+          "tol": 0.3,
+          "must": true,
+          "note": "overlapping, right component"
+        }
+      ],
+      "pool": {
+        "label": "T14-T18",
+        "a": 46.25,
+        "b": 52.5,
+        "area": 1599.5,
+        "area_tol_pct": 4,
+        "eps": 1,
+        "mg": 7.9975
+      }
+    },
+    {
+      "file": "iex_HiTrap_Q_HP_5mL_u6_comma_utf16.csv",
+      "format": "UNICORN 6 CSV, comma, UTF-16 LE with BOM",
+      "kind": "iex",
+      "step": "Anion exchange",
+      "unit": "mL",
+      "column": "HiTrap Q HP 5 mL",
+      "cv": 4.909,
+      "flow": null,
+      "path_mm": 2,
+      "frac": {
+        "n": 24,
+        "first": "A1",
+        "last": "B12"
+      },
+      "injection": null,
+      "peaks": [
+        {
+          "ve": 40,
+          "tol": 0.25,
+          "must": true,
+          "note": "main peak with a shoulder"
+        },
+        {
+          "ve": 41.3,
+          "tol": 0.35,
+          "must": false,
+          "note": "shoulder"
+        },
+        {
+          "ve": 46,
+          "tol": 0.15,
+          "must": true,
+          "note": "small late peak on a drifting baseline"
+        }
+      ],
+      "forbid": [
+        {
+          "ve": 36,
+          "tol": 0.3,
+          "note": "negative dip, never a peak"
+        }
+      ],
+      "pool": null
+    },
+    {
+      "file": "run12_HisTrap_5ml_u5.asc",
+      "format": "UNICORN 5 .asc with run prefix",
+      "kind": "imac",
+      "step": "IMAC",
+      "unit": "mL",
+      "column": "HisTrap 5 mL",
+      "cv": null,
+      "flow": null,
+      "path_mm": 2,
+      "frac": {
+        "n": 12,
+        "first": "A1",
+        "last": "A12"
+      },
+      "injection": null,
+      "peaks": [
+        {
+          "ve": 42.4,
+          "tol": 0.12,
+          "must": true,
+          "note": "step elution peak"
+        },
+        {
+          "ve": 8,
+          "tol": 0.5,
+          "must": false,
+          "note": "flow-through, outside the window"
+        }
+      ],
+      "pool": {
+        "label": "A2-A5",
+        "a": 41,
+        "b": 45,
+        "area": 1200.18,
+        "area_tol_pct": 9,
+        "eps": 1,
+        "mg": 6.0009,
+        "tol_note": "The app draws a straight baseline under the pool between the low points outside it (it corrects the UV rise from imidazole on a step), while this area is on a zero baseline. A pool cut on a peak tail reads 4-7% lower that way. Agreed with the lead as a known, accepted difference."
+      }
+    },
+    {
+      "file": "sec_S200_Increase_minutes_u7.csv",
+      "format": "UNICORN 7 CSV, comma, UTF-8, time axis in minutes",
+      "kind": "sec",
+      "step": "Size exclusion",
+      "unit": "min",
+      "column": "Superdex 200 Increase 10/300 GL",
+      "cv": null,
+      "flow": null,
+      "path_mm": 2,
+      "frac": {
+        "n": 72,
+        "first": "1.A.1",
+        "last": "1.F.12"
+      },
+      "injection": 3,
+      "peaks": [
+        {
+          "ve": 17.6,
+          "tol": 0.15,
+          "must": true,
+          "note": "Ve 8.8 mL at 0.5 mL/min, minutes from injection"
+        },
+        {
+          "ve": 28.4,
+          "tol": 0.15,
+          "must": true,
+          "note": "Ve 14.2 mL at 0.5 mL/min, minutes from injection"
+        },
+        {
+          "ve": 33,
+          "tol": 0.15,
+          "must": true,
+          "note": "Ve 16.5 mL at 0.5 mL/min, minutes from injection"
+        }
+      ],
+      "pool": {
+        "label": "1.C.10-1.D.4",
+        "a": 26.5,
+        "b": 30,
+        "area": 255.81,
+        "area_tol_pct": 4,
+        "eps": 1,
+        "mg": null,
+        "unit_note": "area in mAU*min, no mg on a time axis without a flow"
+      }
+    },
+    {
+      "file": "sec_Superose6_plates_u7_tab.csv",
+      "format": "UNICORN 7 CSV, tab, UTF-8, two 96-well plates, injection at 4.0 mL",
+      "kind": "sec",
+      "step": "Size exclusion",
+      "unit": "mL",
+      "column": "Superose 6 Increase 10/300 GL",
+      "cv": 23.562,
+      "flow": null,
+      "path_mm": 2,
+      "frac": {
+        "n": 110,
+        "first": "1.A.1",
+        "last": "2.B.2"
+      },
+      "injection": 4,
+      "peaks": [
+        {
+          "ve": 9,
+          "tol": 0.08,
+          "must": true,
+          "note": "Ve from injection"
+        },
+        {
+          "ve": 15.6,
+          "tol": 0.08,
+          "must": true,
+          "note": "Ve from injection"
+        },
+        {
+          "ve": 18.4,
+          "tol": 0.08,
+          "must": true,
+          "note": "Ve from injection"
+        }
+      ],
+      "pool": {
+        "label": "1.D.9-1.E.4",
+        "a": 14.8,
+        "b": 16.4,
+        "area": 99.07,
+        "area_tol_pct": 4,
+        "eps": 1,
+        "mg": 0.4954
+      }
+    },
+    {
+      "file": "sec_Sup6_basic_unicorn7.zip",
+      "format": "UNICORN 7 result archive (.zip, zip64 curve entries, float32 arrays)",
+      "kind": "sec",
+      "step": "Size exclusion",
+      "unit": "mL",
+      "column": "Superose 6 Increase 10/300 GL",
+      "cv": 23.562,
+      "flow": 0.5,
+      "temp": 21.5,
+      "path_mm": 2,
+      "frac": {
+        "n": 102,
+        "first": "1.A.1",
+        "last": "2.A.6"
+      },
+      "injection": 29.46053,
+      "peaks": [
+        {
+          "ve": 8.6,
+          "tol": 0.08,
+          "must": true,
+          "note": "Ve from injection"
+        },
+        {
+          "ve": 15.3,
+          "tol": 0.08,
+          "must": true,
+          "note": "Ve from injection"
+        },
+        {
+          "ve": 17.9,
+          "tol": 0.08,
+          "must": true,
+          "note": "Ve from injection"
+        }
+      ],
+      "forbid": [
+        {
+          "ve": 12,
+          "tol": 0.3,
+          "note": "peak only in the derived UV_CUT_TEMP@100,BASEM curve"
+        }
+      ],
+      "pool": {
+        "label": "1.D.12-1.E.8",
+        "a": 14.4,
+        "b": 16.2,
+        "area": 86.13,
+        "area_tol_pct": 4,
+        "eps": 1,
+        "mg": 0.4307
+      }
+    },
+    {
+      "file": "261022_PS_KPP_polish_001_001.zip",
+      "format": "UNICORN 7 result archive, 200,000 points, no SEC word in the file name",
+      "kind": "sec",
+      "step": "Size exclusion",
+      "unit": "mL",
+      "column": "Superdex 200 Increase 10/300 GL",
+      "cv": 24,
+      "flow": 0.75,
+      "path_mm": 10,
+      "frac": {
+        "n": 32,
+        "first": "1.A.1",
+        "last": "1.C.8"
+      },
+      "injection": 12,
+      "peaks": [
+        {
+          "ve": 10.5,
+          "tol": 0.25,
+          "must": true,
+          "note": "overlapping pair, left"
+        },
+        {
+          "ve": 11.3,
+          "tol": 0.25,
+          "must": false,
+          "note": "overlapping pair, right (resolution 0.5, no valley)"
+        },
+        {
+          "ve": 14,
+          "tol": 0.2,
+          "must": true,
+          "note": "main peak"
+        },
+        {
+          "ve": 14.9,
+          "tol": 0.35,
+          "must": false,
+          "note": "shoulder on the main peak"
+        },
+        {
+          "ve": 18.5,
+          "tol": 0.3,
+          "must": false,
+          "note": "tiny peak, under 1% of the area"
+        }
+      ],
+      "forbid": [
+        {
+          "ve": 19.8,
+          "tol": 0.25,
+          "note": "negative dip"
+        }
+      ],
+      "pool": null,
+      "slow_ok_s": 15
+    },
+    {
+      "file": "sec_Sup6_edge_unicorn7.zip",
+      "format": "UNICORN 7 result archive, main peak apex at the last fraction boundary",
+      "kind": "sec",
+      "step": "Size exclusion",
+      "unit": "mL",
+      "column": "Superose 6 Increase 10/300 GL",
+      "cv": 23.562,
+      "flow": 0.5,
+      "path_mm": 2,
+      "frac": {
+        "n": 20,
+        "first": "1.A.1",
+        "last": "1.B.8"
+      },
+      "injection": 1,
+      "peaks": [
+        {
+          "ve": 12,
+          "tol": 0.08,
+          "must": true,
+          "note": "inside the fractions"
+        },
+        {
+          "ve": 16,
+          "tol": 0.1,
+          "must": true,
+          "note": "apex exactly at the end of the fraction range"
+        }
+      ],
+      "pool": null
     }
-   ],
-   "pool": {
-    "label": "T1-T3",
-    "a": 50.0,
-    "b": 53.0,
-    "area": 1014.05,
-    "area_tol_pct": 9,
-    "eps": 1.0,
-    "mg": 5.0702,
-    "tol_note": "The app draws a straight baseline under the pool between the low points outside it (it corrects the UV rise from imidazole on a step), while this area is on a zero baseline. A pool cut on a peak tail reads 4-7% lower that way. Agreed with the lead as a known, accepted difference."
-   }
-  },
-  {
-   "file": "imac_HisTrap_HP_5mL_gradient_u7_tab_utf16.csv",
-   "format": "UNICORN 7 CSV, tab, UTF-16 LE with BOM",
-   "kind": "imac",
-   "step": "IMAC",
-   "unit": "mL",
-   "column": "HisTrap HP 5 mL",
-   "cv": 4.909,
-   "flow": 5.0,
-   "temp": 4.0,
-   "path_mm": 2,
-   "frac": {
-    "n": 40,
-    "first": "T1",
-    "last": "T40"
-   },
-   "injection": null,
-   "peaks": [
+  ],
+  "chrom_note": "ve        apex (isolated peak) or Gaussian centre (overlapped) in the unit the app should show:\n            SEC: counted from the injection. Others: the file's own volume axis.\n  must      the app has to report a peak within tol. must=false: allowed but not required (tiny, shoulder, outside the fraction window)\n  pool      fractions you would pool, its span, its A280 area (mAU*unit) on a zero baseline, and the mg the app should show\n            with eps (A280 of 1 mg/mL, 1 cm) = POOL_EPS and the stated UV path: mg = area/1000/(eps*path_mm/10)",
+  "nd": [
     {
-     "ve": 48.0,
-     "tol": 0.3,
-     "must": true,
-     "note": "overlapping, left component"
+      "file": "nd_one_protein_a280.csv",
+      "format": "NanoDrop One Protein A280, tab, UTF-16 LE BOM, no spectra",
+      "n": 3,
+      "names": [
+        "Pool T2-T6 conc",
+        "Pool T2-T6 conc",
+        "Pool T2-T6 conc"
+      ],
+      "r280": [
+        0.57,
+        0.57,
+        0.58
+      ],
+      "mean_abs1": 2.1033,
+      "sd_abs1": 0.028,
+      "mean_eps": 2.4457,
+      "eps": 0.86,
+      "nucleic": 0,
+      "warn_high_ratio": false,
+      "note": "three replicates of one tube"
     },
     {
-     "ve": 50.5,
-     "tol": 0.3,
-     "must": true,
-     "note": "overlapping, right component"
+      "file": "nd_one_with_spectra.csv",
+      "format": "NanoDrop One Protein A280 with spectra 220-350 nm, comma, UTF-8",
+      "n": 3,
+      "names": [
+        "Sample 1",
+        "Sample 2",
+        "Sample 3"
+      ],
+      "r280": [
+        0.57,
+        0.57,
+        0.57
+      ],
+      "mean_abs1": 2.9357,
+      "sd_abs1": 0.0252,
+      "mean_eps": 3.4136,
+      "eps": 0.86,
+      "nucleic": 0,
+      "warn_high_ratio": false,
+      "note": ""
+    },
+    {
+      "file": "nd2000_protein.tsv",
+      "format": "ND-2000 protein A280, tab, UTF-8",
+      "n": 4,
+      "names": [
+        "KPP-MM final",
+        "KPP-MM final",
+        "KPP-MM final",
+        "KPP-MM final"
+      ],
+      "r280": [
+        0.56,
+        0.57,
+        0.56,
+        0.57
+      ],
+      "mean_abs1": 1.5,
+      "sd_abs1": 0.0115,
+      "mean_eps": 1.7442,
+      "eps": 0.86,
+      "nucleic": 0,
+      "warn_high_ratio": false,
+      "note": ""
+    },
+    {
+      "file": "nd_replicates_sd.csv",
+      "format": "NanoDrop One, 5 replicates",
+      "n": 5,
+      "names": [
+        "Rep 1",
+        "Rep 2",
+        "Rep 3",
+        "Rep 4",
+        "Rep 5"
+      ],
+      "r280": [
+        0.57,
+        0.57,
+        0.57,
+        0.57,
+        0.57
+      ],
+      "mean_abs1": 1,
+      "sd_abs1": 0.0791,
+      "mean_eps": 1.1628,
+      "eps": 0.86,
+      "nucleic": 0,
+      "warn_high_ratio": false,
+      "note": "mean 1.000, SD 0.0791"
+    },
+    {
+      "file": "nd_nucleic.csv",
+      "format": "NanoDrop One dsDNA, ng/uL",
+      "n": 0,
+      "names": [],
+      "r280": [],
+      "mean_abs1": null,
+      "sd_abs1": null,
+      "mean_eps": null,
+      "eps": 0.86,
+      "nucleic": 1,
+      "warn_high_ratio": false,
+      "note": "a nucleic acid reading is never a protein concentration"
+    },
+    {
+      "file": "nd_high_260_280.csv",
+      "format": "NanoDrop One, A260/A280 1.25",
+      "n": 1,
+      "names": [
+        "IMAC pool unfiltered"
+      ],
+      "r280": [
+        1.25
+      ],
+      "mean_abs1": 1.5,
+      "sd_abs1": null,
+      "mean_eps": 1.7442,
+      "eps": 0.86,
+      "nucleic": 0,
+      "warn_high_ratio": true,
+      "note": "should be flagged as nucleic acid contamination"
+    },
+    {
+      "file": "nd_names_commas_unicode.csv",
+      "format": "NanoDrop One, comma CSV, quoted names with commas, quotes and unicode",
+      "n": 3,
+      "names": [
+        "Pool 1.E.7–1.F.6, conc",
+        "KPP-MM α/β 4 °C",
+        "Ulp1 cut, \"final\""
+      ],
+      "r280": [
+        0.56,
+        0.57,
+        0.57
+      ],
+      "mean_abs1": 3.21,
+      "sd_abs1": 0.03,
+      "mean_eps": 3.7326,
+      "eps": 0.86,
+      "nucleic": 0,
+      "warn_high_ratio": false,
+      "note": ""
+    },
+    {
+      "file": "nd_acclaro_ug_ml.csv",
+      "format": "Acclaro nucleic acid corrected concentration in ug/mL",
+      "n": 1,
+      "names": [
+        "Nucleic Acid Corrected Sample"
+      ],
+      "r280": [
+        0.57
+      ],
+      "mean_abs1": 2,
+      "sd_abs1": null,
+      "mean_eps": 2.3256,
+      "eps": 0.86,
+      "nucleic": 0,
+      "warn_high_ratio": false,
+      "note": ""
     }
-   ],
-   "pool": {
-    "label": "T14-T18",
-    "a": 46.25,
-    "b": 52.5,
-    "area": 1599.5,
-    "area_tol_pct": 4,
-    "eps": 1.0,
-    "mg": 7.9975
-   }
-  },
-  {
-   "file": "iex_HiTrap_Q_HP_5mL_u6_comma_utf16.csv",
-   "format": "UNICORN 6 CSV, comma, UTF-16 LE with BOM",
-   "kind": "iex",
-   "step": "Anion exchange",
-   "unit": "mL",
-   "column": "HiTrap Q HP 5 mL",
-   "cv": 4.909,
-   "flow": null,
-   "path_mm": 2,
-   "frac": {
-    "n": 24,
-    "first": "A1",
-    "last": "B12"
-   },
-   "injection": null,
-   "peaks": [
+  ],
+  "nd_note": "n           protein readings the app should keep (nucleic acid readings are not protein)\n  mean_abs1   mean mg/mL with \"1 Abs = 1 mg/mL\" (no coefficient set anywhere): the mean A280 (10 mm)\n  mean_eps    mean mg/mL when the A280 of a 1 mg/mL solution is set to EPS: mean A280 / EPS\n  sd_abs1     sample SD (n-1) of the readings with 1 Abs = 1 mg/mL\n  names       sample names exactly as they should be shown\n  r280        A260/A280 of each reading\nFixed values (no randomness), so the means are exact.",
+  "mg": [
     {
-     "ve": 40.0,
-     "tol": 0.25,
-     "must": true,
-     "note": "main peak with a shoulder"
+      "file": "hplc_min_flow_known_u7.csv",
+      "note": "x in minutes, flow 0.5 mL/min in the file, mAU",
+      "unit": "min",
+      "flow": 0.5,
+      "pool": "F1-F6",
+      "path_mm": 10,
+      "eps": 1,
+      "area": 2506.63,
+      "mg": 1.2533
     },
     {
-     "ve": 41.3,
-     "tol": 0.35,
-     "must": false,
-     "note": "shoulder"
+      "file": "hplc_min_flow_missing_u7.csv",
+      "note": "x in minutes, no flow in the file: no mg until a flow is typed (0.5 mL/min)",
+      "unit": "min",
+      "flow": null,
+      "typed_flow": 0.5,
+      "pool": "F1-F6",
+      "path_mm": 10,
+      "eps": 1,
+      "area": 2506.63,
+      "mg": null,
+      "mg_with_flow": 1.2533
     },
     {
-     "ve": 46.0,
-     "tol": 0.15,
-     "must": true,
-     "note": "small late peak on a drifting baseline"
+      "file": "hplc_au_ml_u7.csv",
+      "note": "y in AU (not mAU), x in mL: the app shows it in mAU, so the area is in mAU*mL",
+      "unit": "mL",
+      "flow": null,
+      "pool": "F1-F6",
+      "path_mm": 10,
+      "eps": 1,
+      "area": 2506.63,
+      "mg": 2.5066
     }
-   ],
-   "forbid": [
+  ],
+  "lastfrac": [
     {
-     "ve": 36.0,
-     "tol": 0.3,
-     "note": "negative dip, never a peak"
+      "file": "lastfrac_median_u7.csv",
+      "note": "no logged end: the last fraction is one median width (1 mL), not 30 mL to the end of the trace",
+      "pool": "T4-T6",
+      "vol": 3,
+      "n": 6,
+      "first": "T1",
+      "last": "T6",
+      "card_note": "not logged"
+    },
+    {
+      "file": "lastfrac_logged_end_u7.csv",
+      "note": "logged end of fractionation at 56.4 mL: the last fraction is 1.4 mL",
+      "pool": "T5-T6",
+      "vol": 2.4,
+      "n": 6,
+      "first": "T1",
+      "last": "T6",
+      "card_note": null
+    },
+    {
+      "file": "lastfrac_wide_logged_u7.csv",
+      "note": "logged end gives a last fraction of 1.7 mL, more than 1.5 times the median: the card warns",
+      "pool": "T5-T6",
+      "vol": 2.7,
+      "n": 6,
+      "first": "T1",
+      "last": "T6",
+      "card_note": "1.5 times"
+    },
+    {
+      "file": "lastfrac_tube_gap_u7.csv",
+      "note": "T4 is followed by T8, 5 mL later: T4 counts as one median width (1 mL), not 5 mL",
+      "pool": "T3-T4",
+      "vol": 2,
+      "n": 7,
+      "first": "T1",
+      "last": "T10",
+      "card_note": null
     }
-   ],
-   "pool": null
-  },
-  {
-   "file": "run12_HisTrap_5ml_u5.asc",
-   "format": "UNICORN 5 .asc with run prefix",
-   "kind": "imac",
-   "step": "IMAC",
-   "unit": "mL",
-   "column": "HisTrap 5 mL",
-   "cv": null,
-   "flow": null,
-   "path_mm": 2,
-   "frac": {
-    "n": 12,
-    "first": "A1",
-    "last": "A12"
-   },
-   "injection": null,
-   "peaks": [
+  ],
+  "synthetic": [
     {
-     "ve": 42.4,
-     "tol": 0.12,
-     "must": true,
-     "note": "step elution peak"
-    },
-    {
-     "ve": 8.0,
-     "tol": 0.5,
-     "must": false,
-     "note": "flow-through, outside the window"
+      "file": "synthetic.csv"
     }
-   ],
-   "pool": {
-    "label": "A2-A5",
-    "a": 41.0,
-    "b": 45.0,
-    "area": 1200.18,
-    "area_tol_pct": 9,
-    "eps": 1.0,
-    "mg": 6.0009,
-    "tol_note": "The app draws a straight baseline under the pool between the low points outside it (it corrects the UV rise from imidazole on a step), while this area is on a zero baseline. A pool cut on a peak tail reads 4-7% lower that way. Agreed with the lead as a known, accepted difference."
-   }
-  },
-  {
-   "file": "sec_S200_Increase_minutes_u7.csv",
-   "format": "UNICORN 7 CSV, comma, UTF-8, time axis in minutes",
-   "kind": "sec",
-   "step": "Size exclusion",
-   "unit": "min",
-   "column": "Superdex 200 Increase 10/300 GL",
-   "cv": null,
-   "flow": null,
-   "path_mm": 2,
-   "frac": {
-    "n": 72,
-    "first": "1.A.1",
-    "last": "1.F.12"
-   },
-   "injection": 3.0,
-   "peaks": [
-    {
-     "ve": 17.6,
-     "tol": 0.15,
-     "must": true,
-     "note": "Ve 8.8 mL at 0.5 mL/min, minutes from injection"
-    },
-    {
-     "ve": 28.4,
-     "tol": 0.15,
-     "must": true,
-     "note": "Ve 14.2 mL at 0.5 mL/min, minutes from injection"
-    },
-    {
-     "ve": 33.0,
-     "tol": 0.15,
-     "must": true,
-     "note": "Ve 16.5 mL at 0.5 mL/min, minutes from injection"
-    }
-   ],
-   "pool": {
-    "label": "1.C.10-1.D.4",
-    "a": 26.5,
-    "b": 30.0,
-    "area": 255.81,
-    "area_tol_pct": 4,
-    "eps": 1.0,
-    "mg": null,
-    "unit_note": "area in mAU*min, no mg on a time axis without a flow"
-   }
-  },
-  {
-   "file": "sec_Superose6_plates_u7_tab.csv",
-   "format": "UNICORN 7 CSV, tab, UTF-8, two 96-well plates, injection at 4.0 mL",
-   "kind": "sec",
-   "step": "Size exclusion",
-   "unit": "mL",
-   "column": "Superose 6 Increase 10/300 GL",
-   "cv": 23.562,
-   "flow": null,
-   "path_mm": 2,
-   "frac": {
-    "n": 110,
-    "first": "1.A.1",
-    "last": "2.B.2"
-   },
-   "injection": 4.0,
-   "peaks": [
-    {
-     "ve": 9.0,
-     "tol": 0.08,
-     "must": true,
-     "note": "Ve from injection"
-    },
-    {
-     "ve": 15.6,
-     "tol": 0.08,
-     "must": true,
-     "note": "Ve from injection"
-    },
-    {
-     "ve": 18.4,
-     "tol": 0.08,
-     "must": true,
-     "note": "Ve from injection"
-    }
-   ],
-   "pool": {
-    "label": "1.D.9-1.E.4",
-    "a": 14.8,
-    "b": 16.4,
-    "area": 99.07,
-    "area_tol_pct": 4,
-    "eps": 1.0,
-    "mg": 0.4954
-   }
-  },
-  {
-   "file": "sec_Sup6_basic_unicorn7.zip",
-   "format": "UNICORN 7 result archive (.zip, zip64 curve entries, float32 arrays)",
-   "kind": "sec",
-   "step": "Size exclusion",
-   "unit": "mL",
-   "column": "Superose 6 Increase 10/300 GL",
-   "cv": 23.562,
-   "flow": 0.5,
-   "temp": 21.5,
-   "path_mm": 2,
-   "frac": {
-    "n": 102,
-    "first": "1.A.1",
-    "last": "2.A.6"
-   },
-   "injection": 29.46053,
-   "peaks": [
-    {
-     "ve": 8.6,
-     "tol": 0.08,
-     "must": true,
-     "note": "Ve from injection"
-    },
-    {
-     "ve": 15.3,
-     "tol": 0.08,
-     "must": true,
-     "note": "Ve from injection"
-    },
-    {
-     "ve": 17.9,
-     "tol": 0.08,
-     "must": true,
-     "note": "Ve from injection"
-    }
-   ],
-   "forbid": [
-    {
-     "ve": 12.0,
-     "tol": 0.3,
-     "note": "peak only in the derived UV_CUT_TEMP@100,BASEM curve"
-    }
-   ],
-   "pool": {
-    "label": "1.D.12-1.E.8",
-    "a": 14.4,
-    "b": 16.2,
-    "area": 86.13,
-    "area_tol_pct": 4,
-    "eps": 1.0,
-    "mg": 0.4307
-   }
-  },
-  {
-   "file": "261022_PS_KPP_polish_001_001.zip",
-   "format": "UNICORN 7 result archive, 200,000 points, no SEC word in the file name",
-   "kind": "sec",
-   "step": "Size exclusion",
-   "unit": "mL",
-   "column": "Superdex 200 Increase 10/300 GL",
-   "cv": 24.0,
-   "flow": 0.75,
-   "path_mm": 10,
-   "frac": {
-    "n": 32,
-    "first": "1.A.1",
-    "last": "1.C.8"
-   },
-   "injection": 12.0,
-   "peaks": [
-    {
-     "ve": 10.5,
-     "tol": 0.25,
-     "must": true,
-     "note": "overlapping pair, left"
-    },
-    {
-     "ve": 11.3,
-     "tol": 0.25,
-     "must": false,
-     "note": "overlapping pair, right (resolution 0.5, no valley)"
-    },
-    {
-     "ve": 14.0,
-     "tol": 0.2,
-     "must": true,
-     "note": "main peak"
-    },
-    {
-     "ve": 14.9,
-     "tol": 0.35,
-     "must": false,
-     "note": "shoulder on the main peak"
-    },
-    {
-     "ve": 18.5,
-     "tol": 0.3,
-     "must": false,
-     "note": "tiny peak, under 1% of the area"
-    }
-   ],
-   "forbid": [
-    {
-     "ve": 19.8,
-     "tol": 0.25,
-     "note": "negative dip"
-    }
-   ],
-   "pool": null,
-   "slow_ok_s": 15
-  },
-  {
-   "file": "sec_Sup6_edge_unicorn7.zip",
-   "format": "UNICORN 7 result archive, main peak apex at the last fraction boundary",
-   "kind": "sec",
-   "step": "Size exclusion",
-   "unit": "mL",
-   "column": "Superose 6 Increase 10/300 GL",
-   "cv": 23.562,
-   "flow": 0.5,
-   "path_mm": 2,
-   "frac": {
-    "n": 20,
-    "first": "1.A.1",
-    "last": "1.B.8"
-   },
-   "injection": 1.0,
-   "peaks": [
-    {
-     "ve": 12.0,
-     "tol": 0.08,
-     "must": true,
-     "note": "inside the fractions"
-    },
-    {
-     "ve": 16.0,
-     "tol": 0.1,
-     "must": true,
-     "note": "apex exactly at the end of the fraction range"
-    }
-   ],
-   "pool": null
-  }
- ],
- "chrom_note": "ve        apex (isolated peak) or Gaussian centre (overlapped) in the unit the app should show:\n            SEC: counted from the injection. Others: the file's own volume axis.\n  must      the app has to report a peak within tol. must=false: allowed but not required (tiny, shoulder, outside the fraction window)\n  pool      fractions you would pool, its span, its A280 area (mAU*unit) on a zero baseline, and the mg the app should show\n            with eps (A280 of 1 mg/mL, 1 cm) = POOL_EPS and the stated UV path: mg = area/1000/(eps*path_mm/10)",
- "nd": [
-  {
-   "file": "nd_one_protein_a280.csv",
-   "format": "NanoDrop One Protein A280, tab, UTF-16 LE BOM, no spectra",
-   "n": 3,
-   "names": [
-    "Pool T2-T6 conc",
-    "Pool T2-T6 conc",
-    "Pool T2-T6 conc"
-   ],
-   "r280": [
-    0.57,
-    0.57,
-    0.58
-   ],
-   "mean_abs1": 2.1033,
-   "sd_abs1": 0.028,
-   "mean_eps": 2.4457,
-   "eps": 0.86,
-   "nucleic": 0,
-   "warn_high_ratio": false,
-   "note": "three replicates of one tube"
-  },
-  {
-   "file": "nd_one_with_spectra.csv",
-   "format": "NanoDrop One Protein A280 with spectra 220-350 nm, comma, UTF-8",
-   "n": 3,
-   "names": [
-    "Sample 1",
-    "Sample 2",
-    "Sample 3"
-   ],
-   "r280": [
-    0.57,
-    0.57,
-    0.57
-   ],
-   "mean_abs1": 2.9357,
-   "sd_abs1": 0.0252,
-   "mean_eps": 3.4136,
-   "eps": 0.86,
-   "nucleic": 0,
-   "warn_high_ratio": false,
-   "note": ""
-  },
-  {
-   "file": "nd2000_protein.tsv",
-   "format": "ND-2000 protein A280, tab, UTF-8",
-   "n": 4,
-   "names": [
-    "KPP-MM final",
-    "KPP-MM final",
-    "KPP-MM final",
-    "KPP-MM final"
-   ],
-   "r280": [
-    0.56,
-    0.57,
-    0.56,
-    0.57
-   ],
-   "mean_abs1": 1.5,
-   "sd_abs1": 0.0115,
-   "mean_eps": 1.7442,
-   "eps": 0.86,
-   "nucleic": 0,
-   "warn_high_ratio": false,
-   "note": ""
-  },
-  {
-   "file": "nd_replicates_sd.csv",
-   "format": "NanoDrop One, 5 replicates",
-   "n": 5,
-   "names": [
-    "Rep 1",
-    "Rep 2",
-    "Rep 3",
-    "Rep 4",
-    "Rep 5"
-   ],
-   "r280": [
-    0.57,
-    0.57,
-    0.57,
-    0.57,
-    0.57
-   ],
-   "mean_abs1": 1.0,
-   "sd_abs1": 0.0791,
-   "mean_eps": 1.1628,
-   "eps": 0.86,
-   "nucleic": 0,
-   "warn_high_ratio": false,
-   "note": "mean 1.000, SD 0.0791"
-  },
-  {
-   "file": "nd_nucleic.csv",
-   "format": "NanoDrop One dsDNA, ng/uL",
-   "n": 0,
-   "names": [],
-   "r280": [],
-   "mean_abs1": null,
-   "sd_abs1": null,
-   "mean_eps": null,
-   "eps": 0.86,
-   "nucleic": 1,
-   "warn_high_ratio": false,
-   "note": "a nucleic acid reading is never a protein concentration"
-  },
-  {
-   "file": "nd_high_260_280.csv",
-   "format": "NanoDrop One, A260/A280 1.25",
-   "n": 1,
-   "names": [
-    "IMAC pool unfiltered"
-   ],
-   "r280": [
-    1.25
-   ],
-   "mean_abs1": 1.5,
-   "sd_abs1": null,
-   "mean_eps": 1.7442,
-   "eps": 0.86,
-   "nucleic": 0,
-   "warn_high_ratio": true,
-   "note": "should be flagged as nucleic acid contamination"
-  },
-  {
-   "file": "nd_names_commas_unicode.csv",
-   "format": "NanoDrop One, comma CSV, quoted names with commas, quotes and unicode",
-   "n": 3,
-   "names": [
-    "Pool 1.E.7–1.F.6, conc",
-    "KPP-MM α/β 4 °C",
-    "Ulp1 cut, \"final\""
-   ],
-   "r280": [
-    0.56,
-    0.57,
-    0.57
-   ],
-   "mean_abs1": 3.21,
-   "sd_abs1": 0.03,
-   "mean_eps": 3.7326,
-   "eps": 0.86,
-   "nucleic": 0,
-   "warn_high_ratio": false,
-   "note": ""
-  },
-  {
-   "file": "nd_acclaro_ug_ml.csv",
-   "format": "Acclaro nucleic acid corrected concentration in ug/mL",
-   "n": 1,
-   "names": [
-    "Nucleic Acid Corrected Sample"
-   ],
-   "r280": [
-    0.57
-   ],
-   "mean_abs1": 2.0,
-   "sd_abs1": null,
-   "mean_eps": 2.3256,
-   "eps": 0.86,
-   "nucleic": 0,
-   "warn_high_ratio": false,
-   "note": ""
-  }
- ],
- "nd_note": "n           protein readings the app should keep (nucleic acid readings are not protein)\n  mean_abs1   mean mg/mL with \"1 Abs = 1 mg/mL\" (no coefficient set anywhere): the mean A280 (10 mm)\n  mean_eps    mean mg/mL when the A280 of a 1 mg/mL solution is set to EPS: mean A280 / EPS\n  sd_abs1     sample SD (n-1) of the readings with 1 Abs = 1 mg/mL\n  names       sample names exactly as they should be shown\n  r280        A260/A280 of each reading\nFixed values (no randomness), so the means are exact.",
- "mg": [
-  {
-   "file": "hplc_min_flow_known_u7.csv",
-   "note": "x in minutes, flow 0.5 mL/min in the file, mAU",
-   "unit": "min",
-   "flow": 0.5,
-   "pool": "F1-F6",
-   "path_mm": 10,
-   "eps": 1.0,
-   "area": 2506.63,
-   "mg": 1.2533
-  },
-  {
-   "file": "hplc_min_flow_missing_u7.csv",
-   "note": "x in minutes, no flow in the file: no mg until a flow is typed (0.5 mL/min)",
-   "unit": "min",
-   "flow": null,
-   "typed_flow": 0.5,
-   "pool": "F1-F6",
-   "path_mm": 10,
-   "eps": 1.0,
-   "area": 2506.63,
-   "mg": null,
-   "mg_with_flow": 1.2533
-  },
-  {
-   "file": "hplc_au_ml_u7.csv",
-   "note": "y in AU (not mAU), x in mL: the app shows it in mAU, so the area is in mAU*mL",
-   "unit": "mL",
-   "flow": null,
-   "pool": "F1-F6",
-   "path_mm": 10,
-   "eps": 1.0,
-   "area": 2506.63,
-   "mg": 2.5066
-  }
- ],
- "lastfrac": [
-  {
-   "file": "lastfrac_median_u7.csv",
-   "note": "no logged end: the last fraction is one median width (1 mL), not 30 mL to the end of the trace",
-   "pool": "T4-T6",
-   "vol": 3.0,
-   "n": 6,
-   "first": "T1",
-   "last": "T6",
-   "card_note": "not logged"
-  },
-  {
-   "file": "lastfrac_logged_end_u7.csv",
-   "note": "logged end of fractionation at 56.4 mL: the last fraction is 1.4 mL",
-   "pool": "T5-T6",
-   "vol": 2.4,
-   "n": 6,
-   "first": "T1",
-   "last": "T6",
-   "card_note": null
-  },
-  {
-   "file": "lastfrac_wide_logged_u7.csv",
-   "note": "logged end gives a last fraction of 1.7 mL, more than 1.5 times the median: the card warns",
-   "pool": "T5-T6",
-   "vol": 2.7,
-   "n": 6,
-   "first": "T1",
-   "last": "T6",
-   "card_note": "1.5 times"
-  },
-  {
-   "file": "lastfrac_tube_gap_u7.csv",
-   "note": "T4 is followed by T8, 5 mL later: T4 counts as one median width (1 mL), not 5 mL",
-   "pool": "T3-T4",
-   "vol": 2.0,
-   "n": 7,
-   "first": "T1",
-   "last": "T10",
-   "card_note": null
-  }
- ]
+  ]
 }
