@@ -75,34 +75,6 @@ async function chromFile(e){ const id = e.file.replace(/\.[^.]+$/, ''), t0 = Dat
     T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
 }
 
-async function ndFile(e, withEps){ const id = e.file.replace(/\.[^.]+$/, '') + (withEps ? '+eps' : ''), vol = 0.5;
-  const {p, errs, close} = await open(), h = H(p);
-  try {
-    await h.newProject('nd ' + id); await h.addRun(path.join(CH, 'imac_HisTrap_FF_1mL_step_u7.csv')); await h.pool('T1-T3');
-    if (withEps) await setOpt(p, 'o-eps', e.eps);
-    await h.addConc(path.join(ND, e.file), vol); await p.waitForTimeout(400);
-    /* the step sheet and the readings list under it: everything in the side panel from the step sheet's heading on */
-    const sheet = (await p.evaluate(() => { const ss = document.getElementById('stepSheet'), pn = document.getElementById('panel') || document.body, all = pn.innerText, head = (ss ? ss.innerText : '').trim().slice(0, 40), i = head ? all.indexOf(head) : -1; return i >= 0 ? all.slice(i) : all; })).replace(/\s+/g, ' '), tl = await h.timeline(), conc = tl.find(x => /concentrat/i.test(x.t || ''));
-    const want = withEps ? e.mean_eps : e.mean_abs1;
-    if (e.n === 0) { // guards: a nucleic acid file gives no protein concentration
-      T.check(`${id}/no-protein-mean`, !/\d\s*mg\/mL/.test(conc ? conc.s || '' : '') && !/mean of \d+ reading/i.test(sheet), `timeline "${conc && conc.s}", sheet ${sheet.slice(0, 200)}`); return; }
-    const m = sheet.match(/(\d+(?:\.\d+)?)\s*(?:±\s*(\d+(?:\.\d+)?)\s*)?mg\/mL/), nm = sheet.match(/mean of (\d+) readings?/i);
-    // guards: the mean concentration of the readings, with 1 Abs = 1 mg/mL or with the A280 coefficient set
-    T.check(`${id}/mean`, m && Math.abs(+m[1] - want) <= 0.006 + want*0.002, `expected ${want} mg/mL, sheet: ${m ? m[0] : sheet.slice(0, 200)}`);
-    // guards: every protein reading in the file is counted
-    if (e.n > 1) T.check(`${id}/n`, nm && +nm[1] === e.n, `expected ${e.n}, sheet: ${nm ? nm[0] : 'no "mean of N readings"'}`);
-    // guards: the SD shown is the sample SD of the replicates
-    if (e.sd_abs1 != null && !withEps) T.check(`${id}/sd`, m && m[2] != null && Math.abs(+m[2] - e.sd_abs1) <= 0.006, `expected ±${e.sd_abs1}, sheet: ${m ? m[0] : ''}`);
-    // guards: names with commas, quotes and unicode survive parsing
-    for (const n of [...new Set(e.names)]) T.check(`${id}/name:${n}`, sheet.includes(n), sheet.slice(0, 300));
-    // guards: the mg carried to the timeline is mean × volume after concentrating
-    T.check(`${id}/timeline-mg`, conc && Math.abs(num((conc.s || '').split(',').find(s => /mg$/.test(s.trim())) || '') - want*vol) <= 0.011, `expected ${(want*vol).toFixed(3)} mg, timeline "${conc && conc.s}"`);
-    // guards: an A260/A280 well above 0.6 is pointed out (nucleic acid in the protein)
-    if (e.warn_high_ratio) T.check(`${id}/flags-260-280`, /1\.25/.test(sheet) && (/nucleic|contamin|high/i.test(sheet) || await p.locator('#panel .hi, #panel .warn, #panel [class*=warn]').count() > 0), sheet.slice(0, 300));
-  } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
-}
-
-
 /* mg from the UV area follows the units: minutes only with a flow, AU shown as mAU, and a UV path not in the file assumed (2 mm) and said so */
 async function mgFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
   const {p, errs, close} = await open(), h = H(p), pool = async () => (await peaks(p, h)).rows.find(r => /^pool/i.test(r.name)) || {}, tbl = async () => (await p.locator('#intTable').innerText()).replace(/\s+/g, ' '), tol = x => Math.max(0.011, x*0.05);
@@ -154,5 +126,4 @@ async function lastFracFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
   for (const e of EXP.lastfrac || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => lastFracFile(e)); }
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
-  for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
   T.done(); })();

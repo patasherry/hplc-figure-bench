@@ -539,8 +539,8 @@
    "format": "NanoDrop One, comma CSV, quoted names with commas, quotes and unicode",
    "n": 3,
    "names": [
-    "Pool 1.E.7\u20131.F.6, conc",
-    "KPP-MM \u03b1/\u03b2 4 \u00b0C",
+    "Pool 1.E.7–1.F.6, conc",
+    "KPP-MM α/β 4 °C",
     "Ulp1 cut, \"final\""
    ],
    "r280": [
