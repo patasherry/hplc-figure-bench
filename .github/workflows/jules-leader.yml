@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   lead:
-    if: (github.event_name != 'issues' || github.event.label.name == 'jules-queue') && (github.event_name != 'issue_comment' || contains(github.event.comment.user.login, 'jules'))
+    if: (github.event_name != 'issues' || github.event.label.name == 'jules-queue') && (github.event_name != 'issue_comment' || contains(github.event.comment.user.login, 'jules') || startsWith(github.event.comment.body, 'Answer for Jules'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # one leader at a time; the heartbeat below waits outside this lock
