@@ -176,6 +176,10 @@ def one_pass(only=None):
 
 
 if __name__ == '__main__':
+    # the local manager (tools/local-manager) runs these reviews itself: if it is active, an old reviewer task steps aside
+    mgr = Path.home() / '.hfb-manager-state.json'
+    if '--pr' not in sys.argv and mgr.exists() and time.time() - mgr.stat().st_mtime < 20*60:
+        sys.exit('The local manager is running and does the reviews, so the reviewer is not needed.')
     if not TOKEN:
         sys.exit(f'No GitHub token. Put {{"token": "..."}} in {CONF}')
     if '--pr' in sys.argv:
