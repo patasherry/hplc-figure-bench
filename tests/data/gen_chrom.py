@@ -330,9 +330,72 @@ def last_frac_runs():
     gap = [(50.0 + i, f'T{i + 1}') for i in range(4)] + [(58.0 + i, f'T{i + 8}') for i in range(3)]
     last_frac('lastfrac_tube_gap_u7.csv', gap, log, 'T3-T4', 2.0, 7, 'T1', 'T10', 'T4 is followed by T8, 5 mL later: T4 counts as one median width (1 mL), not 5 mL', None)
 
+
+# ---------------------------------------------------------------- L. time parsing formats
+def time_formats():
+    x = np.round(np.arange(0, 10.0001, 0.01), 4)
+    y = np.zeros_like(x)
+    ev = [(1.0, 'F1')]
+
+    # 1. ISO format
+    log_iso = [(0.0, 'Method Run 2026-10-23 16:00:00 Method: iso Result: /path')]
+    write_unicorn_csv(os.path.join(OUT, 'time_iso_u7.csv'), [
+        ('UV', 'ml', 'mAU', x, y),
+        ('Fraction', 'ml', 'Fraction', ev, None),
+        ('Run Log', 'ml', 'Logbook', log_iso, None)
+    ])
+    add(dict(file='time_iso_u7.csv', format='UNICORN 7 CSV', kind='sec', step='Size exclusion',
+             unit='mL', column='iso',
+             frac=dict(n=1, first='F1', last='F1'), injection=0.0,
+             peaks=[], forbid=[], pool=None, time='2026-10-23T16:00:00.000Z'))
+
+    # 2. DD/MM/YYYY
+    log_ddmm = [(0.0, 'Method Run 23/10/2026 16:00:00 Method: ddmm Result: /path')]
+    write_unicorn_csv(os.path.join(OUT, 'time_ddmm_u7.csv'), [
+        ('UV', 'ml', 'mAU', x, y),
+        ('Fraction', 'ml', 'Fraction', ev, None),
+        ('Run Log', 'ml', 'Logbook', log_ddmm, None)
+    ])
+    add(dict(file='time_ddmm_u7.csv', format='UNICORN 7 CSV', kind='sec', step='Size exclusion',
+             unit='mL', column='ddmm',
+             frac=dict(n=1, first='F1', last='F1'), injection=0.0,
+             peaks=[], forbid=[], pool=None, time='2026-10-23T16:00:00.000Z'))
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, time_formats): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()
     json.dump(doc, open(p, 'w'), indent=1); print(f'{len(EXP)} chromatograms -> {OUT}')
+
+# ---------------------------------------------------------------- L. time parsing formats
+def time_formats():
+    from gen_chrom import write_unicorn_csv, frac_events, signal, write_unicorn_zip
+    import json, os, numpy as np
+
+    x = np.linspace(0, 10.0, 100)
+    y = np.zeros_like(x)
+    ev = [(1.0, 'F1')]
+
+    # 1. ISO format
+    log_iso = [(0.0, 'Method Run 2026-10-23 16:00:00 Method: iso Result: /path')]
+    write_unicorn_csv(os.path.join(OUT, 'time_iso_u7.csv'), [
+        ('UV', 'ml', 'mAU', x, y),
+        ('Fraction', 'ml', 'Fraction', ev, None),
+        ('Run Log', 'ml', 'Logbook', log_iso, None)
+    ])
+    add(dict(file='time_iso_u7.csv', format='UNICORN 7 CSV', kind='sec', step='Size exclusion',
+             unit='mL', column='iso',
+             frac=dict(n=1, first='F1', last='F1'), injection=0.0,
+             peaks=[], forbid=[], pool=None, time='2026-10-23T16:00:00.000Z'))
+
+    # 2. DD/MM/YYYY
+    log_ddmm = [(0.0, 'Method Run 23/10/2026 16:00:00 Method: ddmm Result: /path')]
+    write_unicorn_csv(os.path.join(OUT, 'time_ddmm_u7.csv'), [
+        ('UV', 'ml', 'mAU', x, y),
+        ('Fraction', 'ml', 'Fraction', ev, None),
+        ('Run Log', 'ml', 'Logbook', log_ddmm, None)
+    ])
+    add(dict(file='time_ddmm_u7.csv', format='UNICORN 7 CSV', kind='sec', step='Size exclusion',
+             unit='mL', column='ddmm',
+             frac=dict(n=1, first='F1', last='F1'), injection=0.0,
+             peaks=[], forbid=[], pool=None, time='2026-10-23T16:00:00.000Z'))
