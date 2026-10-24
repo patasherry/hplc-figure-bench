@@ -37,7 +37,10 @@ module.exports = async ({github, context, core}) => {
     const {id} = await getState(n); if (id) await github.rest.issues.updateComment({owner, repo, comment_id: id, body}); else await github.rest.issues.createComment({owner, repo, issue_number: n, body}); };
   const prompt = (i, attempt, lastErr) => `${i.title}\n\n${i.body || ''}\n\nThis task is GitHub issue #${i.number} in ${owner}/${repo}. Follow AGENTS.md and read docs/CODEMAP.md first if it exists. Put "Closes #${i.number}" in the PR description.` +
     (attempt > 1 ? `\n\nNOTE: attempt ${attempt}. The previous attempt ended with an error${lastErr ? ` (${lastErr})` : ''}. Work in smaller steps. If the task is large, do only the first useful part, open the PR, and list what remains in the PR description.` : '');
-  const start = async (i, attempt, lastErr) => { const s = await jules('sessions', {title: `#${i.number} ${i.title}`.slice(0, 120), prompt: prompt(i, attempt, lastErr),
+  /* before a new session starts, tell any earlier session of the same issue to stop, so a restarted job can't open a second PR later */
+  const start = async (i, attempt, lastErr) => { const {s: old} = await getState(i.number).catch(() => ({s: {}}));
+    if (old && old.session) await jules(`${old.session}:sendMessage`, {prompt: 'This task was restarted as a new session. Stop now: do not commit and do not open a pull request. Nothing more is needed from this session.'}).catch(() => {});
+    const s = await jules('sessions', {title: `#${i.number} ${i.title}`.slice(0, 120), prompt: prompt(i, attempt, lastErr),
       sourceContext: {source: `sources/github/${owner}/${repo}`, githubRepoContext: {startingBranch: 'main'}}, requirePlanApproval: false, automationMode: 'AUTO_CREATE_PR'});
     await putState(i.number, {session: s.name, attempt, since: new Date().toISOString()}, `Jules leader: started attempt ${attempt} (${s.name}).`); await setLabels(i.number, [L.run], [L.queue]); say(`#${i.number}: started attempt ${attempt}`); };
 
