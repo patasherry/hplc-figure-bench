@@ -110,6 +110,8 @@ Jules' questions go up a ladder, run by the local manager on the owner's PC: the
 
 **Automatic review gate.** When the Test suite finishes on a PR that changes the app, the local manager checks it with plain code: only the app, `tests/`, `docs/` and `README.md` change; no regressions; at least one check fails on main and passes on the PR ("Checks this PR fixes"); no check it adds fails on the PR; no existing check is deleted or commented out; no test reaches into `window.__HFB`; `expected.json` is not rewritten; no merge conflict. A PR that fails is closed, the reasons are added to its issue, and the issue goes back to `jules-queue` (at most twice, then `for-coordinator`). A PR that passes gets `ready-for-lead`, plus `needs-owner` if its issue still needs the owner's OK.
 
+The gate also checks PRs that only change tests or docs when they carry stray files. When the only problems are stray files (scratch scripts, logs) or a merge conflict, the manager **rebuilds the PR itself**: it applies just the PR's own app and test changes on the current main as a new PR on `claude/issue-N`, closes the original, and the new PR goes through the tests and the gate. No Jules retry is spent on that.
+
 **Claude Code jobs.** When Jules is out of tries (sent back twice by the gate, or 3 failed sessions), the issue gets `for-claude-code`. The local manager runs Claude Code on the owner's PC in a separate git worktree (`~/hfb-work/issue-N`, from `origin/main`), limited to editing files and running the test suites. The manager checks that only the app and `tests/` changed, commits, pushes the branch `claude/issue-N` (the only branches it ever pushes) and opens the PR. That PR goes through the Test suite and the gate like any other, and if it fails it goes to the lead. At most 3 jobs a day (`max_claude_jobs`). Claude Code (read-only) is also the last step of the question ladder before the lead.
 
 **Direction board (#222).** The local model, Gemini and ChatGPT hold a team meeting there by themselves: every 4 hours while the owner's PC is on (`board_every_hours`), after every 5 merged PRs (`board_every_merges`), when fewer than 5 jobs are queued, weekly on Sunday, or when the owner comments **Discuss: <topic>**. Each meeting opens with a review of the work in progress (what is running, stuck, sent back by the gate or merged, and how the board's own earlier proposals turned out), then each adviser proposes up to 3 directions with their case (problem, evidence, risk, rejected alternative), debates them for 2 rounds (reading the whole discussion, arguing for or against, revising or withdrawing its own), and votes 1 to 5. The meeting is posted live: opening, each round, decision. Proposals with an average of 3.5+ and no score below 3 are adopted as `needs-triage` + `from-board` issues carrying the votes and the debate, up to 3 a meeting and only while fewer than 10 jobs wait, so number changes still reach the owner through triage. The owner can reply **No n** to drop an adopted one or **OK n** to add one, but nothing waits for him.
@@ -117,14 +119,14 @@ Jules' questions go up a ladder, run by the local manager on the owner's PC: the
 - **Jules** works from issues labeled `jules`.
 - **Claude** reviews PRs changing the app automatically and is called on any PR with `@claude`.
 - Agents never push to another agent's branch: a revision goes on a new branch.
-- Only one PR at a time should change the HTML file, because changes to the same large file will conflict.
+- Several PRs may change the HTML file at once (up to 8). A PR that conflicts with main is rebuilt on main by the local manager when its own diff still applies, and otherwise restarted by the gate.
 
 ## The Jules leader (automatic queue)
 
 `.github/workflows/jules-leader.yml` is rule-based, with no AI:
 
 - **`from-patrick`:** issues the owner reports. They start before any other queued issue. `docs/GOALS.md` sets the order of everything else.
-- **`jules-queue`:** issues with this label get a Jules session through the Jules API, at most 15 at a time (Jules Pro), of which at most 4 change the app. Issues whose title starts with Tests, Audit or Docs don't count toward the 4. Label: `jules-running`.
+- **`jules-queue`:** issues with this label get a Jules session through the Jules API, at most 15 at a time (Jules Pro), of which at most 8 change the app. Issues whose title starts with Tests, Audit or Docs don't count toward the 8. Label: `jules-running`.
 - **Questions:** when Jules asks something, the leader posts the question on the issue and tells Jules to decide by these rules and open the PR. After 6 replies the issue gets `needs-coordinator`. A person (or the coordinator) can answer instead by commenting on the issue with a line starting `Answer for Jules:`. The leader passes that text to the running session.
 - **Checks:** every 10 minutes while work is queued or running, and whenever Jules comments or a test run finishes.
 - **Failures:** a failed session is retried with "work in smaller steps", up to 3 attempts. After that the issue gets `needs-coordinator`.

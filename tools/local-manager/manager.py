@@ -457,6 +457,7 @@ def owner_replies(s):
 
 
 # ---------- review gate: plain-code checks on every finished Jules PR, so the lead only sees PRs that pass ----------
+APP_ = 'hplc-figure-bench(WF1.13).html'
 ALLOWED = re.compile(r'^(hplc-figure-bench\(WF1\.13\)\.html|README\.md|tests/(suites|data|lib)/|tests/README\.md|docs/)')
 MAX_SENDBACKS = 2
 
@@ -480,7 +481,7 @@ def gate_problems(pr, files, diff, rep):
     if own_fail:
         out.append('A check this PR adds fails on the PR itself: ' + '; '.join(own_fail[:3])[:500] + '. Make the test work through the UI.')
     fixes = rep.split('Checks this PR fixes', 1)[1].split('</details>', 1)[0] if 'Checks this PR fixes' in rep else ''
-    if not re.search(r'^- \d\d_', fixes, re.M):
+    if APP_ in files and not re.search(r'^- \d\d_', fixes, re.M):
         out.append('No check fails on main and passes on this PR, so nothing shows the fix works. Add a check that fails on main, for example one that reads the exact number or text the issue says is wrong.')
     tests = [b for b in re.split(r'(?m)^diff --git ', diff) if b.startswith('a/tests/suites/')]
     removed = [l for b in tests for l in b.splitlines() if l.startswith('-') and not l.startswith('---') and re.search(r'T\.check\(|await T\.t\(', l)]
@@ -500,6 +501,49 @@ def gate_problems(pr, files, diff, rep):
     return out
 
 
+CLEAN_MARK = '<!-- clean-rebuild -->'
+JUNK_ONLY = ('It adds or changes files outside', 'It conflicts with main')
+
+
+def clean_rebuild(pr, files, issue):
+    """Re-apply only the PR's own app and test changes on the current main, as a new PR. Returns its number, or None."""
+    n, keep = pr['number'], [f for f in files if ALLOWED.match(f)]
+    if not keep or DRY:
+        return None
+    wt, patch = WORK / f'clean-{n}', WORK / f'clean-{n}.diff'
+    branch = f'claude/issue-{issue}'
+    try:
+        WORK.mkdir(parents=True, exist_ok=True)
+        git('fetch', '-q', 'origin', f'+refs/pull/{n}/head:refs/remotes/pr/{n}', 'main')
+        base = git('merge-base', 'origin/main', f'pr/{n}')
+        patch.write_text(git('diff', '--binary', base, f'pr/{n}', '--', *keep) + '\n', encoding='utf-8')
+        if wt.exists():
+            git('worktree', 'remove', '--force', str(wt))
+        git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+        git('apply', '--3way', str(patch), cwd=wt)  # raises on a conflict it can't settle
+        if git('diff', '--name-only', '--diff-filter=U', cwd=wt):
+            raise RuntimeError('conflicts remain')
+        git('add', '-A', cwd=wt)
+        git('-c', 'user.name=HFB local manager', '-c', 'user.email=hfb-manager@users.noreply.github.com', 'commit', '-q', '-m', f'{pr["title"]} (#{issue})\n\nJules\' changes from #{n}, rebuilt on main by the local manager without stray files.', cwd=wt)
+        auth = __import__('base64').b64encode(f'x-access-token:{rv.TOKEN}'.encode()).decode()
+        git('-c', f'http.https://github.com/.extraheader=AUTHORIZATION: basic {auth}', 'push', '-q', '-f', 'origin', f'HEAD:refs/heads/{branch}', cwd=wt, timeout=600)
+        stray = [f for f in files if not ALLOWED.match(f)]
+        new = gh(f'repos/{REPO}/pulls', 'POST', {'title': pr['title'], 'head': branch, 'base': 'main',
+                 'body': f'{CLEAN_MARK}\nCloses #{issue}. Jules\' changes from #{n}, rebuilt on the current main by the local manager' +
+                         (f', without {len(stray)} stray file(s): {", ".join(stray[:8])}' if stray else '') + f'.\n\n---\nJules\' description:\n\n{(pr.get("body") or "")[:6000]}'})
+        post(n, f'**Rebuilt by the local manager** as #{new["number"]}: same app and test changes, on the current main' + (', without the stray files' if stray else '') + '. It goes through the tests and the review gate.' + SIGN.format(rv.MODEL))
+        gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
+        return new['number']
+    except Exception as e:
+        log(f'PR #{n}: clean rebuild failed: {e}')
+        return None
+    finally:
+        try:
+            git('worktree', 'remove', '--force', str(wt))
+        except Exception:
+            pass
+
+
 def gate(s):
     s.setdefault('gated', {}); s.setdefault('sentback', {})
     for pr in gh(f'repos/{REPO}/pulls?state=open&per_page=50'):
@@ -511,8 +555,8 @@ def gate(s):
         if not t or t['status'] != 'completed':
             continue  # wait for the tests
         files = [f['filename'] for f in gh(f'repos/{REPO}/pulls/{n}/files?per_page=100')]
-        if rv.APP not in files:
-            s['gated'][str(n)] = sha
+        if rv.APP not in files and all(ALLOWED.match(f) for f in files):
+            s['gated'][str(n)] = sha  # tests or docs only and nothing stray: the leader's own merge rule handles it
             continue
         full = gh(f'repos/{REPO}/pulls/{n}')
         diff = gh(f'repos/{REPO}/pulls/{n}', accept='application/vnd.github.v3.diff')
@@ -520,6 +564,12 @@ def gate(s):
         m = re.search(r'(?:closes|fixes)\s+#(\d+)', pr.get('body') or '', re.I)
         issue = int(m.group(1)) if m else None
         mine = 'Generated with [Claude Code]' in (pr.get('body') or '') or CC_MARK in (pr.get('body') or '')  # the lead's rebuilds and Claude Code jobs are not sent back to Jules
+        if probs and issue and all(p.startswith(JUNK_ONLY) for p in probs) and CLEAN_MARK not in (pr.get('body') or ''):
+            new = clean_rebuild(full, files, issue)  # only stray files or a conflict: fix it here instead of a Jules retry
+            if new:
+                log(f'PR #{n} rebuilt clean as #{new}')
+                s['gated'][str(n)] = sha
+                continue
         if probs and issue and not mine and s['sentback'].get(str(issue), 0) < MAX_SENDBACKS:
             k = s['sentback'][str(issue)] = s['sentback'].get(str(issue), 0) + 1
             notes = '\n'.join(f'- {x}' for x in probs)

@@ -9,7 +9,7 @@
 //      report become new issues labelled `needs-triage`. A person or the coordinator moves them to `jules-queue`.
 // State lives on the issues: labels plus one hidden JSON comment per issue.
 /* Jules Pro runs 15 sessions at once. Sessions that change the app file are capped lower, because their PRs all edit the same large file and collide when merged. */
-const MAX_RUNNING = 15, MAX_APP = 4, LIGHT = i => /^(tests?|audit|docs?)\b/i.test(i.title || ''), MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, API = 'https://jules.googleapis.com/v1alpha/';
+const MAX_RUNNING = 15, MAX_APP = 8, LIGHT = i => /^(tests?|audit|docs?)\b/i.test(i.title || ''), MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, API = 'https://jules.googleapis.com/v1alpha/';
 const L = {queue: 'jules-queue', run: 'jules-running', done: 'jules-done', fail: 'needs-coordinator', triage: 'needs-triage'};
 const MARK = '<!-- jules-leader ';
 const SAFE = f => /^(tests\/|docs\/|\.github\/ISSUE_TEMPLATE\/)/.test(f) || f === 'README.md' || f === 'tests/README.md';
@@ -35,7 +35,7 @@ module.exports = async ({github, context, core}) => {
     const c = cs.reverse().find(x => x.body.startsWith(MARK)); return c ? {id: c.id, s: JSON.parse(c.body.slice(MARK.length, c.body.indexOf(' -->')))} : {id: null, s: {}}; };
   const putState = async (n, st, note) => { const body = `${MARK}${JSON.stringify(st)} -->\n${note}`;
     const {id} = await getState(n); if (id) await github.rest.issues.updateComment({owner, repo, comment_id: id, body}); else await github.rest.issues.createComment({owner, repo, issue_number: n, body}); };
-  const prompt = (i, attempt, lastErr) => `${i.title}\n\n${i.body || ''}\n\nThis task is GitHub issue #${i.number} in ${owner}/${repo}. Follow AGENTS.md and read docs/CODEMAP.md first if it exists. Put "Closes #${i.number}" in the PR description.` +
+  const prompt = (i, attempt, lastErr) => `${i.title}\n\n${i.body || ''}\n\nThis task is GitHub issue #${i.number} in ${owner}/${repo}. Follow AGENTS.md and read docs/CODEMAP.md first if it exists. Commit only hplc-figure-bench(WF1.13).html and files under tests/suites, tests/data and tests/lib (and README.md or docs/ when the task says so): never scratch scripts, patch files, logs or results. Put "Closes #${i.number}" in the PR description.` +
     (attempt > 1 ? `\n\nNOTE: attempt ${attempt}. The previous attempt ended with an error${lastErr ? ` (${lastErr})` : ''}. Work in smaller steps. If the task is large, do only the first useful part, open the PR, and list what remains in the PR description.` : '');
   /* before a new session starts, tell any earlier session of the same issue to stop, so a restarted job can't open a second PR later */
   const start = async (i, attempt, lastErr) => { const {s: old} = await getState(i.number).catch(() => ({s: {}}));
