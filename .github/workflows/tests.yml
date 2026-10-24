@@ -83,6 +83,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: results
+      - name: Files this PR changes
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate --jq '.[].filename' > changed.txt || true
       - name: Summarize
         id: sum
         run: |
@@ -94,6 +99,7 @@ jobs:
               m = re.match(r'(\d\d_)(.*)\.js$', f)
               if m and m.group(1) not in names: names[m.group(1)] = m.group(2).replace('_', ' ')
           rows, regs, fixes, total_reg, missing, newfail = [], [], [], 0, [], []
+          touched = {os.path.basename(f)[:-3] for f in (open('changed.txt').read().split() if os.path.exists('changed.txt') else []) if f.startswith('tests/suites/') and f.endswith('.js')}
           for key, label in names.items():
               d = f'results/results-{key}'
               def counts(sub):
@@ -114,6 +120,9 @@ jobs:
               if nfx: fixes.append(f'**{label}**\n' + fx.group(2).strip())
               nb = sec('Checks only on new')
               if nb: newfail.extend([l for l in nb.group(2).strip().split('\n') if '(FAIL:' in l])
+              # a suite this PR adds or edits runs on main too, so its failing checks land in "Failing on both": they are still new findings
+              fb = sec('Failing on both')
+              if fb: newfail.extend([l for l in fb.group(2).strip().split('\n') if '(FAIL:' in l and l[2:].split('/')[0] in touched])
               rows.append(f'| {label} | {bp} pass, {bf} fail | {np_} pass, {nf} fail | {nfx} | {nr} |')
           head = '### ✅ No regressions' if not total_reg and not missing else (f'### ❌ {total_reg} regression(s)' if total_reg else '### ⚠️ Some suites did not finish')
           out = ['<!-- test-suite-report -->', head, '', '| Suite | main | this PR | Fixed | Regressions |', '|---|---|---|---|---|', *rows, '']
