@@ -1,0 +1,17 @@
+LOCUS       pORISPAN              5000 bp    DNA     circular SYN 01-JAN-2025
+FEATURES             Location/Qualifiers
+     promoter        4700..4780
+                     /label="T7 promoter"
+     CDS             join(4800..5000,1..600)
+                     /label="OrispanProtein"
+                     /translation="MHHHHHHSSGLVPRGSMSSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITLGMDELYK"
+     misc_feature    4805..4822
+                     /label="6xHis"
+     CDS             2000..2860
+                     /label="AmpR"
+                     /translation="MSIQHFRVALIPFFAAFCLPVFAHPETLVKVKDAEDQLGARVGYIELDLNSGKI"
+     rep_origin      3200..3800
+                     /label="ori"
+ORIGIN
+        1 atcg
+//

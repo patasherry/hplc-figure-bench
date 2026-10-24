@@ -11,7 +11,8 @@ const files = {
   noOrig: path.join(GB_DIR, 'gb_no_origin.gb'),
   win: path.join(GB_DIR, 'gb_windows.gb'),
   geneProd: path.join(GB_DIR, 'gb_gene_product.gb'),
-  snapGene: path.join(GB_DIR, 'snapgene_export.dna')
+  snapGene: path.join(GB_DIR, 'snapgene_export.dna'),
+  originSpanningCassette: path.join(GB_DIR, 'gb_origin_spanning_cassette.gb')
 };
 
 (async () => {
@@ -136,6 +137,27 @@ const files = {
       toasts.some(t => t.includes('SnapGene file') || t.includes('Export, then GenBank (.gb)')),
       `toasts: ${toasts.join(' | ')}`
     );
+  });
+
+
+  /* 10. Origin-spanning CDS cassette keeps promoter and excludes plasmid features */
+  await T.t('origin_spanning_cassette', async () => {
+    await p.click('text=All projects').catch(() => {}); await h.wait(400);
+    await h.newProject('GenBank Orispan');
+    await h.gb(files.originSpanningCassette);
+    const st = await status();
+    const txt = await svgText();
+
+    T.check('orispan.status_loaded', st.includes('pORISPAN'), `status: ${st}`);
+    T.check('orispan.promoter', txt.includes('T7 promoter') || txt.includes('T7'), `svg: ${txt}`);
+
+    // AmpR and ori are NOT drawn as features inside the expressed protein.
+    // AmpR isn't in the SVG at all, and 'ori' only appears once (in the plasmid description '... Ampicillin resistance, ori')
+    T.check('orispan.no_amp', !txt.includes('AmpR'), `svg: ${txt}`);
+    T.check('orispan.no_ori_in_cassette', (txt.match(/\bori\b/gi) || []).length <= 1, `svg: ${txt}`);
+
+    // The His tag is drawn at the N-terminus of the protein
+    T.check('orispan.his_tag', txt.includes('6xHis') || txt.includes('His6 protein') || txt.includes('His6-protein'), `svg: ${txt}`);
   });
 
   T.check('no page errors', !errs.length, errs.join(' | '));
