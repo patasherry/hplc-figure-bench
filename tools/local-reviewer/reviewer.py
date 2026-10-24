@@ -59,6 +59,25 @@ def ask_model(system, user):
     return re.sub(r'<think>.*?</think>', '', out, flags=re.S).strip()
 
 
+DATA = re.compile(r'^(?!.*\.(py|js|mjs)$)(tests/data/|.*\.(csv|tsv|txt|json|zip|asc|dat|gb|dna|png|jpe?g|tiff?|xml)$)', re.I)
+
+
+def code_only(diff):
+    """Keep the diff of code and docs; list data files (synthetic test inputs) by name only, so the model reviews code, not numbers."""
+    parts, data = re.split(r'(?=^diff --git )', diff, flags=re.M), []
+    keep = []
+    for p in parts:
+        m = re.match(r'diff --git a/(\S+)', p)
+        if m and DATA.match(m.group(1)):
+            data.append(m.group(1))
+        else:
+            keep.append(p)
+    out = ''.join(keep)
+    if data:
+        out += '\n\n[Data files changed, contents not shown (synthetic test inputs): ' + ', '.join(data) + ']'
+    return out
+
+
 def flags(diff):
     """Checks done by plain code, not the model, so they are always right about what they look for."""
     added = [l[1:] for l in diff.splitlines() if l.startswith('+') and not l.startswith('+++')]
@@ -114,7 +133,8 @@ def review(pr):
             pass
     comments = gh(f'repos/{REPO}/issues/{n}/comments?per_page=100')
     report = next((c['body'] for c in reversed(comments) if '<!-- test-suite-report -->' in c['body']), 'No test report yet.')
-    short = diff if len(diff) <= MAX_DIFF else diff[:MAX_DIFF] + f'\n\n[diff truncated: {len(diff) - MAX_DIFF} more characters not shown]'
+    code = code_only(diff)
+    short = code if len(code) <= MAX_DIFF else code[:MAX_DIFF] + f'\n\n[diff truncated: {len(code) - MAX_DIFF} more characters not shown]'
     user = f"PR #{n}: {pr['title']}\n\nPR description:\n{(pr.get('body') or '')[:6000]}\n\n{issue}\n\nTest report:\n{report[:4000]}\n\nDiff:\n{short}"
     t0 = time.time()
     notes = ask_model(SYSTEM, user)
