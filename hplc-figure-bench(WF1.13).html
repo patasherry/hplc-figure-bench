@@ -4748,7 +4748,7 @@ function sumRows(){
     let secMw = null; if (isSec(r)) { const fit = secFit(secCalFor(r)); if (fit && fit.mw) { const bl = poolBlocks(r), rows = integRows(r).filter(w => bl.some(b => w.apex >= b.a && w.apex <= b.b) && w.sec && w.sec.mw); const top = rows.sort((u, v) => v.area - u.area)[0]; if (top) secMw = {mw: top.sec.mw, ve: top.apex}; } }
     out.push({r, p, vol, pur, purEst, satL: [...new Set(satL)], secMw, purLab: out.purLane && out.purLane[r.id], nd: ndForRun(r)}); });
   /* one basis for every row: NanoDrop amounts when every step has them (in µmol when each step's mass is known), else mg from the A280 area, else area */
-  let basis = out.length && out.every(x => x.nd && x.nd.umol != null) ? 'umol' : out.length && out.every(x => x.nd && x.nd.mg != null) ? 'nd' : out.length && out.every(x => x.p.mg > 0) ? 'mg' : 'area';
+  let basis = out.length && out.every(x => x.nd && x.nd.umol != null) ? 'umol' : out.length && out.every(x => x.nd && x.nd.mg != null) ? 'nd' : out.length && out[0].p.mg > 0 ? 'mg' : 'area'; /* mg whenever the base step has mg: a later step without mg gets a blank yield, not a switch of every step to UV area (#97) */
   /* across a tag cleavage, mass drops by the tag even with every molecule recovered: count molecules instead */
   const kd = x => { const E = ndEpsFor(x.r.id); return E && E.kda > 0 ? E.kda : null; }, forms = new Set(out.map(x => ndForm(x.r)));
   if ((basis === 'mg' || basis === 'nd') && forms.size > 1 && out.every(x => kd(x))) basis = basis === 'mg' ? 'mgmol' : 'ndmol';
