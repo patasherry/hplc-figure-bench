@@ -18,7 +18,7 @@ EPS = 0.86
 EXP = []
 WL = [220 + i for i in range(131)]                     # 220..350 nm, as the NanoDrop One export
 
-def spectrum(a280, r280=0.57):
+def spectrum(a280, r280=0.57, r260230=2.0):
     """a protein-like spectrum: a peak at 280, a ratio a260/a280 = r280, a steep rise below 240, 0 at 340"""
     w = np.array(WL, float); prot = np.exp(-0.5*((w - 278)/11)**2); nuc = np.exp(-0.5*((w - 260)/13)**2); far = np.exp(-(w - 220)/9)
     p280, n280, p260, n260 = np.interp(280, w, prot), np.interp(280, w, nuc), np.interp(260, w, prot), np.interp(260, w, nuc)
@@ -30,7 +30,7 @@ def spectrum(a280, r280=0.57):
 
 def rec(fn, fmt, readings, note='', nucleic=0, warn_high_ratio=False):
     vals = [r[1] for r in readings]
-    EXP.append(dict(file=fn, format=fmt, n=len(readings), names=[r[0] for r in readings], r280=[r[2] for r in readings],
+    EXP.append(dict(file=fn, format=fmt, n=len(readings), names=[r[0] for r in readings], r280=[r[2] for r in readings], r260230=[r[3] if len(r)>3 else None for r in readings], concs=[r[1] for r in readings],
                     mean_abs1=round(st.mean(vals), 4) if vals else None, sd_abs1=round(st.stdev(vals), 4) if len(vals) > 1 else None,
                     mean_eps=round(st.mean(vals)/EPS, 4) if vals else None, eps=EPS, nucleic=nucleic, warn_high_ratio=warn_high_ratio, note=note))
 
@@ -84,6 +84,24 @@ q = lambda s: '"' + s.replace('"', '""') + '"'
 lines = [','.join(ONE_HEAD)] + [','.join([q('10/22/2026 9:58:00 AM'), q(n), f'{a:.3f}', f'{a:.3f}', f'{r:.2f}', q('1 Abs = 1 mg / mL'), '', '', '', '340', '0.011']) for n, a, r in r7]
 w('nd_names_commas_unicode.csv', '\r\n'.join(lines) + '\r\n')
 rec('nd_names_commas_unicode.csv', 'NanoDrop One, comma CSV, quoted names with commas, quotes and unicode', r7)
+
+
+# 8. Proteins and Labels (e.g. Cy5)
+r8 = [('Labeled 1', 1.050, 0.55), ('Labeled 2', 1.080, 0.55)]
+lines = ['\t'.join(['Date', 'Sample Name', 'Protein (mg/mL)', 'A280', 'A260/A280', 'Cy5', 'Sample Type', 'Factor'])] + ['\t'.join(['10/22/2026 11:00:00 AM', n, f'{a:.3f}', f'{a:.3f}', f'{r:.2f}', '0.1', '1 Abs = 1 mg / mL', '1.00']) for n, a, r in r8]
+w('nd_proteins_and_labels.csv', '\r\n'.join(lines) + '\r\n', 'utf-16-le')
+rec('nd_proteins_and_labels.csv', 'Proteins and Labels, tab, UTF-16', r8)
+
+# 9. ug/mL file
+r9 = [('Diluted', 0.250, 0.56)]
+lines = ['\t'.join(['Sample ID', 'User name', 'Date', 'Time', 'ug/ml', 'A280 10 mm', 'A260 10 mm', '260/280', 'Sample Type', 'Factor'])] + ['\t'.join([n, 'PS', '10/22/2026', '12:00', f'{a*1000:.1f}', f'{a:.3f}', f'{a*r:.3f}', f'{r:.2f}', '1 Abs = 1 mg/ml', '1.00']) for n, a, r in r9]
+w('nd_ug_ml.tsv', '\r\n'.join(lines) + '\r\n')
+rec('nd_ug_ml.tsv', 'ug/mL, tab, UTF-8', r9)
+
+# update nucleic
+EXP[4]['r260230'] = [2.10]
+EXP[4]['r280'] = [1.86]
+EXP[4]['concs'] = [152.3]
 
 if __name__ == '__main__':
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}

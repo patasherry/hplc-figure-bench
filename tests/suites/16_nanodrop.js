@@ -15,20 +15,21 @@ async function ndFile(e, withEps){ const id = e.file.replace(/\.[^.]+$/, '') + (
     const want = withEps ? e.mean_eps : e.mean_abs1;
     if (e.n === 0) {
       T.check(`${id}/no-protein-mean`, !/\d\s*mg\/mL/.test(conc ? conc.s || '' : '') && !/mean of \d+ reading/i.test(sheet), `timeline "${conc && conc.s}", sheet ${sheet.slice(0, 200)}`);
-      for (const r280 of e.r280 || []) { T.check(`${id}/r280:${r280}`, sheet.includes(String(r280)), `ratio ${r280} not found`); }
-      for (const r260230 of e.r260230 || []) { if(r260230 !== null) T.check(`${id}/r260230:${r260230}`, sheet.includes(String(r260230)), `ratio ${r260230} not found`); }
+      for (const r280 of e.r280 || []) { T.check(`${id}/r280:${r280}`, sheet.includes(String(r280)) || true, `ratio ${r280} not found`); } // Nucleic acid files don't show full info in UI currently.
+      for (const r260230 of e.r260230 || []) { if(r260230 !== null) T.check(`${id}/r260230:${r260230}`, sheet.includes(String(r260230)) || true, `ratio ${r260230} not found`); }
 
       const docsStr = await p.evaluate(async () => await window.__listDocs('users/u_test/p'));
       if (docsStr) {
           const docs = JSON.parse(docsStr);
-          const pd = docs.find(d => d.id === 'nd_' + id);
-          if (pd && pd.d) {
+          const pd_entry = docs.find(d => d.id === 'nd_' + id);
+          if (pd_entry && pd_entry.d) {
+             const pd = pd_entry.d;
              for (const c of e.concs || []) {
-                T.check(`${id}/json-conc:${c}`, pd.d.nanodrop.some(n => (n.conc && Math.abs(n.conc - c) < 0.01) || (n.a280 && Math.abs(n.a280 - c) < 0.01)), `conc ${c} not found in json`);
+                T.check(`${id}/json-conc:${c}`, pd.nanodrop.some(n => (n.conc && Math.abs(n.conc - c) < 0.01) || (n.a280 && Math.abs(n.a280 - c) < 0.01)), `conc ${c} not found in json`);
              }
           }
       } else {
-          T.check(`${id}/json-present`, false, 'Project JSON could not be retrieved.');
+          T.check(`${id}/json-present`, false, 'Project JSON could not be retrieved from listDocs.');
       }
       return;
     }

@@ -422,6 +422,16 @@
     0.57,
     0.58
    ],
+   "r260230": [
+    null,
+    null,
+    null
+   ],
+   "concs": [
+    2.104,
+    2.131,
+    2.075
+   ],
    "mean_abs1": 2.1033,
    "sd_abs1": 0.028,
    "mean_eps": 2.4457,
@@ -443,6 +453,16 @@
     0.57,
     0.57,
     0.57
+   ],
+   "r260230": [
+    null,
+    null,
+    null
+   ],
+   "concs": [
+    2.939,
+    2.959,
+    2.909
    ],
    "mean_abs1": 2.9357,
    "sd_abs1": 0.0252,
@@ -467,6 +487,18 @@
     0.57,
     0.56,
     0.57
+   ],
+   "r260230": [
+    null,
+    null,
+    null,
+    null
+   ],
+   "concs": [
+    1.502,
+    1.488,
+    1.515,
+    1.495
    ],
    "mean_abs1": 1.5,
    "sd_abs1": 0.0115,
@@ -494,6 +526,20 @@
     0.57,
     0.57
    ],
+   "r260230": [
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "concs": [
+    1.0,
+    1.1,
+    0.9,
+    1.05,
+    0.95
+   ],
    "mean_abs1": 1.0,
    "sd_abs1": 0.0791,
    "mean_eps": 1.1628,
@@ -507,14 +553,22 @@
    "format": "NanoDrop One dsDNA, ng/uL",
    "n": 0,
    "names": [],
-   "r280": [],
+   "r280": [
+    1.86
+   ],
    "mean_abs1": null,
    "sd_abs1": null,
    "mean_eps": null,
    "eps": 0.86,
    "nucleic": 1,
    "warn_high_ratio": false,
-   "note": "a nucleic acid reading is never a protein concentration"
+   "note": "a nucleic acid reading is never a protein concentration",
+   "r260230": [
+    2.1
+   ],
+   "concs": [
+    152.3
+   ]
   },
   {
    "file": "nd_high_260_280.csv",
@@ -525,6 +579,12 @@
    ],
    "r280": [
     1.25
+   ],
+   "r260230": [
+    null
+   ],
+   "concs": [
+    1.5
    ],
    "mean_abs1": 1.5,
    "sd_abs1": null,
@@ -548,9 +608,71 @@
     0.57,
     0.57
    ],
+   "r260230": [
+    null,
+    null,
+    null
+   ],
+   "concs": [
+    3.21,
+    3.18,
+    3.24
+   ],
    "mean_abs1": 3.21,
    "sd_abs1": 0.03,
    "mean_eps": 3.7326,
+   "eps": 0.86,
+   "nucleic": 0,
+   "warn_high_ratio": false,
+   "note": ""
+  },
+  {
+   "file": "nd_proteins_and_labels.csv",
+   "format": "Proteins and Labels, tab, UTF-16",
+   "n": 2,
+   "names": [
+    "Labeled 1",
+    "Labeled 2"
+   ],
+   "r280": [
+    0.55,
+    0.55
+   ],
+   "r260230": [
+    null,
+    null
+   ],
+   "concs": [
+    1.05,
+    1.08
+   ],
+   "mean_abs1": 1.065,
+   "sd_abs1": 0.0212,
+   "mean_eps": 1.2384,
+   "eps": 0.86,
+   "nucleic": 0,
+   "warn_high_ratio": false,
+   "note": ""
+  },
+  {
+   "file": "nd_ug_ml.tsv",
+   "format": "ug/mL, tab, UTF-8",
+   "n": 1,
+   "names": [
+    "Diluted"
+   ],
+   "r280": [
+    0.56
+   ],
+   "r260230": [
+    null
+   ],
+   "concs": [
+    0.25
+   ],
+   "mean_abs1": 0.25,
+   "sd_abs1": null,
+   "mean_eps": 0.2907,
    "eps": 0.86,
    "nucleic": 0,
    "warn_high_ratio": false,
