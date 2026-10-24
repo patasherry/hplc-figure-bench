@@ -85,6 +85,14 @@ lines = [','.join(ONE_HEAD)] + [','.join([q('10/22/2026 9:58:00 AM'), q(n), f'{a
 w('nd_names_commas_unicode.csv', '\r\n'.join(lines) + '\r\n')
 rec('nd_names_commas_unicode.csv', 'NanoDrop One, comma CSV, quoted names with commas, quotes and unicode', r7)
 
+# 8. Acclaro nucleic acid corrected concentration in ug/mL
+r8 = [('Nucleic Acid Corrected Sample', 2.500, 0.57)] # a = conc for rec
+head = ['Sample Name', 'Date & Time', 'A280 Conc. (\u00b5g/mL)', 'A260/A280', 'A280 (Abs)', 'A260 (Abs)', 'Sample Type', 'Baseline Correction (nm)', 'Corrected Conc. (ug/mL)'] + [str(x) for x in WL]
+# Note: for Acclaro, correct concentration by 0.8
+lines = [','.join(head)] + [','.join([n, '10/22/2026 14:13', f'{a*1000:.3f}', f'{r:.2f}', f'{a:.3f}', f'{a*r:.3f}', '1 Abs = 1 mg/mL', '340', f'{a*0.8*1000:.3f}'] + [f'{v:.3f}' for v in spectrum(a, r)]) for n, a, r in r8]
+w('nd_acclaro_ug_ml.csv', '\r\n'.join(lines) + '\r\n')
+rec('nd_acclaro_ug_ml.csv', 'Acclaro nucleic acid corrected concentration in ug/mL', [(r8[0][0], a*0.8, r8[0][2]) for n, a, r in r8])
+
 if __name__ == '__main__':
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['nd'] = EXP; doc['nd_note'] = __doc__.split('Ground truth per file')[1].strip()
