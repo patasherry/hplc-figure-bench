@@ -212,6 +212,17 @@ def sec_min():
              pool=dict(label='1.C.10-1.D.4', a=a - inj, b=b - inj, area=round(ar, 2), area_tol_pct=4, eps=POOL_EPS, mg=None, unit_note='area in mAU*min, no mg on a time axis without a flow')))
 
 # ---------------------------------------------------------------- F. SEC with two plates, UNICORN 7 CSV, tab, UTF-8, injection at 4.0 mL
+
+# ---------------------------------------------------------------- G. Semicolon delimited UNICORN CSV
+def sec_semicolon_csv():
+    fn = 'sec_semicolon_unicorn7.csv'; inj = 3.0; flow = 0.5; t = np.round(np.arange(0, 60.0001, 0.02), 4)
+    y = signal(t, [(inj + 12.0, 1.0, 80.0), (inj + 14.0, 0.4, 30.0)])
+    write_unicorn_csv(os.path.join(OUT, fn), [('UV 1_280', 'min', 'mAU', t, y), ('Cond', 'min', 'mS/cm', t, np.full(t.size, 15.2)), ('Conc B', 'min', '%B', t, np.zeros(t.size)),
+                                              ('Fraction', 'min', 'Fraction', [(0.0, 'Waste'), (13.0, '1.A.1'), (13.5, '1.A.2'), (14.0, '1.A.3'), (14.5, 'Waste')], None), ('Injection', 'min', 'Injection', [(inj, '')], None), ('Run Log', 'min', 'Logbook', [(0.0, 'Method Run 10/22/2026 1:00:00 PM -07:00 Method: S200 Increase sizing Result: /DefaultHome/s200 001'), (0.0, 'Method Started'), (inj, 'Injection'), (60.0, 'Method Ended')], None)], delim=';')
+    add(dict(file=fn, format='UNICORN 7 CSV, semicolon, UTF-8, time axis in minutes', kind='sec', step='Size exclusion', unit='min', column='Superdex 200 Increase 10/300 GL', cv=None, flow=None, path_mm=2,
+             frac=dict(n=3, first='1.A.1', last='1.A.3'), injection=inj,
+             peaks=[dict(note='big', ve=12.0, tol=0.1, must=True), dict(note='shoulder', ve=14.0, tol=0.1, must=True)]))
+
 def sec_plates_csv():
     fn = 'sec_Superose6_plates_u7_tab.csv'; inj = 4.0; x = np.round(np.arange(0, 32.0001, 0.01), 4)
     vs = [(9.0, 0.3, 10.0), (15.6, 0.45, 95.0), (18.4, 0.35, 25.0)]
@@ -331,7 +342,7 @@ def last_frac_runs():
     last_frac('lastfrac_tube_gap_u7.csv', gap, log, 'T3-T4', 2.0, 7, 'T1', 'T10', 'T4 is followed by T8, 5 mL later: T4 counts as one median width (1 mL), not 5 mL', None)
 
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()
