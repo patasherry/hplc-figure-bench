@@ -138,6 +138,11 @@ for (const cloud of [false, true]) await T.t(cloud ? 'persist-cloud' : 'persist-
   T.check(`persist.${tag}.no-error`, !errs.length, errs.join(' | ')); await close(); });
 
 /* ---------------- damaged or partial files ---------------- */
+await T.t('empty-uvs-project', async () => { const {p, errs, close} = await open(), h = H(p);
+  await p.setInputFiles(SEL.importFile, path.join(Q, 'empty_uvs_proj.json')); await p.waitForTimeout(3000);
+  await h.step('figure'); await p.waitForTimeout(500);
+  T.check('empty-uvs.no-error', !errs.length, errs.join(' | ')); await close(); });
+
 /* a project file with unusable entries opens with what is usable, says what was skipped, and raises no error */
 await T.t('damaged-project', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Partial source'); await h.dropFiles(F.his);
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const good = path.join(ROOT, 'results', 'partial_src.json'); await dl.saveAs(good);

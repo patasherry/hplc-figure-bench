@@ -1629,7 +1629,7 @@ function fracNotes(run){
   if (asm.length) t.push(`The end of ${nm(asm)} was not logged, so it is taken as one median fraction width.`);
   return t.length ? `<br>${t.join(' ')}` : '';
 }
-const uvOf = run => { run.uvs.forEach(c => { if (/^au$/i.test(String(c.yu || '').trim())) { c.ys = c.ys.map(v => v*1000); c.yu = 'mAU'; } }); return run.uvs[run.uvi] || run.uvs[0]; };
+const uvOf = run => { if (!run.uvs || !run.uvs.length) return { xs: new Float64Array([0]), ys: new Float64Array([0]), yu: 'mAU', name: 'None' }; run.uvs.forEach(c => { if (/^au$/i.test(String(c.yu || '').trim())) { c.ys = c.ys.map(v => v*1000); c.yu = 'mAU'; } }); return run.uvs[run.uvi] || run.uvs[0]; };
 function runAuto(run){
   const uv = uvOf(run), dMin = uv.xs[0], dMax = uv.xs[uv.xs.length-1];
   const segs = fracSegments(run, dMax).filter(s => !s.waste);
