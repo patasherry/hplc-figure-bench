@@ -319,9 +319,33 @@ def one_pass():
         save(s)
 
 
+def selftest():
+    """Ping every agent once (one tiny question each) and print OK or FAIL. Posts nothing."""
+    q = 'Reply with the single word OK.'
+    checks = (('GitHub (token)', lambda: gh(f'repos/{REPO}')['full_name']),
+              ('Local model (Ollama)', lambda: rv.ask_model('You are a test.', q)),
+              ('Gemini (REST API)', lambda: ask_gemini(q)),
+              ('Claude Code (read-only)', lambda: ask_claude(q)),
+              ('ChatGPT (Codex, read-only)', lambda: ask_codex(q)))
+    bad = 0
+    for name, f in checks:
+        t0 = time.time()
+        try:
+            out = re.sub(r'<think>.*?</think>', '', str(f()), flags=re.S).strip().replace('\n', ' ')
+            print(f'OK    {name:28} {int(time.time() - t0):>4} s  {out[:60]}', flush=True)
+        except Exception as e:
+            bad += 1
+            print(f'FAIL  {name:28} {int(time.time() - t0):>4} s  {str(e)[:200]}', flush=True)
+    print('Antigravity: no automatic route. The manager labels issues for-antigravity for you to paste in by hand.')
+    print('All agents reachable.' if not bad else f'{bad} agent(s) not reachable.')
+    sys.exit(1 if bad else 0)
+
+
 if __name__ == '__main__':
     if not rv.TOKEN:
         sys.exit(f'No GitHub token. Put {{"token": "..."}} in {rv.CONF}')
+    if '--selftest' in sys.argv:
+        selftest()
     log(f'manager started ({rv.MODEL}; caps {CAP}){" DRY RUN" if DRY else ""}')
     while True:
         one_pass()
