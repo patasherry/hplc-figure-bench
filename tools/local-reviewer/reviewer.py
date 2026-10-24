@@ -28,7 +28,7 @@ MAX_DIFF = 60000  # characters of diff sent to the model; the rest is summarised
 cfg = json.loads(CONF.read_text(encoding='utf-8')) if CONF.exists() else {}
 TOKEN = cfg.get('token') or os.environ.get('GITHUB_TOKEN', '')
 REPO = cfg.get('repo', 'patasherry/hplc-figure-bench')
-MODEL = cfg.get('model', 'qwen3-coder:30b')
+MODEL = cfg.get('model', 'qwen3:30b-a3b')
 OLLAMA = cfg.get('ollama', 'http://localhost:11434')
 
 
@@ -48,7 +48,9 @@ def ask_model(system, user):
     req = urllib.request.Request(OLLAMA + '/api/chat', data=json.dumps(body).encode(),
                                  headers={'Content-Type': 'application/json'})
     with urllib.request.urlopen(req, timeout=1800) as r:
-        return json.loads(r.read())['message']['content'].strip()
+        out = json.loads(r.read())['message']['content']
+    # reasoning models (Qwen3, gpt-oss and others) may put their working in <think> tags: keep only the answer
+    return re.sub(r'<think>.*?</think>', '', out, flags=re.S).strip()
 
 
 def flags(diff):
