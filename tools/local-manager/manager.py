@@ -323,9 +323,30 @@ def digest(s):
     log('digest posted')
 
 
+def self_update(s):
+    """Once an hour: git pull. If the manager's own code changed, exit so the Startup loop restarts it on the new code."""
+    if DRY or time.time() - s.get('pulled', 0) < 3600 or not (ROOT / '.git').exists():
+        return
+    s['pulled'] = time.time()
+    git = lambda *a: subprocess.run(['git', '-C', str(ROOT), *a], capture_output=True, text=True, timeout=120)
+    before = git('rev-parse', 'HEAD').stdout.strip()
+    r = git('pull', '--ff-only', '-q')
+    if r.returncode:
+        log(f'self-update: git pull failed: {(r.stderr or r.stdout).strip()[:200]}')
+        return
+    after = git('rev-parse', 'HEAD').stdout.strip()
+    if before != after:
+        changed = git('diff', '--name-only', before, after).stdout.split()
+        log(f'self-update: pulled {after[:7]} ({len(changed)} files)')
+        if any(f.startswith(('tools/local-manager/', 'tools/local-reviewer/')) for f in changed):
+            save(s)
+            log('self-update: my code changed, restarting')
+            sys.exit(0)
+
+
 def one_pass():
     s = load()
-    for name, duty in (('review', lambda s: None if DRY else rv.one_pass()), ('questions', jules_questions), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest)):
+    for name, duty in (('review', lambda s: None if DRY else rv.one_pass()), ('questions', jules_questions), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         try:
             duty(s)
         except Exception as e:
