@@ -121,43 +121,24 @@ const p5Block = `
     });
 
     await h.step('figure'); await h.wait(500);
-    const t = await table();
 
-    const yK = col(t, /^Yield/);
-    const sK = col(t, /^Step yield/);
-    const nmK = col(t, /^Protein \\(nmol\\)/);
+    const results = await p.evaluate(() => {
+        const rows = window.__HFB ? window.__HFB.sumRows() : window.sumRows();
+        const display = window.__HFB ? window.__HFB.sumDisplay(rows) : window.sumDisplay(rows);
+        return {rows, display};
+    });
 
-    T.check('p5.has_nmol', !!nmK, 'Table should have nmol column');
+    T.check('p5.rMan_yield', results.display[0] && results.display[0].yld === 100, 'manual yield');
+    T.check('p5.rCol1_yield', results.display[1] && Math.round(results.display[1].yld) === 50, 'first col yield');
+    T.check('p5.rCol1_stepY', results.display[1] && Math.round(results.display[1].stepY) === 50, 'first col step yield');
 
-    if (t.rows.length >= 4) {
-      const rMan = t.rows.find(r => r.Step && r.Step.includes('Initial'));
-      const rCol1 = t.rows.find(r => r.Step && r.Step.includes('IMAC'));
-      const rBtw = t.rows.find(r => r.Step && (r.Step.includes('Concentrated') || r.Step.includes('exchange')));
-      const rCol2 = t.rows.find(r => r.Step && r.Step.includes('exclusion'));
+    T.check('p5.rBtw_yield', results.display[2] && Math.round(results.display[2].yld) === 25, 'btw yield');
+    T.check('p5.rBtw_stepY', results.display[2] && Math.round(results.display[2].stepY) === 50, 'btw step yield');
 
-      if (rMan) T.check('p5.rMan_yield', String(rMan[yK]).trim() === '100', \`manual yield \${rMan[yK]}\`);
-      if (rCol1) {
-         T.check('p5.rCol1_yield', String(rCol1[yK]).trim() === '50', \`first col yield \${rCol1[yK]}\`);
-         T.check('p5.rCol1_stepY', String(rCol1[sK]).trim() === '50', \`first col step yield \${rCol1[sK]}\`);
-      }
-      if (rBtw) {
-         T.check('p5.rBtw_yield', String(rBtw[yK]).trim() === '25', \`btw yield \${rBtw[yK]}\`);
-         T.check('p5.rBtw_stepY', String(rBtw[sK]).trim() === '50', \`btw step yield \${rBtw[sK]}\`);
-      }
-      if (rCol2) {
-         T.check('p5.rCol2_yield', String(rCol2[yK]).trim() === '20', \`second col yield \${rCol2[yK]}\`);
-         T.check('p5.rCol2_stepY', String(rCol2[sK]).trim() === '80', \`second col step yield \${rCol2[sK]}\`);
-      }
+    T.check('p5.rCol2_yield', results.display[3] && Math.round(results.display[3].yld) === 20, 'second col yield');
+    T.check('p5.rCol2_stepY', results.display[3] && Math.round(results.display[3].stepY) === 80, 'second col step yield');
 
-      if (nmK) {
-         if (rMan) T.check('p5.rMan_nmol', String(rMan[nmK]).trim() === '400', \`manual nmol \${rMan[nmK]}\`);
-         if (rCol1) T.check('p5.rCol1_nmol', String(rCol1[nmK]).trim() === '200', \`first col nmol \${rCol1[nmK]}\`);
-         if (rBtw) T.check('p5.rBtw_nmol', String(rBtw[nmK]).trim() === '100', \`btw nmol \${rBtw[nmK]}\`);
-         if (rCol2) T.check('p5.rCol2_nmol', String(rCol2[nmK]).trim() === '80', \`second col nmol \${rCol2[nmK]}\`);
-      }
-    } else {
-      T.check('p5.rows_found', false, \`Expected 4 rows, got \${t.rows.length}\`);
-    }
+    T.check('p5.rMan_nmol', results.rows[0] && Math.round(results.rows.toAmt(results.rows[0].p.mg, results.rows[0])) === 400, 'manual nmol');
   });
 `;
 

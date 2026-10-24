@@ -1,0 +1,10 @@
+00_smoke.js                        pass   4  fail   0  13s
+05_quick.js                        pass  10  fail   0  50s
+10_data_truth.js                   pass   0  fail   0  5s
+11_unicorn_zip.js                  pass  14  fail   1  27s
+12_genbank.js                      pass  32  fail   0  38s
+14_peaks.js                        pass  16  fail   0  67s
+15_import_sec.js                   pass  31  fail   0  29s
+16_nanodrop.js                     pass  44  fail   0  50s
+20_science.js                      pass 126  fail   0  131s
+21_methods.js                      pass  13  fail   0  71s
