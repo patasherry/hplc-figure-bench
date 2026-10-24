@@ -441,6 +441,92 @@ def owner_replies(s):
         s['owner'][str(reply['id'])] = 1
 
 
+# ---------- review gate: plain-code checks on every finished Jules PR, so the lead only sees PRs that pass ----------
+ALLOWED = re.compile(r'^(hplc-figure-bench\(WF1\.13\)\.html|README\.md|tests/(suites|data|lib)/|tests/README\.md|docs/)')
+MAX_SENDBACKS = 2
+
+
+def report_of(n):
+    cs = comments(n)
+    return next((c['body'] for c in reversed(cs) if '<!-- test-suite-report -->' in c['body']), '')
+
+
+def gate_problems(pr, files, diff, rep):
+    """What a lead would send back. Each line says what's wrong and what to do instead."""
+    out = []
+    bad = [f for f in files if not ALLOWED.match(f)]
+    if bad:
+        out.append(f"It adds or changes files outside the app and tests/: {', '.join(bad[:6])}. Remove them (AGENTS.md: no dependencies, no scratch files).")
+    if '### ✅ No regressions' not in rep:
+        out.append('The Test suite reports regressions. Fix them, or explain in the PR why the new result is right.')
+    new_fail = rep.split('#### New checks failing', 1)[1].split('Full results', 1)[0] if '#### New checks failing' in rep else ''
+    own = sorted({m for m in re.findall(r'^- (\d\d_\w+)/', new_fail, re.M)} & {re.sub(r'^tests/suites/(\d\d_\w+)\.js$', r'\1', f) for f in files})
+    own_fail = [l[2:].strip() for l in new_fail.splitlines() if l.startswith('- ') and any(l[2:].startswith(o + '/') for o in own) and 'perf.' not in l]
+    if own_fail:
+        out.append('A check this PR adds fails on the PR itself: ' + '; '.join(own_fail[:3])[:500] + '. Make the test work through the UI.')
+    fixes = rep.split('Checks this PR fixes', 1)[1].split('</details>', 1)[0] if 'Checks this PR fixes' in rep else ''
+    if not re.search(r'^- \d\d_', fixes, re.M):
+        out.append('No check fails on main and passes on this PR, so nothing shows the fix works. Add a check that fails on main, for example one that reads the exact number or text the issue says is wrong.')
+    tests = [b for b in re.split(r'(?m)^diff --git ', diff) if b.startswith('a/tests/suites/')]
+    removed = [l for b in tests for l in b.splitlines() if l.startswith('-') and not l.startswith('---') and re.search(r'T\.check\(|await T\.t\(', l)]
+    added = {l[1:] for b in tests for l in b.splitlines() if l.startswith('+')}
+    gone = [l for l in removed if l[1:] not in added]
+    if gone:
+        out.append(f'It deletes or changes {len(gone)} existing check(s), for example `{gone[0][1:].strip()[:120]}`. Keep existing checks (AGENTS.md).')
+    if any(re.match(r'^\+\s*(/\*|//).*(await T\.t\(|T\.check\()', l) for b in tests for l in b.splitlines()):
+        out.append('It comments out existing tests. Leave them running (AGENTS.md).')
+    if any(re.search(r'window\.__HFB|window\.__set|window\.__render|HFB\.runs', l) for b in tests for l in b.splitlines() if l.startswith('+')):
+        out.append("The test reaches into the app's internals (window.__HFB). Tests must drive the app only through its UI and DOM (AGENTS.md).")
+    churn = sum(1 for b in re.split(r'(?m)^diff --git ', diff) if b.startswith('a/tests/data/expected.json') for l in b.splitlines() if l.startswith('-') and not l.startswith('---'))
+    if churn > 40:
+        out.append(f'It rewrites {churn} lines of tests/data/expected.json. Change it only by running the generator, and only for the new file.')
+    if pr.get('mergeable_state') == 'dirty':
+        out.append('It conflicts with main. A fresh attempt starts from the current main.')
+    return out
+
+
+def gate(s):
+    s.setdefault('gated', {}); s.setdefault('sentback', {})
+    for pr in gh(f'repos/{REPO}/pulls?state=open&per_page=50'):
+        n, sha = pr['number'], pr['head']['sha']
+        if pr.get('draft') or s['gated'].get(str(n)) == sha:
+            continue
+        runs = gh(f'repos/{REPO}/actions/runs?head_sha={sha}').get('workflow_runs', [])
+        t = next((r for r in runs if r['name'] == 'Test suite'), None)
+        if not t or t['status'] != 'completed':
+            continue  # wait for the tests
+        files = [f['filename'] for f in gh(f'repos/{REPO}/pulls/{n}/files?per_page=100')]
+        if rv.APP not in files:
+            s['gated'][str(n)] = sha
+            continue
+        full = gh(f'repos/{REPO}/pulls/{n}')
+        diff = gh(f'repos/{REPO}/pulls/{n}', accept='application/vnd.github.v3.diff')
+        probs = gate_problems(full, files, diff, report_of(n))
+        m = re.search(r'(?:closes|fixes)\s+#(\d+)', pr.get('body') or '', re.I)
+        issue = int(m.group(1)) if m else None
+        mine = 'Generated with [Claude Code]' in (pr.get('body') or '')  # the lead's own rebuilds are not sent back to Jules (Jules' PRs come from the same account)
+        if probs and issue and not mine and s['sentback'].get(str(issue), 0) < MAX_SENDBACKS:
+            k = s['sentback'][str(issue)] = s['sentback'].get(str(issue), 0) + 1
+            notes = '\n'.join(f'- {x}' for x in probs)
+            body = gh(f'repos/{REPO}/issues/{issue}').get('body') or ''
+            if not DRY:
+                gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n### Automatic review of PR #{n} (attempt {k}): fix these, then open a new PR\n\n{notes}\n\nKeep the parts of #{n} that are right. Then commit and open the PR.'})
+                post(n, f'**Sent back to Jules** by the automatic review (no Claude tokens used):\n\n{notes}\n\nThe instructions were added to #{issue}.' + SIGN.format(rv.MODEL))
+                gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
+            label(issue, add=['jules-queue'], remove=['jules-done', 'jules-running', 'needs-coordinator', 'for-coordinator'])
+            log(f'PR #{n} sent back to Jules on #{issue} ({len(probs)} problems)')
+        elif probs:
+            label(n, add=['for-coordinator'])
+            post(n, '**For the lead:** the automatic review found problems' + (' after two send-backs' if issue and not mine else '') + ':\n\n' + '\n'.join(f'- {x}' for x in probs) + SIGN.format(rv.MODEL))
+            log(f'PR #{n} flagged for the lead')
+        else:
+            needs = issue and 'needs-owner' in {l['name'] for l in gh(f'repos/{REPO}/issues/{issue}').get('labels', [])}
+            label(n, add=['ready-for-lead'] + (['needs-owner'] if needs else []))
+            post(n, '**Passed the automatic review:** only the app and tests change, no regressions, at least one check fails on main and passes here, no existing check removed, and no test reaches into the app.' + (' Waiting for Patrick\'s OK on the issue before merging.' if needs else ' Ready for the lead to merge.') + SIGN.format(rv.MODEL))
+            log(f'PR #{n} passed the gate')
+        s['gated'][str(n)] = sha
+
+
 def stuck(s):
     for pr in gh(f'repos/{REPO}/pulls?state=open&per_page=50'):
         k = 'f' + pr['head']['sha']
@@ -535,7 +621,7 @@ def self_update(s):
 
 def one_pass():
     s = load()
-    for name, duty in (('review', lambda s: None if DRY else rv.one_pass()), ('questions', jules_questions), ('owner', owner_replies), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    for name, duty in (('review', lambda s: None if DRY else rv.one_pass()), ('questions', jules_questions), ('owner', owner_replies), ('gate', gate), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         try:
             duty(s)
         except Exception as e:
