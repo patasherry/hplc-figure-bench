@@ -1609,17 +1609,26 @@ function detectPeaks(t){
 
 /* ---------- runs: windows and fractions ---------- */
 function fracSegments(run, dataEnd){
-  const F = run.fracs, out = [];
-  for (let i=0;i<F.length;i++){ const a = F[i].x, b = i+1 < F.length ? F[i+1].x : dataEnd; if (b > a) out.push({i, a, b, label: F[i].label, waste: /waste/i.test(F[i].label)}); }
-  /* the last fraction would run to the end of the trace (wash, re-equilibration), and so would a fraction before a jump in tube numbers:
-     end the last one at the logged end of fractionation, else one median width; cut a jump to one median width when it is over 1.5 times it */
-  const tube = s => { const m = /(\d+)\D*$/.exec(s.label); return m ? +m[1] : NaN; };
-  out.forEach((s, k) => { const n = out[k+1]; s.gap = !!n && !s.waste && !n.waste && tube(n) - tube(s) > 1; });
-  const L = out[out.length-1], fe = +run.fracEnd, ws = out.filter((s, k) => !s.waste && !s.gap && k + 1 < out.length).map(s => s.b - s.a).sort((p, q) => p - q);
-  const med = ws.length ? (ws.length % 2 ? ws[ws.length >> 1] : (ws[ws.length/2 - 1] + ws[ws.length/2])/2) : 0;
-  out.forEach(s => { s.med = med; if (s.gap && med && s.b - s.a > 1.5*med) { s.b = s.a + med; s.capped = true; } });
-  if (L && !L.waste && L.i === F.length - 1) { if (run.fracEnd != null && run.fracEnd !== '' && isFinite(fe) && fe > L.a) L.b = Math.min(L.b, fe); else if (med && L.a + med < L.b) { L.b = L.a + med; L.assumed = true; } }
-  return out;
+  const cacheKey = `${dataEnd}|${run.fracEnd}|${JSON.stringify(run.fracs)}`;
+  if (run._fracCache && run._fracCache.key === cacheKey) return run._fracCache.val;
+
+  const compute = () => {
+    const F = run.fracs, out = [];
+    for (let i=0;i<F.length;i++){ const a = F[i].x, b = i+1 < F.length ? F[i+1].x : dataEnd; if (b > a) out.push({i, a, b, label: F[i].label, waste: /waste/i.test(F[i].label)}); }
+    /* the last fraction would run to the end of the trace (wash, re-equilibration), and so would a fraction before a jump in tube numbers:
+       end the last one at the logged end of fractionation, else one median width; cut a jump to one median width when it is over 1.5 times it */
+    const tube = s => { const m = /(\d+)\D*$/.exec(s.label); return m ? +m[1] : NaN; };
+    out.forEach((s, k) => { const n = out[k+1]; s.gap = !!n && !s.waste && !n.waste && tube(n) - tube(s) > 1; });
+    const L = out[out.length-1], fe = +run.fracEnd, ws = out.filter((s, k) => !s.waste && !s.gap && k + 1 < out.length).map(s => s.b - s.a).sort((p, q) => p - q);
+    const med = ws.length ? (ws.length % 2 ? ws[ws.length >> 1] : (ws[ws.length/2 - 1] + ws[ws.length/2])/2) : 0;
+    out.forEach(s => { s.med = med; if (s.gap && med && s.b - s.a > 1.5*med) { s.b = s.a + med; s.capped = true; } });
+    if (L && !L.waste && L.i === F.length - 1) { if (run.fracEnd != null && run.fracEnd !== '' && isFinite(fe) && fe > L.a) L.b = Math.min(L.b, fe); else if (med && L.a + med < L.b) { L.b = L.a + med; L.assumed = true; } }
+    return out;
+  };
+
+  const val = compute();
+  run._fracCache = { key: cacheKey, val };
+  return val;
 }
 /* a note for the run card when a pooled fraction is much wider than the others, or its end is assumed */
 function fracNotes(run){
@@ -1924,15 +1933,27 @@ const windowXY = (q, lo, hi) => { const i0 = lowerBound(q.xs, lo); let i1 = q.xs
 /* peak areas read the recorded trace, like pool areas: the figure's smoothing and baseline change the picture only; integration has its own baseline (opt.intBase) */
 function integRows(run){
   const uv = uvOf(run);
-  let rows = [];
-  const regs = (run.integ || []).slice().sort((p, q) => p.a - q.a);
-  if (opt.intMethod === 'gauss') rows = gaussRows(uv, regs);
-  else regs.forEach(reg => { const r = integrateRegion(uv.xs, uv.ys, reg.a, reg.b, opt.intBase); if (r) rows.push(Object.assign(r, {reg})); });
-  const tot = rows.reduce((t, r) => t + Math.max(0, r.area), 0);
-  const fit = isSec(run) ? secFit(secCalFor(run)) : null;
-  const pr = run.shade ? poolRows(run) : null, kk = pr && pr.k > 0 ? pr.k : 1;
-  rows.forEach((r, k) => { r.name = 'P' + (k+1); r.pct = tot > 0 ? 100*r.area/tot : null; const m = massOf(r.area, run); r.mg = m == null && pr && pr.measured && pr.area > 0 ? pr.mg*r.area/pr.area : m == null ? null : m*kk; r.scaled = kk !== 1 || (m == null && r.mg != null); if (fit) r.sec = secInfo(fit, r.apex); });
-  return rows;
+  const pr = run.shade ? poolRows(run) : null;
+  const prKey = pr ? `${pr.area}|${pr.measured}|${pr.mg}|${pr.k}` : 'null';
+  const cacheKey = `${opt.intMethod}|${opt.intBase}|${JSON.stringify(run.integ)}|${run.shade}|${run.uvi}|${uv.xs.length}|${isSec(run)}|${opt.eps}|${opt.path}|${prKey}`;
+  if (run._integCache && run._integCache.key === cacheKey) return run._integCache.val;
+
+  const compute = () => {
+    const uv = uvOf(run);
+    let rows = [];
+    const regs = (run.integ || []).slice().sort((p, q) => p.a - q.a);
+    if (opt.intMethod === 'gauss') rows = gaussRows(uv, regs);
+    else regs.forEach(reg => { const r = integrateRegion(uv.xs, uv.ys, reg.a, reg.b, opt.intBase); if (r) rows.push(Object.assign(r, {reg})); });
+    const tot = rows.reduce((t, r) => t + Math.max(0, r.area), 0);
+    const fit = isSec(run) ? secFit(secCalFor(run)) : null;
+    const pr = run.shade ? poolRows(run) : null, kk = pr && pr.k > 0 ? pr.k : 1;
+    rows.forEach((r, k) => { r.name = 'P' + (k+1); r.pct = tot > 0 ? 100*r.area/tot : null; const m = massOf(r.area, run); r.mg = m == null && pr && pr.measured && pr.area > 0 ? pr.mg*r.area/pr.area : m == null ? null : m*kk; r.scaled = kk !== 1 || (m == null && r.mg != null); if (fit) r.sec = secInfo(fit, r.apex); });
+    return rows;
+  };
+
+  const val = compute();
+  run._integCache = { key: cacheKey, val };
+  return val;
 }
 /* where a pool's measured concentration comes from: typed on the run card, the Concentrate step after the column, or NanoDrop readings marked Final */
 function poolMeas(run){ const pc = numOr(run.poolConc, 0); if (pc > 0) return {c: pc, v: numOr(run.poolFinalVol, 0), src: 'card'};
@@ -1951,19 +1972,29 @@ function measToStep(r){ const b = prep.btw && prep.btw[r.id], c = numOr(r.poolCo
   prep.btw = prep.btw || {}; prep.btw[r.id] = Object.assign({how: 'conc'}, b, {conc: 'poolConc' in r ? r.poolConc : (b && b.conc) ?? '', vOut: 'poolFinalVol' in r ? r.poolFinalVol : (b && b.vOut) ?? ''}); delete r.poolConc; delete r.poolFinalVol; if (typeof renderSteps === 'function') renderSteps(); }
 /* pooled UV uses the same baseline choice as the peak regions: a line across each pooled block, or 0 mAU */
 function poolRows(run){
-  const uv = uvOf(run), xs = uv.xs, ys = uv.ys, B = poolBlocks(run); if (!B.length) return null;
-  const a = B[0].a, b = B[B.length - 1].b, ia = Math.max(0, lowerBound(xs, a)), ib = Math.min(xs.length - 1, lowerBound(xs, b)); if (xs.length < 2 || !(b > a) || b <= xs[0] || a >= xs[xs.length - 1]) return null;
-  /* baseline: zero, or a line between the lowest points just outside the pool, walking out while the trace keeps falling */
-  const rng = (arrMax(ys) - arrMin(ys)) || 1, tol = rng*0.003, w = Math.max(1, Math.round(xs.length*0.002));
-  const walk = (i, d) => { let j = i; for (let k = 0; k < xs.length; k++) { const n = j + d*w; if (n < 0 || n >= xs.length || ys[n] > ys[j] + tol) break; j = n; } return j; };
-  const il = walk(ia, -1), ir = walk(ib, 1), base = opt.intBase === 'zero' ? () => 0 : x => ys[il] + (ys[ir] - ys[il])*(x - xs[il])/((xs[ir] - xs[il]) || 1);
-  let area = 0; B.forEach(k => { const q = clipXY(xs, ys, k.a, k.b); for (let i = 0; i < q.xs.length - 1; i++) area += (Math.max(0, q.ys[i] - base(q.xs[i])) + Math.max(0, q.ys[i+1] - base(q.xs[i+1])))/2*(q.xs[i+1] - q.xs[i]); });
-  const vol = B.reduce((t, k) => t + k.b - k.a, 0), mgA = massOf(area, run), ms = poolMeas(run), pc = ms.c, fv = ms.v, mv = fv > 0 ? fv : xUnit(run) === 'mL' ? vol : 0;
-  /* a NanoDrop reading of the pool, often after it was concentrated, beats the estimate from the UV area; its volume is the one measured */
-  /* a reading on the Concentrated step needs the volume after concentrating, never the pool volume */
-  const meas = pc > 0 && mv > 0 && !(ms.src === 'btw' && !(fv > 0)), mg = meas ? pc*mv : mgA;
-  return {label: (s0 => isPlate(run) ? s0.toUpperCase() : s0)(String(run.shade || '').trim()).replace(/\s*-\s*/g, '–'), a, b, vol, area, mg, mgArea: mgA, measured: meas, conc: pc > 0 ? pc : null, measVol: meas ? mv : null, concentrated: meas && fv > 0, src: meas ? ms.src : null,
-    k: meas && mgA > 0 ? mg/mgA : null};
+  const uv = uvOf(run);
+  const cacheKey = `${uv.xs.length}|${uv.xs[0]}|${run.shade}|${opt.intBase}|${JSON.stringify(poolMeas(run))}|${opt.eps}|${opt.path}|${run.fracEnd}|${JSON.stringify(run.fracs)}`;
+  if (run._poolCache && run._poolCache.key === cacheKey) return run._poolCache.val;
+
+  const compute = () => {
+    const uv = uvOf(run), xs = uv.xs, ys = uv.ys, B = poolBlocks(run); if (!B.length) return null;
+    const a = B[0].a, b = B[B.length - 1].b, ia = Math.max(0, lowerBound(xs, a)), ib = Math.min(xs.length - 1, lowerBound(xs, b)); if (xs.length < 2 || !(b > a) || b <= xs[0] || a >= xs[xs.length - 1]) return null;
+    /* baseline: zero, or a line between the lowest points just outside the pool, walking out while the trace keeps falling */
+    const rng = (arrMax(ys) - arrMin(ys)) || 1, tol = rng*0.003, w = Math.max(1, Math.round(xs.length*0.002));
+    const walk = (i, d) => { let j = i; for (let k = 0; k < xs.length; k++) { const n = j + d*w; if (n < 0 || n >= xs.length || ys[n] > ys[j] + tol) break; j = n; } return j; };
+    const il = walk(ia, -1), ir = walk(ib, 1), base = opt.intBase === 'zero' ? () => 0 : x => ys[il] + (ys[ir] - ys[il])*(x - xs[il])/((xs[ir] - xs[il]) || 1);
+    let area = 0; B.forEach(k => { const q = clipXY(xs, ys, k.a, k.b); for (let i = 0; i < q.xs.length - 1; i++) area += (Math.max(0, q.ys[i] - base(q.xs[i])) + Math.max(0, q.ys[i+1] - base(q.xs[i+1])))/2*(q.xs[i+1] - q.xs[i]); });
+    const vol = B.reduce((t, k) => t + k.b - k.a, 0), mgA = massOf(area, run), ms = poolMeas(run), pc = ms.c, fv = ms.v, mv = fv > 0 ? fv : xUnit(run) === 'mL' ? vol : 0;
+    /* a NanoDrop reading of the pool, often after it was concentrated, beats the estimate from the UV area; its volume is the one measured */
+    /* a reading on the Concentrated step needs the volume after concentrating, never the pool volume */
+    const meas = pc > 0 && mv > 0 && !(ms.src === 'btw' && !(fv > 0)), mg = meas ? pc*mv : mgA;
+    return {label: (s0 => isPlate(run) ? s0.toUpperCase() : s0)(String(run.shade || '').trim()).replace(/\s*-\s*/g, '–'), a, b, vol, area, mg, mgArea: mgA, measured: meas, conc: pc > 0 ? pc : null, measVol: meas ? mv : null, concentrated: meas && fv > 0, src: meas ? ms.src : null,
+      k: meas && mgA > 0 ? mg/mgA : null};
+  };
+
+  const val = compute();
+  run._poolCache = { key: cacheKey, val };
+  return val;
 }
 function autoIntegrate(run){
   const {xs, ys} = runUV(Object.assign({}, run, {crop: ''})), n = ys.length; if (n < 10) return 0;
