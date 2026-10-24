@@ -1935,7 +1935,9 @@ function integRows(run){
   const uv = uvOf(run);
   const pr = run.shade ? poolRows(run) : null;
   const prKey = pr ? `${pr.area}|${pr.measured}|${pr.mg}|${pr.k}` : 'null';
-  const cacheKey = `${opt.intMethod}|${opt.intBase}|${JSON.stringify(run.integ)}|${run.shade}|${run.uvi}|${uv.xs.length}|${isSec(run)}|${opt.eps}|${opt.path}|${prKey}|${run.mFlow}|${run.flowAuto}|${run.path}`;
+  const fit = isSec(run) ? secFit(secCalFor(run)) : null;
+  const fitKey = fit && fit.n ? `${fit.a}|${fit.b}|${fit.useKav}|${fit.v0}|${fit.vt}|${fit.n}` : (fit ? `${fit.useKav}|${fit.v0}|${fit.vt}` : 'null');
+  const cacheKey = `${opt.intMethod}|${opt.intBase}|${JSON.stringify(run.integ)}|${run.shade}|${run.uvi}|${uv.xs.length}|${isSec(run)}|${opt.eps}|${opt.path}|${prKey}|${run.mFlow}|${run.flowAuto}|${run.path}|${fitKey}|${opt.secStds}`;
   if (run._integCache && run._integCache.key === cacheKey) return run._integCache.val;
 
   const compute = () => {
@@ -1945,7 +1947,6 @@ function integRows(run){
     if (opt.intMethod === 'gauss') rows = gaussRows(uv, regs);
     else regs.forEach(reg => { const r = integrateRegion(uv.xs, uv.ys, reg.a, reg.b, opt.intBase); if (r) rows.push(Object.assign(r, {reg})); });
     const tot = rows.reduce((t, r) => t + Math.max(0, r.area), 0);
-    const fit = isSec(run) ? secFit(secCalFor(run)) : null;
     const pr = run.shade ? poolRows(run) : null, kk = pr && pr.k > 0 ? pr.k : 1;
     rows.forEach((r, k) => { r.name = 'P' + (k+1); r.pct = tot > 0 ? 100*r.area/tot : null; const m = massOf(r.area, run); r.mg = m == null && pr && pr.measured && pr.area > 0 ? pr.mg*r.area/pr.area : m == null ? null : m*kk; r.scaled = kk !== 1 || (m == null && r.mg != null); if (fit) r.sec = secInfo(fit, r.apex); });
     return rows;
