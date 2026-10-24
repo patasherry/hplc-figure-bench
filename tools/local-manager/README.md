@@ -29,3 +29,7 @@ python tools\local-manager\manager.py          # keeps running
 ## Console
 
 While the manager runs, open **http://localhost:8765** in a browser on this PC. It shows Mission Control (`tools/dashboard/mission-control.html`) with a **Your local AI** panel: quick status checks, a box to ask the local model questions (for example "is everything working?"), a **Check every agent** button (the same test as `--selftest`) and the manager's log. It listens on this PC only and accepts calls only from the page it serves. Change the port with `"console_port"` in `~/.hfb-reviewer.json`, or turn it off with `--no-console`.
+
+## Updates
+
+Once an hour the manager runs `git pull`. When the pull changes its own code (`tools/local-manager/` or `tools/local-reviewer/`), it exits and the Startup loop starts it again on the new code a minute later. So it runs whatever is merged to `main` in those folders: only the lead merges changes there (the leader's automatic merges never touch `tools/`).
