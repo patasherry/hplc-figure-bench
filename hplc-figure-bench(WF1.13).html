@@ -3744,7 +3744,7 @@ function cleaveQuant(){
     const idx = lanesFor(g, 'cleave'); if (!idx.length || !calib(g)) return; const labs = gelLabels(g), ln = gelBands(g), sat = gelSaturatedIdx(g);
     const post = idx.filter(i => CLV_POST.test(String(labs[i] || '').trim())).pop(); if (post == null || sat.has(post)) return;
     const bs = ln[post] ? ln[post].bands : [], sumo = /sumo/i.test(opt.tagPreset || ''), fit = (b, kda, app) => b.mw != null && (Math.abs(b.mw/kda - 1) <= 0.06 || (app && Math.abs(b.mw/app - 1) <= 0.06));
-    let c = 0, t = 0; bs.forEach(b => { const tg = tagOf(g, post, b); if (tg) { if (tg.kind === 'target') c += b.area; else if (tg.kind === 'tagged') t += b.area; } else if (fit(b, mC)) c += b.area; else if (fit(b, mT, sumo ? mT + 4 : 0)) t += b.area; });
+    let c = 0, t = 0; bs.forEach(b => { const tg = tagOf(g, post, b); if (tg) { if (tg.kind === 'target') c += b.area; else if (tg.kind === 'tagged') t += b.area; } else { const fC = fit(b, mC), fT = fit(b, mT, sumo ? mT + 4 : 0); if (fC && fT) { const eC = Math.abs(Math.log(b.mw/mC)), eT = Math.min(Math.abs(Math.log(b.mw/mT)), sumo ? Math.abs(Math.log(b.mw/(mT+4))) : Infinity); if (eC < eT) c += b.area; else t += b.area; } else if (fC) c += b.area; else if (fT) t += b.area; } });
     if (t + c <= 0) return; out = {pct: 100*(c/mC)/((c/mC) + (t/mT)), lane: String(labs[post]).trim()}; });
   return out; }
 function exprQuant(){
