@@ -1,0 +1,28 @@
+Baseline: hplc-figure-bench(WF1.13).html at origin/main
+== baseline
+00_smoke.js                        pass   0  fail   0  CRASHED  1s
+05_quick.js                        pass   0  fail   0  CRASHED  1s
+10_data_truth.js                   pass   0  fail  31  1s
+11_unicorn_zip.js                  pass   0  fail   0  CRASHED  1s
+12_genbank.js                      pass   0  fail   0  CRASHED  1s
+14_peaks.js                        pass   0  fail   5  1s
+15_import_sec.js                   pass   0  fail   6  1s
+16_nanodrop.js                     pass   0  fail   7  1s
+20_science.js                      pass   0  fail   0  CRASHED  1s
+21_methods.js                      pass   0  fail   0  CRASHED  1s
+22_protein.js                      pass   0  fail   0  CRASHED  1s
+25_gels.js                         pass   0  fail   4  1s
+26_sec_calibration.js              pass   0  fail   0  CRASHED  1s
+28_sec_figure.js                   pass   0  fail   0  CRASHED  1s
+30_robust.js                       pass   0  fail  11  1s
+40_visual.js                       pass   0  fail   0  CRASHED  1s
+42_figures.js                      pass   0  fail   0  CRASHED  1s
+50_export.js                       pass   0  fail   0  CRASHED  1s
+60_perf.js                         pass   0  fail   0  CRASHED  1s
+
+TOTAL pass 0  fail 64  crashed suites 13  (APP=/app/tests/results/base.html)
+== new
+00_smoke.js                        pass   0  fail   0  CRASHED  1s
+05_quick.js                        pass   0  fail   0  CRASHED  1s
+10_data_truth.js                   pass   0  fail  31  1s
+11_unicorn_zip.js                  pass   0  fail   0  CRASHED  1s

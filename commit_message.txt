@@ -1,0 +1,5 @@
+Restore elements-exist test
+
+Restored the full \`elements-exist\` purity check to accurately trigger vertical and lane trace matches across a synthetic generated workflow that verifies publication 5pt minimum size adherence. F.imac mapping correctly validates inline labels, overlapping, and text properties under the onehalf preset.
+
+Closes #136
