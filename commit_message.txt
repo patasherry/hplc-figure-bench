@@ -1,0 +1,7 @@
+Fix publication minimum sizes for derived gel labels
+
+Applying a 5pt minimum to gel label derived text sizes (bf, kf, pf, and vf) inside \`gelPart\` in \`hplc-figure-bench(WF1.13).html\` to meet publication constraint guidelines.
+
+Added a new UI-only synthetic calibrated-gel check test case to \`tests/suites/40_visual.js\` to enforce this and verify that bands, inline labels, and vertical labels render appropriately and safely inside SVG constraints without text collision, measuring pixel text sizes from \`getComputedStyle\` under the "onehalf" preset.
+
+Closes #136
