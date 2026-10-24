@@ -1581,10 +1581,19 @@ function processXY(xs, ys, lo, hi, norm, sc){
   return {xs, ys};
 }
 function processTrace(t){
-  const sh = +t.xshift || 0; let xs = [], ys = [], sorted = true;
+  const sh = +t.xshift || 0, csc = numOr(t.scale, 1);
+  const cxm = numOr(opt.xmin, -Infinity), cxX = numOr(opt.xmax, Infinity), cnorm = opt.normalize, csmo = +opt.smooth, cbas = opt.baseline;
+  const traceVer = t.rows ? t.rows.length : 0; // naive versioning based on rows
+  const cacheKey = [traceVer, sh, cxm, cxX, cnorm, csmo, cbas, csc].join('|');
+  if (t._ptCache && t._ptCache.key === cacheKey) return t._ptCache.val;
+
+  let xs = [], ys = [], sorted = true;
   for (const r of t.rows) { const x = r[t.xc], y = r[t.yc]; if (x != null && y != null && isFinite(x) && isFinite(y)) { if (xs.length && x+sh < xs[xs.length-1]) sorted = false; xs.push(x+sh); ys.push(y); } }
   if (!sorted) { const idx = xs.map((_,i)=>i).sort((a,b)=>xs[a]-xs[b]); xs = idx.map(i=>xs[i]); ys = idx.map(i=>ys[i]); }
-  return processXY(xs, ys, numOr(opt.xmin, -Infinity), numOr(opt.xmax, Infinity), opt.normalize, numOr(t.scale, 1));
+
+  const val = processXY(xs, ys, cxm, cxX, cnorm, csc);
+  t._ptCache = { key: cacheKey, val };
+  return val;
 }
 function detectPeaks(t){
   const {xs, ys} = processTrace(t); const n = ys.length; if (n < 7) return;
@@ -2021,9 +2030,13 @@ function decimate(xs, ys, lo, hi, nb){
   }
   return out;
 }
-function pathD(xs, ys, lo, hi, nb, px, py){
+function pathD(xs, ys, lo, hi, nb, px, py, cacheObj, cacheKeyName, cacheKeyVal){
+  if (cacheObj && cacheKeyName && cacheKeyVal) {
+    if (cacheObj[cacheKeyName] && cacheObj[cacheKeyName].key === cacheKeyVal) return cacheObj[cacheKeyName].val;
+  }
   const a = decimate(xs, ys, lo, hi, nb); let d = '';
   for (let i=0;i<a.length;i+=2) d += (i ? 'L' : 'M') + r2(px(a[i])) + ' ' + r2(py(a[i+1]));
+  if (cacheObj && cacheKeyName && cacheKeyVal) { cacheObj[cacheKeyName] = { key: cacheKeyVal, val: d }; }
   return d;
 }
 function peakApex(xs, ys, x){
@@ -2079,7 +2092,7 @@ function buildSVG(){
   s.push(`<defs><clipPath id="plot-area"><rect x="${r2(L)}" y="${r2(T)}" width="${r2(R-L)}" height="${r2(B-T)}"/></clipPath></defs>`);
   s.push(`<g clip-path="url(#plot-area)" fill="none" stroke-width="${lw}" stroke-linejoin="round" stroke-linecap="round">`);
   const nb = Math.max(200, Math.round((R-L)*4));
-  P.forEach(p => s.push(`<path d="${pathD(p.xs, p.yp, xlo, xhi, nb, px, py)}" stroke="${p.t.color}"/>`));
+  P.forEach((p,idx) => s.push(`<path d="${pathD(p.xs, p.yp, xlo, xhi, nb, px, py, p.t, '_pdCacheP', [(p.t._ptCache||{}).key, idx, numOr(p.t.offset,0), o.mode, o.stack, xlo, xhi, nb, L, R, T, B, y0, y1].join('|'))}" stroke="${p.t.color}"/>`));
   s.push('</g>');
   s.push(`<g stroke="#000000" stroke-width="${r2(aw)}" fill="none" stroke-linecap="square">`);
   if (o.frame) s.push(`<rect x="${r2(L)}" y="${r2(T)}" width="${r2(R-L)}" height="${r2(B-T)}"/>`);
@@ -2335,8 +2348,8 @@ function buildRunSVG(run, ov){
     s.push('</g>'); }
   const nb = Math.max(200, Math.round((R-L)*4));
   s.push(`<g clip-path="url(#${idp}plot-area)" fill="none" stroke-linejoin="round" stroke-linecap="round">`);
-  if (hasSec) s.push(`<path d="${pathD(sec.xs, sec.ys, xlo, xhi, nb, px, py2)}" stroke="${secCol}" stroke-width="${r2(lw*0.9)}" stroke-dasharray="${r2(lw*4)} ${r2(lw*2.5)}"/>`);
-  s.push(`<path d="${pathD(uv.xs, uv.ys, xlo, xhi, nb, px, py)}" stroke="${run.color}" stroke-width="${lw}"/>`);
+  if (hasSec) s.push(`<path d="${pathD(sec.xs, sec.ys, xlo, xhi, nb, px, py2, run, '_pdCacheSEC', [run._id||run.id, (sec.xs||[]).length, xlo, xhi, nb, L, R, T, secB, s0, s1].join('|'))}" stroke="${secCol}" stroke-width="${r2(lw*0.9)}" stroke-dasharray="${r2(lw*4)} ${r2(lw*2.5)}"/>`);
+  s.push(`<path d="${pathD(uv.xs, uv.ys, xlo, xhi, nb, px, py, run, '_pdCacheUV', [run._id||run.id, (uv.xs||[]).length, xlo, xhi, nb, L, R, T, B, y0, y1].join('|'))}" stroke="${run.color}" stroke-width="${lw}"/>`);
   s.push('</g>');
   const dir = o.ticksOut ? 1 : -1;
   s.push(`<g stroke="#000000" stroke-width="${r2(aw)}" fill="none" stroke-linecap="square">`);
