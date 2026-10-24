@@ -176,4 +176,34 @@ async function lastFracFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
   if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
+  for (const e of EXP.time_tests || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => timeFile(e)); }
   T.done(); })();
+
+async function timeFile(e) {
+  const id = e.file.replace(/\.[^.]+$/, '');
+  const {p, errs, close} = await open();
+  const h = H(p);
+  try {
+    await h.newProject('time ' + id);
+    await h.addRun(path.join(CH, e.file));
+    await p.waitForTimeout(300);
+
+    const cardContent = await cardText(p);
+    let expected = '10/23 16:00';
+    // Actually we want iso to also be 10/23 16:00, based on instructions!
+    expected = '10/23 16:00';
+
+    T.check(`${id}/timestamp`, cardContent.includes(expected), `Expected ${expected} in card, got: ${cardContent.slice(0, 300)}`);
+  } finally {
+    await close();
+  }
+}
+
+(async () => {
+  for (const e of EXP.chrom || []) {
+    if (e.file.startsWith('time_') && (!only || only.test(e.file))) {
+      await T.t(e.file, () => timeFile(e));
+    }
+  }
+  T.done();
+})();
