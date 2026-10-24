@@ -185,6 +185,39 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     await gapCheck('p4'); await junk('p4');
   });
 
+
+
+  /* ================= P5: Manual step correctly rendered in summary table ================= */
+  await T.t('p5_manual_step', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Manual step check');
+
+    // Use the actual UI to add a manual step
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="man:other"]').click()); await h.wait(500);
+
+    // The UI should now show the step sheet
+    const setField = async (sel, v) => { const l = p.locator(sel).first(); await l.fill(String(v)); await l.dispatchEvent('change'); await h.wait(150); };
+
+    await setField('#man-name', 'Final buffer exchange');
+    await setField('#man-conc', '0.5');
+    await setField('#man-vol', '1');
+
+    // We need table() which is inside the test scope, wait let's just copy it:
+    await h.step('figure');
+    const rs = await h.sumTable();
+    const head = rs[0];
+    const rows = rs.slice(1).filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((k, i) => [k, r[i]])));
+
+    const sumHtml = await p.locator('#sumTable').innerHTML();
+    const manRow = rows.find(r => r.Step && r.Step.includes('Final buffer exchange'));
+
+    T.check('p5.manual_name', manRow && manRow.Step === 'Final buffer exchange', 'Name is retained: ' + (manRow ? manRow.Step : 'not found'));
+    T.check('p5.manual_mg', manRow && manRow['Protein (mg)'] === '0.50', 'Mg is 0.50: ' + (manRow ? manRow['Protein (mg)'] : 'not found'));
+    T.check('p5.no_undefined', !sumHtml.includes('undefined'), 'No undefined in HTML');
+    T.check('p5.no_nanodrop', manRow && !manRow.Pool.includes('NanoDrop'), 'No invented NanoDrop provenance: ' + (manRow ? manRow.Pool : ''));
+  });
+
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
