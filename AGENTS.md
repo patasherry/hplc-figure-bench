@@ -106,7 +106,7 @@ In every PR description, say exactly what you tested and how. Do not claim testi
 
 `docs/GOALS.md` is the owner's list of priorities. Every agent weighs its work by it. Once a day the lead posts a **Lead check-in** on issue #17, and the local manager follows the newest one.
 
-Jules' questions go up a ladder, run by the local manager on the owner's PC: the local model decides first, then Gemini (given the code it needs), then ChatGPT (Codex, read-only), and only then the lead (`for-coordinator`). Each answer says who decided and the path it took. Anything that would change a reported number goes to the owner (`needs-owner`) instead. Merging app changes stays with the lead.
+Jules' questions go up a ladder, run by the local manager on the owner's PC: the local model tries three times (quick, then twice more with the code in front of it, each answer checked by a second local pass), then Gemini (given the code it needs), then ChatGPT (Codex, read-only), then the local model once more with their notes, and only then the lead (`for-coordinator`). Each answer says who decided and the path it took. Anything that would change a reported number goes to the owner (`needs-owner`) instead. Merging app changes stays with the lead.
 
 - **Jules** works from issues labeled `jules`.
 - **Claude** reviews PRs changing the app automatically and is called on any PR with `@claude`.

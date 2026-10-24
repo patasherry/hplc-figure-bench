@@ -23,7 +23,7 @@ An app Patrick can trust with his real purification data: every number it report
 
 ## Who decides
 
-The local AI on Patrick's PC decides first. When it can't, it asks Gemini, then ChatGPT, and only then the lead (Claude). Numbers the app reports are Patrick's call.
+The local AI on Patrick's PC decides first and takes as long as it needs: three checked attempts. When it still can't, it asks Gemini, then ChatGPT, then tries once more with their notes, and only then the lead (Claude). Numbers the app reports are Patrick's call.
 
 ## How direction is checked
 
