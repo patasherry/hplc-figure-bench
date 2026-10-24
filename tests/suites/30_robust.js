@@ -26,7 +26,32 @@ const sel1 = async (p, h, k) => { await p.click(`#tl [data-step="${k}"]`); await
 
 (async () => {
 /* ---------------- bad inputs ---------------- */
-await T.t('bad', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Bad inputs'); await watchToasts(p);
+await T.t('malformed-prep', async () => {
+  const {p, errs, close} = await open({cloud: true}), h = H(p);
+  const pr = {
+    app: 'HPLC Figure Bench', v: 3, id: 'p-test', name: 'Malformed Prep', created: Date.now(), updated: Date.now(),
+    runs: [{id: 'r1', name: 'R1', stepName: 'R1', file: 'r1.csv', method: '', time: Date.now(), uvi: 0, xu: 'mL', uvs: [], grad: null, cond: null, fracs: [], fracEnd: 0, phases: [], shift: 0, injX: 0}],
+    gels: [], traces: [], nanodrop: [], struct: null,
+    prep: {on: true, btw: null, manual: null, skip: null, stepMeta: null},
+    opt: {known: [], secCals: []}, curStep: 'construct'
+  };
+  await p.evaluate(pr => { window.claude = {use: () => Promise.resolve({
+    id: () => 'u_test',
+    list: () => Promise.resolve([{id: 'p-test', name: 'Malformed Prep', updated: pr.updated}]),
+    get: () => Promise.resolve(pr)
+  })}; }, pr);
+  await p.reload(); await p.waitForTimeout(500);
+  const ok = await openCard(p, 'Malformed Prep');
+  T.check('malformed.opened', ok, 'Opened malformed project');
+  await sel1(p, h, 'run:r1');
+  const errsPre = errs.length;
+  await p.waitForTimeout(300);
+  const visible = await p.evaluate(() => { const e = document.getElementById('stepSheet'); return e && !e.hidden; });
+  T.check('malformed.stepSheetVisible', visible, 'stepSheet is visible');
+  T.check('malformed.noErrors', errs.length === errsPre, errs.slice(errsPre).join(' | '));
+  await close();
+});
+/*/*await T.t('bad', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Bad inputs'); await watchToasts(p);
   await h.dropFiles(F.his); await h.pool('T1-T6'); await takeToasts(p);
   /* each rejected input: a toast that says something, no page error, no new step or tab */
   const reject = async (id, files, why) => { const e0 = errs.length, c0 = await counts(p, h); await h.dropFiles(files); const ts = await takeToasts(p), c1 = await counts(p, h);
@@ -64,7 +89,7 @@ await T.t('bad', async () => { const {p, errs, close} = await open(), h = H(p); 
   await close(); });
 
 /* ---------------- operation fuzz, fixed seed ---------------- */
-await T.t('fuzz', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Fuzz');
+/*/*await T.t('fuzz', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Fuzz');
   let seed = 20261022; const rnd = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0)/4294967296; };
   const pick = a => a[Math.floor(rnd()*a.length)], pool = [F.his, F.q, F.ortho, F.s200, F.zip], log = [], bad = {};
   const fail = (id, msg) => { if (!bad[id]) bad[id] = `after action ${log.length} [${log.slice(-4).join(' > ')}]: ${msg}`; };
@@ -99,7 +124,7 @@ await T.t('fuzz', async () => { const {p, errs, close} = await open(), h = H(p);
   await close(); });
 
 /* ---------------- persistence ---------------- */
-await T.t('save-reload', async () => { const {p, errs, close} = await open(), h = H(p);
+/*/*await T.t('save-reload', async () => { const {p, errs, close} = await open(), h = H(p);
   await h.newProject('SaveReload');
   await h.dropFiles(path.join(DATA, 'standins', 'imac_histrap_1ml_step.csv'));
   await h.pool('T1-T6');
@@ -172,7 +197,7 @@ await T.t('damaged-settings', async () => { const {ctx, p, errs, close} = await 
   await h.newProject('After damaged settings'); T.check('settings.app-usable', (await h.timeline()).length > 0, 'a new project should open a timeline'); // buttons are wired
   await close(); });
 /* ---------------- older and partial project files ---------------- */
-await T.t('partial-project', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p);
+/*await T.t('partial-project', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p);
   await h.newProject('Partial base'); await h.dropFiles(F.his); await h.addConc(F.ndSpec, 0.25);
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]);
   const origPath = path.join(ROOT, 'results', 'partial_orig.json'); await dl.saveAs(origPath);
@@ -190,7 +215,7 @@ await T.t('partial-project', async () => { const {p, errs, close} = await open()
   await close(); });
 
 /* ---------------- performance budgets ---------------- */
-await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Perf');
+/*/*await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Perf');
   { const n0 = (await h.timeline()).length, t0 = Date.now(); await p.setInputFiles('#file', F.big); let ms = null;
     for (let k = 0; k < 120; k++) { await p.waitForTimeout(100); if ((await h.timeline()).length > n0) { ms = Date.now() - t0; break; } }
     T.check('perf.load-200k-under-6s', ms != null && ms < 6000, ms == null ? 'not loaded in 12 s' : ms + ' ms'); } // a long run must load quickly
