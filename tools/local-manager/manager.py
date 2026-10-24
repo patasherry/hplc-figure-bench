@@ -210,6 +210,33 @@ def code_for(text, limit=14000):
     return '\n\n'.join(out) or '(none of the names in the question were found in the app or the tests)'
 
 
+def search_code(terms, limit=14000):
+    """Lines of the app and the tests that contain each search term, with a few lines around the first hits."""
+    files = [ROOT / rv.APP, ROOT / 'tests' / 'lib' / 'harness.js'] + sorted((ROOT / 'tests' / 'suites').glob('*.js'))
+    texts = {f: f.read_text(encoding='utf-8', errors='replace').splitlines() for f in files}
+    out, size = [], 0
+    for t in [t for t in terms if isinstance(t, str) and len(t.strip()) >= 3][:8]:
+        pat = re.compile(re.escape(t.strip()), re.I)
+        hits = [(f, k) for f, lines in texts.items() for k, l in enumerate(lines) if pat.search(l)]
+        if not hits:
+            out.append(f'--- "{t}": not found')
+            continue
+        for f, k in hits[:3]:
+            lines = texts[f]
+            chunk = '\n'.join(f'{j + 1}: {l[:300]}' for j, l in enumerate(lines[max(0, k - 3):k + 8], start=max(0, k - 3)))
+            if size + len(chunk) > limit:
+                return '\n\n'.join(out)
+            out.append(f'--- "{t}" in {f.relative_to(ROOT).as_posix()} line {k + 1} ({len(hits)} hits in all) ---\n{chunk}')
+            size += len(chunk)
+    return '\n\n'.join(out)
+
+
+SEARCH = """You are about to answer a question about the code of HPLC Figure Bench (a single-file HTML app plus a Playwright test suite).
+You can search the code. Give up to 6 search terms: function or variable names you expect, element ids, or short literal strings likely to be in the code
+(for example "bufB", "parseBuf", "Buffer B", "poolConc"). Prefer short, distinctive terms. Do not repeat terms that found nothing before.
+Return {"terms": ["...", "..."]}."""
+
+
 def helper_json(out):
     """A helper's JSON reply as a dict (status, answer, why), or {} if it gave none."""
     m = re.search(r'\{.*\}', re.sub(r'<think>.*?</think>', '', out or '', flags=re.S), re.S)
@@ -243,6 +270,7 @@ def ladder(s, i, text, ctx, force=False, show=None):
     if re.search(r'\b(skip|drop|remove|weaken|without)\b.{0,40}\b(test|check)s?\b|\b(test|check)s?\b.{0,40}\b(skip|drop|remove|optional)', text, re.I):
         trail.append('asks to skip a test')
     code = code_for(issue + '\n' + text)
+    searched = []
     base = f"{ctx}\n{UNTRUSTED}\n{issue}\n\nJules' question:\n{text[:4000]}"
     local = rv.MODEL + ' (local)'
 
@@ -251,6 +279,15 @@ def ladder(s, i, text, ctx, force=False, show=None):
         return v.get('ok') is True, v.get('problem') or ''
 
     def attempt(k, extra=''):
+        nonlocal code
+        if k > 1:  # let the local model search the code before each deeper attempt
+            t = (local_json(SEARCH, f"{UNTRUSTED}\nJules' question:\n{text[:2000]}\n\nTerms already searched: {searched or 'none'}\nWhat earlier attempts found:\n{extra[-1500:]}") or {}).get('terms') or []
+            t = [x for x in t if isinstance(x, str) and x not in searched]
+            if t:
+                searched.extend(t)
+                found = search_code(t)
+                show(f'local search before attempt {k}', 'terms: ' + ', '.join(t) + f' ({found.count("--- ") - found.count(": not found")} matches)')
+                code = (code + '\n\nSearch results:\n' + found)[-24000:]
         prompt = DECIDE + (DEEP.format(k=k, hints=extra) if k > 1 else '')
         r = local_json(prompt, base + (f'\n\nCode excerpts (app and tests):\n{code}' if k > 1 else '')) or {'decision': 'escalate'}
         d, ans = r.get('decision'), (r.get('answer') or '').strip()
