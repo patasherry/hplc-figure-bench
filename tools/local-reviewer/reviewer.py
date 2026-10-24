@@ -37,7 +37,13 @@ def gh(path, method='GET', body=None, accept='application/vnd.github+json'):
                                  data=json.dumps(body).encode() if body is not None else None,
                                  headers={'Authorization': 'Bearer ' + TOKEN, 'Accept': accept,
                                           'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'hfb-local-reviewer'})
-    with urllib.request.urlopen(req, timeout=60) as r:
+    try:
+        r = urllib.request.urlopen(req, timeout=60)
+    except urllib.error.HTTPError as e:
+        why = e.read().decode('utf-8', 'replace')[:300]
+        hint = ' Check the token has Contents: Read, Pull requests: Read and write, and Issues: Read and write, for this repository.' if e.code in (401, 403, 404) else ''
+        raise RuntimeError(f'GitHub {e.code} on {method} {path}: {why}.{hint}') from None
+    with r:
         t = r.read().decode('utf-8', 'replace')
         return t if accept.endswith('diff') else (json.loads(t) if t else {})
 
@@ -67,7 +73,7 @@ def flags(diff):
         out.append('Possible always-true check: `' + hollow[0][:120] + '`')
     def cond(l):  # the condition of T.check(id, condition, message): text between the first comma and the message
         m = re.match(r'\s*T\.check\(\s*([\'"`]).*?\1\s*,(.*)', l)
-        return re.split(r',\s*[`\'"]', m.group(2), 1)[0] if m else ''
+        return re.split(r',\s*[`\'"]', m.group(2), maxsplit=1)[0] if m else ''
     loose = [l.strip() for l in added if '||' in cond(l) and re.search(r'Loaded|toast|\.length\s*>\s*0', cond(l))]
     if loose:
         out.append('A check passes if any one of several conditions holds. Confirm each one really shows the behaviour: `' + loose[0][:120] + '`')
