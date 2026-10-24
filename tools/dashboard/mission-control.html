@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Figure Bench Mission Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap">
+<style>
+/* Layout: one centered column, summary first (needs you, counts), then progress and health, then the detail tables. */
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --line: #dfe3e8; --fg: #1b2330; --muted: #5d6878;
+  --accent: #0072b2; --accent2: #e69f00; --quiet: #b7c0cc; --ok: #1f8a4c; --warn: #b26b00; --bad: #c0392b;
+  --sans: "Instrument Sans", Arial, sans-serif; --serif: "Instrument Serif", Georgia, serif;
+}
+@media (prefers-color-scheme: dark) { :root { --bg: #12161c; --panel: #1a2029; --line: #2c3440; --fg: #e8ecf1; --muted: #9aa5b4; --accent: #56b4e9; --accent2: #f0b445; --quiet: #4a5566; --ok: #4cc27f; --warn: #f0a83c; --bad: #ff6b5e; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); }
+.wrap { max-width: 72rem; margin: 0 auto; padding: 28px 16px 48px; display: flex; flex-direction: column; gap: 20px; }
+h1 { font: 400 2.2rem/1.1 var(--serif); margin: 0; }
+h2 { font-size: 1.05rem; font-weight: 600; margin: 0; }
+.take { margin: 6px 0 0; color: var(--muted); max-width: 65ch; }
+.bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.meta { font-size: .8rem; color: var(--muted); }
+button { font: inherit; cursor: pointer; }
+.btn { font-size: .85rem; padding: .35rem .8rem; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+.btn:focus-visible, .chip:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.note { margin: 2px 0 0; color: var(--muted); font-size: .82rem; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+.tile .l { font-size: .78rem; color: var(--muted); }
+.tile .n { font: 400 2.2rem/1.1 var(--serif); font-variant-numeric: tabular-nums; }
+.tile.alert .n { color: var(--warn); }
+.item { display: flex; gap: 12px; align-items: baseline; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.item .why { font-size: .78rem; color: var(--warn); white-space: nowrap; }
+a { color: var(--fg); text-decoration: none; } a:hover { text-decoration: underline; }
+.cta { font-size: .82rem; color: var(--muted); } .cta a { text-decoration: underline; }
+.empty { display: flex; gap: 8px; align-items: center; color: var(--muted); }
+.dot { width: .5rem; height: .5rem; border-radius: 50%; display: inline-block; flex: none; background: var(--ok); }
+.dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); } .dot.idle { background: var(--quiet); }
+.pill { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: .78rem; padding: .2rem .65rem; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.scroll { max-height: 26rem; overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .82rem; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; color: var(--muted); position: sticky; top: 0; background: var(--panel); padding: 4px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td:first-child { color: var(--muted); white-space: nowrap; }
+.mine { font-size: .75rem; color: var(--warn); margin-left: .35rem; }
+.legend { display: flex; gap: 14px; font-size: .78rem; color: var(--muted); }
+.legend i { width: .65rem; height: .65rem; border-radius: 2px; display: inline-block; margin-right: .3rem; vertical-align: -1px; }
+.chart { position: relative; min-height: 200px; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.15); padding: 4px 8px; font-size: .78rem; white-space: nowrap; }
+.notes { font-size: .85rem; display: flex; flex-direction: column; gap: 8px; }
+.notes h3 { margin: 0; font-size: .92rem; font-weight: 600; }
+.notes ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 3px; }
+.notes .src { color: var(--muted); font-size: .78rem; }
+.err { color: var(--bad); font-size: .85rem; }
+@media (max-width: 40rem) { .wide { display: none; } h1 { font-size: 1.8rem; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="bar">
+    <div>
+      <h1>Figure Bench Mission Control</h1>
+      <p class="take" id="take">Reading GitHub…</p>
+    </div>
+    <div style="text-align:right">
+      <button class="btn" id="refresh" type="button">Refresh</button>
+      <div class="meta" id="meta"></div>
+    </div>
+  </header>
+  <p class="err" id="err" hidden></p>
+
+  <section class="card">
+    <div><h2>Needs you</h2><p class="note">Decisions only you can make: changes to numbers the app reports, and jobs to paste into Antigravity.</p></div>
+    <div id="inbox"></div>
+    <p class="cta">Hit a problem while using the app? <a href="https://github.com/patasherry/hplc-figure-bench/issues/new?template=from-patrick.md" target="_blank" rel="noopener">Report it with the From Patrick form</a>. Those go to the front of the queue.</p>
+  </section>
+
+  <section class="tiles">
+    <div class="tile" id="t-you"><div class="l">Waiting on you</div><div class="n" id="n-you">–</div></div>
+    <div class="tile"><div class="l">Jules working now</div><div class="n" id="n-run">–</div></div>
+    <div class="tile"><div class="l">Queued for Jules</div><div class="n" id="n-queue">–</div></div>
+    <div class="tile"><div class="l">In review or with the lead</div><div class="n" id="n-review">–</div></div>
+    <div class="tile"><div class="l">App fixes, last 30 days</div><div class="n" id="n-fix">–</div></div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <div><h2>Merged per day</h2><p class="note">Changes that went into the project, last 30 days. App fixes change the program you use.</p></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>App fixes</span><span><i style="background:var(--quiet)"></i>Other (tests, tools, docs)</span></div>
+      <div class="chart" id="chart"></div>
+    </section>
+    <section class="card">
+      <div><h2>Is everything running?</h2><p class="note">Each part of the setup and when it was last seen working.</p></div>
+      <table><thead><tr><th>Part</th><th>Status</th><th>Last seen</th></tr></thead><tbody id="health"></tbody></table>
+    </section>
+  </div>
+
+  <section class="card">
+    <div><h2>Work in progress</h2><p class="note">Every open task and pull request, by where it is now. Click a title to open it on GitHub.</p></div>
+    <div class="chips" id="chips" role="group" aria-label="Filter by stage"></div>
+    <div class="scroll"><table><thead><tr><th>#</th><th>Task</th><th>Stage</th><th class="wide">Updated</th></tr></thead><tbody id="work"></tbody></table></div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <div><h2>Recently merged</h2><p class="note">Newest first, last 30 days.</p></div>
+      <div class="scroll"><table><thead><tr><th>#</th><th>Change</th><th class="wide">Kind</th><th>Merged</th></tr></thead><tbody id="merged"></tbody></table></div>
+    </section>
+    <section class="card">
+      <div><h2>Latest reports</h2><p class="note">The lead's daily check-in and the local manager's digest.</p></div>
+      <div class="notes" id="notes"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+"use strict";
+const REPO = 'patasherry/hplc-figure-bench', APP = 'hplc-figure-bench(WF1.13).html', TRACK = 17, OWNER = 'patasherry';
+const API = 'https://api.github.com/repos/' + REPO;
+const ORDER = ['Waiting on you', 'Waiting on the lead', 'Pull request in review', 'Jules working', 'Queued for Jules', 'Being sorted'];
+const DOT = {'Waiting on you': 'warn', 'Waiting on the lead': 'warn', 'Pull request in review': '', 'Jules working': '', 'Queued for Jules': 'idle', 'Being sorted': 'idle'};
+const LABELS = [['needs-owner', 'Waiting on you'], ['for-coordinator', 'Waiting on the lead'], ['needs-coordinator', 'Waiting on the lead'],
+  ['jules-running', 'Jules working'], ['jules-queue', 'Queued for Jules'], ['needs-triage', 'Being sorted']];
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const link = (href, text) => { const a = el('a', '', text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a; };
+const dot = (cls) => el('i', 'dot ' + (cls || ''));
+const hrs = (ts) => (Date.now() - Date.parse(ts)) / 3.6e6;
+const when = (ts) => { if (!ts) return 'never'; const h = hrs(ts); return h < 1 ? Math.max(1, Math.round(h * 60)) + ' min ago' : h < 36 ? Math.round(h) + ' h ago' : new Date(ts).toLocaleDateString('en-US', {month: 'short', day: 'numeric'}); };
+const clean = (s) => s.replace(/\*\*|`|_/g, '').replace(/^#+\s*/, '').trim();
+let left = null, pick = null, data = null;
+
+async function gh(path) {
+  const r = await fetch(API + path, {headers: {Accept: 'application/vnd.github+json'}});
+  left = r.headers.get('x-ratelimit-remaining') ?? left;
+  if (!r.ok) throw new Error(r.status === 403 || r.status === 429 ? 'GitHub allows 60 reads an hour without signing in, and that is used up. It resets within the hour.' : `GitHub answered ${r.status} for ${path}`);
+  return r.json();
+}
+
+async function load() {
+  $('refresh').disabled = true; $('err').hidden = true;
+  try {
+    const since30 = new Date(Date.now() - 30 * 864e5).toISOString(), since3 = new Date(Date.now() - 3 * 864e5).toISOString();
+    const [open1, open2, closed, appCommits, track, leader, tests, recent] = await Promise.all([
+      gh('/issues?state=open&per_page=100&page=1'), gh('/issues?state=open&per_page=100&page=2'),
+      gh('/pulls?state=closed&sort=updated&direction=desc&per_page=100'),
+      gh('/commits?sha=main&per_page=100&since=' + since30 + '&path=' + encodeURIComponent(APP)),
+      gh(`/issues/${TRACK}/comments?per_page=100&since=${since3}`),
+      gh('/actions/workflows/jules-leader.yml/runs?per_page=15'), gh('/actions/workflows/tests.yml/runs?per_page=15'),
+      gh('/issues/comments?sort=created&direction=desc&per_page=60')]);
+    const open = open1.concat(open2), names = (i) => new Set(i.labels.map((l) => l.name));
+    const appPRs = new Set(appCommits.map((c) => (c.commit.message.split('\n')[0].match(/\(#(\d+)\)\s*$/) || [])[1]).filter(Boolean).map(Number));
+    const checkin = [...track].reverse().find((c) => c.body.startsWith('### Lead check-in') && c.user.login === OWNER);
+    const digest = [...track].reverse().find((c) => c.body.startsWith('### Daily digest'));
+
+    const inbox = [];
+    for (const i of open) { if (i.pull_request) continue; const l = names(i);
+      if (l.has('needs-owner')) inbox.push({n: i.number, title: i.title, why: 'Needs your OK', url: i.html_url});
+      if (l.has('for-antigravity')) inbox.push({n: i.number, title: i.title, why: 'Paste into Antigravity', url: i.html_url}); }
+    if (checkin) for (const line of checkin.body.split('\n')) { const m = line.match(/^\s*[-*]\s*\**Patrick:?\**:?\s*(.+)/); if (m) inbox.push({n: TRACK, title: clean(m[1]), why: 'From the lead check-in', url: checkin.html_url}); }
+
+    const work = [];
+    for (const i of open) { if (i.number === TRACK) continue;
+      if (i.pull_request) { work.push({n: i.number, title: i.title, stage: 'Pull request in review', url: i.html_url, updated: i.updated_at}); continue; }
+      const l = names(i), st = (LABELS.find(([lab]) => l.has(lab)) || [])[1];
+      if (st) work.push({n: i.number, title: i.title, stage: st, yours: l.has('from-patrick'), url: i.html_url, updated: i.updated_at}); }
+
+    const merged = closed.filter((p) => p.merged_at && hrs(p.merged_at) < 24 * 30)
+      .map((p) => ({n: p.number, title: p.title, day: p.merged_at.slice(0, 10), app: appPRs.has(p.number), url: p.html_url}))
+      .sort((a, b) => b.day.localeCompare(a.day) || b.n - a.n);
+
+    const lastRun = (r) => (r.workflow_runs || []).find((x) => x.conclusion && !['skipped', 'cancelled'].includes(x.conclusion));
+    const mgr = recent.find((c) => c.body.includes('From the local manager') || c.body.startsWith('<!-- local-first-pass -->'));
+    const busy = work.some((w) => w.stage === 'Jules working' || w.stage === 'Queued for Jules');
+    const run = (part, r, stallH) => !r ? {part, status: 'Unknown', at: null} : {part, at: r.updated_at,
+      status: stallH && busy && hrs(r.updated_at) > stallH ? 'Stalled' : r.conclusion === 'success' ? 'OK' : 'Last run failed'};
+    const health = [run('Jules leader (GitHub)', lastRun(leader), 1), run('Test suite (GitHub)', lastRun(tests)),
+      {part: 'Local manager (your PC)', status: mgr && hrs(mgr.created_at) < 26 ? 'OK' : 'Quiet', at: mgr && mgr.created_at},
+      {part: 'Daily digest', status: digest ? 'OK' : 'Missing', at: digest && digest.created_at},
+      {part: 'Lead check-in', status: checkin ? 'OK' : 'Not yet', at: checkin && checkin.created_at}];
+    const notes = [checkin && {kind: 'Lead check-in', c: checkin}, digest && {kind: 'Daily digest', c: digest}].filter(Boolean);
+
+    data = {inbox, work, merged, health, notes};
+    draw();
+    $('meta').textContent = `Read from GitHub ${new Date().toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}` + (left != null ? ` · ${left} of 60 reads left this hour` : '');
+  } catch (e) {
+    $('err').textContent = e.message; $('err').hidden = false;
+    if (!data) $('take').textContent = 'Could not read GitHub.';
+  } finally { $('refresh').disabled = false; }
+}
+
+function draw() {
+  const {inbox, work, merged, health, notes} = data;
+  const n = (s) => work.filter((w) => s.includes(w.stage)).length;
+  const v = {you: inbox.length, run: n(['Jules working']), queue: n(['Queued for Jules', 'Being sorted']), review: n(['Pull request in review', 'Waiting on the lead']), fix: merged.filter((m) => m.app).length};
+  $('n-you').textContent = v.you; $('n-run').textContent = v.run; $('n-queue').textContent = v.queue; $('n-review').textContent = v.review; $('n-fix').textContent = v.fix;
+  $('t-you').classList.toggle('alert', v.you > 0);
+  $('take').textContent = `${v.you ? `${v.you} ${v.you === 1 ? 'thing needs' : 'things need'} you.` : 'Nothing needs you right now.'} Jules is working on ${v.run} ${v.run === 1 ? 'task' : 'tasks'} with ${v.queue} queued, and ${v.fix} app fixes went in over the last 30 days.`;
+
+  const box = $('inbox'); box.replaceChildren();
+  if (!inbox.length) { const e = el('div', 'empty'); e.append(dot(), 'Nothing needs you right now.'); box.append(e); }
+  for (const r of inbox) { const row = el('div', 'item'); row.append(el('span', 'why', r.why), link(r.url, `#${r.n} ${r.title}`)); box.append(row); }
+
+  const hb = $('health'); hb.replaceChildren();
+  const HC = {OK: '', Stalled: 'bad', 'Last run failed': 'bad', Missing: 'warn', Quiet: 'warn'};
+  for (const r of health) { const tr = el('tr'); const s = el('span', 'pill'); s.append(dot(HC[r.status] ?? 'idle'), r.status); const td = el('td'); td.append(s); tr.append(el('td', '', r.part), td, el('td', '', when(r.at))); hb.append(tr); }
+
+  const chips = $('chips'); chips.replaceChildren();
+  const chip = (label, val) => { const b = el('button', 'chip', label); b.type = 'button'; b.setAttribute('aria-pressed', String(pick === val)); b.onclick = () => { pick = pick === val ? null : val; draw(); }; chips.append(b); };
+  chip(`All ${work.length}`, null);
+  for (const s of ORDER) { const k = work.filter((w) => w.stage === s).length; if (k) chip(`${s} ${k}`, s); }
+  const wb = $('work'); wb.replaceChildren();
+  for (const r of work.filter((w) => !pick || w.stage === pick).sort((a, b) => ORDER.indexOf(a.stage) - ORDER.indexOf(b.stage) || (b.yours ? 1 : 0) - (a.yours ? 1 : 0) || a.n - b.n)) {
+    const tr = el('tr'), t = el('td'), s = el('td'), p = el('span', 'pill');
+    t.append(link(r.url, r.title)); if (r.yours) t.append(el('span', 'mine', 'yours'));
+    p.append(dot(DOT[r.stage]), r.stage); s.append(p);
+    tr.append(el('td', '', r.n), t, s, el('td', 'wide', when(r.updated))); wb.append(tr); }
+
+  const mb = $('merged'); mb.replaceChildren();
+  for (const r of merged) { const tr = el('tr'), t = el('td'); t.append(link(r.url, r.title));
+    tr.append(el('td', '', r.n), t, el('td', 'wide', r.app ? 'App fix' : 'Other'), el('td', '', new Date(r.day + 'T12:00:00Z').toLocaleDateString('en-US', {month: 'short', day: 'numeric'}))); mb.append(tr); }
+
+  const nb = $('notes'); nb.replaceChildren();
+  if (!notes.some((x) => x.kind === 'Lead check-in')) nb.append(el('p', 'note', 'The first lead check-in arrives tomorrow morning.'));
+  for (const {c} of notes) {
+    const lines = c.body.split('\n_From the local manager')[0].split('\n').map((l) => l.trim()).filter(Boolean);
+    const ul = el('ul'); for (const l of lines.slice(1)) if (/^[-*]/.test(l)) ul.append(el('li', '', clean(l.replace(/^[-*]\s*/, ''))));
+    const src = el('div', 'src'); src.append(link(c.html_url, `Open on GitHub, ${when(c.created_at)}`));
+    nb.append(el('h3', '', clean(lines[0] || '')), ul, src); }
+
+  chart(merged);
+}
+
+function chart(merged) {
+  const box = $('chart'); box.replaceChildren();
+  const days = []; for (let i = 29; i >= 0; i--) { const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10); days.push({day: d, app: 0, other: 0}); }
+  for (const m of merged) { const d = days.find((x) => x.day === m.day); if (d) d[m.app ? 'app' : 'other']++; }
+  const W = box.clientWidth || 600, H = 200, mb = 22, mt = 8, max = Math.max(1, ...days.map((d) => d.app + d.other));
+  const step = Math.max(1, Math.ceil(max / 4)), top = Math.ceil(max / step) * step, ml = String(top).length * 8 + 10;
+  const y = (v) => mt + (H - mb - mt) * (1 - v / top), bw = (W - ml) / days.length, NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', '100%'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Merged pull requests per day');
+  const add = (tag, at) => { const e = document.createElementNS(NS, tag); for (const k in at) e.setAttribute(k, at[k]); svg.append(e); return e; };
+  for (let v = 0; v <= top; v += step) { add('line', {x1: ml, x2: W, y1: y(v), y2: y(v), stroke: 'var(--line)'}); add('text', {x: ml - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: 'var(--muted)'}).textContent = v; }
+  const every = Math.ceil(days.length / Math.max(2, Math.floor((W - ml) / 60)));
+  const tip = el('div', 'tip'); tip.hidden = true;
+  days.forEach((d, i) => {
+    const x = ml + i * bw + bw * 0.15, w = Math.min(32, bw * 0.7);
+    if (d.other) add('rect', {x, width: w, y: y(d.other), height: y(0) - y(d.other), rx: 2, fill: 'var(--quiet)'});
+    if (d.app) add('rect', {x, width: w, y: y(d.other + d.app), height: y(d.other) - y(d.other + d.app) - (d.other ? 1 : 0), rx: 2, fill: 'var(--accent)'});
+    if (i % every === 0) add('text', {x: x + w / 2, y: H - 6, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--muted)'}).textContent = new Date(d.day + 'T12:00:00Z').toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+    const hit = add('rect', {x: ml + i * bw, width: bw, y: mt, height: H - mb - mt, fill: 'transparent'});
+    hit.addEventListener('mousemove', (ev) => { tip.textContent = `${new Date(d.day + 'T12:00:00Z').toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})}: ${d.app} app, ${d.other} other`; tip.hidden = false;
+      const r = box.getBoundingClientRect(); tip.style.left = Math.min(ev.clientX - r.left + 12, box.clientWidth - tip.offsetWidth) + 'px'; tip.style.top = Math.max(0, ev.clientY - r.top - 10) + 'px'; });
+    hit.addEventListener('mouseleave', () => { tip.hidden = true; });
+  });
+  box.append(svg, tip);
+}
+
+$('refresh').onclick = load;
+addEventListener('resize', () => data && chart(data.merged));
+load();
+setInterval(() => { if (!document.hidden) load(); }, 15 * 60 * 1000);
+</script>
+</body>
+</html>
