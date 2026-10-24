@@ -344,8 +344,39 @@ def large_header_run():
              frac=dict(n=9, first='F1', last='F9'), injection=0.0, peaks=[dict(ve=15.0, tol=0.1, must=True, note='main peak')], pool=None))
 
 
+# ---------------------------------------------------------------- L. time parsing formats
+def time_formats():
+    x = np.round(np.arange(0, 10.0001, 0.01), 4)
+    y = np.zeros_like(x)
+    ev = [(1.0, 'F1')]
+
+    # 1. ISO format
+    log_iso = [(0.0, 'Method Run 2026-10-23 16:00:00 Method: iso Result: /path')]
+    write_unicorn_csv(os.path.join(OUT, 'time_iso_u7.csv'), [
+        ('UV', 'ml', 'mAU', x, y),
+        ('Fraction', 'ml', 'Fraction', ev, None),
+        ('Run Log', 'ml', 'Logbook', log_iso, None)
+    ])
+    add(dict(file='time_iso_u7.csv', note='run start date only: no column or method in the file, so the step is named from the file', format='UNICORN 7 CSV', kind='other', step='time',
+             unit='mL',
+             frac=dict(n=1, first='F1', last='F1'), injection=0.0,
+             peaks=[], forbid=[], pool=None, time='2026-10-23T16:00:00.000Z'))
+
+    # 2. DD/MM/YYYY
+    log_ddmm = [(0.0, 'Method Run 23/10/2026 16:00:00 Method: ddmm Result: /path')]
+    write_unicorn_csv(os.path.join(OUT, 'time_ddmm_u7.csv'), [
+        ('UV', 'ml', 'mAU', x, y),
+        ('Fraction', 'ml', 'Fraction', ev, None),
+        ('Run Log', 'ml', 'Logbook', log_ddmm, None)
+    ])
+    add(dict(file='time_ddmm_u7.csv', note='run start date only: no column or method in the file, so the step is named from the file', format='UNICORN 7 CSV', kind='other', step='time',
+             unit='mL',
+             frac=dict(n=1, first='F1', last='F1'), injection=0.0,
+             peaks=[], forbid=[], pool=None, time='2026-10-23T16:00:00.000Z'))
+
+
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, time_formats): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()
