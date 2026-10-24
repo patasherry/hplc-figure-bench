@@ -82,7 +82,7 @@ module.exports = async ({github, context, core}) => {
 
   /* ---------- 1. start queued work ---------- */
   if (key) { const run = (await issues(L.run)).filter(i => !freed.has(i.number)); let free = MAX_RUNNING - run.length, freeApp = MAX_APP - run.filter(i => !LIGHT(i)).length;
-    for (const i of (await issues(L.queue)).filter(i => !labels(i).includes(L.run)).sort((a, b) => a.number - b.number)) { if (free <= 0) break; if (!LIGHT(i) && freeApp <= 0) continue;
+    for (const i of (await issues(L.queue)).filter(i => !labels(i).includes(L.run)).sort((a, b) => (labels(b).includes('from-patrick') - labels(a).includes('from-patrick')) || a.number - b.number)) { if (free <= 0) break; if (!LIGHT(i) && freeApp <= 0) continue;
       try { await start(i, 1); free--; if (!LIGHT(i)) freeApp--; } catch (e) { say(`#${i.number}: could not start: ${e.message}`); } } }
 
   /* ---------- 3. merge safe PRs ---------- */
