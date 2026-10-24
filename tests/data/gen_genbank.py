@@ -107,7 +107,28 @@ ORIGIN
 # 9. SnapGene-style .dna export file
 snapgene_export = b"\x09SnapGene binary file format sample content\x00\x01\x02"
 
+
+# 10. Origin-spanning CDS cassette keeps promoter and excludes plasmid features
+gb_origin_spanning_cassette = """LOCUS       pORISPAN              5000 bp    DNA     circular SYN 01-JAN-2025
+FEATURES             Location/Qualifiers
+     promoter        4700..4780
+                     /label="T7 promoter"
+     CDS             join(4800..5000,1..600)
+                     /label="OrispanProtein"
+                     /translation="MHHHHHHSSGLVPRGSMSSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITLGMDELYK"
+     misc_feature    4805..4822
+                     /label="6xHis"
+     CDS             2000..2860
+                     /label="AmpR"
+                     /translation="MSIQHFRVALIPFFAAFCLPVFAHPETLVKVKDAEDQLGARVGYIELDLNSGKI"
+     rep_origin      3200..3800
+                     /label="ori"
+ORIGIN
+        1 atcg
+//"""
+
 files = {
+    'gb_origin_spanning_cassette.gb': gb_origin_spanning_cassette,
     'gb_complement.gb': gb_complement,
     'gb_join.gb': gb_join,
     'gb_wrap.gb': gb_wrap,
