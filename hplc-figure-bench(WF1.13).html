@@ -3036,7 +3036,7 @@ function lanePurity(g, ln){
   if (!(tgt > 0) && !(g.tags || []).some(t => isProt(t.kind) && (t.lane == null || t.lane === ln.i))) { const F = protForms(); if (F.length) { const rr = runs.find(x => x.id === laneAssign(g, ln.i)), tagStep = !rr || ndForm(rr) === 'tagged';
     /* before cleavage the tagged protein is the product; after it, only the cleaved form counts */
     const ms = [F[0].mass/1000].concat(F[1] && tagStep && opt.tagCounts !== false ? [F[1].mass/1000] : []);
-    ln.bands.forEach(b => { if (!tagRaw(g, ln.i, b) && b.mw != null && ms.some(m => Math.abs(Math.log(b.mw/m)) < Math.log(1.08))) { tgt += b.area; est = true; mws.push(b.mw); } }); } }
+    ln.bands.forEach(b => { if (!tagRaw(g, ln.i, b) && b.mw != null) { const fMs = ms.filter(m => Math.abs(Math.log(b.mw/m)) < Math.log(1.08)); if (fMs.length) { const eC = Math.abs(Math.log(b.mw/fMs[0])), eT = fMs[1] ? Math.abs(Math.log(b.mw/fMs[1])) : Infinity; if (eC < eT || !fMs[1]) { tgt += b.area; est = true; mws.push(b.mw); } } } }); } }
   let flagged = 0; if (opt.knownCount) ln.bands.forEach(b => { if (!tagOf(g, ln.i, b) && knownShown(g, ln.i, b).some(k => k.kind === 'contam' || k.kind === 'freetag')) { con += b.area; flagged++; } });
   const F0 = protForms(), cp = cleavePlan(g), mC = F0[1] ? F0[0].mass/1000 : cp ? cp.P : mws[0] || 1, mT = F0[1] ? F0[1].mass/1000 : cp ? cp.P + cp.T : tmws[0] || mC, cMol = (u, t) => 100*(u/mC)/((u/mC) + (t/mT));
   let cleaved = (g.tags || []).some(t => t.kind === 'tagged' && (t.lane == null || t.lane === ln.i)) && un + tg > 0 ? cMol(un, tg) : null, cleavedEst = false;

@@ -35,16 +35,16 @@ await load(p,project(gel(im,{marks,tags:[{kind:'target',lane:2,y}]}),opt));L=lan
 await load(p,project(gel(im,{tags:[{kind:'target',lane:1,y},{kind:'tagged',lane:2,y}]})));L=lane(await csv(p));T.check('tags.other-lane-does-not-invent-cleavage',L.every(r=>r[12]===''),JSON.stringify(L));T.check('tags.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
 await T.t('cleavage-small-tag', async () => { const a = await start(), p = a.p; try {
   const im = await image(p);
-  const myGel = gel(im, {nLanes: 2, labels: 'M, after', marksManual: true, marks: [{kda: 100, y: .2}, {kda: 10, y: .8}]});
+  const myGel = gel(im, {nLanes: 3, labels: 'M, before, after', marksManual: true, marks: [{kda: 100, y: .2}, {kda: 10, y: .8}]});
   const myProj = { app: 'HPLC Figure Bench', version: 1, runs: [], traces: [], gels: [myGel], cur: 'g1',
-    opt: {gelAutoCrop: false, bandSens: 5, tagPreset: 'custom', tagKda: 2.2, purBase: 'lane', protKda: 80},
+    opt: {gelAutoCrop: false, bandSens: 5, tagPreset: 'custom', tagKda: 2.2, purBase: 'lane', protKda: 80, cleaveDetect: true},
     prep: {on: true, cleave: true, steps: []}
   };
   await load(p, myProj);
   // Uncut band at 82.2 kDa. log(mw) = 2 - (y-0.2)/0.6
   // y = 0.2 + 0.6 * (2 - log10(82.2)) = 0.2 + 0.6 * 0.08513 = 0.2511
-  await load(p, { ...myProj, gels: [gel(im, {nLanes: 2, labels: 'M, after', marksManual: true, marks: [{kda: 100, y: .2}, {kda: 10, y: .8}], edits: {added: [{lane: 1, y: 0.2517}], removed: []}})] });
+  await load(p, { ...myProj, gels: [gel(im, {nLanes: 3, labels: 'M, before, after', marksManual: true, marks: [{kda: 100, y: .2}, {kda: 10, y: .8}], edits: {added: [{lane: 2, y: 0.2517}], removed: []}})] });
   const text = await p.locator('#tl').textContent();
-  T.check('cleavage.small-tag-uncut', /≈0%\s*cleaved/.test(text) || !/≈100%\s*cleaved/.test(text), text.slice(0, 100));
+  T.check('cleavage.small-tag-uncut', !/≈100%\s*cleaved/.test(text), text);
 } finally { await a.close(); } });
 T.done();})();
