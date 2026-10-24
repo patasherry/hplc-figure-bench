@@ -33,5 +33,11 @@
   "pool": "F12-F18",
   "true_area": 125.33141373155001,
   "true_ve": 15.0
+ },
+ {
+  "file": "peak_ratio.csv",
+  "type": "ratio",
+  "pool": "F12-F18",
+  "expected_ratio": 0.57
  }
 ]
