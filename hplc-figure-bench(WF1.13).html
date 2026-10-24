@@ -1454,11 +1454,11 @@ function parseText(text){
 }
 
 /* ---------- parsing: ÄKTA / UNICORN ---------- */
-function csvSplit(line){
+function csvSplit(line, sep = ','){
   const out = []; let c = '', q = false;
   for (let i=0;i<line.length;i++){ const ch = line[i];
     if (q) { if (ch === '"') { if (line[i+1] === '"') { c += '"'; i++; } else q = false; } else c += ch; }
-    else if (ch === '"') q = true; else if (ch === ',') { out.push(c); c = ''; } else c += ch; }
+    else if (ch === '"') q = true; else if (ch === sep) { out.push(c); c = ''; } else c += ch; }
   out.push(c); return out;
 }
 function tidyName(n){ return n.replace(/_/g, ' ').replace(/\s+/g, ' ').replace(/(\s0\d\d)+$/, '').replace(/^\d{6}\s+[A-Z]{1,3}\s+/, '').trim(); }
@@ -1469,22 +1469,22 @@ function parseRunTime(s){
 }
 function parseAkta(text, fname){
   const lines = text.split(/\r\n|\n|\r/); let u = -1, d = ',';
-  for (let i=0;i<Math.min(50, lines.length) && u < 0;i++) for (const dd of [',', '\t']) {
-    const c = (dd === ',' ? csvSplit(lines[i]) : lines[i].split('\t')).map(s => s.trim());
+  for (let i=0;i<Math.min(50, lines.length) && u < 0;i++) for (const dd of [',', '	', ';']) {
+    const c = (dd === '	' ? lines[i].split('	') : csvSplit(lines[i], dd)).map(s => s.trim());
     if (c.length >= 4 && /^(ml|min)$/i.test(c[0]) && c.filter((s,k) => k%2 === 0 && /^(ml|min)$/i.test(s)).length >= 2) { u = i; d = dd; break; }
   }
   if (u < 1) return null;
-  const sp = L => d === ',' ? csvSplit(L) : L.split('\t');
+  const sp = L => d === '\t' ? L.split('\t') : csvSplit(L, d);
   const names = sp(lines[u-1]).map(s => s.trim()), units = sp(lines[u]).map(s => s.trim());
   const curves = [];
   for (let c=0;c<units.length-1;c+=2){ const nm = names[c] || ''; if (!nm) continue;
     /* UNICORN 6/7 names (UV 1_280, Conductivity) and UNICORN 5 names with a run prefix (run12:10_UV1_280nm, run12:10_Cond) */
     curves.push({name: nm, xu: units[c], yu: units[c+1], col: c, kind: curveKind(nm, units[c+1]), xs: [], ys: [], ev: []}); }
   for (let i=u+1;i<lines.length;i++){ const L = lines[i]; if (!L) continue; const f = sp(L);
-    for (const cv of curves){ const xs = f[cv.col]; if (xs === undefined || xs === '') continue; const x = toNum(xs, d === '\t'); if (!isFinite(x)) continue;
+    for (const cv of curves){ const xs = f[cv.col]; if (xs === undefined || xs === '') continue; const x = toNum(xs, d !== ','); if (!isFinite(x)) continue;
       const v = (f[cv.col+1] || '').trim().replace(/^"|"$/g, '');
       if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
-      else { const y = toNum(v, d === '\t'); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
+      else { const y = toNum(v, d !== ','); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
   return aktaFromCurves(curves, fname);
 }
 /* what a UNICORN curve is, from its name and unit. UV path length (cm) and derived UV curves (UV_CUT_TEMP@100) are not traces */
