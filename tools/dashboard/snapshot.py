@@ -117,6 +117,9 @@ health.append({'part': 'Daily digest', 'status': 'OK' if digest and ago(digest['
 health.append({'part': 'Lead check-in', 'status': 'OK' if checkin and ago(checkin['created_at']) < 26 else 'Not yet' if not checkin else 'Missing',
                'detail': 'Posted by Claude each morning', 'at': checkin['created_at'] if checkin else None})
 
+# the dashboard can't load an empty file, so an empty inbox is one blank row (number 0) that the page skips
+inbox = inbox or [{'number': 0, 'title': '', 'why': '', 'url': '', 'since': None}]
+
 out = Path(sys.argv[1] if len(sys.argv) > 1 else '.')
 out.mkdir(parents=True, exist_ok=True)
 for name, rows in (('inbox', inbox), ('work', work), ('merged', merged), ('notes', notes), ('health', health)):
