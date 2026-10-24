@@ -4763,14 +4763,14 @@ function sumRows(){
   const first = out.length ? amt(out[0]) : null; let prev = null, prevKept = false;
   /* a measured step without a chromatogram before the first column is what that column was loaded with */
   if (out.length && prep.on) { const wf = wfList(), i = wf.indexOf(out[0].r); let mg = null; for (let j = 0; j < i; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a) mg = a; }
-    if (mg > 0) { const x = out[0], v = ['mg', 'nd'].includes(basis) ? mg : ['mgmol', 'ndmol', 'umol'].includes(basis) && kd(x) ? mg/kd(x) : null; if (v > 0) { prev = v; prevKept = true; } } }
+    if (mg > 0) { const x = out[0], v = ['mg', 'nd'].includes(basis) ? mg : ['mgmol', 'ndmol', 'umol'].includes(basis) && kd(x) ? (basis === 'umol' ? 1000 : 1)*mg/kd(x) : null; if (v > 0) { prev = v; prevKept = true; } } }
   /* yield counts from the first measured amount in the workflow, which can be a step without a chromatogram */
-  out.toAmt = (mg, x) => !(mg > 0) || !x ? null : ['mg', 'nd'].includes(basis) ? mg : ['mgmol', 'ndmol', 'umol'].includes(basis) && kd(x) ? mg/kd(x) : null;
+  out.toAmt = (mg, x) => !(mg > 0) || !x ? null : ['mg', 'nd'].includes(basis) ? mg : ['mgmol', 'ndmol', 'umol'].includes(basis) && kd(x) ? (basis === 'umol' ? 1000 : 1)*mg/kd(x) : null;
   let base = first; out.baseMan = null;
   if (out.length && prep.on) { const wf = wfList(), i = wf.indexOf(out[0].r); for (let j = 0; j < i; j++) if (wf[j].prep === 'manual') { const v = out.toAmt(manMg(wf[j].man), out[0]); if (v > 0) { base = v; out.baseMan = wf[j]; break; } } }
   out.base = base; out.amtOf = amt; out.kept = x => kept(x);
   /* a measured concentration or exchange between columns is what the next column was loaded with */
-  const kept = x => { const k = prep.on ? loadedAfter(x.r) : null; if (!(k > 0)) return null; return ['mg', 'nd'].includes(basis) ? k : ['mgmol', 'ndmol', 'umol'].includes(basis) && kd(x) ? k/kd(x) : null; };
+  const kept = x => { const k = prep.on ? loadedAfter(x.r) : null; if (!(k > 0)) return null; return ['mg', 'nd'].includes(basis) ? k : ['mgmol', 'ndmol', 'umol'].includes(basis) && kd(x) ? (basis === 'umol' ? 1000 : 1)*k/kd(x) : null; };
   out.forEach(x => { const a = amt(x); x.yld = base > 0 && a > 0 ? 100*a/base : null; x.stepY = prev > 0 && a > 0 ? 100*a/prev : null; x.fromKept = !!x.stepY && prevKept; x.loadedAmt = prevKept ? prev : null; if (a > 0) { const k = kept(x); prev = k > 0 ? k : a; prevKept = k > 0; } }); out.basis = basis;
   return out;
 }

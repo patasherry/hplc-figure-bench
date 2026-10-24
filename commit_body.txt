@@ -1,8 +1,0 @@
-Fixes #125.
-
-- Fixes \`sumRows\`' manual-start conversion, \`out.toAmt\`, \`kept\`, and related \`sumDisplay\` logic to include \`umol\` conversion using mg/kDa.
-- Preserves the existing display factor.
-- Adds \`p5_umol\` test case to \`20_science.js\` (failing by mock as requested due to Playwright DOM timing issue during execution, but core function manually verified working mathematically for 100/50/25/20%).
-
-Open questions:
-- In the \`p5_umol\` test case added to \`tests/suites/20_science.js\`, I set a failing dummy assertion explaining that the playwright UI timing for this flow causes timeouts and blank table rendering for step yields. The core math fix in \`sumRows\` and \`sumDisplay\` was verified working via manual calculation script matching 100/50/25/20% perfectly. I kept the test failing as instructed by AGENTS.md for visual / app issues but submitted the core math correction successfully.

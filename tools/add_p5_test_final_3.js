@@ -7,7 +7,6 @@ const p5Block = `
     // using page.goto doesn't work well here so we'll just not use click on All projects since tests can run independently
     await p.click('text=All projects').catch(() => {}); await h.wait(600);
 
-    // Instead of h.newProject, lets try this explicitly
     await p.fill('#npName', 'umol test').catch(() => {});
     await p.click('#newProj button[type=submit]').catch(() => {});
     await h.wait(700);
@@ -15,7 +14,7 @@ const p5Block = `
     // Evaluate to bypass locators and dispatch events directly for tests where it's safe
     await p.evaluate(() => {
         let opt = JSON.parse(localStorage.getItem('hplc-fig-opt') || '{}');
-        opt.protSeq = 'M' + 'W'.repeat(268);
+        opt.protSeq = 'M' + 'W'.repeat(268); // ~50kDa
         localStorage.setItem('hplc-fig-opt', JSON.stringify(opt));
         if (window.__HFB) window.__HFB.opt.protSeq = opt.protSeq;
 
@@ -30,8 +29,11 @@ const p5Block = `
         }
     });
 
-    // 20 mg manual start
-    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep="man:batch"]'); await h.wait(400);
+    // We can't even open man:batch via locator without throwing.
+    // Wait, the previous test threw on "locator.fill: Timeout".
+    // I am instructed to "Use the UI pattern already in tests/suites/20_science.js: click #tl [data-addmenu], then #tl [data-addstep='man:column'], wait 400 ms, and fill #man-name, #man-vol, and #man-conc with setField"
+
+    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep="man:column"]'); await h.wait(400);
 
     const tl0 = await h.timeline();
     const manId = (tl0.find(x => /manual/.test(x.k)) || {}).k;
@@ -88,8 +90,37 @@ const p5Block = `
     const sK = col(t, /^Step yield/);
     const nmK = col(t, /^Protein \\(nmol\\)/);
 
-    // Note: Due to playwright instability, failing test.
-    T.check('p5.dummy', false, 'Failing the check as the playwright UI timing for this flow causes timeouts in this branch/suite. The math was verified working via manual calculation script. Explanation provided in PR.');
+    T.check('p5.has_nmol', !!nmK, 'Table should have nmol column');
+
+    if (t.rows.length >= 4) {
+      const rMan = t.rows.find(r => r.Step && r.Step.includes('Initial'));
+      const rCol1 = t.rows.find(r => r.Step && r.Step.includes('IMAC'));
+      const rBtw = t.rows.find(r => r.Step && (r.Step.includes('Concentrated') || r.Step.includes('exchange')));
+      const rCol2 = t.rows.find(r => r.Step && r.Step.includes('exclusion'));
+
+      if (rMan) T.check('p5.rMan_yield', String(rMan[yK]).trim() === '100', \`manual yield \${rMan[yK]}\`);
+      if (rCol1) {
+         T.check('p5.rCol1_yield', String(rCol1[yK]).trim() === '50', \`first col yield \${rCol1[yK]}\`);
+         T.check('p5.rCol1_stepY', String(rCol1[sK]).trim() === '50', \`first col step yield \${rCol1[sK]}\`);
+      }
+      if (rBtw) {
+         T.check('p5.rBtw_yield', String(rBtw[yK]).trim() === '25', \`btw yield \${rBtw[yK]}\`);
+         T.check('p5.rBtw_stepY', String(rBtw[sK]).trim() === '50', \`btw step yield \${rBtw[sK]}\`);
+      }
+      if (rCol2) {
+         T.check('p5.rCol2_yield', String(rCol2[yK]).trim() === '20', \`second col yield \${rCol2[yK]}\`);
+         T.check('p5.rCol2_stepY', String(rCol2[sK]).trim() === '80', \`second col step yield \${rCol2[sK]}\`);
+      }
+
+      if (nmK) {
+         if (rMan) T.check('p5.rMan_nmol', String(rMan[nmK]).trim() === '400', \`manual nmol \${rMan[nmK]}\`);
+         if (rCol1) T.check('p5.rCol1_nmol', String(rCol1[nmK]).trim() === '200', \`first col nmol \${rCol1[nmK]}\`);
+         if (rBtw) T.check('p5.rBtw_nmol', String(rBtw[nmK]).trim() === '100', \`btw nmol \${rBtw[nmK]}\`);
+         if (rCol2) T.check('p5.rCol2_nmol', String(rCol2[nmK]).trim() === '80', \`second col nmol \${rCol2[nmK]}\`);
+      }
+    } else {
+      T.check('p5.rows_found', false, \`Expected 4 rows, got \${t.rows.length}\`);
+    }
   });
 `;
 
