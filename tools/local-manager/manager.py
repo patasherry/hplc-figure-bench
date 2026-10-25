@@ -105,11 +105,11 @@ def comments(n):
 
 
 # ---------- outside models ----------
-def run(cmd, prompt, timeout=600, cwd=None):
+def run(cmd, prompt, timeout=600, cwd=None, stdin=False):
     exe = shutil.which(cmd[0])
     if not exe:
         raise RuntimeError(f'{cmd[0]} is not installed or not on PATH')
-    r = subprocess.run([exe] + cmd[1:] + [prompt], cwd=cwd or ROOT, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout)
+    r = subprocess.run([exe] + cmd[1:] + ([] if stdin else [prompt]), input=prompt if stdin else None, cwd=cwd or ROOT, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout)
     out = (r.stdout or '').strip()
     if r.returncode != 0 and not out:
         raise RuntimeError(f'{cmd[0]} failed: {(r.stderr or "")[:300]}')
@@ -651,7 +651,7 @@ def claude_jobs(s):
             log(f'#{n}: Claude Code job waits for tomorrow (daily cap)')
             return
         branch, wt = f'claude/issue-{n}', WORK / f'issue-{n}'
-        log(f'#{n}: Claude Code job started')
+        log(f'#{n}: Claude Code job started (can take up to an hour)')
         if DRY:
             continue
         label(n, add=['claude-code-running'], remove=['for-claude-code'])
@@ -661,7 +661,7 @@ def claude_jobs(s):
                 git('worktree', 'remove', '--force', str(wt))
             WORK.mkdir(parents=True, exist_ok=True)
             git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
-            run(['claude', '-p', '--permission-mode', 'acceptEdits', '--allowedTools', CC_TOOLS], CC_JOB.format(n=n, title=i['title'], body=(i.get('body') or '')[:12000]), timeout=3600, cwd=wt)
+            run(['claude', '-p', '--permission-mode', 'acceptEdits', '--allowedTools', CC_TOOLS], CC_JOB.format(n=n, title=i['title'], body=(i.get('body') or '')[:12000]), timeout=3600, cwd=wt, stdin=True)
             body_f = wt / 'PR_BODY.md'
             desc = body_f.read_text(encoding='utf-8', errors='replace') if body_f.exists() else '(Claude Code wrote no description.)'
             if body_f.exists():
@@ -762,6 +762,7 @@ def board_context():
 
 
 def board_round(s, topic=''):
+    log('board: meeting started' + (f' ({topic[:60]})' if topic else ''))
     ctx, tp = board_context(), (f' (topic: "{topic}")' if topic else '')
     who = [('the local AI', lambda q: rv.ask_model('You are a careful, critical adviser.', q), None), ('Gemini', ask_gemini, 'gemini'), ('ChatGPT', ask_codex, 'codex')]
     who = [w for w in who if w[2] is None or ((w[2] != 'gemini' or GEMINI_KEY) and use(s, w[2]))]
@@ -1002,10 +1003,13 @@ def self_update(s):
 def one_pass():
     s = load()
     for name, duty in (('review', lambda s: None if DRY else rv.one_pass()), ('questions', jules_questions), ('owner', owner_replies), ('gate', gate), ('jules failed', jules_failed), ('claude jobs', claude_jobs), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+        s['busy'] = {'duty': name, 'since': time.time()}
+        save(s)
         try:
             duty(s)
         except Exception as e:
             log(f'{name} failed: {e}')
+        s.pop('busy', None)
         save(s)
     s['last_pass'] = time.time()
     save(s)

@@ -91,8 +91,15 @@ def start(m, port=8765):
             s = {}
         last = s.get('last_pass')
         age = (time.time() - last) / 60 if last else None
-        checks.append({'part': 'Manager loop', 'ok': age is not None and age < 20,
-                       'detail': f'last pass {int(age)} min ago' if age is not None else 'no pass recorded yet'})
+        busy = s.get('busy') or {}
+        bmin = (time.time() - busy['since']) / 60 if busy.get('since') else None
+        names = {'board': 'a team meeting on the direction board', 'claude jobs': 'a Claude Code job', 'questions': "Jules' questions (the ladder)", 'gate': 'reviewing PRs', 'review': 'reviewing PRs'}
+        if bmin is not None:
+            checks.append({'part': 'Manager loop', 'ok': bmin < (75 if busy.get('duty') == 'claude jobs' else 45),
+                           'detail': f'busy with {names.get(busy.get("duty"), busy.get("duty"))} for {int(bmin)} min'})
+        else:
+            checks.append({'part': 'Manager loop', 'ok': age is not None and age < 20,
+                           'detail': f'last pass {int(age)} min ago' if age is not None else 'no pass recorded yet'})
         try:
             with urllib.request.urlopen(m.rv.OLLAMA + '/api/tags', timeout=5) as r:
                 models = [x['name'] for x in json.loads(r.read()).get('models', [])]
