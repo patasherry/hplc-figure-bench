@@ -33,4 +33,29 @@ await load(p,project(gel(im,{marks,tags:[]}),opt));let L=lane(await csv(p));T.ch
 for(const kind of ['contam','none']){await load(p,project(gel(im,{marks,tags:[{kind,lane:1,y}]}),opt));L=lane(await csv(p));T.check('tags.'+kind+'-respected',L.every(r=>r[10]===''),JSON.stringify(L));}
 await load(p,project(gel(im,{marks,tags:[{kind:'target',lane:2,y}]}),opt));L=lane(await csv(p));T.check('tags.other-lane-does-not-disable-estimate',L.some(r=>+r[10]>0),JSON.stringify(L));
 await load(p,project(gel(im,{tags:[{kind:'target',lane:1,y},{kind:'tagged',lane:2,y}]})));L=lane(await csv(p));T.check('tags.other-lane-does-not-invent-cleavage',L.every(r=>r[12]===''),JSON.stringify(L));T.check('tags.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
+
+await T.t('cleavage-quant',async()=>{const a=await start(),p=a.p;try{
+const im=await image(p);
+const yBand = 120.5/360;
+const gZero = gel(im,{labels:'M, before, after',marksManual:true,marks:[{kda:82.2,y:yBand},{kda:10,y:0.8}],tags:[],cl:0,cr:0,ct:0,cb:0});
+const proj0=project(gZero,{protKda:80,tagPreset:'his',cleaveDetect:true,knownOn:true});
+proj0.runs=[{id:'r1',name:'cleave run',prep:'cleave'}];
+proj0.gels[0].assign=['M','r1','r1'];
+await load(p,proj0);
+let rows=await csv(p);
+let L=lane(rows, 3);
+let quantText = await p.locator('#paper').textContent();
+T.check('cleavage.zero-percent',L[0][12] === '0.0' || (quantText && quantText.includes('0% cleaved')), 'Expected approx 0% cleaved, got: ' + JSON.stringify(L[0]));
+
+const gHundred = gel(im,{labels:'M, before, after',marksManual:true,marks:[{kda:80,y:yBand},{kda:10,y:0.8}],tags:[],cl:0,cr:0,ct:0,cb:0});
+const proj1=project(gHundred,{protKda:80,tagPreset:'his',cleaveDetect:true,knownOn:true});
+proj1.runs=[{id:'r1',name:'cleave run',prep:'cleave'}];
+proj1.gels[0].assign=['M','r1','r1'];
+await load(p,proj1);
+rows=await csv(p);
+L=lane(rows, 3);
+quantText = await p.locator('#paper').textContent();
+T.check('cleavage.hundred-percent',L[0][12] === '100.0' || (quantText && quantText.includes('100% cleaved')), 'Expected approx 100% cleaved, got: ' + JSON.stringify(L[0]));
+
+}finally{await a.close();}});
 T.done();})();
