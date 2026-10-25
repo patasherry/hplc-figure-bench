@@ -959,6 +959,18 @@ def copilot(s):
     for i in issues('copilot-running'):
         n = i['number']
         pr = next((p for p in prs if re.search(rf'(?:closes|fixes|resolves)\s+#{n}\b', p.get('body') or '', re.I) and 'copilot' in p['user']['login'].lower()), None)
+        why = next((x['body'] for x in gh(f'repos/{REPO}/issues/{n}/comments?per_page=100') if 'copilot' in x['user']['login'].lower() and 'unable to start' in x['body']), None)
+        if not pr and why:  # Copilot took the job but refused to start (for example out of GitHub AI Credits): hand it back now and pause Copilot a day
+            back = 'for-claude-code' if c.get(f'{n}_retry') else 'jules-queue'
+            try:
+                gh(f'repos/{REPO}/issues/{n}/assignees', 'DELETE', {'assignees': [COPILOT]})
+            except Exception:
+                pass
+            label(n, add=[back], remove=['copilot-running'])
+            post(n, f'Copilot could not start ({"out of GitHub AI Credits" if "Credits" in why else "an error on its side"}), so the job goes {"on to Claude Code" if back == "for-claude-code" else "back to Jules"}.' + SIGN.format(rv.MODEL))
+            s['copilot_off_until'] = time.time() + 24 * 3600  # kept in the state file, so a restart doesn't hand out more jobs it can't start
+            log(f'#{n}: Copilot could not start ({why[:120]}), back to {back}. Copilot paused for 24 hours')
+            continue
         if pr:
             label(n, add=['copilot-done'], remove=['copilot-running'])
             post(n, f'Copilot opened #{pr["number"]}. It goes through the Test suite and the review gate like any PR.' + SIGN.format(rv.MODEL))
@@ -971,8 +983,9 @@ def copilot(s):
     # hand out overflow: only while Jules has a backlog, at most COPILOT_AT_ONCE at a time
     queue = [i for i in issues('jules-queue') if 'pull_request' not in i and not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
     retry = [i for i in issues('for-copilot') if 'pull_request' not in i]  # Jules is out of tries on these: Copilot goes first, before Claude Code
-    if _copilot['off_until'] > time.time() or len(issues('copilot-running')) >= COPILOT_AT_ONCE or not (retry or len(queue) >= COPILOT_WHEN_QUEUE):
-        if retry and _copilot['off_until'] > time.time():
+    off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
+    if off or len(issues('copilot-running')) >= COPILOT_AT_ONCE or not (retry or len(queue) >= COPILOT_WHEN_QUEUE):
+        if retry and off:
             for r in retry:  # Copilot is not available: straight on to Claude Code
                 label(r['number'], add=['for-claude-code'], remove=['for-copilot'])
         return
