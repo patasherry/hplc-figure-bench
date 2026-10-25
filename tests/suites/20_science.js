@@ -218,6 +218,121 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     T.check('p5.no_nanodrop', manRow && !manRow.Pool.includes('NanoDrop'), 'No invented NanoDrop provenance: ' + (manRow ? manRow.Pool : ''));
   });
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    /* ================= P6: umol yields with manual start and transfer ================= */
+  await T.t('p6_umol', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Manual umol check');
+
+    // Set 50 kDa sequence
+    const mwEl = await p.$('#prep-seq');
+    if (mwEl) { await mwEl.fill('A'.repeat(704)); await h.wait(200); }
+
+    // Manual start: 20 mg
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(200);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="man:column"]').click()); await h.wait(600);
+    const mname = await p.$('.man.sel [data-man="name"]');
+    if(mname) {
+        await mname.fill('Start');
+        await p.fill('.man.sel [data-man="vol"]', '10');
+        await p.fill('.man.sel [data-man="conc"]', '2'); // 20 mg
+        await p.evaluate(() => document.querySelector('.man.sel [data-man="conc"]').dispatchEvent(new Event('change', {bubbles: true})));
+        await h.wait(400);
+    }
+
+    // Column 1
+    await h.addRun(path.join(DATA, '..', 'synthetic', 'akta1.csv'));
+    await h.wait(600);
+    await h.pool('T1-T6');
+    await h.wait(400);
+    let id1 = await p.evaluate(() => {
+        const el = document.querySelector('.run.sel');
+        return el ? el.getAttribute('data-id') : null;
+    });
+    if (id1) {
+        await p.evaluate((id) => {
+            const pc = document.querySelector('#pc' + id); if (pc) { pc.value = '2'; pc.dispatchEvent(new Event('change', {bubbles: true})); }
+            const pv = document.querySelector('#pv' + id); if (pv) { pv.value = '5'; pv.dispatchEvent(new Event('change', {bubbles: true})); }
+        }, id1);
+    }
+    await h.wait(400);
+
+    // Transfer
+    await h.addConc(path.join(DATA, '..', 'synthetic', '10mg.csv'), 5);
+    await h.wait(600);
+    await p.evaluate(() => {
+        const c = document.querySelector('#btw-conc');
+        if (c) {
+            c.value = '1';
+            c.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+        const v = document.querySelector('#btw-vOut');
+        if(v) {
+            v.value = '5';
+            v.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await h.wait(400);
+
+    // Column 2
+    await h.addRun(path.join(DATA, '..', 'synthetic', 'akta2.csv'));
+    await h.wait(600);
+    await h.pool('T11-T16');
+    await h.wait(400);
+    let id2 = await p.evaluate(() => {
+        const el = document.querySelector('.run.sel');
+        return el ? el.getAttribute('data-id') : null;
+    });
+    if (id2) {
+        await p.evaluate((id) => {
+            const pc = document.querySelector('#pc' + id); if (pc) { pc.value = '1'; pc.dispatchEvent(new Event('change', {bubbles: true})); }
+            const pv = document.querySelector('#pv' + id); if (pv) { pv.value = '4'; pv.dispatchEvent(new Event('change', {bubbles: true})); }
+        }, id2);
+    }
+    await h.wait(400);
+
+    // addConc for column 2 so it is NanoDrop pool (required to trigger umol basis)
+    await h.addConc(path.join(DATA, '..', 'synthetic', '4mg.csv'), null);
+    await h.wait(600);
+
+    // Wait and check table
+    await p.evaluate(() => {
+        const fig = document.querySelector('#tl [data-step="figure"]');
+        if(fig) fig.click();
+    });
+    await h.wait(800);
+
+    const rs = await h.sumTable();
+    if (!rs || rs.length < 2) return;
+    const head = rs[0];
+    const rows = rs.slice(1).filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((k, i) => [k, r[i]])));
+
+    // Check yields
+    const c1 = rows.find(r => r.Step && r.Step.includes('2. '));
+    const tRow = rows.find(r => r.Step && r.Step.includes('2. ') && r.Pool && r.Pool.includes('NanoDrop')) || rows.find(r => r.Step && r.Step.includes('NanoDrop'));
+    const c2 = rows.find(r => r.Step && r.Step.includes('3. '));
+
+    T.check('p6.c1_yield', c1 && c1['Yield (%)'] === '50', 'C1 cumulative yield 50%: ' + (c1 ? c1['Yield (%)'] : 'not found'));
+    T.check('p6.t_yield', tRow && tRow['Yield (%)'] === '25', 'Transfer cumulative yield 25%: ' + (tRow ? tRow['Yield (%)'] : 'not found'));
+    T.check('p6.t_stepy', tRow && tRow['Step yield (%)'] === '50', 'Transfer step yield 50%: ' + (tRow ? tRow['Step yield (%)'] : 'not found'));
+    T.check('p6.c2_yield', c2 && c2['Yield (%)'] === '20', 'C2 cumulative yield 20%: ' + (c2 ? c2['Yield (%)'] : 'not found'));
+    T.check('p6.c2_stepy', c2 && c2['Step yield (%)'] === '80', 'C2 step yield 80%: ' + (c2 ? c2['Step yield (%)'] : 'not found'));
+  });
+
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
