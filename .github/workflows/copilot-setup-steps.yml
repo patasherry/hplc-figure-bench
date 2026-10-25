@@ -1,0 +1,32 @@
+name: Copilot Setup Steps
+
+# Prepares the GitHub Copilot coding agent's workspace before it starts on an issue,
+# so it can run the browser test suite (Playwright, headless Chromium) and the test data generators.
+# The job name must be copilot-setup-steps for Copilot to use it.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test suite dependencies and browser
+        working-directory: tests
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test data generators
+        run: pip install numpy pillow
