@@ -217,4 +217,31 @@ await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p);
     T.check('perf.workflow-8-steps-under-1.5s', n >= 8 && ms < 1500, `${n} steps, ${ms} ms`); } // the full figure renders in time
   T.check('perf.no-error', !errs.length, errs.join(' | ')); await close(); });
 
+
+await T.t('legacy-sec-calibration', async () => { const {p, errs, close} = await open(), h = H(p);
+  const proj = {
+    app: "HPLC Figure Bench", version: 1,
+    runs: [{id: "r1", file: "run1.csv", secCal: "sc_old", name: "Peak", uvs: [{name: "A280", xs:[0, 9.5], ys:[0, 100], nm:280}], integ: [{name: "Main", a: 9.0, b: 10.0, apex: 9.5, height: 100, area: 100}]}],
+    opt: {
+      secStds: true,
+      secCals: [{id: "sc_old", col: "s200i", v0: 8.5, vt: 24, stds: [{name: "Thyroglobulin", kda: 670, ve: 9.5}, null, {name: "Ovalbumin", kda: 44, ve: 14.5}]}]
+    }
+  };
+  require('fs').writeFileSync(path.join(ROOT, 'results', 'legacy_sec_proj.json'), JSON.stringify(proj));
+  await p.setInputFiles('#projFile', path.join(ROOT, 'results', 'legacy_sec_proj.json'));
+  await p.waitForTimeout(2000);
+  const tl = await h.timeline();
+  if (!tl.length) { errs.push('timeline empty'); }
+  await h.step(tl[0] ? tl[0].k : 'run:r1');
+  await p.waitForTimeout(500);
+  const secCalSel = await p.locator('#sec-cal').inputValue();
+  T.check('legacy-sec.keeps-selected', secCalSel === 'sc_old', 'sc_old selected');
+  const calsCount = await p.locator('#sec-cal option').count();
+  T.check('legacy-sec.no-blank-created', calsCount === 2, calsCount + ' calibrations (including none)');
+  const text = await p.locator('#intTable').innerText().catch(() => '');
+  T.check('legacy-sec.computes-mw', text.includes('kDa'), 'MW shown in table text');
+  T.check('legacy-sec.no-error', !errs.length, errs.join(' | '));
+  await close();
+});
+
 T.done(); })();
