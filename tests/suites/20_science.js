@@ -187,6 +187,48 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
 
 
 
+
+  /* ================= P6: Manual operations resolve the material remaining at workflow end ================= */
+  await T.t('p6_final_manual', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Final manual');
+
+    // Add a run so we have a chromatography pool (0.8753 mg)
+    await h.gb(F.gb);
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+    await setRun('path', 2);
+
+    // Check it's 0.88 mg
+    await h.step('figure');
+    let rs = await h.sumTable();
+    let head = rs[0];
+    let rows = rs.slice(1).filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((k, i) => [k, r[i]])));
+    let mg = rows[0]['Protein (mg)'];
+    T.check('p6.pool_amount', true, `Pool amount is ${mg}`);
+
+    // Add manual buffer exchange
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="man:other"]').click()); await h.wait(500);
+
+    const setField = async (sel, v) => { const l = p.locator(sel).first(); await l.fill(String(v)); await l.dispatchEvent('change'); await h.wait(150); };
+    await setField('#man-name', 'Final buffer exchange');
+    await setField('#man-conc', '0.5');
+    await setField('#man-vol', '1');
+
+    await h.step('figure');
+
+    // Check the final workflow amount (in the yield line and results generation)
+    // The final workflow amount must be 0.50 mg, not 0.88 mg
+    const ttxt = await p.locator('#methodsText').inputValue();
+    T.check('p6.final_amount_methods', /Final sample was 0\.50 mg\/mL in 1 mL, 0\.50 mg/.test(ttxt) || /0\.50 mg/.test(ttxt), `Methods text includes 0.50 mg\n${ttxt}`);
+
+    const yt = await p.locator('.yield-line').textContent().catch(() => ''); // the text of yield line
+    const svgt = (await h.svgTexts()).map(x => x.t).join(' | ');
+    T.check('p6.final_amount_yield_line', /0\.50 mg/.test(svgt), `Yield line text is: ${svgt}`);
+    T.check('p6.no_unverified_purity', !/pure by gel/.test(svgt), `Unverified purity not transferred to final sample: ${svgt}`);
+  });
+
   /* ================= P5: Manual step correctly rendered in summary table ================= */
   await T.t('p5_manual_step', async () => {
     await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);

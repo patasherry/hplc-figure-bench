@@ -3585,12 +3585,22 @@ function buildRunFig(run){
 const sig2 = v => v >= 100 ? fmt(v, 0) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2) : v >= 0.1 ? fmt(v, 2) : fmt(v, 3);
 function finalYield(){
   const rows = sumRows(), fin = rows.slice().reverse().find(x => rows.mgOf(x) > 0); if (!fin) return null;
+  /* find any manual step placed after the last chromatography pool that sets the amount */
+  const wf = wfList(), finIndex = wf.indexOf(fin.r);
+  let manM = null, manC = 0, manV = 0, manP = null;
+  for (let i = finIndex + 1; i < wf.length; i++) {
+    if (wf[i].prep === 'manual') {
+      const am = manMg(wf[i].man);
+      if (am > 0) { manM = am; manC = numOr(wf[i].man.conc, 0); manV = numOr(wf[i].man.vol, 0); manP = wf[i]; }
+    }
+  }
   /* the final sample's own concentration and volume, when entered, give the amount kept; the last pool stays the chromatography figure */
-  const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc > 0 ? kc : rows.mgOf(fin), fc = prep.on ? numOr(prep.finConc, 0) : 0, fv = prep.on ? numOr(prep.finVol, 0) : 0, meas = fc > 0 && fv > 0, mg = meas ? fc*fv : pm;
+  const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc > 0 ? kc : rows.mgOf(fin), fc = prep.on ? numOr(prep.finConc, 0) : 0, fv = prep.on ? numOr(prep.finVol, 0) : 0, finFields = fc > 0 && fv > 0, meas = finFields || manM > 0, mg = finFields ? fc*fv : manM > 0 ? manM : pm;
   const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, perG = cG > 0 ? mg/cG : null;
-  return {fin, k: rows.indexOf(fin), mg, poolMg: pm, poolPerL: cL > 0 ? pm/cL : null, meas, fc, fv, perL: cL > 0 ? mg/cL : null, perG, cL, basis: meas ? 'final' : rows.basis, poolBasis: rows.basis, pur: fin.pur, purEst: fin.purEst,
+  const useMan = !finFields && manM > 0;
+  return {fin, k: rows.indexOf(fin), mg, poolMg: pm, poolPerL: cL > 0 ? pm/cL : null, meas, hasMan: useMan, fc: finFields ? fc : useMan ? manC : 0, fv: finFields ? fv : useMan ? manV : 0, perL: cL > 0 ? mg/cL : null, perG, cL, basis: meas ? 'final' : rows.basis, poolBasis: rows.basis, pur: useMan ? null : fin.pur, purEst: useMan ? false : fin.purEst,
     perGTxt: perG == null ? '' : `${sig2(perG)} mg per g of wet cells`, odd: rows.some(x => x.yld > 100 || x.stepY > 105),
-    loaded: (() => { const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r) : null; return k ? {mg: k, kept: true, r: fin.r} : rows.mgOf(pr) > 0 ? {mg: rows.mgOf(pr), kept: false, r: fin.r} : null; })(),
+    loaded: (() => { if (useMan) return {mg: pm, kept: true, r: manP.r || manP}; const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r) : null; return k ? {mg: k, kept: true, r: fin.r} : rows.mgOf(pr) > 0 ? {mg: rows.mgOf(pr), kept: false, r: fin.r} : null; })(),
     purTyped: prep.on && hasTxt(prep.qcPurity) && fin.pur == null}; }
 function yieldLine(res){
   if (opt.wfYield === false || !res || !res.svg || !res.geo) return res; const y = finalYield(); if (!y) return res;
@@ -4143,7 +4153,7 @@ function methodsText(){
   if (y) { const E = ndEpsFor(y.fin.r.id), pr = poolRows(y.fin.r), vol = pr && pr.measured ? pr.measVol : y.fin.nd && y.fin.nd.fv ? y.fin.nd.fv : pr && pr.vol, path = numOr(y.fin.r.path, numOr(opt.path, 2));
     wf.forEach(r => { if (r.prep === 'manual') { const a = manMg(r.man); if (a) R.push(`After the ${r.name} step, the sample held ${sig2(a)} mg (${fmtAuto(+r.man.conc)} mg/mL in ${fmtAuto(+r.man.vol)} mL).`); return; } const bw = btwOf(r), kp = btwMg(r); if (bw && kp) { const epStr = poolMeas(r).nd ? epPhrase(ndEpsUsed(r)) : ''; R.push(`After ${lc(stepTitle(r))}, ${bw.how === 'conc' ? 'concentration' : 'that step'} left ${sig2(kp.mg)} mg (${(ms => ms.nd ? `${fmt(ms.c, 2)} mg/mL in ${fmtAuto(+bw.vOut)} mL by NanoDrop${ms.nd.n > 1 ? `, mean of ${ms.nd.n} readings` : ''}${epStr}` : `${fmtAuto(+bw.conc)} mg/mL in ${fmtAuto(+bw.vOut)} mL`)(poolMeas(r))}).`); } });
     /* one final amount: the measured final sample, else the concentrated pool said above, else the last pool */
-    if (!y.meas && !(y.fin.p && y.fin.p.viaConc && btwMg(y.fin.r))) R.push(`The ${y.meas ? 'last' : 'final'} pool held ${sig2(y.poolMg)} mg${vol > 0 ? ` in ${fmtAuto(vol)} mL (${sig2(y.poolMg/vol)} mg/mL)` : ''}${y.poolPerL != null ? `, ${sig2(y.poolPerL)} mg per L of culture` : ''}, by ${y.fin.p && y.fin.p.measured ? `NanoDrop A280 of the ${y.fin.p.concentrated ? 'concentrated ' : ''}pool (` : ['mg', 'mgmol', 'area'].includes(y.poolBasis) ? `the A280 area of the pool (${path} mm path${hasTxt(y.fin.r.path) ? '' : ' [assumed, check]'}` : `NanoDrop A280 (`}${E ? `, A280 of ${fmt(E.e, 2)} for 1 mg/mL of the ${E.src === 'set' ? 'protein' : E.src + ' form'}` : ''}).${y.pur == null && !hasTxt(prep.qcPurity) ? ' Its purity was not measured by gel.' : !hasTxt(prep.qcPurity) && !(y.purEst && y.pur < 15) ? ` Purity was ${y.purEst ? 'about ' : ''}${fmt(y.pur, 0)}% by SDS-PAGE.` : ''}${y.odd ? (o => ` This amount is unverified, because ${o ? `the ${lc(stepTitle(o.r))} step yield is ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'one step yield is above 100%'}.`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''}`); }
+    if ((!y.meas || y.hasMan) && !(y.fin.p && y.fin.p.viaConc && btwMg(y.fin.r))) R.push(`The ${y.meas ? 'last' : 'final'} pool held ${sig2(y.poolMg)} mg${vol > 0 ? ` in ${fmtAuto(vol)} mL (${sig2(y.poolMg/vol)} mg/mL)` : ''}${y.poolPerL != null ? `, ${sig2(y.poolPerL)} mg per L of culture` : ''}, by ${y.fin.p && y.fin.p.measured ? `NanoDrop A280 of the ${y.fin.p.concentrated ? 'concentrated ' : ''}pool (` : ['mg', 'mgmol', 'area'].includes(y.poolBasis) ? `the A280 area of the pool (${path} mm path${hasTxt(y.fin.r.path) ? '' : ' [assumed, check]'}` : `NanoDrop A280 (`}${E ? `, A280 of ${fmt(E.e, 2)} for 1 mg/mL of the ${E.src === 'set' ? 'protein' : E.src + ' form'}` : ''}).${y.pur == null && !hasTxt(prep.qcPurity) ? ' Its purity was not measured by gel.' : !hasTxt(prep.qcPurity) && !(y.purEst && y.pur < 15) ? ` Purity was ${y.purEst ? 'about ' : ''}${fmt(y.pur, 0)}% by SDS-PAGE.` : ''}${y.odd ? (o => ` This amount is unverified, because ${o ? `the ${lc(stepTitle(o.r))} step yield is ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'one step yield is above 100%'}.`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''}`); }
   if (prep.on) { const fc = numOr(prep.finConc, 0), fv = numOr(prep.finVol, 0), ra = v(prep.finRatio), cL = numOr(prep.cultureL, 0);
     if (fc > 0 && fv > 0) R.push(`The final sample was ${fmtAuto(fc)} mg/mL in ${fmtAuto(fv)} mL, ${sig2(fc*fv)} mg${cL > 0 ? ` or ${sig2(fc*fv/cL)} mg per L of culture` : ''}${ra ? `, with an A260/A280 of ${ra}` : ''}.`);
     else if (ra) R.push(`The final sample had an A260/A280 of ${ra}.`);
