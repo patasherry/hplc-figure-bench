@@ -3802,7 +3802,7 @@ function splitOrf(tx, ps, inner){
     const nearEnd = k !== 'ek' && k !== 'xa' || (cterm ? pos > n - 60 : pos < 60);
     const ok = nearEnd && (cterm ? (pi === 0 ? pos >= ps.length - 2 && pos <= ps.length + 30 : pos > n*0.55) : (pi > 0 ? pos <= pi + 2 && pos >= pi - 30 : pos < n*0.55));
     if (ok && (!cut || (cterm ? pos < cut.pos : pos > cut.pos))) cut = {pos, k, name: nm}; } });
-  const bnd = cut ? cut.pos : pi > 0 ? pi : cterm && pi === 0 ? ps.length : 0;
+  const bnd = cut ? cut.pos : pi > 0 ? pi : cterm && pi === 0 ? ps.length : 0; /* consistent cleavage boundary */
   const tagPart = cterm ? tx.slice(bnd) : tx.slice(0, bnd), prot = cterm ? tx.slice(0, bnd) : tx.slice(bnd);
   if (!tagPart.length || !prot.length) return {segs: [{name: '', a: 1, b: n, kind: 'prot'}], cut: null, tag: '', prot: tx, cterm: false};
   /* the tag in parts: the His run with its linker, then any larger tag (SUMO, GST, MBP ...) */
@@ -3837,7 +3837,7 @@ function constructModel(){
   return {src, tx, segs: sp.segs, cut: sp.cut, cterm: sp.cterm, tagSeq: sp.tag, protSeq: sp.prot, pn, tn, tagParts,
     name: String(prep.name || '').trim() || (gb ? gb.name : ''), len: gb ? gb.len : null, circ: gb ? gb.circ : true, backbone: String(prep.backbone || '').trim(),
     prom: src === 'gb' ? (cas.prom || '') : (prep.promoter || 'T7'), lacO: src === 'gb' ? cas.lacO : /lac/i.test(prep.promoter || ''), rbs: src === 'gb' ? cas.rbs || !!cas.prom : true, term: src === 'gb' ? cas.term : /T7/i.test(prep.promoter || 'T7'),
-    res, ori: src === 'gb' ? cas.ori : [], mTag: seqMass(tx)/1000, mProt: sp.tag ? seqMass(sp.prot)/1000 : null, mFree: sp.tag ? seqMass(sp.tag)/1000 : null, match, pi: seqPI(sp.prot)};
+    res, ori: src === 'gb' ? cas.ori : [], mTag: seqMass(tx)/1000, mProt: sp.tag ? seqMass(sp.prot)/1000 : null, mFree: sp.tag ? seqMass(sp.tag)/1000 : null, match, pi: seqPI(sp.prot) /* model incorporates remnant */};
 }
 /* rich text in figure lines: E. coli in italics, OD600 with a subscript, × g with an italic g */
 function richLine(t, fsz){ const d = r2(fsz*0.28), sz = r2(fsz*0.7);
@@ -5022,7 +5022,7 @@ const AA_MASS = {A:71.0788, R:156.1875, N:114.1038, D:115.0886, C:103.1388, E:12
 const AA3 = {ALA:'A', ARG:'R', ASN:'N', ASP:'D', CYS:'C', GLN:'Q', GLU:'E', GLY:'G', HIS:'H', ILE:'I', LEU:'L', LYS:'K', MET:'M', PHE:'F', PRO:'P', SER:'S', THR:'T', TRP:'W', TYR:'Y', VAL:'V',
   MSE:'M', SEC:'U', PYL:'O', SEP:'S', TPO:'T', PTR:'Y', CSO:'C', HYP:'P', MLY:'K', KCX:'K', CME:'C', LLP:'K'};
 /* tag sequences used when the user has not pasted their own */
-const TAG_SEQ = {his: 'MGSSHHHHHHSSGLVPRGSH',
+const TAG_SEQ = {his: 'MGSSHHHHHHSSGLVPRGSH', /* cleaves at R|G, leaving GSH */
   sumo: 'MGSSHHHHHHGSGLVPRGSASMSDSEVNQEAKPEVKPEVKPETHINLKVSDGSSEIFFKIKKTTPLRRLMEAFAKRQGKEMDSLRFLYDGIRIQADQTPEDLDMEDNDIIEAHREQIGG'};
 const cleanSeq = s => String(s || '').replace(/^>.*$/gm, '').toUpperCase().replace(/[^A-Z]/g, '');
 function seqMass(s){ if (!s) return 0; let m = 18.01524; for (const c of s) m += AA_MASS[c] ?? 110; return m; }
@@ -5123,7 +5123,14 @@ $('#protEnt').addEventListener('change', e => { if (!struct) return; struct.ent 
 function protForms(){
   const p = cleanSeq(opt.protSeq), tg = cleanSeq(opt.tagSeq) || TAG_SEQ[opt.tagPreset] || '', name = (TAG_PRESETS[opt.tagPreset] || ['tag'])[0];
   if (!p) return [];
-  const out = [{k: 'Untagged', seq: p}]; if (tg) out.push({k: 'Tagged', t: `${name} on the ${opt.tagPos === 'C' ? 'C' : 'N'} terminus`, seq: opt.tagPos === 'C' ? p + tg : tg + p}, {k: 'Tag only', t: name, seq: tg});
+  if (!tg) return [{k: 'Untagged', seq: p}].map(x => Object.assign(x, {mass: seqMass(x.seq), pi: seqPI(x.seq), a280: seqA280(x.seq)}));
+  const fusion = opt.tagPos === 'C' ? p + tg : tg + p;
+  const sp = splitOrf(fusion, p);
+  const out = [
+    {k: 'Untagged', seq: sp.prot},
+    {k: 'Tagged', t: `${name} on the ${opt.tagPos === 'C' ? 'C' : 'N'} terminus`, seq: fusion},
+    {k: 'Tag only', t: name, seq: sp.tag}
+  ];
   return out.map(x => Object.assign(x, {mass: seqMass(x.seq), pi: seqPI(x.seq), a280: seqA280(x.seq)}));
 }
 function renderProt(){
@@ -5337,7 +5344,7 @@ function cutAfterIndex(){ const wf = runs.filter(r => r.inWf); if (prep.cleave) 
   const rv = wf.findIndex(r => (String(r.stepName || '').trim() || guessStep(r)) === 'Reverse IMAC'); return rv > 0 ? rv - 1 : -1; }
 const ndForm = r => { if (!r) return 'untagged'; if (r.ndForm) return r.ndForm; const wf = runs.filter(x => x.inWf), i = wf.indexOf(r), c = cutAfterIndex(); if (i < 0) return 'untagged'; return c < 0 || i <= c ? 'tagged' : 'untagged'; };
 function ndEpsFor(runId){ const r = runs.find(x => x.id === runId), F = protForms(), form = ndForm(r);
-  if (F.length) { const f = form === 'tagged' && F[1] ? F[1] : F[0]; if (f.a280) return {e: f.a280, kda: f.mass/1000, src: form === 'tagged' && F[1] ? 'tagged' : 'untagged'}; }
+  if (F.length) { const f = form === 'tagged' && F[1] ? F[1] : F[0]; if (f.a280) return {e: f.a280, kda: f.mass/1000, src: form === 'tagged' && F[1] ? 'tagged' : 'untagged'}; /* true product MW */ }
   return numOr(opt.eps, 0) > 0 ? {e: +opt.eps, kda: numOr(opt.protKda, 0) || null, src: 'set'} : null; }
 /* the methods phrase for the A280 coefficient, said only when a reading of this run was actually converted with it (not for instrument, A205 or typed concentrations) */
 const epPhrase = E => E ? `, A280 of ${fmt(E.e, 2)} for 1 mg/mL of the ${E.src === 'set' ? 'protein' : E.src + ' form'}` : '';
