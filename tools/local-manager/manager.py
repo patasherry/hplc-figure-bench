@@ -930,7 +930,8 @@ def board(s):
 # ---------- GitHub Copilot coding agent: overflow worker beside Jules (needs a paid Copilot plan) ----------
 COPILOT = 'copilot-swe-agent[bot]'
 COPILOT_AT_ONCE = cfg.get('copilot_at_once', 2)
-COPILOT_WHEN_QUEUE = cfg.get('copilot_when_queue', 6)  # hand jobs to Copilot only while at least this many wait for Jules
+COPILOT_WHEN_QUEUE = cfg.get('copilot_when_queue', 2)  # hand jobs to Copilot while at least this many wait for Jules
+_copilot = {'off_until': 0}  # kept in memory, so a restart (for example after a plan change) retries at once
 COPILOT_RULES = ('Follow AGENTS.md exactly (read docs/CODEMAP.md first). Change only hplc-figure-bench(WF1.13).html and files under tests/suites, tests/data and tests/lib. '
                  'Never commit scratch scripts, logs or results. Add a check, driven only through the UI and DOM, that fails on the current main and passes with your change, '
                  'and keep every existing check. Put "Closes #{n}" in the PR description with the before and after numbers.')
@@ -953,7 +954,7 @@ def copilot(s):
             log(f'#{n}: Copilot timed out, back to Jules')
     # hand out overflow: only while Jules has a backlog, at most COPILOT_AT_ONCE at a time
     queue = [i for i in issues('jules-queue') if 'pull_request' not in i and not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
-    if c.get('off_until', 0) > time.time() or len(queue) < COPILOT_WHEN_QUEUE or len(issues('copilot-running')) >= COPILOT_AT_ONCE:
+    if _copilot['off_until'] > time.time() or len(queue) < COPILOT_WHEN_QUEUE or len(issues('copilot-running')) >= COPILOT_AT_ONCE:
         return
     i = sorted(queue, key=lambda x: x['number'])[-1]  # the newest: Jules takes the oldest first, so they don't race
     if not use(s, 'copilot'):
@@ -968,7 +969,7 @@ def copilot(s):
             raise RuntimeError('GitHub did not assign Copilot (no paid Copilot plan yet, or the coding agent is turned off for this repository)')
     except Exception as e:
         s['count']['copilot'] -= 1
-        c['off_until'] = time.time() + 6 * 3600  # don't retry for 6 hours
+        _copilot['off_until'] = time.time() + 6 * 3600  # don't retry for 6 hours
         return log(f'Copilot not available: {str(e)[:200]}')
     c[str(n)] = time.time()
     label(n, add=['copilot-running'], remove=['jules-queue'])
