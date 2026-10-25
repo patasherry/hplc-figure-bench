@@ -44,8 +44,7 @@ proj0.gels[0].assign=['M','r1','r1'];
 await load(p,proj0);
 let rows=await csv(p);
 let L=lane(rows, 3);
-let quantText = await p.locator('#paper').textContent();
-T.check('cleavage.zero-percent',L[0][12] === '0.0' || (quantText && quantText.includes('0% cleaved')), 'Expected approx 0% cleaved, got: ' + JSON.stringify(L[0]));
+T.check('cleavage.zero-percent', L[0][12] === '0.0', 'Expected 0% cleaved, got: ' + L[0][12]);
 
 const gHundred = gel(im,{labels:'M, before, after',marksManual:true,marks:[{kda:80,y:yBand},{kda:10,y:0.8}],tags:[],cl:0,cr:0,ct:0,cb:0});
 const proj1=project(gHundred,{protKda:80,tagPreset:'his',cleaveDetect:true,knownOn:true});
@@ -54,8 +53,6 @@ proj1.gels[0].assign=['M','r1','r1'];
 await load(p,proj1);
 rows=await csv(p);
 L=lane(rows, 3);
-quantText = await p.locator('#paper').textContent();
-T.check('cleavage.hundred-percent',L[0][12] === '100.0' || (quantText && quantText.includes('100% cleaved')), 'Expected approx 100% cleaved, got: ' + JSON.stringify(L[0]));
-
+T.check('cleavage.hundred-percent', L[0][12] === '100.0', 'Expected 100% cleaved, got: ' + L[0][12]);
 }finally{await a.close();}});
 T.done();})();
