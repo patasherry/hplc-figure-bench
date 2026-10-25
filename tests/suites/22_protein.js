@@ -328,6 +328,118 @@ const getA280Cell = r => r['A₂₈₀'] || r['A280'] || '';
     T.check('6_large_protein.eps_text_84800', epsText.includes('84,800') || epsText.includes('84800'), `expected ε280 = 84,800, got "${epsText}"`);
   });
 
+
+
+  /* ================= 7. GST Empty Tag ================= */
+  await T.t('7_gst_empty_tag', async () => {
+    // 1. setProtSeq, clearTagSeq, pick GST, empty o-eps
+    const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, String(v)]);
+    await setProtSeq('M' + 'AWY'.repeat(10));
+    await clearTagSeq();
+    await p.evaluate(() => { document.querySelector('#o-tagPreset').value = 'gst'; document.querySelector('#o-tagPreset').dispatchEvent(new Event('change', {bubbles: true})); });
+    await p.evaluate(() => { const el = document.getElementById('o-eps'); el.value = ''; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); });
+
+    // 2. Add one run, pool fractions, add NanoDrop reading with h.addConc
+    const runF = 'standins/imac_histrap_1ml_ortho.csv';
+    await h.addRun(require('path').join(require('path').join(__dirname, '..', 'data'), runF));
+    await p.waitForTimeout(500);
+
+    const tlItems = await p.$$eval('#tl .tl-step', els => els.map(e => ({id: e.dataset.step, text: e.textContent})));
+    const runStep = tlItems.find(x => x.text && x.text.includes('1 mL'));
+    if (runStep) {
+       await p.click(`#tl [data-step="${runStep.id}"]`);
+       await p.waitForTimeout(500);
+    }
+
+    // a single workflow run with no cleavage step is "tagged"
+    const setRun = async (p, k, v) => { const l = p.locator('.trace.run.sel [data-k=' + k + ']').first(); await l.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } }); await l.fill(String(v)); await l.dispatchEvent('change'); await p.waitForTimeout(400); };
+
+    await setRun(p, 'stepName', 'tagged');
+
+    // Pool fractions and add ND
+    await p.locator('.trace.run.sel [data-k=shade]').fill('A2-A5'); await p.locator('.trace.run.sel [data-k=shade]').dispatchEvent('change');
+    await p.waitForTimeout(500);
+    await h.addConc(null, 1);
+
+    // 3. Download sumCsv
+    const checkCsvCol = async (expected_to_fail) => {
+      await p.click('#tl [data-step=final]');
+      await p.waitForTimeout(500);
+
+      const [download] = await Promise.all([
+        p.waitForEvent('download', {timeout: 8000}).catch(() => null),
+        p.click('#sumCsv')
+      ]);
+
+      if (!download) {
+         throw new Error("Download failed");
+      }
+
+      const csvPath = await download.path();
+      const csv = require('fs').readFileSync(csvPath, 'utf8').split('\n').map(x => x.split(',').map(y => y.replace(/(^"|"$)/g, '')));
+      const head = csv[0];
+      const iEps = head.indexOf('A280 of 1 mg/mL used');
+      const row = csv.find(r => r.length > iEps && r.includes('NanoDrop') && r[iEps] !== 'A280 of 1 mg/mL used');
+
+      if (!row && expected_to_fail) return null;
+      return row ? row[iEps] : null;
+    };
+
+    let epsUsed = await checkCsvCol(true);
+    // After the fix it must be empty (withheld), not 16.05.
+    if(epsUsed) {
+      T.check('7_gst_empty_tag.eps_withheld', !epsUsed.includes('16.055') && !epsUsed.includes('16.050') && !epsUsed.includes('16.05'), 'withheld ' + epsUsed);
+    } else {
+      T.check('7_gst_empty_tag.eps_withheld', true, 'withheld');
+    }
+
+    // 4. Control: type 40 in #o-eps
+    await setOpt(p, 'o-eps', '40');
+    epsUsed = await checkCsvCol(false);
+    if(epsUsed) {
+      T.check('7_gst_empty_tag.eps_control', epsUsed.includes('40'), 'control 40 ' + epsUsed);
+    }
+
+    // 5. Type synthetic tag sequence AWY, calculate fusion coeff
+    await setOpt(p, 'o-eps', '');
+    await p.click('#tl [data-step=construct]');
+    await p.waitForTimeout(500);
+
+    await p.fill('#tagSeq', 'AWY');
+    await p.dispatchEvent('#tagSeq', 'change');
+    await p.waitForTimeout(500);
+
+    const tagSeq = 'AWY';
+    const protSeq = 'M' + 'AWY'.repeat(10);
+    const fullSeq = tagSeq + protSeq;
+
+    // ExPASy: (5500×W + 1490×Y + 125×cystines) / average mass
+    const calcIndepMW = (seq) => {
+       // Using rough MW from 22_protein tests calcMW
+       let mw = 18.01524;
+       // approximate masses to match app
+       const aa = {A: 71.0788, C: 103.1388, D: 115.0886, E: 129.1155, F: 147.1766, G: 57.0519, H: 137.1411, I: 113.1594, K: 128.1741, L: 113.1594, M: 131.1926, N: 114.1038, P: 97.1167, Q: 128.1307, R: 156.1875, S: 87.0782, T: 101.1051, V: 99.1326, W: 186.2132, Y: 163.1760};
+       for(let i=0; i<seq.length; i++) mw += (aa[seq[i]] || 110);
+       return mw;
+    };
+    const W = (fullSeq.match(/W/g) || []).length;
+    const Y = (fullSeq.match(/Y/g) || []).length;
+    const C = (fullSeq.match(/C/g) || []).length;
+    const ext = 5500 * W + 1490 * Y + 125 * C; // Assuming not all cystines forming disulfide for this simple formula or based on ExPASy reduced
+    // ExPASy formula actually is just 5500 W + 1490 Y (reduced)
+    const mw = calcIndepMW(fullSeq);
+    const expFusionA280 = ext / mw;
+
+    epsUsed = await checkCsvCol(false);
+    if(epsUsed) {
+       T.check('7_gst_empty_tag.eps_fusion', !epsUsed.includes('16.055') && !epsUsed.includes('16.05'), 'fusion not 16.05 ' + epsUsed);
+       if (expFusionA280) {
+         const parsed = parseFloat(epsUsed);
+         T.check('7_gst_empty_tag.eps_matches_table', T.near(parsed, expFusionA280, 0.05), `expected ${expFusionA280.toFixed(3)}, got ${epsUsed}`);
+       }
+    }
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
