@@ -1545,16 +1545,17 @@ async function isUnicornZip(f){ if (!/\.zip$/i.test(f.name)) return false; try {
 async function parseUnicornZip(buf, fname){
   const m = zipList(new Uint8Array(buf)), cx = [...m.keys()].filter(k => /^Chrom\.\d+\.xml$/i.test(k)).sort()[0]; if (!cx) return null;
   const doc = new DOMParser().parseFromString(new TextDecoder().decode(await zipGet(m, cx)), 'text/xml'), kid = (el, t) => { const c = [...el.children].find(x => x.tagName === t); return c ? c.textContent : ''; };
-  const curves = []; let path = null;
+  const curves = [], missing = []; let path = null;
   for (const c of doc.querySelectorAll('Curves > Curve')) { const nm = kid(c, 'Name'), yu = kid(c, 'AmplitudeUnit'), kind = curveKind(nm, yu); if (!['uv', 'cond', 'grad', 'flow', 'temp'].includes(kind)) continue;
     const pts = [...c.querySelectorAll('CurvePoints > CurvePoint')], cp = pts.find(p => kid(p, 'IsFullResolution') === 'true') || pts[0], fn = cp ? kid(cp, 'BinaryCurvePointsFileName') : '';
-    const inner = fn ? await zipGet(m, fn) : null; if (!inner) continue; const im = zipList(inner), xs = netFloats(await zipGet(im, 'CoordinateData.Volumes')), ys = netFloats(await zipGet(im, 'CoordinateData.Amplitudes'));
+    const inner = fn ? await zipGet(m, fn) : null; if (!inner) { missing.push(nm || kind); continue; } const im = zipList(inner), xs = netFloats(await zipGet(im, 'CoordinateData.Volumes')), ys = netFloats(await zipGet(im, 'CoordinateData.Amplitudes'));
     const n = Math.min(xs.length, ys.length); if (n < 2) continue;
     if (kind === 'uv' && path == null) { const ui = c.querySelector('CurveUVInfo'); const pl = ui ? parseFloat(kid(ui, 'UVPathLength')) : NaN; if (pl > 0) path = pl; }
     curves.push({name: nm, xu: kid(c, 'VolumeUnit') || 'ml', yu, kind, xs: xs.slice(0, n).map(v => Math.round(v*1e5)/1e5), ys: ys.slice(0, n), ev: []}); }
   for (const ec of doc.querySelectorAll('EventCurves > EventCurve')) { const t = ec.getAttribute('EventCurveType') || '', kind = /^frac/i.test(t) ? 'frac' : /^inject/i.test(t) ? 'inj' : /log/i.test(t) ? 'log' : ''; if (!kind) continue;
     curves.push({name: t, xu: 'ml', yu: '', kind, xs: [], ys: [], ev: [...ec.querySelectorAll('Event')].map(e => ({x: parseFloat(kid(e, 'EventVolume')), label: kid(e, 'EventText')})).filter(e => isFinite(e.x))}); }
-  return aktaFromCurves(curves, fname, path ? {path: String(path), pathFromFile: true} : null); }
+  const ak = aktaFromCurves(curves, fname, path ? {path: String(path), pathFromFile: true} : null);
+  return ak || (missing.length ? {error: `missing usable curve data (${missing.join(', ')})`} : null); }
 
 /* ---------- traces and runs ---------- */
 function makeTrace(name, p, ex){
@@ -4981,7 +4982,7 @@ async function loadFiles(files){
       if (/\.(xlsx?|xlsm|ods|docx?)$/i.test(f.name)) { bad.push(`${f.name} (a spreadsheet or document: save the data as CSV or tab-separated text first)`); continue; }
       if (/\.zip$/i.test(f.name)) { if (typeof DecompressionStream === 'undefined') { bad.push(`${f.name} (this browser cannot unpack it, export the run as .csv from UNICORN)`); continue; }
         const ak = await isUnicornZip(f) ? await parseUnicornZip(await f.arrayBuffer(), f.name.replace(/\.[^.]+$/, '')) : null;
-        if (ak) newRuns.push(makeRun(ak)); else bad.push(`${f.name} (not a UNICORN result archive)`); continue; }
+        if (ak && !ak.error) newRuns.push(makeRun(ak)); else bad.push(`${f.name} (${ak && ak.error ? ak.error : 'not a UNICORN result archive'})`); continue; }
       const text = decode(await f.arrayBuffer()), nm = f.name.replace(/\.[^.]+$/, '');
       if (looksNanoDrop(text)) { addNanoDrop(parseNanoDrop(text), f.name); continue; }
       const ak = parseAkta(text, nm);

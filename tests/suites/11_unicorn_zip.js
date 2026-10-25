@@ -71,9 +71,9 @@ async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return
     await h.wait(500);
     const badFiles = await p.$$eval('#badFiles li', els => els.map(e => e.textContent));
     const toasts = await h.toasts();
-    // Missing UV curve causes parseUnicornZip to return null, which pushes "not a UNICORN result archive".
-    // Guards: an archive missing a curve must say so (which curve, or that something was skipped), not only report a normal load.
-    T.check('gives a message for missing curve', [...badFiles, ...toasts].some(t => /missing|not found|no .*curve|skipp|without/i.test(t)), `badFiles: ${badFiles.join(' | ') || 'none'}, toasts: ${toasts.join(' | ') || 'none'}`);
+    // Guards: an archive missing curve data identifies the missing data, rather than disguising it as a different archive type.
+    const messages = [...badFiles, ...toasts].join(' | ');
+    T.check('gives actionable missing curve message', /missing.*curve.*UV/i.test(messages), `badFiles: ${badFiles.join(' | ') || 'none'}, toasts: ${toasts.join(' | ') || 'none'}`);
     T.check('no page errors for missing curve', !errs.length, errs.join(' | '));
   });
 

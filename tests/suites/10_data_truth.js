@@ -53,6 +53,13 @@ async function chromFile(e){ const id = e.file.replace(/\.[^.]+$/, ''), t0 = Dat
     const P = await peaks(p, h), pk = P.rows.filter(r => !/^pool/i.test(r.name));
     // guards: the axis unit follows the file (mL, or min for a time-based export)
     T.check(`${id}/unit`, P.unit === e.unit, `expected ${e.unit}, table header "${P.head.join(' | ')}"`);
+    if (e.file === 'sec_semicolon_unicorn7.csv') {
+      const [download] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
+      const saved = JSON.parse(fs.readFileSync(await download.path(), 'utf8')), r = saved.runs[0] || {};
+      // Guards: the European delimiter preserves the source UV, conductivity, and gradient curve units.
+      T.check(`${id}/preserves-curves-and-units`, r.uvs && r.uvs[0] && r.uvs[0].yu === 'mAU' && r.cond && r.cond.yu === 'mS/cm' && r.grad && r.grad.yu === '%B',
+        JSON.stringify({uv: r.uvs && r.uvs[0] && r.uvs[0].yu, cond: r.cond && r.cond.yu, grad: r.grad && r.grad.yu}));
+    }
     for (const [k, x] of e.peaks.entries()) { const hit = pk.find(r => Math.abs(r.ve - x.ve) <= x.tol);
       // guards: each real peak is found at its true elution volume (from the injection for SEC); optional peaks are only reported
       if (x.must) T.check(`${id}/peak${k + 1}@${x.ve}`, hit, `${x.note}: expected Ve ${x.ve} ±${x.tol}, table has ${pk.map(r => r.ve).join(', ') || 'none'}`);
