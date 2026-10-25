@@ -381,7 +381,7 @@ def jules_questions(s):
         if key in s['answered'] or any(c['id'] > q['id'] and c['body'].lstrip().lower().startswith('answer for jules') for c in cs):
             continue
         ctx = ctx or context()
-        text = q['body'][len('Jules asked:'):].split('The leader told Jules', 1)[0].strip()
+        text = re.split(r'The leader told Jules|The local manager on Patrick', q['body'][len('Jules asked:'):], 1)[0].strip()
         try:
             who, ans, trail = ladder(s, i, text, ctx)
         except Exception as e:

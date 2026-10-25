@@ -57,9 +57,9 @@ jobs:
       group: jules-leader-heartbeat
       cancel-in-progress: true
     steps:
-      - name: Check again in 10 minutes
+      - name: Check again in 3 minutes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sleep 600
+          sleep 180
           gh workflow run jules-leader.yml --repo "$GITHUB_REPOSITORY" --ref main
