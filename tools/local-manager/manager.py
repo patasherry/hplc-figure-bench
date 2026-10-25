@@ -598,6 +598,7 @@ def gate(s):
         probs = gate_problems(full, files, diff, report_of(n))
         m = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
         issue = int(m.group(1)) if m else linked_issue(n)
+        cop = 'copilot' in pr['user']['login'].lower() or COPILOT_CLI_MARK in (pr.get('body') or '')
         mine = 'Generated with [Claude Code]' in (pr.get('body') or '') or CC_MARK in (pr.get('body') or '')  # the lead's rebuilds and Claude Code jobs are not sent back to Jules
         if probs and issue and all(p.startswith(JUNK_ONLY) for p in probs) and CLEAN_MARK not in (pr.get('body') or ''):
             new = clean_rebuild(full, files, issue)  # only stray files or a conflict: fix it here instead of a Jules retry
@@ -605,7 +606,7 @@ def gate(s):
                 log(f'PR #{n} rebuilt clean as #{new}')
                 s['gated'][str(n)] = sha
                 continue
-        if probs and issue and not mine and 'copilot' not in pr['user']['login'].lower() and s['sentback'].get(str(issue), 0) < MAX_SENDBACKS:
+        if probs and issue and not mine and not cop and s['sentback'].get(str(issue), 0) < MAX_SENDBACKS:
             k = s['sentback'][str(issue)] = s['sentback'].get(str(issue), 0) + 1
             notes = '\n'.join(f'- {x}' for x in probs)
             body = gh(f'repos/{REPO}/issues/{issue}').get('body') or ''
@@ -620,9 +621,9 @@ def gate(s):
             if not DRY:
                 body = gh(f'repos/{REPO}/issues/{issue}').get('body') or ''
                 gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n### Automatic review of PR #{n} (Jules out of tries)\n\n{notes}'})
-                post(n, ('**Handed to Claude Code** on the owner\'s PC: Copilot\'s attempt did not pass either.' if 'copilot' in pr['user']['login'].lower() else f'**Handed to Copilot**, then Claude Code if needed: Jules was sent back {MAX_SENDBACKS} times.') + f' Problems:\n\n{notes}' + SIGN.format(rv.MODEL))
+                post(n, ('**Handed to Claude Code** on the owner\'s PC: Copilot\'s attempt did not pass either.' if cop else f'**Handed to Copilot**, then Claude Code if needed: Jules was sent back {MAX_SENDBACKS} times.') + f' Problems:\n\n{notes}' + SIGN.format(rv.MODEL))
                 gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
-            nxt = 'for-claude-code' if 'copilot' in pr['user']['login'].lower() else 'for-copilot'
+            nxt = 'for-claude-code' if cop else 'for-copilot'
             label(issue, add=[nxt], remove=['jules-queue', 'jules-done', 'jules-running', 'needs-coordinator', 'copilot-done'])
             log(f'PR #{n}: #{issue} handed to {"Claude Code" if nxt == "for-claude-code" else "Copilot"}')
         elif probs:
@@ -655,8 +656,8 @@ def gate(s):
 CC_MARK = '<!-- claude-code-job -->'
 WORK = Path(cfg.get('work_dir', str(Path.home() / 'hfb-work')))
 CC_TOOLS = 'Read,Edit,Write,Glob,Grep,Bash(node tests/suites/:*),Bash(python tests/data/:*),Bash(git diff:*),Bash(git status:*)'
-CC_JOB = """You are Claude Code working on issue #{n} of HPLC Figure Bench, in a separate copy of the repository made for this job.
-Jules (another agent) could not finish it. Read AGENTS.md first and follow it exactly, then docs/CODEMAP.md and docs/GOALS.md.
+CC_JOB = """You are {who} working on issue #{n} of HPLC Figure Bench, in a separate copy of the repository made for this job.
+{why} Read AGENTS.md first and follow it exactly, then docs/CODEMAP.md and docs/GOALS.md.
 Make the change the issue asks for, and nothing more. Change only hplc-figure-bench(WF1.13).html and files under tests/.
 Add a check, driven only through the UI and DOM, that fails on the current app and passes with your change. Keep every existing check.
 Test data is synthetic and made by the generators in tests/data/. If tests run here, run the suites you touched from the repository root,
@@ -695,7 +696,7 @@ def claude_jobs(s):
                 git('worktree', 'remove', '--force', str(wt))
             WORK.mkdir(parents=True, exist_ok=True)
             git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
-            run(['claude', '-p', '--permission-mode', 'acceptEdits', '--allowedTools', CC_TOOLS], CC_JOB.format(n=n, title=i['title'], body=(i.get('body') or '')[:12000]), timeout=3600, cwd=wt, stdin=True)
+            run(['claude', '-p', '--permission-mode', 'acceptEdits', '--allowedTools', CC_TOOLS], CC_JOB.format(who='Claude Code', why='Jules (another agent) could not finish it.', n=n, title=i['title'], body=(i.get('body') or '')[:12000]), timeout=3600, cwd=wt, stdin=True)
             body_f = wt / 'PR_BODY.md'
             desc = body_f.read_text(encoding='utf-8', errors='replace') if body_f.exists() else '(Claude Code wrote no description.)'
             if body_f.exists():
@@ -722,6 +723,60 @@ def claude_jobs(s):
                 git('worktree', 'remove', '--force', str(wt))
             except Exception:
                 pass
+
+
+COPILOT_CLI_MARK = '<!-- copilot-cli-job -->'
+# the Copilot CLI may write files and run only the test suites, the data generators and read-only git; it never commits or pushes (the manager does)
+COPILOT_CLI_TOOLS = ['--allow-tool=write', '--allow-tool=shell(node:*)', '--allow-tool=shell(python:*)', '--allow-tool=shell(git diff:*)', '--allow-tool=shell(git status:*)',
+                     '--deny-tool=shell(git push:*)', '--deny-tool=shell(git commit:*)', '--deny-tool=shell(git reset:*)']
+TASK_FILE = 'HFB_TASK.md'
+
+
+def copilot_cli_job(s, i, retry):
+    """Run the Copilot CLI on the owner's PC in its own worktree, like a Claude Code job. Uses the Copilot plan's own allowance, not the cloud agent's AI Credits."""
+    n = i['number']
+    branch, wt = f'copilot/issue-{n}', WORK / f'copilot-{n}'
+    back = 'for-claude-code' if retry else 'jules-queue'
+    log(f'#{n}: Copilot CLI job started (can take up to an hour)')
+    if DRY:
+        return
+    label(n, add=['copilot-running'], remove=['jules-queue', 'for-copilot'])
+    try:
+        git('fetch', '-q', 'origin')
+        if wt.exists():
+            git('worktree', 'remove', '--force', str(wt))
+        WORK.mkdir(parents=True, exist_ok=True)
+        git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+        why = 'Jules (another agent) could not finish it.' if retry else 'You are taking it so Jules (another agent) can work on other jobs.'
+        (wt / TASK_FILE).write_text(CC_JOB.format(who='the GitHub Copilot CLI', why=why, n=n, title=i['title'], body=(i.get('body') or '')[:12000]), encoding='utf-8')
+        run(['copilot', '-s'] + COPILOT_CLI_TOOLS + ['-p'], f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE}.', timeout=3600, cwd=wt)
+        (wt / TASK_FILE).unlink(missing_ok=True)
+        body_f = wt / 'PR_BODY.md'
+        desc = body_f.read_text(encoding='utf-8', errors='replace') if body_f.exists() else '(The Copilot CLI wrote no description.)'
+        if body_f.exists():
+            body_f.unlink()
+        changed = sorted(set(git('diff', '--name-only', 'HEAD', cwd=wt).splitlines() + git('ls-files', '--others', '--exclude-standard', cwd=wt).splitlines()) - {''})
+        bad = [f for f in changed if not ALLOWED.match(f.strip('"'))]
+        if not changed or bad:
+            raise RuntimeError('no changes' if not changed else 'changed files outside the app and tests: ' + ', '.join(bad[:5]))
+        git('add', '-A', cwd=wt)
+        git('-c', 'user.name=HFB local manager', '-c', 'user.email=hfb-manager@users.noreply.github.com', 'commit', '-q', '-m', f'{i["title"]} (#{n})\n\nMade by the GitHub Copilot CLI on the owner\'s PC, started by the local manager.', cwd=wt)
+        auth = __import__('base64').b64encode(f'x-access-token:{rv.TOKEN}'.encode()).decode()
+        git('-c', f'http.https://github.com/.extraheader=AUTHORIZATION: basic {auth}', 'push', '-q', '-f', 'origin', f'HEAD:refs/heads/{branch}', cwd=wt, timeout=600)
+        pr = gh(f'repos/{REPO}/pulls', 'POST', {'title': f'{i["title"]} (#{n})', 'head': branch, 'base': 'main',
+                                              'body': f'{COPILOT_CLI_MARK}\nCloses #{n}. Made by the **GitHub Copilot CLI on the owner\'s PC** (started by the local manager).\n\n{desc}'})
+        label(n, add=['copilot-done'], remove=['copilot-running'])
+        post(n, f'The Copilot CLI opened #{pr["number"]}. It goes through the Test suite and the automatic review like any PR.' + SIGN.format(rv.MODEL))
+        log(f'#{n}: Copilot CLI opened PR #{pr["number"]}')
+    except Exception as e:
+        label(n, add=[back], remove=['copilot-running'])
+        post(n, f'The Copilot CLI job on the owner\'s PC did not finish ({str(e)[:300]}), so the job goes {"on to Claude Code" if retry else "back to Jules"}.' + SIGN.format(rv.MODEL))
+        log(f'#{n}: Copilot CLI job failed: {e}')
+    finally:
+        try:
+            git('worktree', 'remove', '--force', str(wt))
+        except Exception:
+            pass
 
 
 def jules_failed(s):
@@ -945,6 +1000,7 @@ def board(s):
 # ---------- GitHub Copilot coding agent: overflow worker beside Jules (needs a paid Copilot plan) ----------
 COPILOT = 'copilot-swe-agent[bot]'
 COPILOT_AT_ONCE = cfg.get('copilot_at_once', 4)
+COPILOT_MODE = cfg.get('copilot_mode', 'auto')  # auto: the cloud agent, and the Copilot CLI on this PC while the cloud agent is paused. cloud or cli: only that one
 COPILOT_WHEN_QUEUE = cfg.get('copilot_when_queue', 1)  # hand jobs to Copilot while at least this many wait for Jules
 _copilot = {'off_until': 0}  # kept in memory, so a restart (for example after a plan change) retries at once
 COPILOT_RULES = ('Follow AGENTS.md exactly (read docs/CODEMAP.md first). Change only hplc-figure-bench(WF1.13).html and files under tests/suites, tests/data and tests/lib. '
@@ -984,6 +1040,8 @@ def copilot(s):
     queue = [i for i in issues('jules-queue') if 'pull_request' not in i and not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
     retry = [i for i in issues('for-copilot') if 'pull_request' not in i]  # Jules is out of tries on these: Copilot goes first, before Claude Code
     off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
+    cli = bool(shutil.which('copilot')) and (COPILOT_MODE == 'cli' or (COPILOT_MODE == 'auto' and off))
+    off = off and not cli  # the CLI covers for the paused cloud agent
     if off or len(issues('copilot-running')) >= COPILOT_AT_ONCE or not (retry or len(queue) >= COPILOT_WHEN_QUEUE):
         if retry and off:
             for r in retry:  # Copilot is not available: straight on to Claude Code
@@ -994,6 +1052,8 @@ def copilot(s):
         for r in retry:  # today's Copilot jobs are used up: straight on to Claude Code
             label(r['number'], add=['for-claude-code'], remove=['for-copilot'])
         return
+    if cli:
+        return copilot_cli_job(s, i, bool(retry))
     n = i['number']
     if DRY:
         return log(f'[dry] would hand #{n} to Copilot')
@@ -1126,7 +1186,8 @@ def agent_checks():
               ('Local model (Ollama)', lambda: rv.ask_model('You are a test.', q)),
               ('Gemini (REST API)', lambda: ask_gemini(q)),
               ('Claude Code (read-only)', lambda: ask_claude(q)),
-              ('ChatGPT (Codex, read-only)', lambda: ask_codex(q)))
+              ('ChatGPT (Codex, read-only)', lambda: ask_codex(q)),
+              ('Copilot CLI', lambda: run(['copilot', '-s', '-p'], q, timeout=300)))
     res = []
     for name, f in checks:
         t0 = time.time()
