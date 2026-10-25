@@ -300,12 +300,12 @@ const getA280Cell = r => r['A₂₈₀'] || r['A280'] || '';
 
   /* ================= 7. GenBank Table 11 + Partial CDS ================= */
   await T.t('7_transl.table11_partial', async () => {
-    // Generate synthetic GenBank file with codon_start=2 and partial CDS <1..97
-    const ntSeq = 'G' + 'ATG' + 'GCTTGGTAT'.repeat(10) + 'TAA'; // G + ATG + 10x AWY + STOP (97 nt total)
-    const gbPartial = `LOCUS       test_plasmid          97 bp    DNA
+    // 1. Partial CDS where first codon is non-M initiator (GTG).
+    // GTG + 10x AWY + TAA (96 nt total) -> <1..96
+    const ntSeq = 'GTG' + 'GCTTGGTAT'.repeat(10) + 'TAA';
+    const gbPartial = `LOCUS       test_plasmid          96 bp    DNA
 FEATURES             Location/Qualifiers
-     CDS             <1..97
-                     /codon_start=2
+     CDS             <1..96
                      /transl_table=11
 ORIGIN
         1 ${ntSeq}
@@ -318,18 +318,17 @@ ORIGIN
     await h.wait(1500);
 
     const partialSeq = await p.$eval('#protSeq', e => e.value);
-    const expPartial = 'M' + 'AWY'.repeat(10);
+    const expPartial = 'V' + 'AWY'.repeat(10); // Not M, because partial5 disables initiation override
     T.check('7_transl.table11_partial', partialSeq === expPartial, `expected ${expPartial}, got ${partialSeq}`);
     T.check('7_transl.table11_partial_len', partialSeq.length === expPartial.length, `seq length mismatch ${partialSeq.length}`);
 
-    // Complete CDS with GTG start -> translates to M
-    const completeSeq = 'GTG' + 'GCTTGGTAT'.repeat(10) + 'TAA'; // GTG + 10x AWY + STOP
+    // 2. Complete CDS with GTG start -> translates to M
     const gbComplete = `LOCUS       test_plasmid          96 bp    DNA
 FEATURES             Location/Qualifiers
      CDS             1..96
                      /transl_table=11
 ORIGIN
-        1 ${completeSeq}
+        1 ${ntSeq}
 //`;
     const completeFile = path.join(DATA, 'standins/complete_test.gb');
     fs.writeFileSync(completeFile, gbComplete);
@@ -338,7 +337,53 @@ ORIGIN
     await h.wait(1500);
 
     const compSeq = await p.$eval('#protSeq', e => e.value);
-    T.check('7_transl.table11_complete', compSeq === expPartial, `expected M start (table 11), got ${compSeq}`);
+    const expComplete = 'M' + 'AWY'.repeat(10);
+    T.check('7_transl.table11_complete', compSeq === expComplete, `expected M start (table 11), got ${compSeq}`);
+
+    // 3. Unsupported table test (transl_table=4) - should be filtered out
+    const gbUnsupported = `LOCUS       test_plasmid          96 bp    DNA
+FEATURES             Location/Qualifiers
+     CDS             1..96
+                     /transl_table=4
+ORIGIN
+        1 ${ntSeq}
+//`;
+    const unsupportedFile = path.join(DATA, 'standins/unsupported_test.gb');
+    fs.writeFileSync(unsupportedFile, gbUnsupported);
+
+    // reset sequence first so we can see if it loads nothing
+    await setProtSeq('MAAAAA');
+    await h.gb(unsupportedFile);
+    await h.wait(1500);
+
+    const unsuppSeq = await p.$eval('#protSeq', e => e.value);
+    // If it's filtered, it should not load into the UI and 'MAAAAA' will remain, or it will be cleared.
+    // The previous test will have cleared it to empty maybe, but let's check it doesn't translate it incorrectly.
+    // When gbCassette returns null, the file parsing doesn't load a sequence.
+    T.check('7_transl.unsupported_filtered', !unsuppSeq.includes('VAWY') && !unsuppSeq.includes('MAWY'), `unsupported table should not fallback translate, got ${unsuppSeq}`);
+
+    // 4. Explicit /translation control on unsupported table
+    const gbExplicit = `LOCUS       test_plasmid          96 bp    DNA
+FEATURES             Location/Qualifiers
+     CDS             1..96
+                     /transl_table=4
+                     /translation="EXPLICITEXPLICITEXPLICITEXPLICIT"
+ORIGIN
+        1 ${ntSeq}
+//`;
+    const explicitFile = path.join(DATA, 'standins/explicit_test.gb');
+    fs.writeFileSync(explicitFile, gbExplicit);
+
+    await h.gb(explicitFile);
+    await h.wait(1500);
+    const expSeq = await p.$eval('#protSeq', e => e.value);
+    T.check('7_transl.explicit_translation', expSeq === 'EXPLICITEXPLICITEXPLICITEXPLICIT', `expected EXPLICITEXPLICITEXPLICITEXPLICIT, got ${expSeq}`);
+
+    // Clean up
+    fs.unlinkSync(partialFile);
+    fs.unlinkSync(completeFile);
+    fs.unlinkSync(unsupportedFile);
+    fs.unlinkSync(explicitFile);
   });
 
   /* ================= 6. Sequence 6: Over 1,000 aa ================= */
