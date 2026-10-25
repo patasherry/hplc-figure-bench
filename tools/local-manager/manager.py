@@ -126,20 +126,39 @@ def ask_codex(q):
     return out.split('\ncodex\n', 1)[-1].split('\ntokens used', 1)[0].strip()  # keep only the answer
 
 
+GEMINI_MODELS = cfg.get('gemini_models', ['gemini-flash-latest', 'gemini-flash-lite-latest'])  # the lite model has its own, larger free quota
+GEMINI_GAP = cfg.get('gemini_gap_seconds', 8)  # at least this long between calls, to stay under the free per-minute limit
+_gem = {'last': 0.0, 'rest_until': {}, 'strikes': {}}
+
+
 def ask_gemini(q):
+    """Ask Gemini, pacing calls for the free tier. On "429 Too Many Requests" a model rests (2 min, then 15, then until tomorrow)
+    and the next model is tried. When every model rests, this fails at once, so the ladder and the board move on to ChatGPT."""
     if not GEMINI_KEY:
         raise RuntimeError('no GEMINI_API_KEY')
     body = json.dumps({'contents': [{'parts': [{'text': q}]}]}).encode()
-    req = urllib.request.Request('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent', data=body,
-                                 headers={'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY})
-    for tries in (1, 2):  # Gemini can be slow on long prompts: wait up to 5 minutes, and try once more after a timeout
+    for model in GEMINI_MODELS:
+        if _gem['rest_until'].get(model, 0) > time.time():
+            continue
+        wait = _gem['last'] + GEMINI_GAP - time.time()
+        if wait > 0:
+            time.sleep(wait)
+        _gem['last'] = time.time()
+        req = urllib.request.Request(f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', data=body,
+                                     headers={'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY})
         try:
             with urllib.request.urlopen(req, timeout=300) as r:
+                _gem['strikes'][model] = 0
                 return json.loads(r.read())['candidates'][0]['content']['parts'][0]['text'].strip()
-        except (TimeoutError, OSError) as e:
-            if tries == 2 or (isinstance(e, urllib.error.HTTPError) and e.code not in (429, 500, 503)):
+        except urllib.error.HTTPError as e:
+            if e.code != 429:
                 raise
-            time.sleep(20)
+            k = _gem['strikes'][model] = _gem['strikes'].get(model, 0) + 1
+            now = dt.datetime.now()
+            rest = 120 if k == 1 else 900 if k == 2 else (dt.datetime.combine(now.date() + dt.timedelta(days=1), dt.time(0, 30)) - now).total_seconds()
+            _gem['rest_until'][model] = time.time() + rest
+            log(f'Gemini {model}: rate limit (429), resting {int(rest / 60)} min')
+    raise RuntimeError('Gemini is resting after its free-tier rate limit')
 
 
 def local_json(system, user):
