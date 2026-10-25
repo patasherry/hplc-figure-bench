@@ -520,6 +520,31 @@ def gate_problems(pr, files, diff, rep):
     return out
 
 
+def preflight_report(pr, files, rep):
+    """Deterministic, advisory checks to guide a retry before the next PR is opened."""
+    bad = [f for f in files if not ALLOWED.match(f)]
+    mergeable = pr.get('mergeable_state') or 'unknown'
+    own_new_fail = rep.split('#### New checks failing', 1)[1].split('Full results', 1)[0] if '#### New checks failing' in rep else ''
+    own = sorted({m for m in re.findall(r'^- (\d\d_\w+)/', own_new_fail, re.M)} & {re.sub(r'^tests/suites/(\d\d_\w+)\.js$', r'\1', f) for f in files})
+    own_fail = [l[2:].strip() for l in own_new_fail.splitlines() if l.startswith('- ') and any(l[2:].startswith(o + '/') for o in own) and 'perf.' not in l]
+    fixes = rep.split('Checks this PR fixes', 1)[1].split('</details>', 1)[0] if 'Checks this PR fixes' in rep else ''
+    has_fix = bool(re.search(r'^- \d\d_', fixes, re.M))
+    docs_only = bool(files) and all(f.startswith('docs/') or f in ('README.md', 'tests/README.md') for f in files)
+    needs_fix = APP_ in files and not docs_only
+    check_fix = 'PASS' if (has_fix or not needs_fix) else 'FAIL'
+    fix_detail = 'docs-only exception (this advisory check is skipped for docs-only changes)' if docs_only else 'app file not changed (advisory check skipped)' if APP_ not in files else 'check-fix evidence found' if has_fix else 'no "fails on main, passes here" evidence found'
+    return '\n'.join([
+        '### Deterministic preflight report (advisory)',
+        '',
+        f'- Changed-file allowlist: {"PASS" if not bad else "FAIL"}' + ('' if not bad else f' — outside allowlist: {", ".join(bad[:6])}'),
+        f'- Applicable to current `main`: {"PASS" if mergeable in ("clean", "unstable", "has_hooks") else "FAIL"} — mergeable_state=`{mergeable}`',
+        f'- New checks added by this PR pass: {"PASS" if not own_fail else "FAIL"}' + ('' if not own_fail else f' — {own_fail[0][:200]}'),
+        f'- At least one check fails on `main` and passes here: {check_fix} — {fix_detail}',
+        '',
+        'Advisory only: this report does not add a new approval layer; the existing gate still decides pass/fail.'
+    ])
+
+
 AUTO_MERGE = cfg.get('auto_merge', True)  # merge gate-passing PRs that don't change reported numbers
 CLEAN_MARK = '<!-- clean-rebuild -->'
 JUNK_ONLY = ('It adds or changes files outside', 'It conflicts with main')
@@ -595,7 +620,9 @@ def gate(s):
             continue
         full = gh(f'repos/{REPO}/pulls/{n}')
         diff = gh(f'repos/{REPO}/pulls/{n}', accept='application/vnd.github.v3.diff')
-        probs = gate_problems(full, files, diff, report_of(n))
+        rep = report_of(n)
+        probs = gate_problems(full, files, diff, rep)
+        preflight = preflight_report(full, files, rep)
         m = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
         issue = int(m.group(1)) if m else linked_issue(n)
         mine = 'Generated with [Claude Code]' in (pr.get('body') or '') or CC_MARK in (pr.get('body') or '')  # the lead's rebuilds and Claude Code jobs are not sent back to Jules
@@ -610,8 +637,8 @@ def gate(s):
             notes = '\n'.join(f'- {x}' for x in probs)
             body = gh(f'repos/{REPO}/issues/{issue}').get('body') or ''
             if not DRY:
-                gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n### Automatic review of PR #{n} (attempt {k}): fix these, then open a new PR\n\n{notes}\n\nKeep the parts of #{n} that are right. Then commit and open the PR.'})
-                post(n, f'**Sent back to Jules** by the automatic review (no Claude tokens used):\n\n{notes}\n\nThe instructions were added to #{issue}.' + SIGN.format(rv.MODEL))
+                gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n{preflight}\n\n### Automatic review of PR #{n} (attempt {k}): fix these, then open a new PR\n\n{notes}\n\nKeep the parts of #{n} that are right. Then commit and open the PR.'})
+                post(n, f'**Sent back to Jules** by the automatic review (no Claude tokens used):\n\n{preflight}\n\n{notes}\n\nThe instructions were added to #{issue}.' + SIGN.format(rv.MODEL))
                 gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
             label(issue, add=['jules-queue'], remove=['jules-done', 'jules-running', 'needs-coordinator', 'for-coordinator'])
             log(f'PR #{n} sent back to Jules on #{issue} ({len(probs)} problems)')
@@ -619,8 +646,8 @@ def gate(s):
             notes = '\n'.join(f'- {x}' for x in probs)
             if not DRY:
                 body = gh(f'repos/{REPO}/issues/{issue}').get('body') or ''
-                gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n### Automatic review of PR #{n} (Jules out of tries)\n\n{notes}'})
-                post(n, ('**Handed to Claude Code** on the owner\'s PC: Copilot\'s attempt did not pass either.' if 'copilot' in pr['user']['login'].lower() else f'**Handed to Copilot**, then Claude Code if needed: Jules was sent back {MAX_SENDBACKS} times.') + f' Problems:\n\n{notes}' + SIGN.format(rv.MODEL))
+                gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n{preflight}\n\n### Automatic review of PR #{n} (Jules out of tries)\n\n{notes}'})
+                post(n, ('**Handed to Claude Code** on the owner\'s PC: Copilot\'s attempt did not pass either.' if 'copilot' in pr['user']['login'].lower() else f'**Handed to Copilot**, then Claude Code if needed: Jules was sent back {MAX_SENDBACKS} times.') + f'\n\n{preflight}\n\nProblems:\n\n{notes}' + SIGN.format(rv.MODEL))
                 gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
             nxt = 'for-claude-code' if 'copilot' in pr['user']['login'].lower() else 'for-copilot'
             label(issue, add=[nxt], remove=['jules-queue', 'jules-done', 'jules-running', 'needs-coordinator', 'copilot-done'])
