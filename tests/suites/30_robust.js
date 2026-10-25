@@ -221,8 +221,10 @@ await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p);
 /* a project file omitting trace/gel fields adds defaults and renders fine */
 await T.t('missing-fields', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p);
   const proj = {app: "HPLC Figure Bench", version: 1, runs: [], cur: "overlay", traces: [{id: 1, name: "Trace 1", rows: [[0, 0], [1, 10], [2, 0]]}], gels: [{id: 2, name: "Gel 1", image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==", crop: [0, 0, 1, 1], bands: [{id: 1, y: 0.5, h: 0.1}], lanes: [{id: 1, x: 0.5, w: 0.1}]}]};
-  await p.setInputFiles('#projFile', {name: 'missing_fields.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(proj))});
-  await p.waitForTimeout(1000);
+  await p.click(SEL.home); await p.waitForTimeout(600);
+  await p.setInputFiles(SEL.importFile, {name: 'missing_fields.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(proj))});
+  await p.waitForTimeout(3000);
+  await h.step('figure'); await p.waitForTimeout(500);
   const pathNodes = await p.locator('#paper svg path').count();
   T.check('missing-trace-fields.renders-path', pathNodes > 0, 'renders a <path> in overlay figure without throwing an error');
   T.check('missing-fields.no-error', errs.length === 0, errs.join(' | '));
