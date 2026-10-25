@@ -328,6 +328,85 @@ const getA280Cell = r => r['A₂₈₀'] || r['A280'] || '';
     T.check('6_large_protein.eps_text_84800', epsText.includes('84,800') || epsText.includes('84800'), `expected ε280 = 84,800, got "${epsText}"`);
   });
 
+
+  /* ================= 7. GenBank Translation rules (Table 11, codon_start) ================= */
+  await T.t('7_genbank_translation', async () => {
+    // We create three separate files so each becomes the main cassette.
+
+    // File 1: <1..97, codon_start=2, table=1 (default)
+    const fsys = require('fs');
+    const gbFile1 = path.join(DATA, 'gb/synthetic_transl_1.gb');
+    fsys.writeFileSync(gbFile1, `LOCUS       pTRANSL1              97 bp    DNA     circular SYN 01-JAN-2025
+FEATURES             Location/Qualifiers
+     CDS             <1..97
+                     /label="PartialTable1Codon2"
+                     /codon_start=2
+ORIGIN
+        1 gatggcttgg tatgcttggt atgcttggta tgcttggtat gcttggtatg cttggtatgc
+       61 ttggtatgct tggtatgctt ggtatgcttg gtattaa
+//`);
+
+    // File 2: 2..97, codon_start=1, table=11, start GTG
+    const gbFile2 = path.join(DATA, 'gb/synthetic_transl_2.gb');
+    fsys.writeFileSync(gbFile2, `LOCUS       pTRANSL2              97 bp    DNA     circular SYN 01-JAN-2025
+FEATURES             Location/Qualifiers
+     CDS             2..97
+                     /label="CompleteTable11"
+                     /transl_table=11
+ORIGIN
+        1 gatggcttgg tatgcttggt atgcttggta tgcttggtat gcttggtatg cttggtatgc
+       61 ttggtatgct tggtatgctt ggtatgcttg gtattaa
+//`);
+
+    // File 3: <2..97, codon_start=1, table=11, start GTG
+    const gbFile3 = path.join(DATA, 'gb/synthetic_transl_3.gb');
+    fsys.writeFileSync(gbFile3, `LOCUS       pTRANSL3              97 bp    DNA     circular SYN 01-JAN-2025
+FEATURES             Location/Qualifiers
+     CDS             <2..97
+                     /label="PartialTable11"
+                     /transl_table=11
+ORIGIN
+        1 gatggcttgg tatgcttggt atgcttggta tgcttggtat gcttggtatg cttggtatgc
+       61 ttggtatgct tggtatgctt ggtatgcttg gtattaa
+//`);
+
+
+    const getProtSeqLocal = async () => {
+      try {
+        const val = await p.evaluate(() => {
+          if (window.__HFB && window.__HFB.opt) return (() => { const tbl = Array.from(document.querySelectorAll('#fig-protein table tr')); return tbl.length > 1 ? tbl[1].cells[2].textContent.trim().split(' ')[0] : ''; })();
+          const el = document.querySelector('#opt-protSeq') || document.querySelector('textarea[title*="Protein sequence"]');
+          return el ? el.value : '';
+        });
+        return val || '';
+      } catch (e) {
+        return '';
+      }
+    };
+
+    const getSeq = async () => {
+      for (let i = 0; i < 5; i++) {
+        await h.wait(500);
+        const seq = await p.evaluate(() => {
+          try {
+            return window.__HFB.opt.protSeq;
+          } catch(e) {
+            const el = document.querySelector('textarea[title*="Protein sequence"]') || document.querySelector('#opt-protSeq');
+            return el ? el.value : '';
+          }
+        });
+        if (seq && seq.length > 0) return seq;
+      }
+      return '';
+    };
+
+    await h.gb(gbFile1); await h.wait(1500);
+
+    await h.wait(1500);
+    const seq1 = await p.evaluate(() => (() => { const el = document.querySelector('textarea[title*="Protein sequence"]') || document.querySelector('#opt-protSeq'); return el ? el.value : ''; })()); const seq2 = await p.evaluate(() => (() => { const el = document.querySelector('textarea[title*="Protein sequence"]') || document.querySelector('#opt-protSeq'); return el ? el.value : ''; })()); await h.wait(500); const seq3 = await p.evaluate(() => { try { return window.__HFB.opt.protSeq; } catch(e) { const el = document.querySelector('textarea[title*="Protein sequence"]') || document.querySelector('#opt-protSeq'); return el ? el.value : ''; } }); T.check('7_transl.table11_partial', seq3.startsWith('M'), `expected MAWY..., got ${seq3}`);
+    T.check('7_transl.table11_partial_len', seq3 === 'M' + 'AWY'.repeat(10), `seq length mismatch ${seq3.length}`);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();

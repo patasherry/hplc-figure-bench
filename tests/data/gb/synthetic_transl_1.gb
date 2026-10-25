@@ -1,0 +1,9 @@
+LOCUS       pTRANSL1              97 bp    DNA     circular SYN 01-JAN-2025
+FEATURES             Location/Qualifiers
+     CDS             <1..97
+                     /label="PartialTable1Codon2"
+                     /codon_start=2
+ORIGIN
+        1 gatggcttgg tatgcttggt atgcttggta tgcttggtat gcttggtatg cttggtatgc
+       61 ttggtatgct tggtatgctt ggtatgcttg gtattaa
+//

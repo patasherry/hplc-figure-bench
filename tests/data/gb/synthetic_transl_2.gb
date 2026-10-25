@@ -1,0 +1,9 @@
+LOCUS       pTRANSL2              97 bp    DNA     circular SYN 01-JAN-2025
+FEATURES             Location/Qualifiers
+     CDS             2..97
+                     /label="CompleteTable11"
+                     /transl_table=11
+ORIGIN
+        1 gatggcttgg tatgcttggt atgcttggta tgcttggtat gcttggtatg cttggtatgc
+       61 ttggtatgct tggtatgctt ggtatgcttg gtattaa
+//
