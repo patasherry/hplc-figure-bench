@@ -125,4 +125,98 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
       T.check(`chrom:${f}:no-overlap`, !ov.length, ov.slice(0, 6).join(' | ') + ' ' + shot); /* hard cases (overlapping, tiny, 96-well, 2 plates) keep labels apart */
       T.check(`chrom:${f}:no-hscroll`, !(await h.hScroll()), shot); /* a wide plate never makes the page scroll sideways */ }); }
     await close(); }
+  await T.t('min-font-size', async () => {
+    const {p, close} = await open({width: 1400}), h = H(p);
+    await h.newProject('MinFont');
+    await h.addRun(F.imac);
+    await h.suggest();
+    await p.setInputFiles(SEL.gelFile, [F.gel]);
+    await h.wait(1500);
+
+    await p.evaluate(() => {
+      document.querySelector('#o-preset').value = 'single';
+      document.querySelector('#o-preset').dispatchEvent(new Event('input', {bubbles: true}));
+      document.querySelector('#o-bandLabels').value = 'all';
+      document.querySelector('#o-bandLabels').dispatchEvent(new Event('change', {bubbles: true}));
+      const e = document.querySelector('#o-knownOn'); e.checked = true;
+      e.dispatchEvent(new Event('change', {bubbles: true}));
+      document.querySelector('#o-knownShow').value = 'inline';
+      document.querySelector('#o-knownShow').dispatchEvent(new Event('change', {bubbles: true}));
+      const pRow = document.querySelector('#o-purRow'); pRow.checked = true;
+      pRow.dispatchEvent(new Event('change', {bubbles: true}));
+      const n = document.querySelector('#g-n');
+      n.value = '40'; n.dispatchEvent(new Event('input', {bubbles: true})); n.dispatchEvent(new Event('change', {bubbles: true}));
+      const l = document.querySelector('#g-labels');
+      l.value = Array.from({length: 40}, (_, i) => 'LaneLabelVeryLongText' + i).join(',');
+      l.dispatchEvent(new Event('input', {bubbles: true})); l.dispatchEvent(new Event('change', {bubbles: true}));
+    });
+    await h.wait(500);
+
+    const svg = await p.$('#paper svg');
+    T.check('min-font-size:svg', !!svg, 'SVG present');
+
+    const g = await figGeom(p);
+    if (!g) return T.check('min-font-size:figure', false, 'no svg');
+    const out = g.T.filter(x => x.x < g.svg.x - 1 || x.r > g.svg.r + 1 || x.y < g.svg.y - 1 || x.b > g.svg.b + 1);
+    T.check('min-font-size:inside-svg', !out.length, out.map(x => x.t).slice(0, 6).join(' | '));
+    const ov = await h.overlaps();
+    T.check('min-font-size:no-overlap', !ov.length, ov.slice(0, 6).join(' | '));
+
+    const sizes = await p.evaluate(() => {
+      const texts = Array.from(document.querySelectorAll('#paper svg text'));
+      return texts.map(t => ({ text: t.textContent, fs: parseFloat(getComputedStyle(t).fontSize) }));
+    });
+
+    const tooSmall = sizes.filter(s => s.fs < 5);
+    T.check('min-font-size:size', tooSmall.length === 0, 'Too small labels: ' + tooSmall.map(x => x.text + '@' + x.fs).join(', '));
+    T.check('min-font-size:has-labels', sizes.length >= 5, 'Found ' + sizes.length + ' labels');
+    await close();
+  });
+  await T.t('min-font-size', async () => {
+    const {p, close} = await open({width: 1400}), h = H(p);
+    await h.newProject('MinFont');
+    await h.addRun(F.imac);
+    await h.suggest();
+    await p.setInputFiles(SEL.gelFile, [F.gel]);
+    await h.wait(1500);
+
+    await p.evaluate(() => {
+      document.querySelector('#o-preset').value = 'single';
+      document.querySelector('#o-preset').dispatchEvent(new Event('input', {bubbles: true}));
+      document.querySelector('#o-bandLabels').value = 'all';
+      document.querySelector('#o-bandLabels').dispatchEvent(new Event('change', {bubbles: true}));
+      const e = document.querySelector('#o-knownOn'); e.checked = true;
+      e.dispatchEvent(new Event('change', {bubbles: true}));
+      document.querySelector('#o-knownShow').value = 'inline';
+      document.querySelector('#o-knownShow').dispatchEvent(new Event('change', {bubbles: true}));
+      const pRow = document.querySelector('#o-purRow'); pRow.checked = true;
+      pRow.dispatchEvent(new Event('change', {bubbles: true}));
+      const n = document.querySelector('#g-n');
+      n.value = '40'; n.dispatchEvent(new Event('input', {bubbles: true})); n.dispatchEvent(new Event('change', {bubbles: true}));
+      const l = document.querySelector('#g-labels');
+      l.value = Array.from({length: 40}, (_, i) => 'LaneLabelVeryLongText' + i).join(',');
+      l.dispatchEvent(new Event('input', {bubbles: true})); l.dispatchEvent(new Event('change', {bubbles: true}));
+    });
+    await h.wait(500);
+
+    const svg = await p.$('#paper svg');
+    T.check('min-font-size:svg', !!svg, 'SVG present');
+
+    const g = await figGeom(p);
+    if (!g) return T.check('min-font-size:figure', false, 'no svg');
+    const out = g.T.filter(x => x.x < g.svg.x - 1 || x.r > g.svg.r + 1 || x.y < g.svg.y - 1 || x.b > g.svg.b + 1);
+    T.check('min-font-size:inside-svg', !out.length, out.map(x => x.t).slice(0, 6).join(' | '));
+    const ov = await h.overlaps();
+    T.check('min-font-size:no-overlap', !ov.length, ov.slice(0, 6).join(' | '));
+
+    const sizes = await p.evaluate(() => {
+      const texts = Array.from(document.querySelectorAll('#paper svg text'));
+      return texts.map(t => ({ text: t.textContent, fs: parseFloat(getComputedStyle(t).fontSize) }));
+    });
+
+    const tooSmall = sizes.filter(s => s.fs < 5);
+    T.check('min-font-size:size', tooSmall.length === 0, 'Too small labels: ' + tooSmall.map(x => x.text + '@' + x.fs).join(', '));
+    T.check('min-font-size:has-labels', sizes.length >= 5, 'Found ' + sizes.length + ' labels');
+    await close();
+  });
   T.done(); })();
