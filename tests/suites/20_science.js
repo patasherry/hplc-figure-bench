@@ -205,7 +205,7 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     let head = rs[0];
     let rows = rs.slice(1).filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((k, i) => [k, r[i]])));
     let mg = rows[0]['Protein (mg)'];
-    T.check('p6.pool_amount', true, `Pool amount is ${mg}`);
+    T.check('p6.pool_amount', true, `Pool amount is \${mg}`);
 
     // Add manual buffer exchange
     await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
