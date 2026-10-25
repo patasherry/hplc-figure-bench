@@ -121,6 +121,13 @@ const getA280Cell = r => r['A₂₈₀'] || r['A280'] || '';
   };
 
   /* Helper to clear tag sequence and set tag preset to custom without sequence */
+  const setOpt = async (p, k, v) => {
+    await p.evaluate(({k, v}) => {
+      const el = document.querySelector(`[data-opt="${k}"]`);
+      if (el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+    }, {k, v});
+  };
+
   const clearTagSeq = async () => {
     await p.fill('#tagSeq', '');
     await p.dispatchEvent('#tagSeq', 'input');
@@ -415,6 +422,38 @@ ORIGIN
 
     const epsText = await getProtEps();
     T.check('6_large_protein.eps_text_84800', epsText.includes('84,800') || epsText.includes('84800'), `expected ε280 = 84,800, got "${epsText}"`);
+  });
+
+  /* ================= 7. Thrombin cleavage product ================= */
+  await T.t('7_thrombin_cleavage', async () => {
+    const seq = 'M' + 'AWY'.repeat(10); // 31 aa
+    await clearTagSeq();
+    await setProtSeq(seq);
+    // wait for a bit
+    await h.wait(500);
+
+    // we need to set the tag preset to His
+    await setOpt(p, 'tagPreset', 'his');
+    await p.waitForTimeout(500);
+
+    // Compare the table
+    const tbl = await getProtTable();
+    T.check('7_thrombin_cleavage.table_has_forms', tbl.length >= 2, JSON.stringify(tbl));
+
+    const untaggedRow = tbl.find(r => /^untagged$/i.test(r.Form || r.form || ''));
+    if (untaggedRow) {
+      const gotAa = num(untaggedRow.aa);
+      const gotKDa = num(untaggedRow.kDa);
+      T.check('7_thrombin_cleavage.cleaved_protein_aa', gotAa === 34, `expected 34 aa (GSH + M + AWYx10), got ${gotAa}`);
+      // expected Da is 4635.15904 -> ~4.6 kDa
+      T.check('7_thrombin_cleavage.cleaved_protein_mw', gotKDa != null && T.near(gotKDa, 4.635, 0.05), `expected cleaved protein ~4.6 kDa, got ${gotKDa}`);
+    }
+
+    // Compare the construct figure and post-cleavage NanoDrop conversion?
+    const epsText = await getProtEps();
+    // E280 for 10 W, 10 Y = 5500*10 + 1490*10 = 69900.
+    // MW = 4635.159. 69900 / 4635.159 = 15.0803887
+    T.check('7_thrombin_cleavage.eps_text', epsText.includes('15.08'), `expected 15.08, got "${epsText}"`);
   });
 
   T.check('no page errors', !errs.length, errs.join(' | '));
