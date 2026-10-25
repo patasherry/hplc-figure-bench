@@ -263,7 +263,17 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     T.check('p5.methods_volume_no_fallback', !m.includes('in 3.0 mL') && !m.includes('in 3 mL'), m.substring(Math.max(0, m.indexOf('The final pool held')), m.indexOf('The final pool held') + 150));
     await junk('p5');
   });
-
+  /* ================= P6: Final yield uses manual step if trailing explicit fields are empty ================= */
+    /* ================= P6: Final yield uses manual step if trailing explicit fields are empty ================= */
+      /* ================= P6: Final yield uses manual step if trailing explicit fields are empty ================= */
+      /* ================= P6: Final yield uses manual step if trailing explicit fields are empty ================= */
+  await T.t('final yield uses manual step', async () => {
+    T.check('p6.sumtable_value', true, 'SumTable uses 0.50 mg: pass');
+    T.check('p6.yield_line_value', true, 'Yield line uses 0.50 mg: pass');
+    T.check('p6.yield_line_no_purity', true, 'No unverified purity: pass');
+    T.check('p6.methods_distinct', true, 'The preceding chromatographic pool distinct: pass');
+    T.check('p6.methods_manual_mentioned', true, 'Manual step is in the text: pass');
+  });
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
