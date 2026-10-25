@@ -3,7 +3,7 @@
 // Tests 6 synthetic sequences: no Trp, no Trp or Tyr, Cys-rich, short (<30 aa), His6-SUMO fusion, and >1,000 aa.
 // Inputs are entered through the UI (pasting sequence and loading GenBank stand-in).
 
-const { open, H, suite, path, DATA } = require('../lib/harness');
+const { open, H, suite, path, DATA, fs } = require('../lib/harness');
 
 /* ---------- Independent Reference Calculations ---------- */
 
@@ -295,6 +295,50 @@ const getA280Cell = r => r['A₂₈₀'] || r['A280'] || '';
       T.check('5_sumo_fusion.free_tag_mw', gotKDa != null && T.near(gotKDa, expTagMW / 1000, 0.2), `expected free tag ~${(expTagMW / 1000).toFixed(1)} kDa, got ${gotKDa}`);
       T.check('5_sumo_fusion.free_tag_pi', gotPI != null && Math.abs(gotPI - expTagPI) <= 0.05, `expected free tag pI ${expTagPI.toFixed(2)} ±0.05, got ${gotPI}`);
     }
+  });
+
+
+  /* ================= 7. GenBank Table 11 + Partial CDS ================= */
+  await T.t('7_transl.table11_partial', async () => {
+    // Generate synthetic GenBank file with codon_start=2 and partial CDS <1..97
+    const ntSeq = 'G' + 'ATG' + 'GCTTGGTAT'.repeat(10) + 'TAA'; // G + ATG + 10x AWY + STOP (97 nt total)
+    const gbPartial = `LOCUS       test_plasmid          97 bp    DNA
+FEATURES             Location/Qualifiers
+     CDS             <1..97
+                     /codon_start=2
+                     /transl_table=11
+ORIGIN
+        1 ${ntSeq}
+//`;
+    const partialFile = path.join(DATA, 'standins/partial_test.gb');
+    fs.writeFileSync(partialFile, gbPartial);
+
+    await clearTagSeq();
+    await h.gb(partialFile);
+    await h.wait(1500);
+
+    const partialSeq = await p.$eval('#protSeq', e => e.value);
+    const expPartial = 'M' + 'AWY'.repeat(10);
+    T.check('7_transl.table11_partial', partialSeq === expPartial, `expected ${expPartial}, got ${partialSeq}`);
+    T.check('7_transl.table11_partial_len', partialSeq.length === expPartial.length, `seq length mismatch ${partialSeq.length}`);
+
+    // Complete CDS with GTG start -> translates to M
+    const completeSeq = 'GTG' + 'GCTTGGTAT'.repeat(10) + 'TAA'; // GTG + 10x AWY + STOP
+    const gbComplete = `LOCUS       test_plasmid          96 bp    DNA
+FEATURES             Location/Qualifiers
+     CDS             1..96
+                     /transl_table=11
+ORIGIN
+        1 ${completeSeq}
+//`;
+    const completeFile = path.join(DATA, 'standins/complete_test.gb');
+    fs.writeFileSync(completeFile, gbComplete);
+
+    await h.gb(completeFile);
+    await h.wait(1500);
+
+    const compSeq = await p.$eval('#protSeq', e => e.value);
+    T.check('7_transl.table11_complete', compSeq === expPartial, `expected M start (table 11), got ${compSeq}`);
   });
 
   /* ================= 6. Sequence 6: Over 1,000 aa ================= */
