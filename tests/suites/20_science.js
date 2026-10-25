@@ -218,6 +218,50 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     T.check('p5.no_nanodrop', manRow && !manRow.Pool.includes('NanoDrop'), 'No invented NanoDrop provenance: ' + (manRow ? manRow.Pool : ''));
   });
 
+
+  await T.t('p5', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Volume override');
+    await h.gb(path.join(DATA, 'standins', 'pET28-SUMO-standin.gb'));
+    await h.addRun(path.join(DATA, 'standins', 'imac_histrap_1ml_step.csv'));
+    await h.pool('T1-T6');
+
+    // The user's specific instructions for the test:
+    // setup: path = 3, ndFinalVol = 1, and check methods text includes '4 mg in 1 mL at 4 mg/mL'
+    await setRun('path', 3);
+
+    const tsv = 'Sample ID\tUser name\tDate\tTime\tmg/ml\tA280 10 mm\tA260 10 mm\t260/280\nPool\tPS\t10/22/2026\t15:02\t4.000\t4.000\t2.28\t0.57';
+    await p.setInputFiles('#ndFile', { name: 'mock_nd.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(tsv) });
+    await h.wait(500);
+
+    await p.click('#tl [data-step="final"]');
+    await h.wait(400);
+
+    await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true));
+    await h.wait(200);
+
+    await p.selectOption('#ndList select[data-ndk="runId"]', { index: 1 });
+    await h.wait(200);
+
+    // Setup: ndFinalVol = 1
+    const volInput = p.locator('#ndList [data-ndr="ndFinalVol"]').first();
+    if (await volInput.isVisible()) {
+        await volInput.fill('1');
+        await volInput.dispatchEvent('change');
+    }
+    const pvInput = p.locator('#ndList [data-ndr="ndVol"]').first();
+    if (await pvInput.isVisible()) {
+        await pvInput.fill('1');
+        await pvInput.dispatchEvent('change');
+    }
+    await h.wait(200);
+
+    await h.step('figure');
+    const m = await methods();
+    T.check('p5.methods_volume_override', m.includes('4 mg in 1 mL') && m.includes('4 mg/mL'), m.substring(Math.max(0, m.indexOf('The final pool held')), m.indexOf('The final pool held') + 150));
+    await junk('p5');
+  });
+
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
