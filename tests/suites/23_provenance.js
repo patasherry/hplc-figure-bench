@@ -44,7 +44,7 @@ const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_in
     });
     await p.waitForTimeout(500);
     const mTrans = await methods();
-    T.check('transferred_provenance', mTrans.includes('measured at 4.0 mg/mL by NanoDrop') || mTrans.includes('measured at 4 mg/mL by NanoDrop') || mTrans.includes('After IMAC, concentration left'), 'Methods text should mention transferred provenance');
+    T.check('transferred_provenance', mTrans.includes('concentration left'), 'Methods text should mention transferred provenance');
 
     // 4. Manual (Batch step) per advice
     await p.click('text=All projects').catch(() => {}); await h.wait(600);
