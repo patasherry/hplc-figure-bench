@@ -154,6 +154,17 @@ await T.t('damaged-project', async () => { const {p, errs, close} = await open()
   T.check('partial.keeps-usable-run', tl.some(x => x.k.startsWith('run:')), `timeline: ${tl.map(x => x.k).join(', ')}`); // the good run is not lost
   T.check('partial.says-skipped', ts.some(t => /skipped 4/i.test(t)), `toasts: ${ts.join(' | ') || 'none'}`); // the user is told 4 entries were unusable
   await close(); });
+/* a project file whose opt object has null known entries or invalid secCals opens without error and renders cleanly */
+await T.t('malformed-opt', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p);
+  const e0 = errs.length;
+  const d = { app: "HPLC Figure Bench", version: 1, runs: [], opt: { known: [{name: 'DnaK', kda: 69.1, kind: 'contam'}, null, {name: 'GlmS', kda: 66.9, kind: 'contam'}], secCals: "invalid" } };
+  await p.setInputFiles(SEL.importFile, {name: 'malformed_opt.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))}); await p.waitForTimeout(3000);
+  T.check('malformed-opt.no-error', errs.length === e0, errs.slice(e0).join(' | '));
+  await h.step('settings');
+  await p.waitForSelector('#knownList', { state: 'visible' });
+  const knownListEntries = await p.evaluate(() => document.querySelectorAll('#knownList .krow').length);
+  T.check('malformed-opt/knownList-entries', knownListEntries === 22, 'Expected 22 entries, got ' + knownListEntries);
+  await close(); });
 /* a project file whose prep sub-objects are null or the wrong type (hand-edited, or from another tool) opens, and every step still renders (#146) */
 await T.t('malformed-prep', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Malformed prep'); await h.dropFiles(F.his); await h.pool('T1-T6');
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const src = path.join(ROOT, 'results', 'malformed_prep_src.json'); await dl.saveAs(src);
