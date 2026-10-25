@@ -143,6 +143,16 @@ await T.t('empty-uvs-project', async () => { const {p, errs, close} = await open
   await h.step('figure'); await p.waitForTimeout(500);
   T.check('empty-uvs.no-error', !errs.length, errs.join(' | ')); await close(); });
 
+
+/* a project file missing trace fields like xc, yc, cols, peaks, visible */
+await T.t('missing-trace-fields', async () => { const {p, errs, close} = await open(), h = H(p);
+  const d = {app: 'HPLC Figure Bench', version: 1, runs: [], cur: 'overlay', traces: [{id: 1, name: 'Trace 1', rows: [[0, 0], [1, 10], [2, 0]]}]};
+  await p.setInputFiles(SEL.importFile, {name: 'missing_fields.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))});
+  await p.waitForTimeout(3000);
+  const pathCount = await p.locator('#paper svg path').count();
+  T.check('missing-trace-fields.renders-path', pathCount > 0, 'renders a <path> in overlay figure without throwing an error');
+  T.check('missing-trace-fields.no-error', !errs.length, errs.join(' | '));
+  await close(); });
 /* a project file with unusable entries opens with what is usable, says what was skipped, and raises no error */
 await T.t('damaged-project', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Partial source'); await h.dropFiles(F.his);
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const good = path.join(ROOT, 'results', 'partial_src.json'); await dl.saveAs(good);
