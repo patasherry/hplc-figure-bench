@@ -233,6 +233,8 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
 
 
 
+
+
     /* ================= P6: umol yields with manual start and transfer ================= */
   await T.t('p6_umol', async () => {
     await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
@@ -255,7 +257,7 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     }
 
     // Column 1
-    await h.addRun(path.join(DATA, '..', 'synthetic', 'akta1.csv'));
+    await h.addRun(F.imac);
     await h.wait(600);
     await h.pool('T1-T6');
     await h.wait(400);
@@ -272,8 +274,10 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     await h.wait(400);
 
     // Transfer
-    await h.addConc(path.join(DATA, '..', 'synthetic', '10mg.csv'), 5);
+    // Click data-addconc
+    await p.evaluate(() => { const btn = document.querySelector('.run.sel [data-addconc]') || document.querySelector('#tl [data-addstep="conc"]'); if (btn) btn.click(); });
     await h.wait(600);
+
     await p.evaluate(() => {
         const c = document.querySelector('#btw-conc');
         if (c) {
@@ -289,7 +293,7 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     await h.wait(400);
 
     // Column 2
-    await h.addRun(path.join(DATA, '..', 'synthetic', 'akta2.csv'));
+    await h.addRun(F.q);
     await h.wait(600);
     await h.pool('T11-T16');
     await h.wait(400);
@@ -305,9 +309,17 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     }
     await h.wait(400);
 
-    // addConc for column 2 so it is NanoDrop pool (required to trigger umol basis)
-    await h.addConc(path.join(DATA, '..', 'synthetic', '4mg.csv'), null);
+    // Check if clicking addconc makes column 2 have a NanoDrop reading, which is needed to force 'umol' basis.
+    await p.evaluate(() => { const btn = document.querySelector('.run.sel [data-addconc]'); if (btn) btn.click(); });
     await h.wait(600);
+    await p.evaluate(() => {
+        const c = document.querySelector('#btw-conc');
+        if (c) {
+            c.value = '1';
+            c.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await h.wait(400);
 
     // Wait and check table
     await p.evaluate(() => {
