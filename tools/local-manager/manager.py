@@ -35,7 +35,7 @@ BOARD_HOURS = cfg.get('board_every_hours', 4)  # and at least this often while t
 BOARD_LOW_QUEUE = cfg.get('board_low_queue', 5)  # and when fewer jobs than this wait for Jules
 AUTO_MAX, AUTO_QUEUE, AUTO_AVG = 3, 10, 3.5  # adopt at most 3 a round, while fewer than 10 jobs wait, with an average of 3.5+ and nobody below 3
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
-CAP = {'copilot': cfg.get('max_copilot_jobs', 5), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
+CAP = {'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
 TRACK = cfg.get('tracking_issue', 17)
 DIGEST_HOUR = cfg.get('digest_hour', 7)
 GEMINI_KEY = cfg.get('gemini_key') or os.environ.get('GEMINI_API_KEY', '')
@@ -591,7 +591,7 @@ def gate(s):
                 log(f'PR #{n} rebuilt clean as #{new}')
                 s['gated'][str(n)] = sha
                 continue
-        if probs and issue and not mine and s['sentback'].get(str(issue), 0) < MAX_SENDBACKS:
+        if probs and issue and not mine and 'copilot' not in pr['user']['login'].lower() and s['sentback'].get(str(issue), 0) < MAX_SENDBACKS:
             k = s['sentback'][str(issue)] = s['sentback'].get(str(issue), 0) + 1
             notes = '\n'.join(f'- {x}' for x in probs)
             body = gh(f'repos/{REPO}/issues/{issue}').get('body') or ''
@@ -606,10 +606,11 @@ def gate(s):
             if not DRY:
                 body = gh(f'repos/{REPO}/issues/{issue}').get('body') or ''
                 gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n### Automatic review of PR #{n} (Jules out of tries)\n\n{notes}'})
-                post(n, f'**Handed to Claude Code** on the owner\'s PC: Jules was sent back {MAX_SENDBACKS} times. Problems:\n\n{notes}' + SIGN.format(rv.MODEL))
+                post(n, ('**Handed to Claude Code** on the owner\'s PC: Copilot\'s attempt did not pass either.' if 'copilot' in pr['user']['login'].lower() else f'**Handed to Copilot**, then Claude Code if needed: Jules was sent back {MAX_SENDBACKS} times.') + f' Problems:\n\n{notes}' + SIGN.format(rv.MODEL))
                 gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
-            label(issue, add=['for-claude-code'], remove=['jules-queue', 'jules-done', 'jules-running', 'needs-coordinator'])
-            log(f'PR #{n}: #{issue} handed to Claude Code')
+            nxt = 'for-claude-code' if 'copilot' in pr['user']['login'].lower() else 'for-copilot'
+            label(issue, add=[nxt], remove=['jules-queue', 'jules-done', 'jules-running', 'needs-coordinator', 'copilot-done'])
+            log(f'PR #{n}: #{issue} handed to {"Claude Code" if nxt == "for-claude-code" else "Copilot"}')
         elif probs:
             label(n, add=['for-coordinator'])
             post(n, '**For the lead:** the automatic review found problems' + (' after two send-backs' if issue and not mine else '') + ':\n\n' + '\n'.join(f'- {x}' for x in probs) + SIGN.format(rv.MODEL))
@@ -716,9 +717,9 @@ def jules_failed(s):
         if 'pull_request' in i or str(i['number']) in s['ccfail']:
             continue
         if any('attempts ended without a PR' in c['body'] for c in comments(i['number'])[-3:]):
-            label(i['number'], add=['for-claude-code'], remove=['needs-coordinator'])
+            label(i['number'], add=['for-copilot'], remove=['needs-coordinator'])
             s['ccfail'][str(i['number'])] = 1
-            log(f'#{i["number"]}: Jules failed 3 times, handed to Claude Code')
+            log(f'#{i["number"]}: Jules failed 3 times, handed to Copilot (then Claude Code)')
 
 
 # ---------- direction board: the local model, Gemini and ChatGPT discuss where to go, Patrick decides ----------
@@ -929,8 +930,8 @@ def board(s):
 
 # ---------- GitHub Copilot coding agent: overflow worker beside Jules (needs a paid Copilot plan) ----------
 COPILOT = 'copilot-swe-agent[bot]'
-COPILOT_AT_ONCE = cfg.get('copilot_at_once', 2)
-COPILOT_WHEN_QUEUE = cfg.get('copilot_when_queue', 2)  # hand jobs to Copilot while at least this many wait for Jules
+COPILOT_AT_ONCE = cfg.get('copilot_at_once', 4)
+COPILOT_WHEN_QUEUE = cfg.get('copilot_when_queue', 1)  # hand jobs to Copilot while at least this many wait for Jules
 _copilot = {'off_until': 0}  # kept in memory, so a restart (for example after a plan change) retries at once
 COPILOT_RULES = ('Follow AGENTS.md exactly (read docs/CODEMAP.md first). Change only hplc-figure-bench(WF1.13).html and files under tests/suites, tests/data and tests/lib. '
                  'Never commit scratch scripts, logs or results. Add a check, driven only through the UI and DOM, that fails on the current main and passes with your change, '
@@ -949,15 +950,22 @@ def copilot(s):
             post(n, f'Copilot opened #{pr["number"]}. It goes through the Test suite and the review gate like any PR.' + SIGN.format(rv.MODEL))
             log(f'#{n}: Copilot opened PR #{pr["number"]}')
         elif time.time() - c.get(str(n), time.time()) > 8 * 3600:
-            label(n, add=['jules-queue'], remove=['copilot-running'])
-            post(n, 'Copilot did not open a PR within 8 hours, so the job goes back to Jules.' + SIGN.format(rv.MODEL))
+            back = 'for-claude-code' if c.get(f'{n}_retry') else 'jules-queue'
+            label(n, add=[back], remove=['copilot-running'])
+            post(n, f'Copilot did not open a PR within 8 hours, so the job goes {"on to Claude Code" if back == "for-claude-code" else "back to Jules"}.' + SIGN.format(rv.MODEL))
             log(f'#{n}: Copilot timed out, back to Jules')
     # hand out overflow: only while Jules has a backlog, at most COPILOT_AT_ONCE at a time
     queue = [i for i in issues('jules-queue') if 'pull_request' not in i and not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
-    if _copilot['off_until'] > time.time() or len(queue) < COPILOT_WHEN_QUEUE or len(issues('copilot-running')) >= COPILOT_AT_ONCE:
+    retry = [i for i in issues('for-copilot') if 'pull_request' not in i]  # Jules is out of tries on these: Copilot goes first, before Claude Code
+    if _copilot['off_until'] > time.time() or len(issues('copilot-running')) >= COPILOT_AT_ONCE or not (retry or len(queue) >= COPILOT_WHEN_QUEUE):
+        if retry and _copilot['off_until'] > time.time():
+            for r in retry:  # Copilot is not available: straight on to Claude Code
+                label(r['number'], add=['for-claude-code'], remove=['for-copilot'])
         return
-    i = sorted(queue, key=lambda x: x['number'])[-1]  # the newest: Jules takes the oldest first, so they don't race
+    i = retry[0] if retry else sorted(queue, key=lambda x: x['number'])[-1]  # else the newest: Jules takes the oldest first, so they don't race
     if not use(s, 'copilot'):
+        for r in retry:  # today's Copilot jobs are used up: straight on to Claude Code
+            label(r['number'], add=['for-claude-code'], remove=['for-copilot'])
         return
     n = i['number']
     if DRY:
@@ -971,8 +979,8 @@ def copilot(s):
         s['count']['copilot'] -= 1
         _copilot['off_until'] = time.time() + 6 * 3600  # don't retry for 6 hours
         return log(f'Copilot not available: {str(e)[:200]}')
-    c[str(n)] = time.time()
-    label(n, add=['copilot-running'], remove=['jules-queue'])
+    c[str(n)] = time.time(); c[f'{n}_retry'] = bool(retry)
+    label(n, add=['copilot-running'], remove=['jules-queue', 'for-copilot'])
     post(n, f'Handed to the **GitHub Copilot coding agent** (Jules has {len(queue)} jobs waiting). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
     log(f'#{n}: handed to Copilot')
 
