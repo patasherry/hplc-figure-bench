@@ -138,6 +138,15 @@ for (const cloud of [false, true]) await T.t(cloud ? 'persist-cloud' : 'persist-
   T.check(`persist.${tag}.no-error`, !errs.length, errs.join(' | ')); await close(); });
 
 /* ---------------- damaged or partial files ---------------- */
+
+await T.t('empty-trace-fields', async () => { const {p, errs, close} = await open(), h = H(p);
+  const qPath = path.join(Q, 'qa', 'robust_empty_trace_fields.json');
+  await p.setInputFiles(SEL.importFile, qPath); await p.waitForTimeout(3000);
+  await h.step('figure'); await p.waitForTimeout(500);
+  const pathCount = await p.evaluate(() => document.querySelectorAll('#paper svg path').length);
+  T.check('empty-trace-fields.renders-path', pathCount > 0, 'figure has a path');
+  T.check('empty-trace-fields.no-error', !errs.length, errs.join(' | ')); await close(); });
+
 await T.t('empty-uvs-project', async () => { const {p, errs, close} = await open(), h = H(p);
   await p.setInputFiles(SEL.importFile, path.join(Q, 'empty_uvs_proj.json')); await p.waitForTimeout(3000);
   await h.step('figure'); await p.waitForTimeout(500);

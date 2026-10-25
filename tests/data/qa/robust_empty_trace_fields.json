@@ -1,0 +1,14 @@
+{
+  "app": "HPLC Figure Bench",
+  "version": 1,
+  "runs": [],
+  "traces": [
+    {
+      "id": 1,
+      "name": "Trace 1",
+      "rows": [[0, 0], [1, 10], [2, 0]]
+    }
+  ],
+  "gels": [],
+  "cur": "overlay"
+}
