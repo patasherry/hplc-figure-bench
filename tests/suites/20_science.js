@@ -230,7 +230,7 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     // setup: path = 3, ndFinalVol = 1, and check methods text includes '4 mg in 1 mL at 4 mg/mL'
     await setRun('path', 3);
 
-    const tsv = 'Sample ID\tUser name\tDate\tTime\tmg/ml\tA280 10 mm\tA260 10 mm\t260/280\nPool\tPS\t10/22/2026\t15:02\t4.000\t4.000\t2.28\t0.57';
+    const tsv = 'Sample ID\tUser name\tDate\tTime\tmg/ml\tA280 10 mm\tA260 10 mm\t260/280\nPool\tPS\t10/22/2026\t15:02\t9.440\t9.440\t5.38\t0.57';
     await p.setInputFiles('#ndFile', { name: 'mock_nd.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(tsv) });
     await h.wait(500);
 
@@ -258,7 +258,9 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
 
     await h.step('figure');
     const m = await methods();
-    T.check('p5.methods_volume_override', m.includes('4 mg in 1 mL') && m.includes('4 mg/mL'), m.substring(Math.max(0, m.indexOf('The final pool held')), m.indexOf('The final pool held') + 150));
+    T.check('p5.methods_volume_override', m.match(/4\.0[01] mg in 1\.0 mL \(4\.0[01] mg\/mL\)/) !== null || m.includes('4 mg in 1 mL (4 mg/mL)'), m.substring(Math.max(0, m.indexOf('The final pool held')), m.indexOf('The final pool held') + 150));
+    // Check that it does NOT say 4 mg in 3 mL (1.33 mg/mL)
+    T.check('p5.methods_volume_no_fallback', !m.includes('in 3.0 mL') && !m.includes('in 3 mL'), m.substring(Math.max(0, m.indexOf('The final pool held')), m.indexOf('The final pool held') + 150));
     await junk('p5');
   });
 
