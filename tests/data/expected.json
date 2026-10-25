@@ -462,6 +462,42 @@
     }
    ],
    "pool": null
+  },
+  {
+   "file": "time_iso_u7.csv",
+   "note": "run start date only: no column or method in the file, so the step is named from the file",
+   "format": "UNICORN 7 CSV",
+   "kind": "other",
+   "step": "time",
+   "unit": "mL",
+   "frac": {
+    "n": 1,
+    "first": "F1",
+    "last": "F1"
+   },
+   "injection": 0.0,
+   "peaks": [],
+   "forbid": [],
+   "pool": null,
+   "time": "2026-10-23T16:00:00.000Z"
+  },
+  {
+   "file": "time_ddmm_u7.csv",
+   "note": "run start date only: no column or method in the file, so the step is named from the file",
+   "format": "UNICORN 7 CSV",
+   "kind": "other",
+   "step": "time",
+   "unit": "mL",
+   "frac": {
+    "n": 1,
+    "first": "F1",
+    "last": "F1"
+   },
+   "injection": 0.0,
+   "peaks": [],
+   "forbid": [],
+   "pool": null,
+   "time": "2026-10-23T16:00:00.000Z"
   }
  ],
  "chrom_note": "ve        apex (isolated peak) or Gaussian centre (overlapped) in the unit the app should show:\n            SEC: counted from the injection. Others: the file's own volume axis.\n  must      the app has to report a peak within tol. must=false: allowed but not required (tiny, shoulder, outside the fraction window)\n  pool      fractions you would pool, its span, its A280 area (mAU*unit) on a zero baseline, and the mg the app should show\n            with eps (A280 of 1 mg/mL, 1 cm) = POOL_EPS and the stated UV path: mg = area/1000/(eps*path_mm/10)",
