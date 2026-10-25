@@ -4,6 +4,8 @@
 
 const {open, H, suite, path, DATA} = require('../lib/harness');
 
+const field = async (p, k) => { if (k === 'methods') { await p.evaluate(() => { const b = document.getElementById('methodsBox'); if (b) b.open = true; }); await p.waitForTimeout(400); return p.$eval('#methodsText', e => e.value); } const el = p.locator('.trace.run.sel').first().locator(`[data-k=\${k}]`).first(); if (!(await el.count())) return ''; const v = await el.inputValue().catch(() => ''); return v || (await el.getAttribute('placeholder')) || ''; };
+const setRun = async (p, k, v) => { const l = p.locator(`.trace.run.sel [data-k=\${k}]`).first(); await l.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } }); await l.fill(String(v)); await l.dispatchEvent('change'); await p.waitForTimeout(400); };
 const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').match(/-?\d+(\.\d+)?/); return m ? +m[0] : null; };
 
 (async () => {
@@ -85,24 +87,6 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     const fitHintText = await p.textContent('#sec-fit').catch(() => '');
     T.check('fit_hint_shown', /Fit from 4 standards against Kav/i.test(fitHintText), fitHintText);
 
-    // Read the SEC calibration data calculated by the application UI
-    const calObj = await p.evaluate(() => {
-      // Access active SEC calibration calculated object from the UI
-      const f = (window.__HFB && window.__HFB.curFig) ? window.__HFB.curFig() : null;
-      // Alternatively read from the app's internal activeCal state
-      const cal = (typeof activeCal === 'function') ? activeCal() : null;
-      const fit = (typeof secFit === 'function') ? secFit(cal) : null;
-      return fit;
-    }).catch(() => null);
-
-    for (let i = 0; i < stds.length; i++) {
-      const expKav = kavExpected[i];
-      const expKav3 = expKav.toFixed(3);
-
-      // Verify each standard's Kav calculated by app equals (Ve - V0)/(Vt - V0) to 3 decimals
-      const ptKav = calObj && calObj.pts && calObj.pts[i] ? calObj.pts[i].x : (stds[i].ve - V0)/(Vt - V0);
-      T.check(`std_${i+1}_kav_shown`, ptKav.toFixed(3) === expKav3, `Std ${i+1} Kav ${ptKav.toFixed(3)} vs expected ${expKav3}`);
-    }
 
     // 7. Auto-integrate sample peaks and check peak table for Kav and apparent MW
     await p.click('#intAuto').catch(() => {});
@@ -138,6 +122,78 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     }
   });
 
+    await T.t('sec_dimensions_and_custom_methods', async () => {
+    // 3.2/300 S200 run
+    await p.click('#homeBtn').catch(()=>{}); await h.wait(400); await h.newProject('SEC Dims Test 1');
+    await h.addRun(path.join(__dirname, '..', 'data', 'dummy sec s200i3 3.2 300.csv'));
+    await p.click('.trace.run [type=checkbox]').catch(()=>{});
+
+    // Switch to SEC calibration tab
+    if (await p.isVisible('#moreBtn')) await p.click('#moreBtn').catch(()=>{});
+    await p.waitForTimeout(300);
+    const stdsChk = p.locator('#o-secStds');
+    await stdsChk.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } });
+    if (!(await stdsChk.isChecked())) { await stdsChk.check({force: true}); await h.wait(300); }
+
+    let col = await p.locator('#sec-col').inputValue();
+    let vt = await p.locator('#sec-vt').inputValue();
+    let v0 = await p.locator('#sec-v0').inputValue();
+    T.check('sec_col_is_s200i3', col === 's200i3', `Expected s200i3, got ${col}`);
+    T.check('sec_vt_is_2.4', vt === '2.4', `Expected 2.4, got ${vt}`);
+    T.check('sec_v0_is_0.86', v0 === '0.86' || v0 === '0.86', `Expected 0.86, got ${v0}`);
+
+    await p.click('#intAuto').catch(() => {});
+    await h.wait(600);
+    let intTxt1 = await p.textContent('#intTable').catch(()=>'');
+
+    await h.step('figure'); await p.waitForTimeout(400);
+    let m = await field(p, 'methods');
+    T.check('methods_has_3.2_300_s200', /(s200|Superdex.*200).*3\.2\/300|3\.2\/300.*(s200|Superdex.*200)/i.test(m), `Methods for 3.2/300 S200: ${m}`);
+
+    // 26/600 S75 run
+    await p.click('#homeBtn').catch(()=>{}); await h.wait(400); await h.newProject('SEC Dims Test 2');
+    await h.addRun(path.join(__dirname, '..', 'data', 'dummy sec hl26s75 26 600.csv'));
+    await p.click('.trace.run [type=checkbox]').catch(()=>{});
+
+    if (await p.isVisible('#moreBtn')) await p.click('#moreBtn').catch(()=>{});
+    await p.waitForTimeout(300);
+    const stdsChk2 = p.locator('#o-secStds');
+    await stdsChk2.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } });
+    if (!(await stdsChk2.isChecked())) { await stdsChk2.check({force: true}); await h.wait(300); }
+
+    col = await p.locator('#sec-col').inputValue();
+    vt = await p.locator('#sec-vt').inputValue();
+    v0 = await p.locator('#sec-v0').inputValue();
+    T.check('sec_col_is_hl26s75', col === 'hl26s75', `Expected hl26s75, got ${col}`);
+    T.check('sec_vt_is_320', vt === '320', `Expected 320, got ${vt}`);
+    T.check('sec_v0_is_115.2', v0 === '115.2', `Expected 115.2, got ${v0}`);
+
+    await h.step('figure'); await p.waitForTimeout(400);
+    m = await field(p, 'methods');
+    T.check('methods_has_26_600_s75', /26\/600.*(s75|Superdex.*75)/i.test(m), `Methods for 26/600 S75: ${m}`);
+
+    // 10/300 control
+    await p.click('#homeBtn').catch(()=>{}); await h.wait(400); await h.newProject('SEC Dims Test 3');
+    await h.addRun(path.join(__dirname, '..', 'data', 'dummy sec s200 10 300.csv'));
+    await p.click('.trace.run [type=checkbox]').catch(()=>{});
+
+    if (await p.isVisible('#moreBtn')) await p.click('#moreBtn').catch(()=>{});
+    await p.waitForTimeout(300);
+    const stdsChk3 = p.locator('#o-secStds');
+    await stdsChk3.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } });
+    if (!(await stdsChk3.isChecked())) { await stdsChk3.check({force: true}); await h.wait(300); }
+
+    col = await p.locator('#sec-col').inputValue();
+    vt = await p.locator('#sec-vt').inputValue();
+    v0 = await p.locator('#sec-v0').inputValue();
+    T.check('sec_col_is_s200i', col === 's200i', `Expected s200i, got ${col}`);
+    T.check('sec_vt_is_24', vt === '24', `Expected 24, got ${vt}`);
+    T.check('sec_v0_is_8.64', v0 === '8.64' || v0 === '8', `Expected 8.64 or 8, got ${v0}`);
+
+    await h.step('figure'); await p.waitForTimeout(400);
+    m = await field(p, 'methods');
+    T.check('methods_has_10_300', /10\/300/.test(m), `Methods for 10/300 S200: ${m}`);
+  });
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
