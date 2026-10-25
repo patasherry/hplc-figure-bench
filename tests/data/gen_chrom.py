@@ -315,6 +315,13 @@ def au_trace():
     fn = 'hplc_au_ml_u7.csv'; ar = mg_run(fn, 'ml', 'AU', False, 0.001)
     MG.append(dict(file=fn, note='y in AU (not mAU), x in mL: the app shows it in mAU, so the area is in mAU*mL', unit='mL', flow=None, pool='F1-F6', path_mm=10, eps=POOL_EPS, area=round(ar, 2), mg=round(ar/1000/(POOL_EPS*1.0), 4)))
 
+def synthetic_csv():
+    fn = 'synthetic.csv'
+    x = np.round(np.arange(0, 10.0001, 0.05), 4); y = signal(x, [(5.0, 0.5, 1.0)])
+    with open(os.path.join(OUT, fn), 'w') as f:
+        f.write('Volume (mL),Absorbance (AU)\n')
+        for i in range(len(x)): f.write(f'{x[i]:.4f},{y[i]:.4f}\n')
+
 # ---------------------------------------------------------------- K. pool volume when the pool includes the last fraction
 # The trace runs about 24 mL past the last fraction (wash, re-equilibration) and there is no Waste mark, so the last fraction must not run to the end of the trace.
 # Own generator per file: the files above keep their noise. Fractions are 1 mL unless stated; vol = the pool volume the app should show.
@@ -345,7 +352,7 @@ def large_header_run():
 
 
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, synthetic_csv): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()

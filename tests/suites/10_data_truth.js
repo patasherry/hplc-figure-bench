@@ -170,10 +170,29 @@ async function lastFracFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
   } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
 }
 
+async function syntheticCsvTest(){
+  const id = 'synthetic_generic_csv';
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('synthetic_csv ' + id);
+    await h.dropFiles(path.join(CH, 'synthetic.csv'));
+    await p.waitForTimeout(1500);
+    const svg = await p.locator('#paper svg').innerHTML();
+    T.check(`${id}/svg_axis`, svg.includes('Absorbance (AU)') && svg.includes('Volume (mL)'), 'axes');
+
+    const hasPeak = await p.evaluate(() => {
+      const text = document.querySelector('#paper svg').innerHTML;
+      return text.includes('5.00') && (text.includes('1.00') || text.includes('1.0') || text.includes('1000'));
+    });
+    T.check(`${id}/peak_detected`, hasPeak, 'peak at ~5 mL');
+  } finally { await close(); }
+}
+
 (async () => {
   for (const e of EXP.lastfrac || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => lastFracFile(e)); }
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
+  await T.t('synthetic_csv', syntheticCsvTest);
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
   T.done(); })();
