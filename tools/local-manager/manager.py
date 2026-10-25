@@ -538,6 +538,7 @@ def clean_rebuild(pr, files, issue):
         base = git('merge-base', 'origin/main', f'pr/{n}')
         patch.write_text(git('diff', '--binary', base, f'pr/{n}', '--', *keep) + '\n', encoding='utf-8')
         if wt.exists():
+            unlink_deps(wt)
             git('worktree', 'remove', '--force', str(wt))
         git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
         git('apply', '--3way', str(patch), cwd=wt)  # raises on a conflict it can't settle
@@ -559,6 +560,7 @@ def clean_rebuild(pr, files, issue):
         return None
     finally:
         try:
+            unlink_deps(wt)
             git('worktree', 'remove', '--force', str(wt))
         except Exception:
             pass
@@ -660,7 +662,7 @@ CC_JOB = """You are {who} working on issue #{n} of HPLC Figure Bench, in a separ
 {why} Read AGENTS.md first and follow it exactly, then docs/CODEMAP.md and docs/GOALS.md.
 Make the change the issue asks for, and nothing more. Change only hplc-figure-bench(WF1.13).html and files under tests/.
 Add a check, driven only through the UI and DOM, that fails on the current app and passes with your change. Keep every existing check.
-Test data is synthetic and made by the generators in tests/data/. If tests run here, run the suites you touched from the repository root,
+Test data is synthetic and made by the generators in tests/data/. The test libraries are linked in, so run the suites you touched from the repository root before you finish,
 for example `node tests/suites/10_data_truth.js` (set ONLY to a file name pattern to run fewer).
 Do not commit, push or open a PR: the manager does that. When you finish, write the PR description to PR_BODY.md in this folder:
 what changed and why, the check that fails before and passes after with its numbers, and what you ran.
@@ -675,6 +677,38 @@ def git(*a, cwd=None, timeout=300):
     if r.returncode:
         raise RuntimeError(f'git {a[0]}: {(r.stderr or r.stdout).strip()[:300]}')
     return r.stdout.strip()
+
+
+def link_deps(wt):
+    """Give a job's worktree the test suite's libraries (Playwright), by a link to tests/node_modules in this checkout, so the agent can run the suites."""
+    src, dst = ROOT / 'tests' / 'node_modules', wt / 'tests' / 'node_modules'
+    if not src.is_dir() or not dst.parent.is_dir() or os.path.lexists(dst):
+        return
+    try:
+        if os.name == 'nt':  # a junction needs no admin rights on Windows
+            subprocess.run(['cmd', '/c', 'mklink', '/J', str(dst), str(src)], capture_output=True, check=True)
+        else:
+            os.symlink(src, dst, target_is_directory=True)
+        ex = Path(git('rev-parse', '--git-common-dir', cwd=wt).strip())
+        ex = (ex if ex.is_absolute() else wt / ex) / 'info' / 'exclude'
+        if 'tests/node_modules' not in (ex.read_text(encoding='utf-8') if ex.exists() else ''):
+            ex.parent.mkdir(parents=True, exist_ok=True)
+            with open(ex, 'a', encoding='utf-8') as fh:
+                fh.write('\ntests/node_modules\n')  # never committed, never counted as a changed file
+    except Exception as e:
+        log(f'could not link the test libraries into {wt}: {e}')
+
+
+def unlink_deps(wt):
+    """Remove only the link, before the worktree is deleted, so the real tests/node_modules is never touched."""
+    dst = wt / 'tests' / 'node_modules'
+    try:
+        if os.path.islink(dst):
+            os.unlink(dst)
+        elif os.name == 'nt' and os.path.isdir(dst) and os.path.realpath(dst) != os.path.abspath(dst):
+            os.rmdir(dst)  # rmdir on a junction removes the junction, not its target
+    except Exception as e:
+        log(f'could not remove the test library link in {wt}: {e}')
 
 
 def claude_jobs(s):
@@ -693,9 +727,11 @@ def claude_jobs(s):
         try:
             git('fetch', '-q', 'origin')
             if wt.exists():
+                unlink_deps(wt)
                 git('worktree', 'remove', '--force', str(wt))
             WORK.mkdir(parents=True, exist_ok=True)
             git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+            link_deps(wt)
             run(['claude', '-p', '--permission-mode', 'acceptEdits', '--allowedTools', CC_TOOLS], CC_JOB.format(who='Claude Code', why='Jules (another agent) could not finish it.', n=n, title=i['title'], body=(i.get('body') or '')[:12000]), timeout=3600, cwd=wt, stdin=True)
             body_f = wt / 'PR_BODY.md'
             desc = body_f.read_text(encoding='utf-8', errors='replace') if body_f.exists() else '(Claude Code wrote no description.)'
@@ -720,6 +756,7 @@ def claude_jobs(s):
             log(f'#{n}: Claude Code job failed: {e}')
         finally:
             try:
+                unlink_deps(wt)
                 git('worktree', 'remove', '--force', str(wt))
             except Exception:
                 pass
@@ -744,9 +781,11 @@ def copilot_cli_job(s, i, retry):
     try:
         git('fetch', '-q', 'origin')
         if wt.exists():
+            unlink_deps(wt)
             git('worktree', 'remove', '--force', str(wt))
         WORK.mkdir(parents=True, exist_ok=True)
         git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+        link_deps(wt)
         why = 'Jules (another agent) could not finish it.' if retry else 'You are taking it so Jules (another agent) can work on other jobs.'
         (wt / TASK_FILE).write_text(CC_JOB.format(who='the GitHub Copilot CLI', why=why, n=n, title=i['title'], body=(i.get('body') or '')[:12000]), encoding='utf-8')
         run(['copilot', '-s'] + COPILOT_CLI_TOOLS + ['-p'], f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE}.', timeout=3600, cwd=wt)
@@ -774,6 +813,7 @@ def copilot_cli_job(s, i, retry):
         log(f'#{n}: Copilot CLI job failed: {e}')
     finally:
         try:
+            unlink_deps(wt)
             git('worktree', 'remove', '--force', str(wt))
         except Exception:
             pass
