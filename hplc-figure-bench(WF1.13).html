@@ -1480,7 +1480,7 @@ function parseRunTime(s){
   } else return null;
   return {t, str};
 }
-function parseAkta(text, fname){
+function parseAkta(text, fname, why){
   const lines = text.split(/\r\n|\n|\r/); let u = -1, d = ',';
   for (let i=0;i<Math.min(50, lines.length) && u < 0;i++) for (const dd of [',', '	', ';']) {
     const c = (dd === '	' ? lines[i].split('	') : csvSplit(lines[i], dd)).map(s => s.trim());
@@ -1498,7 +1498,9 @@ function parseAkta(text, fname){
       const v = (f[cv.col+1] || '').trim().replace(/^"|"$/g, '');
       if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
       else { const y = toNum(v, d !== ','); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
-  return aktaFromCurves(curves, fname);
+  /* an ÄKTA export without a UV curve: say which curves it has, so the caller can tell the user instead of plotting conductivity as the signal */
+  const ak = aktaFromCurves(curves, fname); if (!ak && why) why.noUv = curves.filter(c => c.xs.length > 1).map(c => c.name);
+  return ak;
 }
 /* what a UNICORN curve is, from its name and unit. UV path length (cm) and derived UV curves (UV_CUT_TEMP@100) are not traces */
 function curveKind(nm, yu){ yu = yu || '';
@@ -1542,14 +1544,16 @@ async function zipGet(map, name){ const e = map.get(name); if (!e) return null; 
 function netFloats(u8){ if (!u8 || u8.length < 27 || u8[17] !== 0x0f) return []; const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength), n = dv.getInt32(22, true), t = u8[26], out = new Array(n);
   if (t === 0x0b) { for (let k = 0; k < n; k++) out[k] = dv.getFloat32(27 + 4*k, true); } else if (t === 0x06) { for (let k = 0; k < n; k++) out[k] = dv.getFloat64(27 + 8*k, true); } else return []; return out; }
 async function isUnicornZip(f){ if (!/\.zip$/i.test(f.name)) return false; try { const m = zipList(new Uint8Array(await f.arrayBuffer())); return [...m.keys()].some(k => /^Chrom\.\d+\.xml$/i.test(k)); } catch (e) { return false; } }
-async function parseUnicornZip(buf, fname){
+/* why (optional) gets the curves the chromatogram lists but whose points are missing or empty in the archive, so the loader can name them */
+async function parseUnicornZip(buf, fname, why){
   const m = zipList(new Uint8Array(buf)), cx = [...m.keys()].filter(k => /^Chrom\.\d+\.xml$/i.test(k)).sort()[0]; if (!cx) return null;
+  const lost = []; if (why) why.missing = lost;
   const doc = new DOMParser().parseFromString(new TextDecoder().decode(await zipGet(m, cx)), 'text/xml'), kid = (el, t) => { const c = [...el.children].find(x => x.tagName === t); return c ? c.textContent : ''; };
   const curves = []; let path = null;
   for (const c of doc.querySelectorAll('Curves > Curve')) { const nm = kid(c, 'Name'), yu = kid(c, 'AmplitudeUnit'), kind = curveKind(nm, yu); if (!['uv', 'cond', 'grad', 'flow', 'temp'].includes(kind)) continue;
     const pts = [...c.querySelectorAll('CurvePoints > CurvePoint')], cp = pts.find(p => kid(p, 'IsFullResolution') === 'true') || pts[0], fn = cp ? kid(cp, 'BinaryCurvePointsFileName') : '';
-    const inner = fn ? await zipGet(m, fn) : null; if (!inner) continue; const im = zipList(inner), xs = netFloats(await zipGet(im, 'CoordinateData.Volumes')), ys = netFloats(await zipGet(im, 'CoordinateData.Amplitudes'));
-    const n = Math.min(xs.length, ys.length); if (n < 2) continue;
+    const inner = fn ? await zipGet(m, fn) : null; if (!inner) { lost.push({name: nm, kind}); continue; } const im = zipList(inner), xs = netFloats(await zipGet(im, 'CoordinateData.Volumes')), ys = netFloats(await zipGet(im, 'CoordinateData.Amplitudes'));
+    const n = Math.min(xs.length, ys.length); if (n < 2) { lost.push({name: nm, kind}); continue; }
     if (kind === 'uv' && path == null) { const ui = c.querySelector('CurveUVInfo'); const pl = ui ? parseFloat(kid(ui, 'UVPathLength')) : NaN; if (pl > 0) path = pl; }
     curves.push({name: nm, xu: kid(c, 'VolumeUnit') || 'ml', yu, kind, xs: xs.slice(0, n).map(v => Math.round(v*1e5)/1e5), ys: ys.slice(0, n), ev: []}); }
   for (const ec of doc.querySelectorAll('EventCurves > EventCurve')) { const t = ec.getAttribute('EventCurveType') || '', kind = /^frac/i.test(t) ? 'frac' : /^inject/i.test(t) ? 'inj' : /log/i.test(t) ? 'log' : ''; if (!kind) continue;
@@ -4974,18 +4978,21 @@ async function loadFiles(files){
   const gbf = files.filter(f => /\.(gb|gbk|genbank|ape|dna)$/i.test(f.name)); for (const f of gbf) await loadGenBank(f); files = files.filter(f => !gbf.includes(f)); if (!files.length) return;
   const sf = files.filter(f => /\.(cif|mmcif|pdb|ent)$/i.test(f.name)); for (const f of sf) await loadStructFile(f); files = files.filter(f => !sf.includes(f)); if (!files.length) return;
   const imgs = files.filter(isImage), data = files.filter(f => !isImage(f));
-  const added = [], newRuns = [], bad = [];
+  const added = [], newRuns = [], bad = [], warn = [];
   for (const f of data) {
     try {
       if (/\.(heic|heif|pdf|svg|dng|raw|cr2|nef)$/i.test(f.name)) { bad.push(`${f.name} (a picture format this tool cannot open: export the gel as PNG, JPEG or TIFF)`); continue; }
       if (/\.(xlsx?|xlsm|ods|docx?)$/i.test(f.name)) { bad.push(`${f.name} (a spreadsheet or document: save the data as CSV or tab-separated text first)`); continue; }
       if (/\.zip$/i.test(f.name)) { if (typeof DecompressionStream === 'undefined') { bad.push(`${f.name} (this browser cannot unpack it, export the run as .csv from UNICORN)`); continue; }
-        const ak = await isUnicornZip(f) ? await parseUnicornZip(await f.arrayBuffer(), f.name.replace(/\.[^.]+$/, '')) : null;
-        if (ak) newRuns.push(makeRun(ak)); else bad.push(`${f.name} (not a UNICORN result archive)`); continue; }
+        const why = {}, ak = await isUnicornZip(f) ? await parseUnicornZip(await f.arrayBuffer(), f.name.replace(/\.[^.]+$/, ''), why) : null, lost = why.missing || [], uvLost = lost.filter(c => c.kind === 'uv').map(c => c.name);
+        /* a curve listed in the result but without its points is named, never dropped silently */
+        if (ak) { newRuns.push(makeRun(ak)); if (lost.length) warn.push(`${f.name} lists ${lost.map(c => c.name).join(', ')} but the archive has no data for ${lost.length > 1 ? 'them' : 'it'}, so ${lost.length > 1 ? 'they are' : 'it is'} missing from the figure. Export the result from UNICORN again to include ${lost.length > 1 ? 'them' : 'it'}.`); }
+        else bad.push(uvLost.length ? `${f.name} (a UNICORN result archive, but the data of its UV curve ${uvLost.join(', ')} is missing from it: export the result from UNICORN again)` : why.missing ? `${f.name} (a UNICORN result archive without a UV curve: export a result that has one)` : `${f.name} (not a UNICORN result archive)`); continue; }
       const text = decode(await f.arrayBuffer()), nm = f.name.replace(/\.[^.]+$/, '');
       if (looksNanoDrop(text)) { addNanoDrop(parseNanoDrop(text), f.name); continue; }
-      const ak = parseAkta(text, nm);
-      if (ak) newRuns.push(makeRun(ak)); else added.push({name: nm, parsed: parseText(text)});
+      const why = {}, ak = parseAkta(text, nm, why);
+      if (ak) newRuns.push(makeRun(ak)); else { added.push({name: nm, parsed: parseText(text)});
+        if (why.noUv) warn.push(`${f.name} looks like an ÄKTA (UNICORN) export but has no UV curve${why.noUv.length ? ` (only ${why.noUv.join(', ')})` : ''}, so it was loaded as a plain trace of its first curve. Export it again from UNICORN with the UV curve ticked.`); }
     } catch (err) { bad.push(f.size === 0 ? `${f.name} (the file is empty)` : `${f.name} (no columns of numbers found)`); }
   }
   if ((added.length || newRuns.length) && traces.length && traces.every(t => t.ex)) { traces = []; opt.xmin = opt.xmax = opt.ymin = opt.ymax = ''; }
@@ -5000,6 +5007,7 @@ async function loadFiles(files){
   const n = added.length + newRuns.length;
   if (bad.length) toast(`Could not read ${bad.join(', ')}. Use an ÄKTA (UNICORN) export or a text file with time and signal columns.`);
   else if (n) toast(dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}` : `Loaded ${n} trace${n > 1 ? 's' : ''}`);
+  if (warn.length) toast(warn.join(' '));
   if (imgs.length) addGelFiles(imgs);
 }
 function addParsed(added, quiet){
