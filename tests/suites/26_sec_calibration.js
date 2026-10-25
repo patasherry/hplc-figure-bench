@@ -139,6 +139,130 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
   });
 
   T.check('no page errors', !errs.length, errs.join(' | '));
+
+  await T.t('sec_calibration_extrapolation', async () => {
+    // We must return to home to create a new project.
+    await p.click('#homeBtn', {force: true}).catch(() => {});
+    await h.wait(500);
+
+    await h.newProject('SEC Extrapolation Test');
+    await h.addRun(path.join(DATA, 'science/sec_inject_12.csv'));
+
+    const runStep = (await h.timeline()).find(x => /^run:/.test(x.k));
+    if (runStep) await h.step(runStep.k);
+    await h.wait(400);
+
+    await p.waitForSelector('#secPanel', {state: 'visible'});
+
+    if ((await p.getAttribute('#moreBtn', 'aria-expanded')) !== 'true') {
+      await p.evaluate(() => { const b = document.querySelector('#moreBtn'); if (b) b.click(); });
+      await h.wait(300);
+    }
+    await p.waitForSelector('#moreBtn[aria-expanded="true"]', {state: 'visible'});
+    await p.waitForSelector('#sec-v0', {state: 'visible'});
+
+    const stdsChk = p.locator('#o-secStds');
+    await openFolds(stdsChk);
+    if (!(await stdsChk.isChecked())) {
+      await stdsChk.check();
+      await h.wait(300);
+    }
+
+    await setField('#sec-v0', '');
+    await setField('#sec-vt', '');
+
+    while (await p.locator('#secStdList .krow').count() > 0) {
+      await p.evaluate(() => { const b = document.querySelector('#secStdList .krow .xbtn'); if (b) b.click(); });
+      await h.wait(150);
+    }
+
+    const stds1 = [{ name: 'A', kda: 100, ve: 14.0 }, { name: 'B', kda: 10, ve: 18.0 }];
+    for (let i = 0; i < stds1.length; i++) {
+      await p.evaluate(() => { const b = document.querySelector('#sec-addStd'); if (b) b.click(); });
+      await h.wait(150);
+    }
+
+    for (let i = 0; i < stds1.length; i++) {
+      const s = stds1[i], nIn = p.locator(`#ss-n${i}`), kIn = p.locator(`#ss-k${i}`), vIn = p.locator(`#ss-v${i}`);
+      await openFolds(nIn);
+      await p.evaluate(({s,v}) => { const el = document.querySelector(s); if(el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); } }, {s: `#ss-n${i}`, v: s.name});
+      await p.evaluate(({s,v}) => { const el = document.querySelector(s); if(el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); } }, {s: `#ss-k${i}`, v: String(s.kda)});
+      await p.evaluate(({s,v}) => { const el = document.querySelector(s); if(el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); } }, {s: `#ss-v${i}`, v: String(s.ve)});
+      await h.wait(150);
+    }
+
+    await p.evaluate(() => { const b = document.querySelector('#intAuto'); if (b) b.click(); });
+    await h.wait(600);
+
+    let pt = await h.peakTable();
+    T.check('peak_table_exists', pt.length >= 2, `Peak table rows count: ${pt.length}`);
+    if (pt.length >= 2) {
+      const mwCol = pt[0].findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
+      const mwVal = pt[1][mwCol];
+      T.check('mw_316_23_in_peak_table', mwVal.includes('~316'), `Peak table MW: ${mwVal}`);
+    }
+
+    await p.evaluate(() => { const el = document.querySelector('.trace.run.sel [data-k=shade]'); if (el) { el.value = '11.0-13.0'; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); } });
+    await h.wait(500);
+
+    await h.step('figure');
+    await h.wait(400);
+
+    let sumT = await h.sumTable();
+    T.check('summary_table_exists', sumT.length >= 2, `Summary table rows count: ${sumT.length}`);
+    let notes = await p.locator('#sumNotes').textContent();
+    T.check('mw_316_23_in_summary_notes', notes.includes('~316'), `Summary notes: ${notes}`);
+
+    // Verify SVG labels in Cal Fig tab
+    await p.evaluate(() => { const b = document.querySelector('#figtabs [data-fig^="cal:"]'); if (b) b.click(); });
+    await h.wait(500);
+    let svgT = await h.svgTexts();
+    T.check('svg_contains_extrapolated_label', svgT.some(t => t.text && t.text.includes('~316')), 'SVG should contain ~316 label');
+
+    // Case 2: standards at 12.2 and 18.2
+    // Must go back to run step to edit stds
+    await h.step(runStep.k);
+    await h.wait(400);
+
+    if ((await p.getAttribute('#moreBtn', 'aria-expanded')) !== 'true') {
+      await p.evaluate(() => { const b = document.querySelector('#moreBtn'); if (b) b.click(); });
+      await h.wait(300);
+    }
+    await p.waitForSelector('#sec-v0', {state: 'visible'});
+
+    const stds2 = [{ name: 'A', kda: 100, ve: 12.2 }, { name: 'B', kda: 10, ve: 18.2 }];
+    for (let i = 0; i < stds2.length; i++) {
+      const s = stds2[i];
+      await p.evaluate(({s,v}) => { const el = document.querySelector(s); if(el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); } }, {s: `#ss-n${i}`, v: s.name});
+      await p.evaluate(({s,v}) => { const el = document.querySelector(s); if(el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); } }, {s: `#ss-k${i}`, v: String(s.kda)});
+      await p.evaluate(({s,v}) => { const el = document.querySelector(s); if(el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); } }, {s: `#ss-v${i}`, v: String(s.ve)});
+      await h.wait(150);
+    }
+    await h.wait(600);
+
+    pt = await h.peakTable();
+    if (pt.length >= 2) {
+      const mwCol = pt[0].findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
+      const mwVal = pt[1][mwCol];
+      T.check('is_extrapolated_12_2_in_peak_table', mwVal.includes('~'), `Peak table MW: ${mwVal}`);
+    }
+
+    await h.step('figure');
+    await h.wait(400);
+
+    sumT = await h.sumTable();
+    T.check('summary_table_exists_2', sumT.length >= 2, `Summary table rows count: ${sumT.length}`);
+    notes = await p.locator('#sumNotes').textContent();
+    T.check('mw_316_23_in_summary_notes_2', notes.includes('~316'), `Summary notes: ${notes}`);
+
+    // Verify SVG labels in Cal Fig tab
+    await p.evaluate(() => { const b = document.querySelector('#figtabs [data-fig^="cal:"]'); if (b) b.click(); });
+    await h.wait(500);
+    svgT = await h.svgTexts();
+    T.check('svg_contains_extrapolated_label_2', svgT.some(t => t.text && t.text.includes('~316')), 'SVG should contain ~316 label');
+
+  });
+
   await close();
   T.done();
 })();
