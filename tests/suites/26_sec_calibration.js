@@ -138,6 +138,37 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     }
   });
 
+  await T.t('sec_dimensions_and_custom_methods', async () => {
+    const fs2 = require('fs');
+    fs2.writeFileSync(path.join(DATA, 'qa/sec_dummy_3.2_300_S200.csv'), 'Volume (mL),UV\n0,0\n1,1\n2,2\n3,3\n');
+    fs2.writeFileSync(path.join(DATA, 'qa/sec_dummy_26_600_S75.csv'), 'Volume (mL),UV\n0,0\n1,1\n2,2\n3,3\n');
+    fs2.writeFileSync(path.join(DATA, 'qa/sec_dummy_S200_10_300.csv'), 'Volume (mL),UV\n0,0\n1,1\n2,2\n3,3\n');
+
+    await h.newProject('Dimensions Test 1');
+    await h.addRun(path.join(DATA, 'qa/sec_dummy_3.2_300_S200.csv'));
+    await h.wait(400);
+    const runStep1 = (await h.timeline()).find(x => /^run:/.test(x.k));
+    if (runStep1) await h.step(runStep1.k);
+    let m = await p.locator('#methodsText').inputValue();
+    T.check('s200i3_methods', m.includes('3.2/300') && m.includes('200'), 'Methods should have 3.2/300 S200: ' + m);
+
+    await h.newProject('Dimensions Test 2');
+    await h.addRun(path.join(DATA, 'qa/sec_dummy_26_600_S75.csv'));
+    await h.wait(400);
+    const runStep2 = (await h.timeline()).find(x => /^run:/.test(x.k));
+    if (runStep2) await h.step(runStep2.k);
+    m = await p.locator('#methodsText').inputValue();
+    T.check('hl26s75_methods', m.includes('26/600') && m.includes('75'), 'Methods should have 26/600 S75: ' + m);
+
+    await h.newProject('Dimensions Test 3');
+    await h.addRun(path.join(DATA, 'qa/sec_dummy_S200_10_300.csv'));
+    await h.wait(400);
+    const runStep3 = (await h.timeline()).find(x => /^run:/.test(x.k));
+    if (runStep3) await h.step(runStep3.k);
+    m = await p.locator('#methodsText').inputValue();
+    T.check('s200_10_300_methods', m.includes('10/300'), 'Methods should have 10/300: ' + m);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
