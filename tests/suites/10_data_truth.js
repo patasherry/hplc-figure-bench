@@ -170,7 +170,35 @@ async function lastFracFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
   } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
 }
 
+async function fixtureFormatMatrix(){ const id = 'fixture-format-matrix', byFile = new Map((EXP.chrom || []).map(e => [e.file, e]));
+  const rows = [
+    {k: 'u7-csv-comma', file: 'imac_HisTrap_FF_1mL_step_u7.csv', ok: e => e && /UNICORN 7 CSV, comma/i.test(e.format || '')},
+    {k: 'u7-csv-tab-utf16', file: 'imac_HisTrap_HP_5mL_gradient_u7_tab_utf16.csv', ok: e => e && /UNICORN 7 CSV, tab, UTF-16/i.test(e.format || '')},
+    {k: 'u6-csv-comma-utf16', file: 'iex_HiTrap_Q_HP_5mL_u6_comma_utf16.csv', ok: e => e && /UNICORN 6 CSV, comma, UTF-16/i.test(e.format || '')},
+    {k: 'u5-asc', file: 'run12_HisTrap_5ml_u5.asc', ok: e => e && /UNICORN 5/i.test(e.format || '')},
+    {k: 'u7-sec-semicolon-min-no-flow', file: 'sec_semicolon_unicorn7.csv', ok: e => e && e.kind === 'sec' && e.unit === 'min' && e.flow == null},
+    {k: 'u7-zip-missing-curve', file: 'missing_curve.zip', ok: () => true}
+  ], matrix = [];
+  for (const r of rows){ const hasFile = fs.existsSync(path.join(CH, r.file)), e = byFile.get(r.file), hasExpect = !!e || r.file === 'missing_curve.zip', ok = hasFile && hasExpect && r.ok(e);
+    matrix.push(`${r.k}:${ok ? '✓' : '✗'}`); T.check(`${id}/${r.k}`, ok, `file=${hasFile}, expected=${hasExpect}, entry=${e ? (e.format || e.kind || 'present') : 'none'}`); }
+  T.check(`${id}/compact-matrix`, matrix.length === rows.length, matrix.join(' | '));
+}
+
+async function secSemicolonNoFlow(){ const id = 'sec_semicolon_no_flow';
+  const {p, errs, close} = await open(), h = H(p), pool = async () => (await peaks(p, h)).rows.find(r => /^pool/i.test(r.name)) || {};
+  try {
+    await h.newProject('sec semicolon no flow'); await h.addRun(path.join(CH, 'sec_semicolon_unicorn7.csv')); await setOpt(p, 'o-eps', 1); await h.pool('1.A.1-1.A.3');
+    const P = await peaks(p, h), pr = await pool(), tbl = (await p.locator('#intTable').innerText()).replace(/\s+/g, ' ');
+    T.check(`${id}/unit`, P.unit === 'min', `header: ${P.head.join(' | ')}`);
+    T.check(`${id}/pool-row`, /^pool/i.test(pr.name || ''), JSON.stringify(pr));
+    T.check(`${id}/no-mg-without-flow`, Number.isNaN(pr.mg), `pool mg shown without flow: ${pr.mg}`);
+    T.check(`${id}/flow-note`, /flow rate is not known|enter it under Flow/i.test(tbl), tbl.slice(-240));
+  } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
+}
+
 (async () => {
+  if (!only || only.test('fixture-format-matrix')) await T.t('fixture-format-matrix', fixtureFormatMatrix);
+  if (!only || only.test('sec_semicolon_no_flow')) await T.t('sec_semicolon_no_flow', secSemicolonNoFlow);
   for (const e of EXP.lastfrac || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => lastFracFile(e)); }
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);

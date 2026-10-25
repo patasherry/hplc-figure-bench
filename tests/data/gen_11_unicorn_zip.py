@@ -55,7 +55,7 @@ def gen_missing_curve_unicorn():
     temp_zip = path + ".tmp"
     with zipfile.ZipFile(path, 'r') as zin, zipfile.ZipFile(temp_zip, 'w', zipfile.ZIP_DEFLATED) as zout:
         for item in zin.infolist():
-            if 'BinaryCurvePoints' not in item.filename:
+            if item.filename != 'Chrom.1_1_True':
                 zout.writestr(item, zin.read(item.filename))
     os.remove(path)
     os.rename(temp_zip, path)
