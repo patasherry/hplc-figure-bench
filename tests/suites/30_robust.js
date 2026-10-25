@@ -217,4 +217,11 @@ await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p);
     T.check('perf.workflow-8-steps-under-1.5s', n >= 8 && ms < 1500, `${n} steps, ${ms} ms`); } // the full figure renders in time
   T.check('perf.no-error', !errs.length, errs.join(' | ')); await close(); });
 
+await T.t('missing-fields', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p);
+  const proj = {app: 'HPLC Figure Bench', version: 1, runs: [], cur: 'overlay', traces: [{id: 1, name: 'Trace 1', rows: [[0, 0], [1, 10], [2, 0]]}], gels: [{id: 2, name: 'Gel 1', image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==', crop: [0, 0, 1, 1], bands: [{id: 1, y: 0.5, h: 0.1}], lanes: [{id: 1, x: 0.5, w: 0.1}]}]};
+  await p.click(SEL.home); await p.waitForTimeout(600); await p.setInputFiles(SEL.importFile, {name: 'missing_fields.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(proj))}); await p.waitForTimeout(3000); await h.step('figure'); await p.waitForTimeout(500);
+  T.check('missing-trace-fields.renders-path', await p.locator('#paper svg path').count() > 0, 'renders an overlay path');
+  T.check('missing-fields.no-error', !errs.length, errs.join(' | ')); await close();
+});
+
 T.done(); })();

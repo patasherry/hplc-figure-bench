@@ -4,7 +4,7 @@
 // moving and removing steps keeps every number consistent. Fixtures: data/science (gen_science.py), plus real runs (HFB_PRIVATE_DATA) or their synthetic stand-ins.
 const {open, H, suite, path, fs, ROOT, DATA, src} = require('../lib/harness');
 const F = {gb: src('gb'), imac: src('his'),
-  q: src('q'), sec: path.join(DATA, 'science/sec_inject2.csv'), nd: path.join(DATA, 'science/nd3.csv'), fdh: src('secZip')};
+  q: src('q'), sec: path.join(DATA, 'science/sec_inject2.csv'), nd: path.join(DATA, 'science/nd3.csv'), a205: path.join(DATA, 'nd/nd_a205_4mg_ml.tsv'), fdh: src('secZip')};
 const TRUTH = JSON.parse(fs.readFileSync(path.join(DATA, 'science/truth.json'), 'utf8'));
 /* the biochemist's ground truth, when present, adds NanoDrop fixtures with a known mean and count */
 let EXP = null; try { EXP = JSON.parse(fs.readFileSync(path.join(DATA, 'expected.json'), 'utf8')); } catch (e) {}
@@ -263,6 +263,14 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     // Check that it does NOT say 4 mg in 3 mL (1.33 mg/mL)
     T.check('p5.methods_volume_no_fallback', !m.includes('in 3.0 mL') && !m.includes('in 3 mL'), m.substring(Math.max(0, m.indexOf('The final pool held')), m.indexOf('The final pool held') + 150));
     await junk('p5');
+  });
+
+  await T.t('a205_provenance', async () => {
+    await h.newProject('A205 provenance'); await h.addRun(F.imac); await h.pool('T1-T6'); await h.addConc(F.a205, 1); await h.step('figure');
+    const m = await methods();
+    T.check('a205.amount', /4(?:\.00)? mg/.test(m), m.slice(-500));
+    T.check('a205.source', /A205.*instrument/i.test(m), m.slice(-500));
+    T.check('a205.no-unused-a280', !/NanoDrop A280 \(.*A280 of/i.test(m), m.slice(-500));
   });
 
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));

@@ -123,6 +123,15 @@ async function poolConcMinutes(){ const id = 'hplc_min_flow_known_u7';
   } finally { await close(); }
 }
 
+async function genericUnits(){ const id = 'generic_units';
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject(id); await h.dropFiles(path.join(CH, 'generic_units.csv')); await p.waitForTimeout(500);
+    const text = (await h.svgTexts()).map(x => x.t).join(' | ');
+    T.check(`${id}/axis-units`, text.includes('Absorbance (AU)') && text.includes('Volume (mL)'), text);
+  } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
+}
+
 /* mg from the UV area follows the units: minutes only with a flow, AU shown as mAU, and a UV path not in the file assumed (2 mm) and said so */
 async function mgFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
   const {p, errs, close} = await open(), h = H(p), pool = async () => (await peaks(p, h)).rows.find(r => /^pool/i.test(r.name)) || {}, tbl = async () => (await p.locator('#intTable').innerText()).replace(/\s+/g, ' '), tol = x => Math.max(0.011, x*0.05);
@@ -174,6 +183,7 @@ async function lastFracFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
   for (const e of EXP.lastfrac || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => lastFracFile(e)); }
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);
+  await T.t('generic_units', genericUnits);
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
   for (const e of EXP.time_tests || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => timeFile(e)); }
