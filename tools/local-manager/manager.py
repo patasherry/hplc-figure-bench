@@ -564,6 +564,20 @@ def clean_rebuild(pr, files, issue):
             pass
 
 
+def linked_issue(n):
+    """The issue a PR belongs to when its description has no "Closes #N": the leader writes the PR's link on the issue it finished."""
+    try:
+        hits = gh(f'search/issues?q=repo:{REPO}+is:issue+%22pull/{n}%22').get('items', [])
+        if hits:
+            return hits[0]['number']
+    except Exception:
+        pass
+    for i in gh(f'repos/{REPO}/issues?state=all&labels=jules-done&sort=updated&direction=desc&per_page=30'):  # fallback without search
+        if 'pull_request' not in i and any(f'/pull/{n}' in c['body'] for c in comments(i['number'])[-6:]):
+            return i['number']
+    return None
+
+
 def gate(s):
     s.setdefault('gated', {}); s.setdefault('sentback', {})
     merged_now = False  # one merge per pass, so each lands on a fresh main
@@ -582,8 +596,8 @@ def gate(s):
         full = gh(f'repos/{REPO}/pulls/{n}')
         diff = gh(f'repos/{REPO}/pulls/{n}', accept='application/vnd.github.v3.diff')
         probs = gate_problems(full, files, diff, report_of(n))
-        m = re.search(r'(?:closes|fixes)\s+#(\d+)', pr.get('body') or '', re.I)
-        issue = int(m.group(1)) if m else None
+        m = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
+        issue = int(m.group(1)) if m else linked_issue(n)
         mine = 'Generated with [Claude Code]' in (pr.get('body') or '') or CC_MARK in (pr.get('body') or '')  # the lead's rebuilds and Claude Code jobs are not sent back to Jules
         if probs and issue and all(p.startswith(JUNK_ONLY) for p in probs) and CLEAN_MARK not in (pr.get('body') or ''):
             new = clean_rebuild(full, files, issue)  # only stray files or a conflict: fix it here instead of a Jules retry
@@ -686,7 +700,7 @@ def claude_jobs(s):
             desc = body_f.read_text(encoding='utf-8', errors='replace') if body_f.exists() else '(Claude Code wrote no description.)'
             if body_f.exists():
                 body_f.unlink()
-            changed = [l[3:].strip() for l in git('status', '--porcelain', cwd=wt).splitlines()]
+            changed = sorted(set(git('diff', '--name-only', 'HEAD', cwd=wt).splitlines() + git('ls-files', '--others', '--exclude-standard', cwd=wt).splitlines()) - {''})
             bad = [f for f in changed if not ALLOWED.match(f.strip('"'))]
             if not changed or bad:
                 raise RuntimeError('no changes' if not changed else 'changed files outside the app and tests: ' + ', '.join(bad[:5]))
