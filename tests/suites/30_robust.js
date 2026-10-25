@@ -160,7 +160,8 @@ await T.t('malformed-prep', async () => { const {p, errs, close} = await open(),
   const d = JSON.parse(fs.readFileSync(src, 'utf8')); d.prep = Object.assign({}, d.prep, {btw: null, manual: null, skip: 'x', stepMeta: [], offs: 5, titles: null});
   await p.click(SEL.home); await p.waitForTimeout(600); const e0 = errs.length;
   await p.setInputFiles(SEL.importFile, {name: 'malformed_prep.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))}); await p.waitForTimeout(3000);
-  const tl = await h.timeline(); T.check('malformed-prep.opens', tl.some(x => x.k.startsWith('run:')), `timeline: ${tl.map(x => x.k).join(', ')}`);
+  const tl = await h.timeline();
+  if (!tl.length) { errs.push('timeline empty'); } T.check('malformed-prep.opens', tl.some(x => x.k.startsWith('run:')), `timeline: ${tl.map(x => x.k).join(', ')}`);
   for (const x of tl) { await h.step(x.k); await p.waitForTimeout(250); } // every step, including the run's, renders from the normalized prep
   T.check('malformed-prep.no-error', errs.length === e0, errs.slice(e0).join(' | '));
   await close(); });
