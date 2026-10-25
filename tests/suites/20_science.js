@@ -94,6 +94,7 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
       const mgS = mg != null ? mg.toFixed(2) + ' mg' : '@@'; T.check('meth.conc_once', m.split(mgS).length - 1 <= 1, `"${mgS}" appears ${m.split(mgS).length - 1} times`); }); /* guards: the concentrated amount is not reported twice */
     await T.t('p1_arith', () => arith('p1'));
     await T.t('p1_methods', async () => { const m = await methods(), t = await table(), vK = col(t, /^Volume/);
+      T.check('meth.yield_per_gram_cells', m.includes('0.004 mg per g of wet cell pellet'), 'methods text lacks per-gram yield');
       for (const [id, re] of [['col_imac', /HisTrap FF 1 mL/], ['col_q', /Resource Q 6 mL/], ['col_sec', /Superdex 200 Increase 10\/300 GL/], ['flow_imac', /1 mL\/min/], ['flow_q', /2 mL\/min/], ['flow_sec', /0\.5 mL\/min/],
         ['pool_imac', /T1–T6|T1-T6/], ['pool_q', /T11–T16|T11-T16/], ['bufA_q', /20 mM Tris pH 8\.0, 50 mM NaCl/], ['protease', /Ulp1/], ['final_conc', /1(\.0+)? mg\/mL/], ['final_vol', /0\.10? mL/]])
         T.check('meth.' + id, re.test(m), `${re} not in methods`); /* guards: the methods state the values the user entered */
