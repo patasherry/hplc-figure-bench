@@ -3574,14 +3574,24 @@ function buildRunFig(run){
 /* the final pool's amount as a line under the workflow, so the figure states what came out */
 const sig2 = v => v >= 100 ? fmt(v, 0) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2) : v >= 0.1 ? fmt(v, 2) : fmt(v, 3);
 function finalYield(){
-  const rows = sumRows(), fin = rows.slice().reverse().find(x => rows.mgOf(x) > 0); if (!fin) return null;
+  const rows = sumRows(), wf = wfList();
+  let fin = rows.slice().reverse().find(x => rows.mgOf(x) > 0), mFin = null;
+  for (let j = wf.length - 1; j >= 0; j--) {
+    if (wf[j].prep === 'manual') { if (manMg(wf[j].man) > 0) { mFin = wf[j]; break; } }
+    else if (fin && wf[j] === fin.r) break;
+  }
+  if (!fin && !mFin) return null;
   /* the final sample's own concentration and volume, when entered, give the amount kept; the last pool stays the chromatography figure */
-  const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc > 0 ? kc : rows.mgOf(fin), fc = prep.on ? numOr(prep.finConc, 0) : 0, fv = prep.on ? numOr(prep.finVol, 0) : 0, meas = fc > 0 && fv > 0, mg = meas ? fc*fv : pm;
+  const kc = fin && prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = mFin ? manMg(mFin.man) : (kc > 0 ? kc : rows.mgOf(fin)), fc = prep.on ? numOr(prep.finConc, 0) : 0, fv = prep.on ? numOr(prep.finVol, 0) : 0, meas = fc > 0 && fv > 0, mg = meas ? fc*fv : pm;
   const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, perG = cG > 0 ? mg/cG : null;
-  return {fin, k: rows.indexOf(fin), mg, poolMg: pm, poolPerL: cL > 0 ? pm/cL : null, meas, fc, fv, perL: cL > 0 ? mg/cL : null, perG, cL, basis: meas ? 'final' : rows.basis, poolBasis: rows.basis, pur: fin.pur, purEst: fin.purEst,
+  return {fin: mFin ? {r: mFin} : fin, k: mFin ? -1 : rows.indexOf(fin), mg, poolMg: pm, poolPerL: cL > 0 ? pm/cL : null, meas, fc, fv, perL: cL > 0 ? mg/cL : null, perG, cL, basis: meas ? 'final' : rows.basis, poolBasis: rows.basis, pur: mFin ? null : (fin ? fin.pur : null), purEst: mFin ? false : (fin ? fin.purEst : false),
     perGTxt: perG == null ? '' : `${sig2(perG)} mg per g of wet cells`, odd: rows.some(x => x.yld > 100 || x.stepY > 105),
-    loaded: (() => { const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r) : null; return k ? {mg: k, kept: true, r: fin.r} : rows.mgOf(pr) > 0 ? {mg: rows.mgOf(pr), kept: false, r: fin.r} : null; })(),
-    purTyped: prep.on && hasTxt(prep.qcPurity) && fin.pur == null}; }
+    loaded: (() => { if (mFin) {
+      if (fin && rows.mgOf(fin) > 0) return {mg: rows.mgOf(fin), kept: false, r: mFin};
+      return null;
+    }
+    const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r) : null; return k ? {mg: k, kept: true, r: fin.r} : rows.mgOf(pr) > 0 ? {mg: rows.mgOf(pr), kept: false, r: fin.r} : null; })(),
+    purTyped: prep.on && hasTxt(prep.qcPurity) && (!fin || fin.pur == null)}; }
 function yieldLine(res){
   if (opt.wfYield === false || !res || !res.svg || !res.geo) return res; const y = finalYield(); if (!y) return res;
   const fs = fontSize(), W = res.geo.W, H = res.geo.H, pos = prepSteps().concat(wfFigList()).indexOf(y.fin.r), letter = opt.wfLetters && pos >= 0 ? String.fromCharCode(65 + pos) + ', ' : '';
@@ -4137,7 +4147,7 @@ function methodsText(){
   if (prep.on) { const fc = numOr(prep.finConc, 0), fv = numOr(prep.finVol, 0), ra = v(prep.finRatio), cL = numOr(prep.cultureL, 0);
     if (fc > 0 && fv > 0) R.push(`The final sample was ${fmtAuto(fc)} mg/mL in ${fmtAuto(fv)} mL, ${sig2(fc*fv)} mg${cL > 0 ? ` or ${sig2(fc*fv/cL)} mg per L of culture` : ''}${ra ? `, with an A260/A280 of ${ra}` : ''}.`);
     else if (ra) R.push(`The final sample had an A260/A280 of ${ra}.`);
-    const yy = finalYield(); if (yy && yy.meas && yy.loaded && yy.mg > yy.loaded.mg*1.05) R.push(`The final sample (${sig2(yy.mg)} mg) is more than the ${sig2(yy.loaded.mg)} mg loaded onto ${lc(stepTitle(yy.loaded.r))} [check the UV path and the concentration readings].`);
+    const yy = finalYield(); if (yy && yy.meas && yy.loaded && yy.mg > yy.loaded.mg*1.05) R.push(`The final sample (${sig2(yy.mg)} mg) is more than the ${sig2(yy.loaded.mg)} mg loaded onto ${lc(yy.loaded.r.prep === "manual" ? yy.loaded.r.name : stepTitle(yy.loaded.r))} [check the UV path and the concentration readings].`);
     [['qcPurity', 'Purity'], ['qcMass', 'Intact mass'], ['qcActivity', 'Activity and other checks']].forEach(([k, l]) => { if (hasTxt(prep[k])) R.push(`${l}: ${v(prep[k]).replace(/\.$/, '')}${k === 'qcPurity' && yy && yy.purTyped ? ' [no gel of the last pool attached, check]' : ''}.`); }); }
   return (P.join('\n\n') + (R.length ? '\n\nResults: ' + R.join(' ') : '')).replace(/\(, /g, '(').replace(/[ \t]+/g, ' ').replace(/\.\./g, '.').replace(/ /g, ' ');
 }
@@ -5875,8 +5885,8 @@ function stepList(){
       s: (ms => [ms.c > 0 && (ms.src === 'btw' || ms.nd) ? `${fmt(ms.c, 2)} mg/mL` : '', numOr(b.vOut, 0) > 0 ? `${fmtAuto(+b.vOut)} mL` : '', kp ? `${sig2(kp.mg)} mg` : ''].filter(Boolean).join(', '))(poolMeas(r)) || 'NanoDrop export and volume'}); } });
   L.push({k: 'add', g: first ? 'Purification' : '', add: true, t: '', s: ''});
   const y = finalYield(), fin = FIN_KEYS.some(v) || ndSamples.some(n => n.stage === 'final') || !!m('final').date;
-  const fw = !fin || !y ? '' : y.meas && y.loaded && y.mg > y.loaded.mg*1.05 ? `${sig2(y.mg)} mg is more than was loaded, check` : y.purTyped ? 'Purity typed, add a gel of the last pool' : '';
-  L.push({k: 'final', g: 'Results', t: 'Final sample', done: fin, warn: fw, s: fw ? fw : fin && y ? `${sig2(y.mg)} mg${y.perL != null ? `, ${sig2(y.perL)} mg/L` : ''}${y.meas ? '' : ', from the last pool'}` : y ? `Latest pool: ${sig2(y.poolMg)} mg after ${stepTitle(y.fin.r)}` : 'Concentration, storage, quality checks'});
+  const fw = !fin || !y ? '' : y.meas && y.loaded && y.mg > y.loaded.mg*1.05 ? `${sig2(y.mg)} mg is more than was loaded, check` : y.purTyped && y.fin.r.prep !== 'manual' ? 'Purity typed, add a gel of the last pool' : '';
+  L.push({k: 'final', g: 'Results', t: 'Final sample', done: fin, warn: fw, s: fw ? fw : fin && y ? `${sig2(y.mg)} mg${y.perL != null ? `, ${sig2(y.perL)} mg/L` : ''}${y.meas ? '' : ', from the last pool'}` : y ? `Latest pool: ${sig2(y.poolMg)} mg after ${y.fin.r.prep === 'manual' ? y.fin.r.name : stepTitle(y.fin.r)}` : 'Concentration, storage, quality checks'});
   const hasWf = figures().some(f => f.kind === 'workflow'), gaps = hasWf ? methodGaps() : 0;
   L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, s: gaps ? `${gaps} field${gaps === 1 ? '' : 's'} left for the methods` : hasWf ? 'Workflow figure, summary, methods text' : 'Builds once a column is added'});
   L.forEach(x => { if (['transform', 'expr', 'lysis'].includes(x.k) && skipped(x.k)) Object.assign(x, {done: false, warn: '', skip: true, s: 'Skipped, left out of the figure and methods'}); });

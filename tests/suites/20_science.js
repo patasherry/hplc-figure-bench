@@ -218,6 +218,23 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     T.check('p5.no_nanodrop', manRow && !manRow.Pool.includes('NanoDrop'), 'No invented NanoDrop provenance: ' + (manRow ? manRow.Pool : ''));
   });
 
+
+  /* ================= P6: Final manual step works in yieldLine and finalYield ================= */
+  await T.t('p6_final_manual', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Final manual');
+    await h.addRun(F.imac); await h.pool('T1-T6'); await setRun('path', 2);
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="man:other"]').click()); await h.wait(500);
+    await setField('#man-name', 'Final buffer exchange');
+    await setField('#man-conc', '0.5'); await setField('#man-vol', '1');
+    await h.step('figure');
+
+    // final Yield text check
+    const txt = await p.evaluate(() => document.body.innerText);
+    T.check('p6.final_manual_amount', txt.includes('0.50 mg'), 'Yield line: ' + txt.substring(Math.max(0, txt.indexOf('Final pool')), txt.indexOf('Final pool') + 100));
+  });
+
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
