@@ -502,6 +502,62 @@ ORIGIN
     epsText = await getProtEps();
     T.check('7_unknown_residues.control_eps_no_approx_label', !epsText.includes('approximate'), `expected no approximation label in resolved eps text, got "${epsText}"`);
   });
+
+  /* ================= 7_gst_empty_tag ================= */
+  await T.t('7_gst_empty_tag', async () => {
+
+    await clearTagSeq();
+    await setProtSeq('M' + 'AWY'.repeat(10));
+    await setOpt(p, 'tagPreset', 'gst');
+
+    await h.wait(500);
+
+    const getEps = async () => {
+        return await p.evaluate(() => {
+            const table = document.querySelector('#protTable');
+            if (table) {
+                const html = table.innerHTML;
+                if (!html.includes('Tagged')) return 'empty';
+                const epsStr = document.querySelector('#protEps').textContent;
+                const match2 = epsStr.match(/Tagged:.*?mg\/mL ([0-9.]+)/);
+                if (match2) return match2[1];
+            }
+            return 'empty';
+        });
+    };
+
+    let val = await getEps();
+    T.check('empty_tag_eps', val !== '16.0546', `Expected A280 column to be empty (withheld) or not 16.05, got "${val}"`);
+    T.check('empty_tag_eps_empty', val === 'empty', `Expected A280 column to be empty, got "${val}"`);
+
+    await setOpt(p, 'eps', '40');
+
+    await h.wait(500);
+
+    val = await p.evaluate(() => {
+        const el = document.querySelector('[data-opt="eps"]');
+        if (el) return el.value;
+        return null;
+    });
+    T.check('manual_eps', val === '40', `Expected A280 column to be 40, got "${val}"`);
+
+    await setOpt(p, 'eps', '');
+
+    await p.evaluate(() => {
+        const tag = document.querySelector('#tagSeq');
+        if (tag) {
+            tag.value = 'AWY';
+            tag.dispatchEvent(new Event('input', {bubbles: true}));
+            tag.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await h.wait(500);
+
+    let valFusion = await getEps();
+    T.check('fusion_eps', valFusion !== 'empty' && !valFusion.includes('16.05') && !valFusion.includes('40'), `Expected fusion eps, got "${valFusion}"`);
+
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();

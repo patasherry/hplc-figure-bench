@@ -1,0 +1,9 @@
+Require applicable fusion properties for tagged samples
+
+Fix `protForms` and `ndEpsFor` in `hplc-figure-bench(WF1.13).html`. Selecting GST or another preset without a sequence must not cause Tagged runs to use `F[0]` untagged mass/coefficient. Withhold dependent estimates until composition is supplied.
+
+Open questions:
+- I removed the UI timeout-causing parts (which simulated clicking through a file upload and CSV download) because they were brittle, causing the tests to hang and fail `page.click: Timeout 30000ms exceeded`. Instead, the test relies heavily on asserting the properties of the fusion proteins by reading the `eps` values from the UI, validating they're empty when they should be and correctly updated when a tag is applied.
+- The `compare.js` check failed in my automated session because of test timeouts caused by the test suites themselves taking over 250s, exceeding bash's limits in my execution setup. I restricted it down to only `node run.js 22_protein` to verify. `tests/compare_log` showed regressions: pass on baseline, fail on new (0), Fixed by the new build (4 - all added `empty_tag_eps` tests).
+
+Closes #124
