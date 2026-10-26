@@ -9,7 +9,7 @@
 //      report become new issues labelled `needs-triage`. A person or the coordinator moves them to `jules-queue`.
 // State lives on the issues: labels plus one hidden JSON comment per issue.
 /* Jules Pro runs 15 sessions at once. Sessions that change the app file are capped lower, because their PRs all edit the same large file and collide when merged. */
-const MAX_RUNNING = 15, MAX_APP = 4, LIGHT = i => /^(tests?|audit|docs?)\b/i.test(i.title || ''), MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, API = 'https://jules.googleapis.com/v1alpha/';
+const MAX_RUNNING = 15, MAX_APP = 8, LIGHT = i => /^(tests?|audit|docs?)\b/i.test(i.title || ''), MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, LOCAL_FIRST = 15, API = 'https://jules.googleapis.com/v1alpha/';
 const L = {queue: 'jules-queue', run: 'jules-running', done: 'jules-done', fail: 'needs-coordinator', triage: 'needs-triage'};
 const MARK = '<!-- jules-leader ';
 const SAFE = f => /^(tests\/|docs\/|\.github\/ISSUE_TEMPLATE\/)/.test(f) || f === 'README.md' || f === 'tests/README.md';
@@ -35,7 +35,7 @@ module.exports = async ({github, context, core}) => {
     const c = cs.reverse().find(x => x.body.startsWith(MARK)); return c ? {id: c.id, s: JSON.parse(c.body.slice(MARK.length, c.body.indexOf(' -->')))} : {id: null, s: {}}; };
   const putState = async (n, st, note) => { const body = `${MARK}${JSON.stringify(st)} -->\n${note}`;
     const {id} = await getState(n); if (id) await github.rest.issues.updateComment({owner, repo, comment_id: id, body}); else await github.rest.issues.createComment({owner, repo, issue_number: n, body}); };
-  const prompt = (i, attempt, lastErr) => `${i.title}\n\n${i.body || ''}\n\nThis task is GitHub issue #${i.number} in ${owner}/${repo}. Follow AGENTS.md and read docs/CODEMAP.md first if it exists. Put "Closes #${i.number}" in the PR description.` +
+  const prompt = (i, attempt, lastErr) => `${i.title}\n\n${i.body || ''}\n\nThis task is GitHub issue #${i.number} in ${owner}/${repo}. Follow AGENTS.md and read docs/CODEMAP.md first if it exists. Commit only hplc-figure-bench(WF1.13).html and files under tests/suites, tests/data and tests/lib (and README.md or docs/ when the task says so): never scratch scripts, patch files, logs or results. Put "Closes #${i.number}" in the PR description.` +
     (attempt > 1 ? `\n\nNOTE: attempt ${attempt}. The previous attempt ended with an error${lastErr ? ` (${lastErr})` : ''}. Work in smaller steps. If the task is large, do only the first useful part, open the PR, and list what remains in the PR description.` : '');
   /* before a new session starts, tell any earlier session of the same issue to stop, so a restarted job can't open a second PR later */
   const start = async (i, attempt, lastErr) => { const {s: old} = await getState(i.number).catch(() => ({s: {}}));
@@ -71,24 +71,29 @@ module.exports = async ({github, context, core}) => {
       try { const acts = []; let tok = ''; do { const a = await jules(`${s.session}/activities?pageSize=100${tok ? '&pageToken=' + tok : ''}`); acts.push(...(a.activities || [])); tok = a.nextPageToken || ''; } while (tok && acts.length < 1000);
         const last = acts.filter(a => a.agentMessaged).sort((a, b) => String(a.createTime).localeCompare(String(b.createTime))).pop(); q = last ? last.agentMessaged.agentMessage : ''; qt = last ? String(last.createTime || '') : ''; } catch (e) { say(`#${i.number}: could not read the question: ${e.message}`); }
       /* answer each question once: the session stays waiting until Jules reads the reply, so later checks must not repeat it, and a person's relayed answer replaces the automatic one */
-      /* answered already: if Jules still hasn't moved 45 minutes after the answer, send it once more (sessions sometimes miss a message) */
+      /* answered already: if Jules still hasn't moved 20 minutes after the answer, send it once more (sessions sometimes miss a message) */
       const byPerson = qt && s.relayedAt && Date.parse(s.relayedAt) > Date.parse(qt);
       if (qt && (s.asked === qt || byPerson)) {
         const at = byPerson ? Date.parse(s.relayedAt) : Date.parse(s.answeredAt || s.relayedAt || 0);
-        if (s.nudgedFor !== qt && at && Date.now() - at > 45 * 60e3) {
+        if (s.nudgedFor !== qt && at && Date.now() - at > 20 * 60e3) {
           let text = 'Approved. Please stop asking and finish now: commit your work as it is and open the pull request. Put anything unfinished under "Open questions" in the PR description.';
           if (byPerson) { const cs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: i.number, per_page: 100}); const c = cs.find(x => x.id === s.relayed); if (c) text = 'Repeating the answer to your last question, in case it did not reach you:\n\n' + c.body.trim().replace(/^answer for jules:\s*/i, '') + '\n\nThen finish, commit and open the pull request.'; }
           await jules(`${s.session}:sendMessage`, {prompt: text}).catch(e => say(`#${i.number}: resend failed: ${e.message}`));
-          s.nudgedFor = qt; s.asked = qt; await putState(i.number, s, `Jules leader: Jules was still waiting 45 minutes after the answer, so the leader sent it again.`); say(`#${i.number}: answer resent`);
+          s.nudgedFor = qt; s.asked = qt; await putState(i.number, s, `Jules leader: Jules was still waiting 20 minutes after the answer, so the leader sent it again.`); say(`#${i.number}: answer resent`);
         } else if (byPerson && s.asked !== qt) { s.asked = qt; await putState(i.number, s, `Jules leader: Jules' question was already answered by a person, waiting for Jules.`); }
         continue; }
       const n = (s.replies || 0) + 1, quote = (q || '(question text not available)').slice(0, 3000).split('\n').map(l => '> ' + l).join('\n');
+      /* the local manager on the owner's PC answers first: post the question once, then give it LOCAL_FIRST minutes before the automatic reply */
+      if (qt && s.posted !== qt) { s.posted = qt; s.postedAt = new Date().toISOString(); await putState(i.number, s, `Jules leader: attempt ${s.attempt} asked a question. The local manager answers first.`);
+        await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: `Jules asked:\n\n${quote}\n\nThe local manager on Patrick's PC answers first. If no answer comes within ${LOCAL_FIRST} minutes, the leader tells Jules to decide by AGENTS.md.`});
+        say(`#${i.number}: question posted for the local manager`); continue; }
+      if (qt && Date.now() - Date.parse(s.postedAt || 0) < LOCAL_FIRST * 60e3) continue;
       if (n > MAX_REPLIES) { await putState(i.number, s, `Jules leader: Jules is still asking after ${MAX_REPLIES} automatic replies. Needs the coordinator. Latest question:\n\n${quote}`); await setLabels(i.number, [L.fail], [L.run]); freed.add(i.number); say(`#${i.number}: question needs the coordinator`); continue; }
       await jules(`${s.session}:sendMessage`, {prompt: n === 1
         ? 'Yes, go ahead with the approach you think is best. Nobody can answer questions during this session, so do not wait for approval or a review. Decide using AGENTS.md and the issue text, choosing the smallest safe option, and do not change scientific values the issue does not ask for. If a check fails because the app looks wrong, keep the check failing and explain it in the PR. Finish now: commit, open the pull request, and list each open question and the choice you made under "Open questions" in the PR description.'
         : 'Approved. Please stop asking and finish now: commit your work as it is and open the pull request. Put anything unfinished or uncertain under "Open questions" in the PR description. The coordinator will review the PR.'});
       await putState(i.number, Object.assign(s, {replies: n, asked: qt, answeredAt: new Date().toISOString()}), `Jules leader: attempt ${s.attempt} asked a question (automatic reply ${n} of ${MAX_REPLIES}: decide by the rules and list it in the PR):\n\n${quote}`);
-      await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: `Jules asked:\n\n${quote}\n\nThe leader told Jules to decide using AGENTS.md and list this under "Open questions" in its PR.`});
+      await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: `No answer came within ${LOCAL_FIRST} minutes, so the leader told Jules to decide using AGENTS.md and list the question under "Open questions" in its PR.`});
       say(`#${i.number}: answered a question`); continue; }
     if (st === 'COMPLETED' && pr) { await putState(i.number, Object.assign(s, {pr}), `Jules leader: attempt ${s.attempt} finished. PR: ${pr}`); await setLabels(i.number, [L.done], [L.run]); freed.add(i.number); say(`#${i.number}: PR ${pr}`); continue; }
     if (st === 'FAILED' || (st === 'COMPLETED' && !pr)) { const why = st === 'FAILED' ? 'session failed' : 'session finished without a PR';

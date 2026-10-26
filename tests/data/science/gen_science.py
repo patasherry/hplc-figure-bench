@@ -1,7 +1,9 @@
 """Fixtures for suites/20_science.js. Run: python3 -I gen_science.py (writes next to this file).
 sec_inject2.csv: an AKTA-style SEC export logged from method start, injection at 2.00 mL.
   Peaks at 14.00 and 17.00 mL of run volume, so elution volumes counted from injection are 12.00 and 15.00 mL.
-nd3.csv: three NanoDrop readings, A280 Abs 1.40, 1.42, 1.44 (mean 1.42, n 3), sample type 1 Abs = 1 mg/mL."""
+nd3.csv: three NanoDrop readings, A280 Abs 1.40, 1.42, 1.44 (mean 1.42, n 3), sample type 1 Abs = 1 mg/mL.
+nd_a205.csv: three NanoDrop Protein A205 readings named after the IMAC pool (T1-T6): 1.20, 1.22, 1.24 mg/mL by the instrument
+  (A205 Abs = 31 x mg/mL, the Scopes coefficient), mean 1.22 mg/mL, n 3. Their A280 Abs (0.7 x mg/mL) was not used by the instrument."""
 import math, os, json
 D = os.path.dirname(os.path.abspath(__file__))
 INJ, PEAKS = 2.0, [(14.0, 120.0, 0.35), (17.0, 40.0, 0.40)]
@@ -24,4 +26,7 @@ def spec(a): return [a*(0.25 + 1.8*math.exp(-((w - 220)/14)**2)) if w < 250 else
 hdr = "Sample Name,Date & Time,A280 Conc. (mg/mL),A260/A280,A280 (Abs),A260 (Abs),Sample Type,Baseline Correction (nm)," + ",".join(map(str, wl))
 lines = [hdr] + [f"Sample {i+1},10/7/2026 14:1{i},{a:.3f},0.57,{a:.3f},{0.57*a:.3f},1 Abs = 1 mg/mL,340," + ",".join(f"{v:.3f}" for v in spec(a)) for i, a in enumerate([1.40, 1.42, 1.44])]
 open(os.path.join(D, "nd3.csv"), "w").write("\n".join(lines) + "\n")
-json.dump({"sec_inject2.csv": {"injection_ml": INJ, "ve_from_injection": [12.0, 15.0]}, "nd3.csv": {"abs_mean": 1.42, "n": 3}}, open(os.path.join(D, "truth.json"), "w"), indent=1)
+a205 = [1.20, 1.22, 1.24]
+lines = ["Sample Name,Date & Time,A205 Conc. (mg/mL),A205 (Abs),A280 (Abs),Sample Type"] + [f"Pool T1-T6 {i+1},10/7/2026 15:0{i},{c:.3f},{31*c:.3f},{0.7*c:.3f},Protein A205" for i, c in enumerate(a205)]
+open(os.path.join(D, "nd_a205.csv"), "w").write("\n".join(lines) + "\n")
+json.dump({"sec_inject2.csv": {"injection_ml": INJ, "ve_from_injection": [12.0, 15.0]}, "nd3.csv": {"abs_mean": 1.42, "n": 3}, "nd_a205.csv": {"mean": 1.22, "n": 3}}, open(os.path.join(D, "truth.json"), "w"), indent=1)

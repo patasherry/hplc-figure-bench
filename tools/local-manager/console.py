@@ -25,7 +25,12 @@ When you talk to the other agents (this is exact, use it when asked):
   then you try once more with their notes. Only if all of that fails does it go to the lead (Claude), with the label for-coordinator.
 - Anything that would change a number the app reports goes to Patrick (label needs-owner), never decided by an AI.
 - Items labelled for-coordinator: you ask ChatGPT (Codex) for a written recommendation for the lead, and Claude Code only if ChatGPT's daily cap is used up.
-- You never use Claude Code otherwise. Each agent has a daily cap (shown under "use").
+- The direction board is GitHub issue #222. When Patrick comments "Discuss: <topic>" there (or after every 10 merged PRs, or on Sundays) you run a debate:
+  you, Gemini and ChatGPT each propose up to 3 directions with evidence and risks, argue for 2 rounds, then vote 1 to 5. Proposals all three back become issues automatically.
+  Patrick replies "No 2" to drop one or "OK 4" to add one. If Patrick asks how to start it: open issue #222 on GitHub and comment "Discuss: <topic>".
+- GitHub Copilot: its cloud agent takes overflow jobs. While the cloud agent is paused (for example out of AI Credits), you run the Copilot CLI on this PC instead, one job at a time, like a Claude Code job.
+- Your review gate checks every finished Jules PR and sends weak ones back to Jules. When Jules is out of tries, you hand the job to Claude Code on this PC.
+- Otherwise you use Claude Code only as the last step of the question ladder, and for recommendations when ChatGPT's cap is used up. Each agent has a daily cap (shown under "use").
 The lead (Claude in the cloud) merges app changes and posts a daily check-in on #17 that you follow. Jules does the coding, started by a GitHub workflow called the leader.
 Answer what Patrick actually asks. A greeting or small talk gets a short friendly reply and one line on what you can check for him, not a report.
 Give a status report only when he asks how things are going or whether something works.
@@ -87,8 +92,15 @@ def start(m, port=8765):
             s = {}
         last = s.get('last_pass')
         age = (time.time() - last) / 60 if last else None
-        checks.append({'part': 'Manager loop', 'ok': age is not None and age < 20,
-                       'detail': f'last pass {int(age)} min ago' if age is not None else 'no pass recorded yet'})
+        busy = s.get('busy') or {}
+        bmin = (time.time() - busy['since']) / 60 if busy.get('since') else None
+        names = {'board': 'a team meeting on the direction board', 'claude jobs': 'a Claude Code job', 'questions': "Jules' questions (the ladder)", 'gate': 'reviewing PRs', 'review': 'reviewing PRs'}
+        if bmin is not None:
+            checks.append({'part': 'Manager loop', 'ok': bmin < (75 if busy.get('duty') == 'claude jobs' else 45),
+                           'detail': f'busy with {names.get(busy.get("duty"), busy.get("duty"))} for {int(bmin)} min'})
+        else:
+            checks.append({'part': 'Manager loop', 'ok': age is not None and age < 20,
+                           'detail': f'last pass {int(age)} min ago' if age is not None else 'no pass recorded yet'})
         try:
             with urllib.request.urlopen(m.rv.OLLAMA + '/api/tags', timeout=5) as r:
                 models = [x['name'] for x in json.loads(r.read()).get('models', [])]
@@ -104,7 +116,7 @@ def start(m, port=8765):
                 res = (False, f'GitHub call failed: {e}')
             cache['gh'] = (time.time(), res)
         checks.append({'part': 'GitHub token', 'ok': res[0], 'detail': res[1]})
-        for name, exe in (('Claude Code', 'claude'), ('ChatGPT (Codex)', 'codex')):
+        for name, exe in (('Claude Code', 'claude'), ('ChatGPT (Codex)', 'codex'), ('Copilot CLI', 'copilot')):
             found = m.shutil.which(exe)
             checks.append({'part': name, 'ok': bool(found), 'detail': 'installed' if found else f'{exe} is not on PATH'})
         checks.append({'part': 'Gemini', 'ok': bool(m.GEMINI_KEY), 'detail': 'API key set' if m.GEMINI_KEY else 'GEMINI_API_KEY is not set'})

@@ -216,6 +216,37 @@
    }
   },
   {
+   "file": "sec_semicolon_unicorn7.csv",
+   "format": "UNICORN 7 CSV, semicolon, UTF-8, time axis in minutes",
+   "kind": "sec",
+   "step": "Size exclusion",
+   "unit": "min",
+   "column": "Superdex 200 Increase 10/300 GL",
+   "cv": null,
+   "flow": null,
+   "path_mm": 2,
+   "frac": {
+    "n": 3,
+    "first": "1.A.1",
+    "last": "1.A.3"
+   },
+   "injection": 3.0,
+   "peaks": [
+    {
+     "note": "big",
+     "ve": 12.0,
+     "tol": 0.3,
+     "must": false
+    },
+    {
+     "note": "shoulder",
+     "ve": 14.0,
+     "tol": 0.3,
+     "must": false
+    }
+   ]
+  },
+  {
    "file": "sec_Superose6_plates_u7_tab.csv",
    "format": "UNICORN 7 CSV, tab, UTF-8, two 96-well plates, injection at 4.0 mL",
    "kind": "sec",
@@ -431,6 +462,42 @@
     }
    ],
    "pool": null
+  },
+  {
+   "file": "time_iso_u7.csv",
+   "note": "run start date only: no column or method in the file, so the step is named from the file",
+   "format": "UNICORN 7 CSV",
+   "kind": "other",
+   "step": "time",
+   "unit": "mL",
+   "frac": {
+    "n": 1,
+    "first": "F1",
+    "last": "F1"
+   },
+   "injection": 0.0,
+   "peaks": [],
+   "forbid": [],
+   "pool": null,
+   "time": "2026-10-23T16:00:00.000Z"
+  },
+  {
+   "file": "time_ddmm_u7.csv",
+   "note": "run start date only: no column or method in the file, so the step is named from the file",
+   "format": "UNICORN 7 CSV",
+   "kind": "other",
+   "step": "time",
+   "unit": "mL",
+   "frac": {
+    "n": 1,
+    "first": "F1",
+    "last": "F1"
+   },
+   "injection": 0.0,
+   "peaks": [],
+   "forbid": [],
+   "pool": null,
+   "time": "2026-10-23T16:00:00.000Z"
   }
  ],
  "chrom_note": "ve        apex (isolated peak) or Gaussian centre (overlapped) in the unit the app should show:\n            SEC: counted from the injection. Others: the file's own volume axis.\n  must      the app has to report a peak within tol. must=false: allowed but not required (tiny, shoulder, outside the fraction window)\n  pool      fractions you would pool, its span, its A280 area (mAU*unit) on a zero baseline, and the mg the app should show\n            with eps (A280 of 1 mg/mL, 1 cm) = POOL_EPS and the stated UV path: mg = area/1000/(eps*path_mm/10)",

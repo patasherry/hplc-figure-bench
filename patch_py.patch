@@ -1,0 +1,11 @@
+--- tests/data/gen_chrom.py
++++ tests/data/gen_chrom.py
+@@ -398,5 +398,2 @@
+ if __name__ == '__main__':
+-<<<<<<< HEAD
+-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, time_formats): f()
+-=======
+-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, synthetic_csv): f()
+->>>>>>> 97623c5 (Preserve source units on generic chromatogram figures)
++    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, time_formats, synthetic_csv): f()
+     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
