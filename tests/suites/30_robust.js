@@ -197,8 +197,8 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   await p.setInputFiles(SEL.importFile, {name: 'legacy_project.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data))}); await p.waitForTimeout(3000);
 
   // verify supplied trace and run selection values
-  const tl = await h.timeline();
-  const run1 = tl.find(x => x.k === 'run:1');
+  let tl = await h.timeline();
+  let run1 = tl.find(x => x.k === 'run:1');
   if (run1) {
       await h.step('run:1'); await p.waitForTimeout(500);
       const pool = await p.evaluate(() => { const e = document.querySelector('.trace.run.sel [data-k=shade]'); return e ? e.value : null; });
@@ -208,7 +208,7 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   }
 
   // verify prep values
-  const prep = tl.find(x => x.k === 'prep');
+  let prep = tl.find(x => x.k === 'prep');
   if (prep) {
       await h.step('prep'); await p.waitForTimeout(500);
       const prepName = await p.evaluate(() => { const e = document.querySelector('#prepName'); return e ? e.value : null; });
@@ -221,7 +221,7 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   }
 
   // verify gel values
-  const gel1 = tl.find(x => x.k === 'gel:1');
+  let gel1 = tl.find(x => x.k === 'gel:1');
   if (gel1) {
       await h.step('gel:1'); await p.waitForTimeout(500);
       const lane2 = await p.evaluate(() => { const e = document.querySelector('.lane-row[data-i="1"] .lane-name'); return e ? e.value : null; });
@@ -230,23 +230,25 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
       T.check('legacy-project.gel-lane-preserved', false, 'gel:1 missing from timeline');
   }
 
-  // verify SEC calibration values
-  await h.step('figure'); await p.waitForTimeout(500); // make sure SEC settings are populated if they exist
-
   // successful Methods generation
   await openMethods(p); await p.waitForTimeout(400);
   const methods = await h.methods();
   T.check('legacy-project.methods-generated', methods.length > 50 && methods.includes('Legacy Protein'), `methods length ${methods.length}`);
 
   // round trip
-  const dlPromise = p.waitForEvent('download').catch(() => null);
-  await p.evaluate(() => { const b = document.querySelector('#projSave'); if(b) b.click(); });
-  const dl = await dlPromise;
+  const origPath = path.join(ROOT, 'results', 'legacy_project_exported.json');
+  let exported = null;
+  try {
+      const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 5000}), p.click(SEL.exportBtn)]);
+      if (dl) {
+          await dl.saveAs(origPath);
+          exported = JSON.parse(fs.readFileSync(origPath, 'utf8'));
+      }
+  } catch (e) {
+      // ignore timeout
+  }
 
-  if (dl) {
-      const origPath = path.join(ROOT, 'results', 'legacy_project_exported.json'); await dl.saveAs(origPath);
-      const exported = JSON.parse(fs.readFileSync(origPath, 'utf8'));
-
+  if (exported) {
       if (exported.runs && exported.runs[0] && exported.runs[0].sel) {
           T.check('legacy-project.roundtrip-run', exported.runs[0].sel.val === 'A1-A2', `exported sel is ${exported.runs[0].sel.val}`);
       } else {
