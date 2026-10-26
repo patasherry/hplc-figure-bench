@@ -33,4 +33,41 @@ await load(p,project(gel(im,{marks,tags:[]}),opt));let L=lane(await csv(p));T.ch
 for(const kind of ['contam','none']){await load(p,project(gel(im,{marks,tags:[{kind,lane:1,y}]}),opt));L=lane(await csv(p));T.check('tags.'+kind+'-respected',L.every(r=>r[10]===''),JSON.stringify(L));}
 await load(p,project(gel(im,{marks,tags:[{kind:'target',lane:2,y}]}),opt));L=lane(await csv(p));T.check('tags.other-lane-does-not-disable-estimate',L.some(r=>+r[10]>0),JSON.stringify(L));
 await load(p,project(gel(im,{tags:[{kind:'target',lane:1,y},{kind:'tagged',lane:2,y}]})));L=lane(await csv(p));T.check('tags.other-lane-does-not-invent-cleavage',L.every(r=>r[12]===''),JSON.stringify(L));T.check('tags.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
+
+await T.t('cleavage-small-tag', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    const opt = {protKda: 80, tagPreset: 'his', cleaveDetect: true};
+
+    // Case 1: Uncut band at 82.2 kDa. Expect 0% cleaved.
+    await load(p, project(gel(im, {
+      labels: 'M, Dialysis, Cleavage',
+      marks: [{kda: 82.2, y: 120.5/360}, {kda: 10, y: 0.9}],
+      tags: []
+    }), opt));
+
+    let csv1 = await csv(p);
+    let L1 = lane(csv1, 3);
+    let csv_val1 = L1.length ? L1[0][12] : '';
+
+    T.check('cleavage-small-tag.0pct-csv', parseFloat(csv_val1) < 1 || csv_val1 === '', 'Expected ~0% cleaved, got csv: ' + csv_val1);
+
+    // Case 2: Band at 80.0 kDa. Expect 100% cleaved.
+    await load(p, project(gel(im, {
+      labels: 'M, Dialysis, Cleavage',
+      marks: [{kda: 80.0, y: 120.5/360}, {kda: 10, y: 0.9}],
+      tags: []
+    }), opt));
+
+    let csv2 = await csv(p);
+    let L2 = lane(csv2, 3);
+    let csv_val2 = L2.length ? L2[0][12] : '';
+
+    T.check('cleavage-small-tag.100pct-csv', parseFloat(csv_val2) > 99, 'Expected 100% cleaved, got csv: ' + csv_val2);
+
+  } finally {
+    await a.close();
+  }
+});
 T.done();})();
