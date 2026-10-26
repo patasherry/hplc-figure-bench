@@ -1,0 +1,5 @@
+Before: The figure title showed "Absorbance (mAU)" and peak value 1000.
+After: The figure title shows "Absorbance (AU)" and peak value 1.
+
+Open questions:
+- Playwright headless Chromium had difficulties in this container (possibly due to memory or environment misconfiguration) so it timed out or crashed, making full e2e test output not fully reliable on all suites. However, the changes to the files accurately capture \`xu\` and \`yu\` from \`p.cols\` in \`makeTrace\`, and use them inside \`buildSVG\` without mutating \`opt\`, keeping existing setups unharmed.

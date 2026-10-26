@@ -1558,8 +1558,9 @@ async function parseUnicornZip(buf, fname){
 
 /* ---------- traces and runs ---------- */
 function makeTrace(name, p, ex){
+  const mX = (p.cols[p.xc ?? 0] || '').match(/\(([^)]+)\)/), mY = (p.cols[p.yc ?? 1] || '').match(/\(([^)]+)\)/);
   return {id: uid++, name, color: paletteColor(traces.length, traces.length+1), visible: true, rows: p.rows, cols: p.cols,
-    xc: p.xc ?? 0, yc: p.yc ?? 1, offset: 0, scale: 1, xshift: 0, peaks: [], ex: !!ex};
+    xc: p.xc ?? 0, yc: p.yc ?? 1, xu: mX ? mX[1] : '', yu: mY ? mY[1] : '', offset: 0, scale: 1, xshift: 0, peaks: [], ex: !!ex};
 }
 function makeRun(p){ const r = Object.assign({id: 'r' + (uid++), color: RUN_COLORS.uv, uvi: 0, xmin:'', xmax:'', ymin:'', ymax:'', shade:'', inWf: true, integ: [], secMode: 'auto'}, p);
   r.secAuto = secGuess(r); applyInjShift(r);
@@ -2044,7 +2045,13 @@ function peakApex(xs, ys, x){
   let best = i; for (let k=Math.max(0,i-w); k<=Math.min(xs.length-1,i+w); k++) if (ys[k] > ys[best]) best = k;
   return best;
 }
-function yLabelText(){ return (opt.normalize && opt.ylabel === DEF.ylabel) ? 'Normalized absorbance' : opt.ylabel; }
+function yLabelText(){
+  if (opt.ylabel !== DEF.ylabel) return opt.ylabel;
+  if (opt.normalize) return 'Normalized absorbance';
+  const vis = traces.filter(t => t.visible);
+  if (vis.length && vis[0].yu) return `Absorbance (${vis[0].yu})`;
+  return opt.ylabel;
+}
 function style(ov){
   ov = ov || {};
   const o = opt, W = ov.wPt || numOr(o.w,3.5)*72, H = ov.hPt || numOr(o.h,2.6)*72, fs = fontSize(), lw = Math.max(0.1, numOr(o.lw,0.75));
@@ -2104,7 +2111,9 @@ function buildSVG(){
   s.push(`<g fill="#000000">`);
   const xly = B + tOut + 3 + fs*0.78;
   xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(xly)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
-  if (o.xlabel) s.push(`<text x="${r2((L+R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle">${esc(o.xlabel)}</text>`);
+  let xl = o.xlabel;
+  if (xl === DEF.xlabel) { const v = traces.find(t => t.visible); if (v && v.xu) xl = (v.xu === 'mL' || v.xu === 'ml' ? 'Volume' : 'Time') + ` (${v.xu})`; }
+  if (xl) s.push(`<text x="${r2((L+R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle">${esc(xl)}</text>`);
   if (o.showY) {
     yt.v.forEach((v,i) => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${ytl[i]}</text>`));
     const yl = yLabelText();

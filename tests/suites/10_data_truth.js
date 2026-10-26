@@ -250,5 +250,49 @@ async function pelletMassNoCultureVol() {
     }
   }
   if (!only || only.test('pellet_mass_no_culture_vol')) await T.t('pellet_mass_no_culture_vol', pelletMassNoCultureVol);
+  if (!only || only.test('synthetic_csv')) await T.t('synthetic_csv', syntheticCSV);
   T.done();
 })();
+
+async function syntheticCSV(e) {
+  const t0 = Date.now();
+  const {p, errs, close} = await open();
+  const h = H(p);
+  try {
+    await p.locator('#newProj button[type=submit]').click();
+    await p.waitForTimeout(500);
+    const input = await p.$('#file');
+    await input.setInputFiles(path.join(CH, 'synthetic.csv'));
+    await p.waitForTimeout(1000);
+
+    T.check('synthetic/loaded', await p.locator('.trace.sel').count() > 0 || await p.locator('.trace.run.sel').count() > 0, 'synthetic trace loaded');
+    await detect(p);
+
+    // Check titles in SVG
+    const titles = await p.evaluate(() => {
+      return Array.from(document.querySelectorAll('#paper svg text')).map(t => t.textContent.trim());
+    });
+    const hasAU = titles.some(t => t.includes('Absorbance (AU)'));
+    const hasML = titles.some(t => t.includes('Volume (mL)') || t.includes('mL'));
+    T.check('synthetic/title_au', hasAU, 'Title contains Absorbance (AU)');
+    T.check('synthetic/title_ml', hasML, 'Title contains mL');
+
+    const pk = await p.evaluate(() => {
+        return window.__HFB ? window.__HFB.traces[0].peaks : (window.traces && window.traces[0].peaks);
+    });
+    const peak = pk && pk.find(r => Math.abs(r.x - 5) < 0.2);
+    T.check('synthetic/peak_ve', !!peak, 'found peak at 5 mL');
+    T.check('synthetic/peak_height', peak && (Math.abs(peak.h - 1) < 0.05 || Math.abs(peak.h - 1000) < 5), 'peak height is 1 or 1000');
+
+    // check user title persistence
+    await setOpt(p, 'o-ylabel', 'My Title');
+    const titles2 = await p.evaluate(() => {
+      return Array.from(document.querySelectorAll('#paper svg text')).map(t => t.textContent.trim());
+    });
+    T.check('synthetic/custom_title', titles2.some(t => t.includes('My Title')), 'Custom title applied');
+
+  } finally {
+    T.check('synthetic/no-errors', !errs.length, errs.join(' | '));
+    await close();
+  }
+}
