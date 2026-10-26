@@ -68,7 +68,7 @@ async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return
     await h.newProject('Unicorn 7 missing curve');
     await h.addRun(path.join(DATA, 'chrom', 'missing_curve.zip'));
 
-    await h.wait(500);
+    await p.waitForSelector('#toast :text-matches("not a UNICORN result archive", "i")');
     const badFiles = await p.$$eval('#badFiles li', els => els.map(e => e.textContent));
     const toasts = await h.toasts();
     // Missing UV curve causes parseUnicornZip to return null, which pushes "not a UNICORN result archive".
