@@ -33,4 +33,97 @@ await load(p,project(gel(im,{marks,tags:[]}),opt));let L=lane(await csv(p));T.ch
 for(const kind of ['contam','none']){await load(p,project(gel(im,{marks,tags:[{kind,lane:1,y}]}),opt));L=lane(await csv(p));T.check('tags.'+kind+'-respected',L.every(r=>r[10]===''),JSON.stringify(L));}
 await load(p,project(gel(im,{marks,tags:[{kind:'target',lane:2,y}]}),opt));L=lane(await csv(p));T.check('tags.other-lane-does-not-disable-estimate',L.some(r=>+r[10]>0),JSON.stringify(L));
 await load(p,project(gel(im,{tags:[{kind:'target',lane:1,y},{kind:'tagged',lane:2,y}]})));L=lane(await csv(p));T.check('tags.other-lane-does-not-invent-cleavage',L.every(r=>r[12]===''),JSON.stringify(L));T.check('tags.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
+
+await T.t('cleavage-small-tag-uncleaved', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    const marks = [{kda: 82.2, y: 120.5/360}, {kda: 80.0, y: 230.5/360}];
+
+    let proj = project(
+      gel(im, {
+        labels: 'M, Before, After',
+        marks,
+        edits: {
+          added: [{lane:2, y: 120.5/360}, {lane:3, y: 120.5/360}],
+          removed: [
+            {lane:1, y: 120.5/360}, {lane:1, y: 230.5/360},
+            {lane:2, y: 120.5/360}, {lane:2, y: 230.5/360},
+            {lane:3, y: 120.5/360}, {lane:3, y: 230.5/360}
+          ]
+        },
+        tags: []
+      }),
+      {
+        purBase: 'lane',
+        tagPreset: 'custom',
+        tagKda: 2.2,
+        protKda: 80.0,
+        cleaveDetect: true
+      }
+    );
+    proj.runs = [{id: 'r1', name: 'cleavage', trace: [{t: 0, A280: 0}]}];
+    proj.prep = {on: true, cleave: true};
+    proj.gels[0].assign = ['r1', 'cleave', 'cleave'];
+
+    await load(p, proj);
+    await set(p, '#g-labels', 'M, Before, After');
+    await p.waitForTimeout(200);
+
+    let allCsv = await csv(p);
+    let L3 = lane(allCsv, 3);
+    let csvUncleaved = L3[0][12] || '';
+
+    T.check('cleavage-small-tag.0-pct-uncleaved', csvUncleaved !== '100' && csvUncleaved !== '100.0', 'Expected ~0%, got ' + csvUncleaved);
+  } finally {
+    await a.close();
+  }
+});
+
+await T.t('cleavage-small-tag-cleaved', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    const marks = [{kda: 82.2, y: 120.5/360}, {kda: 80.0, y: 230.5/360}];
+
+    let proj = project(
+      gel(im, {
+        labels: 'M, Before, After',
+        marks,
+        edits: {
+          added: [{lane:2, y: 230.5/360}, {lane:3, y: 230.5/360}],
+          removed: [
+            {lane:1, y: 120.5/360}, {lane:1, y: 230.5/360},
+            {lane:2, y: 120.5/360}, {lane:2, y: 230.5/360},
+            {lane:3, y: 120.5/360}, {lane:3, y: 230.5/360}
+          ]
+        },
+        tags: []
+      }),
+      {
+        purBase: 'lane',
+        tagPreset: 'custom',
+        tagKda: 2.2,
+        protKda: 80.0,
+        cleaveDetect: true
+      }
+    );
+    proj.runs = [{id: 'r1', name: 'cleavage', trace: [{t: 0, A280: 0}]}];
+    proj.prep = {on: true, cleave: true};
+    proj.gels[0].assign = ['r1', 'cleave', 'cleave'];
+
+    await load(p, proj);
+    await set(p, '#g-labels', 'M, Before, After');
+    await p.waitForTimeout(200);
+
+    let allCsv = await csv(p);
+    let L3 = lane(allCsv, 3);
+    let csvCleaved = L3[0][12] || '';
+
+    T.check('cleavage-small-tag.100-pct-cleaved', csvCleaved === '100' || csvCleaved === '100.0', 'Expected ~100%, got ' + csvCleaved);
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
