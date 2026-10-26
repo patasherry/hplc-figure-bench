@@ -41,14 +41,28 @@ await T.t('bad', async () => { const {p, errs, close} = await open(), h = H(p); 
 
   /* opt.known and opt.secCals sanitization */
   await T.t('malformed-opt', async () => {
+    const {p, errs, close} = await open(), h = H(p);
     await h.newProject('Malformed opt');
     await p.setInputFiles(SEL.importFile, path.join(Q, 'malformed_project.json'));
-    await p.waitForTimeout(3000); // wait for load
+    await p.waitForTimeout(3000);
 
     await p.evaluate(() => {
       const optBtn = document.querySelector('#optBtn');
       if (optBtn) optBtn.click();
     });
+
+    await p.evaluate(() => {
+      const details = document.querySelector('details.koff');
+      if (details && !details.open) details.open = true;
+    });
+
+    await p.waitForSelector('#knownList', { timeout: 5000 });
+
+    let actualL = await p.evaluate(() => document.querySelectorAll('#knownList .krow').length);
+
+    T.check('knownList-entries', actualL === 1, 'Expected 1 entry, got ' + actualL);
+    await close();
+  });
 
     await p.evaluate(() => {
       const details = document.querySelector('details.koff');
