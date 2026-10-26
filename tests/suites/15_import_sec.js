@@ -70,6 +70,37 @@ async function fresh(id, fn){
       await p.locator(SEL.column).inputValue());
     T.check('column/' + size + '-volume', +(await p.locator(SEL.vt).inputValue()) === 3);
   });
+  await fresh('uv-only-csv', async (p, h) => {
+    await h.newProject('Synthetic UV-only export');
+    await h.addRun(F.uvOnly('uv_only_u7.csv'));
+    const toasts = (await h.toasts()).join(' | '), data = await saved(p), r = data.runs[0];
+    // Guards: a UNICORN export of the UV curve alone loads as an ÄKTA run, not as a plain trace outside the workflow.
+    T.check('uvonly/loads-as-run', data.runs.length === 1 && /Loaded 1 ÄKTA run/.test(toasts), `runs: ${data.runs.length}, traces: ${data.traces.length}, toasts: ${toasts || 'none'}`);
+    // Guards: the mL axis, the mAU unit and all 501 points survive; the apex stays at 12 mL and 81.5 mAU.
+    T.check('uvonly/units-and-points', !!r && r.xu === 'ml' && r.uvs[0].yu === 'mAU' && r.uvs[0].xs.length === 501 && r.uvs[0].xs[240] === 12 && r.uvs[0].ys[240] === 81.5,
+      r ? JSON.stringify({xu: r.xu, yu: r.uvs[0].yu, n: r.uvs[0].xs.length, x: r.uvs[0].xs[240], y: r.uvs[0].ys[240]}) : 'no run');
+  });
+  await fresh('zip-curve-without-points', async (p, h) => {
+    await h.newProject('Synthetic incomplete archive');
+    await h.addRun(F.unicornZip('complete_rebuilt.zip'));
+    const whole = (await h.toasts()).join(' | ');
+    // Guards: the rebuilt archive with every curve loads as usual and reports nothing left out (no false alarm).
+    T.check('zip/complete-no-warning', /Loaded 1 ÄKTA run/.test(whole) && !/left out/.test(whole), whole || 'none');
+    await h.addRun(F.unicornZip('cond_points_missing.zip', [2]));
+    const toasts = (await h.toasts()).join(' | '), r = (await saved(p)).runs.find(x => x.file === 'cond_points_missing');
+    // Guards: the curve whose points are missing is named, rather than dropped without a word.
+    T.check('zip/names-lost-curve', /Conductivity in cond_points_missing\.zip/.test(toasts) && /no readable data points/.test(toasts), toasts || 'none');
+    // Guards: the UV curve, its units and the other curves still load.
+    T.check('zip/uv-kept', !!r && r.xu === 'ml' && r.uvs[0].yu === 'mAU' && r.uvs[0].xs.length > 1000 && !r.cond && !!r.grad,
+      r ? JSON.stringify({xu: r.xu, yu: r.uvs[0].yu, n: r.uvs[0].xs.length, cond: !!r.cond, grad: !!r.grad}) : 'no run');
+  });
+  await fresh('zip-uv-without-points', async (p, h) => {
+    await h.newProject('Synthetic archive without UV points');
+    await h.addRun(F.unicornZip('uv_points_missing.zip', [1]));
+    const toasts = (await h.toasts()).join(' | ');
+    // Guards: a UNICORN archive whose UV points are missing says so and what to do, instead of "not a UNICORN result archive".
+    T.check('zip/uv-missing-message', /UV curve \(UV\) has no readable data points/.test(toasts) && /export the result from UNICORN again/.test(toasts) && !/not a UNICORN result archive/.test(toasts), toasts || 'none');
+  });
   await fresh('nanodrop', async p => {
     const legacy = F.project();
     legacy.nanodrop = [{id: 'ndLegacy', name: 'Legacy reading', a280: 2.5, kind: 'protein', stage: 'pool', dil: 1}];
