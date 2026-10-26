@@ -1985,7 +1985,7 @@ function poolRows(run){
     k: meas && mgA > 0 ? mg/mgA : null};
 }
 function autoIntegrate(run){
-  const {xs, ys} = runUV(Object.assign({}, run, {crop: ''})), n = ys.length; if (n < 10) return 0;
+  const {xs, ys} = xUnit(run) === 'min' && !(uvFlow(run) > 0) ? procFull(run) : runUV(Object.assign({}, run, {crop: ''})), n = ys.length; if (n < 10) return 0;
   const mn = arrMin(ys), range = arrMax(ys) - mn; if (!(range > 0)) return 0;
   const dn = []; for (let i=1;i<n;i++) dn.push(Math.abs(ys[i] - ys[i-1])); dn.sort((p, q) => p - q); const nsd = (dn[dn.length >> 1] || 0)*1.4826/Math.SQRT2;
   const sec = isSec(run), thr = Math.max(10*nsd, range*(sec ? Math.min(numOr(opt.intProm, 5), 2) : numOr(opt.intProm, 5))/100), w = Math.max(2, Math.round(n*0.004)), span = Math.max(10, Math.round(n*0.15));
