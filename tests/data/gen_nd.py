@@ -85,6 +85,21 @@ lines = [','.join(ONE_HEAD)] + [','.join([q('10/22/2026 9:58:00 AM'), q(n), f'{a
 w('nd_names_commas_unicode.csv', '\r\n'.join(lines) + '\r\n')
 rec('nd_names_commas_unicode.csv', 'NanoDrop One, comma CSV, quoted names with commas, quotes and unicode', r7)
 
+
+# 9. Vendor export with metadata preamble
+r9 = [('Pool T2-T6 conc', 2.104, 0.57)]
+lines = [
+    'Instrument\tNanoDrop One',
+    'User\tAdmin',
+    'Date\t10/22/2026',
+    '',
+    'Table of Results',
+    '\t'.join(ONE_HEAD),
+    '\t'.join(['10/22/2026 9:41:48 AM', 'Pool T2-T6 conc', '2.104', '2.104', '0.57', '1 Abs = 1 mg / mL', '', '', '', '340', '0.012'])
+]
+w('nd_one_with_preamble.tsv', '\r\n'.join(lines) + '\r\n', 'utf-16-le')
+rec('nd_one_with_preamble.tsv', 'NanoDrop One with preamble, tab, UTF-16 LE BOM, no spectra', r9, 'vendor metadata preamble')
+
 # 8. Acclaro nucleic acid corrected concentration in ug/mL
 r8 = [('Nucleic Acid Corrected Sample', 2.500, 0.57)] # a = conc for rec
 head = ['Sample Name', 'Date & Time', 'A280 Conc. (\u00b5g/mL)', 'A260/A280', 'A280 (Abs)', 'A260 (Abs)', 'Sample Type', 'Baseline Correction (nm)', 'Corrected Conc. (ug/mL)'] + [str(x) for x in WL]

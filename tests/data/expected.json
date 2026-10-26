@@ -633,8 +633,8 @@
    "format": "NanoDrop One, comma CSV, quoted names with commas, quotes and unicode",
    "n": 3,
    "names": [
-    "Pool 1.E.7\u20131.F.6, conc",
-    "KPP-MM \u03b1/\u03b2 4 \u00b0C",
+    "Pool 1.E.7–1.F.6, conc",
+    "KPP-MM α/β 4 °C",
     "Ulp1 cut, \"final\""
    ],
    "r280": [
@@ -649,6 +649,24 @@
    "nucleic": 0,
    "warn_high_ratio": false,
    "note": ""
+  },
+  {
+   "file": "nd_one_with_preamble.tsv",
+   "format": "NanoDrop One with preamble, tab, UTF-16 LE BOM, no spectra",
+   "n": 1,
+   "names": [
+    "Pool T2-T6 conc"
+   ],
+   "r280": [
+    0.57
+   ],
+   "mean_abs1": 2.104,
+   "sd_abs1": null,
+   "mean_eps": 2.4465,
+   "eps": 0.86,
+   "nucleic": 0,
+   "warn_high_ratio": false,
+   "note": "vendor metadata preamble"
   },
   {
    "file": "nd_acclaro_ug_ml.csv",

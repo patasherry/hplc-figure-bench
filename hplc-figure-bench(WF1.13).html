@@ -5280,9 +5280,22 @@ const splitRow = (line, d) => { const out = []; let cur = '', q = false; for (le
   if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; } else if (c === '"') q = true; else if (c === d) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out.map(v => v.trim()); };
 const ND_HEAD = /(a?\s?260\s*\/\s*a?\s?280|\ba\s?280\b|\ba\s?205\b|mg\s*\/\s*ml|ng\s*\/\s*[µu]l|conc)/i, ND_NAME = /sample\s*(name|id)|^"?sample"?\s*$/i;
 const isWl = h => /^\d{3}(\.\d+)?\s*(nm)?$/i.test(String(h).trim());
-function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
-    if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) return {i, d, H, rows: 'samples'};
-    if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1) return {i, d, H, rows: 'wavelengths'}; } return null; }
+function ndHeader(lines){
+  for (let i = 0; i < Math.min(lines.length, 20); i++) {
+    const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
+    if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) {
+      for (let j = i + 1; j < Math.min(lines.length, i + 5); j++) {
+        if (splitRow(lines[j], d).some(v => ndNum(v) !== null)) return {i, d, H, rows: 'samples'};
+      }
+    }
+    if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1) {
+      for (let j = i + 1; j < Math.min(lines.length, i + 5); j++) {
+        if (splitRow(lines[j], d).filter(v => ndNum(v) !== null).length > 1) return {i, d, H, rows: 'wavelengths'};
+      }
+    }
+  }
+  return null;
+}
 function looksNanoDrop(text){ const L = text.split(/\r?\n/).filter(l => l.trim()); return !!ndHeader(L) || (L.slice(0, 6).some(l => /^wavelength/i.test(l.trim()) && /absorbance/i.test(l)) && L.some(l => /^a?\s?260\s*\/\s*a?280\b/i.test(l.trim()))); }
 const ndNum = v => { const s = String(v ?? '').replace(/\s/g, ''), m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/), x = parseFloat(m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, '')); return isFinite(x) ? x : null; };
 const CRUDE_RE = /lys|load|flow|\bft\b|supernat|pellet|crude|input|clarif/i;
