@@ -33,4 +33,57 @@ await load(p,project(gel(im,{marks,tags:[]}),opt));let L=lane(await csv(p));T.ch
 for(const kind of ['contam','none']){await load(p,project(gel(im,{marks,tags:[{kind,lane:1,y}]}),opt));L=lane(await csv(p));T.check('tags.'+kind+'-respected',L.every(r=>r[10]===''),JSON.stringify(L));}
 await load(p,project(gel(im,{marks,tags:[{kind:'target',lane:2,y}]}),opt));L=lane(await csv(p));T.check('tags.other-lane-does-not-disable-estimate',L.some(r=>+r[10]>0),JSON.stringify(L));
 await load(p,project(gel(im,{tags:[{kind:'target',lane:1,y},{kind:'tagged',lane:2,y}]})));L=lane(await csv(p));T.check('tags.other-lane-does-not-invent-cleavage',L.every(r=>r[12]===''),JSON.stringify(L));T.check('tags.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
+
+await T.t('cleavage-quant', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    const y1 = 120.5/360, y2 = 230.5/360;
+    const m1 = Math.log10(82.2), m2 = Math.log10(20);
+    const slope1 = (m2 - m1) / (y2 - y1);
+    const inc1 = m1 - slope1 * y1;
+    const marks1 = [{kda: Math.pow(10, slope1 * 0.2 + inc1), y: 0.2}, {kda: Math.pow(10, slope1 * 0.8 + inc1), y: 0.8}];
+
+    let pData1 = project(gel(im, {
+      labels: 'M, after, before',
+      marks: marks1,
+      tags: [],
+      edits: { added: [], removed: [] }
+    }), {cleaveDetect: true, protKda: 80, protSeq: 'W'.repeat(430), tagPreset: 'his', tagKda: 2.2});
+    pData1.prep = {cleave: true, on: true};
+
+    await load(p, pData1);
+    await p.waitForTimeout(300);
+
+    const L = lane(await csv(p), 2); // 'after' lane
+    let cPct = L[0] ? L[0][12] : '';
+    let bandText = await p.locator('#bandTable').textContent();
+    T.check('cleavage.small-tag-uncut-0', cPct === '0.0' && !/100% cleaved/i.test(bandText), 'Expected 0% cleavage, got csv=' + cPct);
+
+    const m1_2 = Math.log10(80.0);
+    const slope2 = (m2 - m1_2) / (y2 - y1);
+    const inc2 = m1_2 - slope2 * y1;
+    const marks2 = [{kda: Math.pow(10, slope2 * 0.2 + inc2), y: 0.2}, {kda: Math.pow(10, slope2 * 0.8 + inc2), y: 0.8}];
+
+    let pData2 = project(gel(im, {
+      labels: 'M, after, before',
+      marks: marks2,
+      tags: [],
+      edits: { added: [], removed: [] }
+    }), {cleaveDetect: true, protKda: 80, protSeq: 'W'.repeat(430), tagPreset: 'his', tagKda: 2.2});
+    pData2.prep = {cleave: true, on: true};
+
+    await load(p, pData2);
+    await p.waitForTimeout(300);
+
+    const L2 = lane(await csv(p), 2);
+    let cPct2 = L2[0] ? L2[0][12] : '';
+    let bandText2 = await p.locator('#bandTable').textContent();
+    T.check('cleavage.small-tag-cut-100', cPct2 === '100.0' && /100%/.test(bandText2), 'Expected 100% cleavage, got csv=' + cPct2);
+
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
