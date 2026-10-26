@@ -2431,8 +2431,11 @@ function buildRunSVG(run, ov){
       if (clampX() > ww*0.2 && /\s\(.*\)$/.test(tt)) { tt = tt.replace(/\s*\(.*\)$/, ''); ww = tt.length*fs*0.45; pick.x = xOrig; clampX(); }
       const e2 = ext(), lift = Math.max(base, hiIn(xlo + (pick.x + e2[0] - L)*k, xlo + (pick.x + e2[1] - L)*k));
       let Y = Math.max(T + fs*0.8, py(lift) - 3), guard = 0; const cx0 = pick.x + (e2[0] + e2[1])/2;
-      if (placed.some(q => Math.abs(q.x - cx0) < (q.w + ww)/2 + 1 && Math.abs(q.y - Y) < fs*0.85)) return;
-      placed.push({x: cx0, y: Y, w: ww}); s.push(`<text x="${r2(pick.x)}" y="${r2(Y)}"${pick.an !== 'middle' ? ` text-anchor="${pick.an}"` : ''}>${esc(tt)}</text>`);
+      const b2 = (() => { const hit = () => placed.some(q => Math.abs(q.x - cx0) < (q.w + ww)/2 + 1 && Math.abs(q.y - Y) < fs*0.85);
+        if (!hit()) return {x: cx0, y: Y, w: ww}; return null; })();
+      if (!b2 && FIG_SCREEN) toast('Some labels were skipped because they overlapped. Hide some to fix the figure.');
+      if (!b2) return;
+      placed.push(b2); s.push(`<text x="${r2(pick.x)}" y="${r2(Y)}"${pick.an !== 'middle' ? ` text-anchor="${pick.an}"` : ''}>${esc(tt)}</text>`);
       /* a label lifted clear of its peak gets a short leader down to the apex */
       const ay = py(base); if (ay - Y > fs*1.4) s.push(`<line x1="${r2(X)}" y1="${r2(Y + fs*0.25)}" x2="${r2(X)}" y2="${r2(ay - 1.5)}" stroke="#777777" stroke-width="0.4"/>`); });
     s.push('</g>');
