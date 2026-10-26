@@ -68,3 +68,4 @@ HFB_PRIVATE_DATA=/path/to/private/folder node run.js
 ```
 
 Never commit real chromatograms, gel photos, plasmid maps, or sequence files to this repository.
+| `17_comma_decimal.js` | Comma decimals | Unit test for comma-decimal semicolon trace parsing |

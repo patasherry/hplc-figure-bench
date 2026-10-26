@@ -1420,7 +1420,7 @@ function decode(buf){
 }
 const clean = f => f.trim().replace(/^"(.*)"$/,'$1').trim();
 function splitLine(L, d){ return d === 'ws' ? L.trim().split(/\s+/) : L.split(d); }
-function toNum(f, dc){ f = clean(f); if (dc) f = f.replace(',', '.'); return NUM.test(f) ? parseFloat(f) : NaN; }
+function toNum(f, dc){ f = clean(f); if (dc && /^-?\d+,\d+$/.test(f)) f = f.replace(',', '.'); return NUM.test(f) ? parseFloat(f) : NaN; }
 function parseText(text){
   const lines = text.split(/\r\n|\n|\r/);
   const sample = lines.length > 6000 ? lines.slice(0,3000).concat(lines.slice(-3000)) : lines;
