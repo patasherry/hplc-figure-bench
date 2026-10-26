@@ -1992,7 +1992,7 @@ function autoIntegrate(run){
     if (v - Math.max(mL, mR) >= thr) pk.push(i);
   }
   /* SEC: a shoulder (a dimer on a tetramer, say) has no peak of its own, only a dip in curvature on the flank of a bigger peak */
-  if (sec && pk.length) { const sw = Math.max(3, Math.round(n*0.006)), sm = sgSmooth(ys, 2*sw + 1), d2 = new Float64Array(n);
+  if (isSec(run) && pk.length) { const sw = Math.max(3, Math.round(n*0.006)), sm = sgSmooth(ys, 2*sw + 1), d2 = new Float64Array(n);
     for (let i=sw;i<n-sw;i++) d2[i] = sm[i-sw] - 2*sm[i] + sm[i+sw];
     const d2n = (() => { const a = Array.from(d2).map(Math.abs).sort((p, q) => p - q); return a[a.length >> 1] || 1e-9; })();
     const extra = [];
