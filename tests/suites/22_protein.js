@@ -456,6 +456,52 @@ ORIGIN
     T.check('7_thrombin_cleavage.eps_text', epsText.includes('15.08'), `expected 15.08, got "${epsText}"`);
   });
 
+
+
+
+
+
+
+  /* ================= 7. Sequence 7: Unknown Residues ================= */
+  await T.t('7_unknown_residues', async () => {
+    // A sequence with unknown residues (30 X's) and W to trigger A280 computation.
+    const unkSeq = 'M' + 'X'.repeat(30) + 'W';
+    await clearTagSeq();
+    await setProtSeq(unkSeq);
+
+    let tbl = await getProtTable();
+    T.check('7_unknown_residues.table_has_row', tbl.length >= 1, JSON.stringify(tbl));
+    if (tbl.length) {
+      const r = tbl[0];
+      T.check('7_unknown_residues.mw_approx', r.kDa && r.kDa.includes('≈'), `expected kDa to be prefixed with '≈', got ${r.kDa}`);
+      T.check('7_unknown_residues.pi_approx', r.pI && r.pI.includes('≈'), `expected pI to be prefixed with '≈', got ${r.pI}`);
+      T.check('7_unknown_residues.a280_approx', getA280Cell(r).includes('≈'), `expected A280 to be prefixed with '≈', got ${getA280Cell(r)}`);
+
+      const formText = r.Form || r.form || '';
+      T.check('7_unknown_residues.approx_label', formText.includes('approximate: 30 unknown residues counted as average'), `expected approximation label in form cell, got ${formText}`);
+    }
+
+    let epsText = await getProtEps();
+    T.check('7_unknown_residues.eps_approx_label', epsText.includes('approximate: 30 unknown residues counted as average'), `expected approximation label in eps text, got "${epsText}"`);
+
+    // Control: Resolved sequence without X's
+    const resolvedSeq = 'MW';
+    await setProtSeq(resolvedSeq);
+
+    tbl = await getProtTable();
+    if (tbl.length) {
+      const r = tbl[0];
+      T.check('7_unknown_residues.control_mw_exact', r.kDa && !r.kDa.includes('≈'), `expected resolved kDa to not be prefixed with '≈', got ${r.kDa}`);
+      T.check('7_unknown_residues.control_pi_exact', r.pI && !r.pI.includes('≈'), `expected resolved pI to not be prefixed with '≈', got ${r.pI}`);
+      T.check('7_unknown_residues.control_a280_exact', !getA280Cell(r).includes('≈'), `expected resolved A280 to not be prefixed with '≈', got ${getA280Cell(r)}`);
+
+      const formText = r.Form || r.form || '';
+      T.check('7_unknown_residues.control_no_approx_label', !formText.includes('approximate'), `expected no approximation label in resolved form cell, got ${formText}`);
+    }
+
+    epsText = await getProtEps();
+    T.check('7_unknown_residues.control_eps_no_approx_label', !epsText.includes('approximate'), `expected no approximation label in resolved eps text, got "${epsText}"`);
+  });
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();

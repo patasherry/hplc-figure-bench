@@ -5038,6 +5038,7 @@ const TAG_SEQ = {his: 'MGSSHHHHHHSSGLVPRGSH', /* cleaves at R|G, leaving GSH */
   sumo: 'MGSSHHHHHHGSGLVPRGSASMSDSEVNQEAKPEVKPEVKPETHINLKVSDGSSEIFFKIKKTTPLRRLMEAFAKRQGKEMDSLRFLYDGIRIQADQTPEDLDMEDNDIIEAHREQIGG'};
 const cleanSeq = s => String(s || '').replace(/^>.*$/gm, '').toUpperCase().replace(/[^A-Z]/g, '');
 function seqMass(s){ if (!s) return 0; let m = 18.01524; for (const c of s) m += AA_MASS[c] ?? 110; return m; }
+const seqUnknowns = s => { let u = 0; for (const c of s) if (!(c in AA_MASS)) u++; return u; };
 const seqA280 = s => { let w = 0, y = 0; for (const c of s) { if (c === 'W') w++; else if (c === 'Y') y++; } const m = seqMass(s); return m ? (5500*w + 1490*y)/m : null; };
 /* isoelectric point with the Bjellqvist pK set (ExPASy), by bisection on the net charge */
 const PK_POS = {K: 10.0, R: 12.0, H: 5.98}, PK_NEG = {D: 4.05, E: 4.45, C: 9.0, Y: 10.0}, PK_NT = {A: 7.59, M: 7.0, S: 6.93, P: 8.36, T: 6.82, V: 7.44, E: 7.7}, PK_CT = {D: 4.55, E: 4.75};
@@ -5135,7 +5136,7 @@ $('#protEnt').addEventListener('change', e => { if (!struct) return; struct.ent 
 function protForms(){
   const p = cleanSeq(opt.protSeq), tg = cleanSeq(opt.tagSeq) || TAG_SEQ[opt.tagPreset] || '', name = (TAG_PRESETS[opt.tagPreset] || ['tag'])[0];
   if (!p) return [];
-  if (!tg) return [{k: 'Untagged', seq: p}].map(x => Object.assign(x, {mass: seqMass(x.seq), pi: seqPI(x.seq), a280: seqA280(x.seq)}));
+  if (!tg) return [{k: 'Untagged', seq: p}].map(x => Object.assign(x, {mass: seqMass(x.seq), pi: seqPI(x.seq), a280: seqA280(x.seq), unk: seqUnknowns(x.seq)}));
   const fusion = opt.tagPos === 'C' ? p + tg : tg + p;
   const sp = splitOrf(fusion, p);
   const out = [
@@ -5143,7 +5144,7 @@ function protForms(){
     {k: 'Tagged', t: `${name} on the ${opt.tagPos === 'C' ? 'C' : 'N'} terminus`, seq: fusion},
     {k: 'Tag only', t: name, seq: sp.tag}
   ];
-  return out.map(x => Object.assign(x, {mass: seqMass(x.seq), pi: seqPI(x.seq), a280: seqA280(x.seq)}));
+  return out.map(x => Object.assign(x, {mass: seqMass(x.seq), pi: seqPI(x.seq), a280: seqA280(x.seq), unk: seqUnknowns(x.seq)}));
 }
 function renderProt(){
   const put = (sel, v) => { const e = $(sel); if (e && e !== document.activeElement && e.value !== v) e.value = v; };
@@ -5153,9 +5154,9 @@ function renderProt(){
   if (pe.length > 1) { const h = pe.map(e => `<option value="${e.id}"${e.id === struct.ent ? ' selected' : ''}>${esc(e.desc || 'Entity ' + e.id)} (chain${e.chains.length > 1 ? 's' : ''} ${esc(e.chains.join(', '))})</option>`).join(''); const sl = $('#protEnt'); if (sl._h !== h) { sl._h = h; sl.innerHTML = h; } }
   const F = protForms();
   $('#protTable').innerHTML = F.length ? `<tr><th>Form</th><th title="Residues">aa</th><th>kDa</th><th>pI</th><th title="A280 of a 1 mg/mL solution, 1 cm path, cysteines reduced">A₂₈₀</th></tr>` +
-    F.map(x => `<tr><td${x.t ? ` title="${esc(x.t)}"` : ''}>${esc(x.k)}</td><td>${x.seq.length}</td><td>${fmt(x.mass/1000, 1)}</td><td>${fmt(x.pi, 2)}</td><td>${x.a280 ? fmt(x.a280, 2) : '<span title="No Trp or Tyr">none</span>'}</td></tr>`).join('') : '';
+    F.map(x => `<tr><td${x.t ? ` title="${esc(x.t)}"` : ''}>${esc(x.k)}${x.unk ? `<br><span class="warnc" style="font-size:0.85em">(approximate: ${x.unk} unknown residue${x.unk > 1 ? 's' : ''} counted as average)</span>` : ''}</td><td>${x.seq.length}</td><td>${x.unk ? '≈ ' : ''}${fmt(x.mass/1000, 1)}</td><td>${x.unk ? '≈ ' : ''}${fmt(x.pi, 2)}</td><td>${x.a280 ? (x.unk ? '≈ ' : '') + fmt(x.a280, 2) : '<span title="No Trp or Tyr">none</span>'}</td></tr>`).join('') : '';
   $('#protUse').hidden = !F.length;
-  $('#protEps').textContent = F.length ? F.slice(0, 2).map(x => x.a280 ? `${x.k}: ε₂₈₀ ${Math.round(x.a280*x.mass).toLocaleString('en-US')} M⁻¹cm⁻¹, E1% ${fmt(x.a280*10, 2)}, A₂₈₀ of 1 mg/mL ${fmt(x.a280, 3)}` : '').filter(Boolean).join('. ') + '.' : '';
+  $('#protEps').textContent = F.length ? F.slice(0, 2).map(x => { const t = x.a280 ? `${x.k}: ε₂₈₀ ${Math.round(x.a280*x.mass).toLocaleString('en-US')} M⁻¹cm⁻¹, E1% ${fmt(x.a280*10, 2)}, A₂₈₀ of 1 mg/mL ${fmt(x.a280, 3)}` : ''; return x.unk ? (t ? t + ` ` : `${x.k}: `) + `(approximate: ${x.unk} unknown residue${x.unk > 1 ? 's' : ''} counted as average)` : t; }).filter(Boolean).join('. ') + (F.some(x => x.a280 || x.unk) ? '.' : '') : '';
   if (struct) { const m = auMass(struct), np = struct.chains.length;
     const big = struct.ents.filter(e => e.fw >= 500 && !/water/i.test(e.type)), cut = t => t.length > 26 ? t.slice(0, 24).trim() + '…' : t;
     const parts = big.slice(0, 4).map(e => `${e.n > 1 ? e.n + ' × ' : ''}${fmt(e.fw/1000, 1)} kDa${e.desc ? ' ' + cut(e.desc) : ''}`).join(' + ') + (big.length > 4 ? ' + …' : '');
@@ -5172,7 +5173,7 @@ $('#protSeq').addEventListener('input', () => { opt.protSrc = ''; });
 function applyProt(quiet){ const F = protForms(); if (!F.length) return; const u = F[0], t = F[2];
   opt.protKda = +fmt(u.mass/1000, 1); opt.secMono = opt.protKda; if (u.a280) opt.eps = +fmt(u.a280, 3); if (t) opt.tagKda = +fmt(t.mass/1000, 1);
   saveOpt(); syncControls(); render(); { const b = $('#protUse'); b.textContent = 'Applied'; b.disabled = true; setTimeout(() => { b.textContent = 'Use for gel, SEC and mg'; b.disabled = false; }, 1600); }
-  if (quiet !== true) toast(`Protein ${opt.protKda} kDa${t ? `, tag ${opt.tagKda} kDa` : ''}${u.a280 ? `, A280 ${opt.eps} per mg/mL` : ''} now used for the gel, SEC and mg estimates`);}
+  if (quiet !== true) toast(`Protein ${u.unk ? '≈ ' : ''}${opt.protKda} kDa${t ? `, tag ${t.unk ? '≈ ' : ''}${opt.tagKda} kDa` : ''}${u.a280 ? `, A280 ${u.unk ? '≈ ' : ''}${opt.eps} per mg/mL` : ''} now used for the gel, SEC and mg estimates${u.unk ? ` (approximate: ${u.unk} unknown residue${u.unk > 1 ? 's' : ''} counted as average)` : ''}`);}
 $('#protUse').addEventListener('click', () => applyProt());
 
 /* ---------- construct and expression panel ---------- */
