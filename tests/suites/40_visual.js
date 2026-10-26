@@ -125,4 +125,12 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
       T.check(`chrom:${f}:no-overlap`, !ov.length, ov.slice(0, 6).join(' | ') + ' ' + shot); /* hard cases (overlapping, tiny, 96-well, 2 plates) keep labels apart */
       T.check(`chrom:${f}:no-hscroll`, !(await h.hScroll()), shot); /* a wide plate never makes the page scroll sideways */ }); }
     await close(); }
+  test('gel label size clamped to 5pt', async ({ page }) => {
+    const p = page;
+    await newProject('test-gel-label');
+    await addRun(['tests/data/gel1.png']);
+    await p.waitForTimeout(2000);
+    const h = (await p.locator('#paper svg text:has-text("Band 1")').first().getAttribute('h'));
+    expect(parseFloat(h)).toBeGreaterThanOrEqual(6.666);
+  });
   T.done(); })();
