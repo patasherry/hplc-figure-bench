@@ -161,8 +161,8 @@ await T.t('legacy-sec-proj', async () => {
   const {p, errs, close} = await open(), h = H(p);
   const projPath = path.join(DATA, 'legacy_sec_proj.json');
 
-  await h.newProject('Legacy Base');
-  await p.setInputFiles('#file', projPath);
+  // Open via standard import mechanism from home screen
+  await p.setInputFiles(SEL.importFile, projPath);
   await p.waitForTimeout(3000);
 
   const tl2 = await h.timeline();
@@ -185,6 +185,9 @@ await T.t('legacy-sec-proj', async () => {
 
         const mwField = await p.evaluate(() => { const e = document.querySelector('#sec-mw'); return e ? e.value : ''; });
         T.check('legacy-sec.mw-field', mwField !== '', 'mw field is not empty');
+
+        const mws = await p.evaluate(() => Array.from(document.querySelectorAll('#intTable input[data-k=mw]')).map(i => i.value));
+        T.check('legacy-sec.mw-calc', mws.some(v => v && parseFloat(v) > 0), 'at least one calculated MW ' + mws.join(','));
     }
   }
 
