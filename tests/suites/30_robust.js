@@ -38,6 +38,29 @@ await T.t('bad', async () => { const {p, errs, close} = await open(), h = H(p); 
   await reject('corrupt-zip', path.join(Q, 'corrupt_unicorn.zip'), 'UNICORN zip cut to a third');
   await reject('images-zip', path.join(Q, 'images_only.zip'), 'zip with only PNGs');
   await reject('other-zip', path.join(Q, 'not_unicorn.zip'), 'zip with text files');
+
+  /* opt.known and opt.secCals sanitization */
+  await T.t('malformed-opt', async () => {
+    await h.newProject('Malformed opt');
+    await p.setInputFiles(SEL.importFile, path.join(Q, 'malformed_project.json'));
+    await p.waitForTimeout(3000); // wait for load
+
+    await p.evaluate(() => {
+      const optBtn = document.querySelector('#optBtn');
+      if (optBtn) optBtn.click();
+    });
+
+    await p.evaluate(() => {
+      const details = document.querySelector('details.koff');
+      if (details && !details.open) details.open = true;
+    });
+
+    await p.waitForSelector('#knownList', { timeout: 5000 });
+
+    let actualL = await p.evaluate(() => document.querySelectorAll('#knownList .krow').length);
+
+    T.check('knownList-entries', actualL === 1, 'Expected 1 entry, got ' + actualL);
+  });
   /* inputs that should load: they add exactly one step or tab, with no error */
   const accept = async (id, file, why) => { const e0 = errs.length, c0 = await counts(p, h); await h.dropFiles(file); const ts = await takeToasts(p), c1 = await counts(p, h);
     T.check(`ok.${id}.added`, c1.tl + c1.tabs > c0.tl + c0.tabs, `${why}; toasts: ${ts.join(' | ')}`); T.check(`ok.${id}.no-error`, errs.length === e0, errs.slice(e0).join(' | ')); return ts; };
