@@ -34,6 +34,7 @@ BOARD_EVERY = cfg.get('board_every_merges', 5)  # a round after this many merged
 BOARD_HOURS = cfg.get('board_every_hours', 4)  # and at least this often while the PC is on
 BOARD_LOW_QUEUE = cfg.get('board_low_queue', 5)  # and when fewer jobs than this wait for Jules
 AUTO_MAX, AUTO_QUEUE, AUTO_AVG = 3, 10, 3.5  # adopt at most 3 a round, while fewer than 10 jobs wait, with an average of 3.5+ and nobody below 3
+BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
 CAP = {'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
 TRACK = cfg.get('tracking_issue', 17)
@@ -431,7 +432,9 @@ SCI_WORDS = re.compile(r'needs owner ok|yield|extinction|ε|concentrat|mg/ml|\bm
 def triage(s):
     for i in issues('needs-triage'):
         n = str(i['number'])
-        if n in s['triaged']:
+        if {'owner-approved', 'board-approved'} & {l['name'] for l in i['labels']}:
+            label(i['number'], add=['jules-queue'], remove=['needs-triage'])  # already approved: nothing to ask
+            log(f'#{n} already approved, queued for Jules'); s['triaged'][n] = 'approved'
             continue
         r = local_json(TRIAGE, f"{direction()}\n{UNTRUSTED}\n{i['title']}\n{(i.get('body') or '')[:5000]}") or {'kind': 'scientific'}
         kind = r.get('kind')
@@ -449,6 +452,7 @@ def triage(s):
 
 
 OWNER = REPO.split('/')[0]
+by_owner = lambda c: c['user']['login'] == OWNER and '_From the local manager' not in c['body']  # the manager posts with Patrick's token: never read its own comments as his
 YES = re.compile(r'^\W*(ok|okay|yes|yep|approved?|go ahead|lgtm)\b', re.I)
 NO = re.compile(r'^\W*(no|nope|declined?|reject(ed)?|don.?t)\b', re.I)
 
@@ -459,7 +463,7 @@ def owner_replies(s):
     for i in issues('needs-owner'):
         cs = comments(i['number'])
         ask = max((c['id'] for c in cs if c['body'].lstrip().startswith('**Needs your OK')), default=0)
-        reply = next((c for c in reversed(cs) if c['id'] > ask and c['user']['login'] == OWNER and (YES.match(c['body']) or NO.match(c['body']))), None)
+        reply = next((c for c in reversed(cs) if c['id'] > ask and by_owner(c) and (YES.match(c['body']) or NO.match(c['body']))), None)
         if not reply or str(reply['id']) in s['owner']:
             continue
         names = {l['name'] for l in i.get('labels', [])}
@@ -644,7 +648,7 @@ def gate(s):
         else:
             ilabels = {l['name'] for l in gh(f'repos/{REPO}/issues/{issue}').get('labels', [])} if issue else set()
             needs = 'needs-owner' in ilabels
-            science = bool(ilabels & {'needs-owner', 'owner-approved'})  # it changes a number the app reports
+            science = bool(ilabels & {'needs-owner', 'owner-approved', 'board-approved'})  # it changes a number the app reports
             if AUTO_MERGE and not science and not merged_now and t.get('conclusion') == 'success' and full.get('mergeable_state') in ('clean', 'unstable', 'has_hooks'):
                 if not DRY:
                     gh(f'repos/{REPO}/pulls/{n}/merge', 'PUT', {'merge_method': 'squash'})
@@ -975,15 +979,17 @@ def board_round(s, topic=''):
         p = ranked[r - 1]
         args = '\n'.join(f'- {t}' for t in debate_of(p)) or '- (no arguments recorded)'
         votes = '\n'.join(f'- {n}: {sc}/5, {why}' for n, sc, why in scores[p['id']])
+        strong = len(scores[p['id']]) >= 3 and min(x[1] for x in scores[p['id']]) >= BOARD_GO  # all three advisers back it strongly: no need to wait for Patrick
         if not DRY:
-            i = gh(f'repos/{REPO}/issues', 'POST', {'title': p['title'], 'labels': ['needs-triage', 'from-board'],
+            i = gh(f'repos/{REPO}/issues', 'POST', {'title': p['title'], 'labels': (['jules-queue', 'board-approved'] if strong else ['needs-triage']) + ['from-board'],
                    'body': f'{p["why"]}\n\n**Change:** {p["change"]}\n\n**Evidence:** {p["evidence"]}\n\n**Risk to avoid:** {p["risk"]}\n\n'
                            f'### Why the advisers chose it\n{votes}\n\n<details><summary>The debate</summary>\n\n{args}\n\n</details>\n\n'
-                           f'Proposed by {p["by"]} on the Direction board (#{BOARD}) and adopted after debate: all three advisers backed it. Follow AGENTS.md.'})
+                           f'Proposed by {p["by"]} on the Direction board (#{BOARD}) and adopted after debate: all three advisers backed it' +
+                           (f', each with {BOARD_GO} or more, so it was queued without waiting for Patrick. If it changes a reported number, the lead checks the science before merging.' if strong else '.') + ' Follow AGENTS.md.'})
             b['made'][str(r)] = i['number']
     if b['made']:
         lines += ['**Adopted after the debate** (all three backed them): ' + ', '.join(f'{r} → #{n}' for r, n in b['made'].items()) +
-                  '. They go through triage, so anything that changes a reported number still comes to Patrick. Reply **No 2** to drop one.', '']
+                  f'. Ones every adviser scored {BOARD_GO} or more go straight to the work queue, and the lead checks the science of any that change a reported number before merging. The rest go through triage. Patrick can reply **No 2** to drop one.', '']
     elif agreed:
         lines += [f'Proposals {", ".join(map(str, agreed))} had full support, but {queued} jobs already wait, so none were adopted this round.', '']
     lines += ['Patrick: reply **OK** with any other numbers you want, for example **OK 4**.', '', '<details><summary>The full debate</summary>', '']
@@ -1006,7 +1012,7 @@ def board(s):
     last_round = max((c['id'] for c in cs if c['body'].split('\n', 1)[0] == BOARD_MARK), default=0)
     # Patrick picks proposals: "OK 1, 3"
     for c in cs:
-        if c['id'] > last_round and c['user']['login'] == OWNER and NO.match(c['body']) and str(c['id']) not in b.setdefault('picked', {}):
+        if c['id'] > last_round and by_owner(c) and NO.match(c['body']) and str(c['id']) not in b.setdefault('picked', {}):
             gone = []
             for k in re.findall(r'\d+', c['body'].split('\n')[0]):
                 n = (b.get('made') or {}).get(k)
@@ -1014,7 +1020,7 @@ def board(s):
                     gh(f'repos/{REPO}/issues/{n}', 'PATCH', {'state': 'closed', 'state_reason': 'not_planned'}); post(n, 'Dropped by Patrick on the Direction board.' + SIGN.format(rv.MODEL)); gone.append(f'#{n}')
             post(BOARD, ('Dropped ' + ', '.join(gone) + '.' if gone else 'No adopted proposal matches those numbers.') + SIGN.format(rv.MODEL))
             b['picked'][str(c['id'])] = 1
-        if c['id'] > last_round and c['user']['login'] == OWNER and YES.match(c['body']) and str(c['id']) not in b.setdefault('picked', {}):
+        if c['id'] > last_round and by_owner(c) and YES.match(c['body']) and str(c['id']) not in b.setdefault('picked', {}):
             nums = [int(x) for x in re.findall(r'\d+', c['body'].split('\n')[0])]
             made = []
             for k in nums:
@@ -1028,7 +1034,7 @@ def board(s):
             b['picked'][str(c['id'])] = 1
             log(f'board: Patrick picked {nums}')
     # a round on request ("Discuss: ..."), or weekly on Sunday after the digest hour
-    ask = next((c for c in reversed(cs) if c['id'] > last_round and c['user']['login'] == OWNER and re.match(r'^\W*discuss\s*:', c['body'], re.I)), None)
+    ask = next((c for c in reversed(cs) if c['id'] > last_round and by_owner(c) and re.match(r'^\W*discuss\s*:', c['body'], re.I)), None)
     now = dt.datetime.now()
     if ask and str(ask['id']) != b.get('asked'):
         b['asked'] = str(ask['id']); b['at'] = time.time()
