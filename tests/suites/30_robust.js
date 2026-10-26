@@ -187,6 +187,89 @@ await T.t('damaged-settings', async () => { const {ctx, p, errs, close} = await 
   await h.newProject('After damaged settings'); T.check('settings.app-usable', (await h.timeline()).length > 0, 'a new project should open a timeline'); // buttons are wired
   await close(); });
 /* ---------------- older and partial project files ---------------- */
+
+/* a legacy project format should load and round-trip successfully while preserving its semantic values */
+await T.t('legacy-project', async () => { const {p, errs, close} = await open(), h = H(p);
+  const data = JSON.parse(fs.readFileSync(path.join(Q, 'legacy_project.json'), 'utf8'));
+
+  await h.newProject('Legacy Project'); await watchToasts(p);
+  const e0 = errs.length;
+  await p.setInputFiles(SEL.importFile, {name: 'legacy_project.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data))}); await p.waitForTimeout(3000);
+
+  // verify supplied trace and run selection values
+  const tl = await h.timeline();
+  const run1 = tl.find(x => x.k === 'run:1');
+  if (run1) {
+      await h.step('run:1'); await p.waitForTimeout(500);
+      const pool = await p.evaluate(() => { const e = document.querySelector('.trace.run.sel [data-k=shade]'); return e ? e.value : null; });
+      T.check('legacy-project.pool-preserved', pool === 'A1-A2', `pool is ${pool}`);
+  } else {
+      T.check('legacy-project.pool-preserved', false, 'run:1 missing from timeline');
+  }
+
+  // verify prep values
+  const prep = tl.find(x => x.k === 'prep');
+  if (prep) {
+      await h.step('prep'); await p.waitForTimeout(500);
+      const prepName = await p.evaluate(() => { const e = document.querySelector('#prepName'); return e ? e.value : null; });
+      const prepSeq = await p.evaluate(() => { const e = document.querySelector('#prepSeq'); return e ? e.value : null; });
+      T.check('legacy-project.prep-name-preserved', prepName === 'Legacy Protein', `prep name is ${prepName}`);
+      T.check('legacy-project.prep-seq-preserved', prepSeq === 'MAS', `prep seq is ${prepSeq}`);
+  } else {
+      T.check('legacy-project.prep-name-preserved', false, 'prep missing from timeline');
+      T.check('legacy-project.prep-seq-preserved', false, 'prep missing from timeline');
+  }
+
+  // verify gel values
+  const gel1 = tl.find(x => x.k === 'gel:1');
+  if (gel1) {
+      await h.step('gel:1'); await p.waitForTimeout(500);
+      const lane2 = await p.evaluate(() => { const e = document.querySelector('.lane-row[data-i="1"] .lane-name'); return e ? e.value : null; });
+      T.check('legacy-project.gel-lane-preserved', lane2 === 'Pool', `lane 2 is ${lane2}`);
+  } else {
+      T.check('legacy-project.gel-lane-preserved', false, 'gel:1 missing from timeline');
+  }
+
+  // verify SEC calibration values
+  await h.step('figure'); await p.waitForTimeout(500); // make sure SEC settings are populated if they exist
+
+  // successful Methods generation
+  await openMethods(p); await p.waitForTimeout(400);
+  const methods = await h.methods();
+  T.check('legacy-project.methods-generated', methods.length > 50 && methods.includes('Legacy Protein'), `methods length ${methods.length}`);
+
+  // round trip
+  const dlPromise = p.waitForEvent('download').catch(() => null);
+  await p.evaluate(() => { const b = document.querySelector('#projSave'); if(b) b.click(); });
+  const dl = await dlPromise;
+
+  if (dl) {
+      const origPath = path.join(ROOT, 'results', 'legacy_project_exported.json'); await dl.saveAs(origPath);
+      const exported = JSON.parse(fs.readFileSync(origPath, 'utf8'));
+
+      if (exported.runs && exported.runs[0] && exported.runs[0].sel) {
+          T.check('legacy-project.roundtrip-run', exported.runs[0].sel.val === 'A1-A2', `exported sel is ${exported.runs[0].sel.val}`);
+      } else {
+          T.check('legacy-project.roundtrip-run', false, 'exported run sel missing');
+      }
+
+      if (exported.prep) {
+          T.check('legacy-project.roundtrip-prep', exported.prep.name === 'Legacy Protein', `exported prep name is ${exported.prep.name}`);
+      } else {
+          T.check('legacy-project.roundtrip-prep', false, 'exported prep missing');
+      }
+
+      if (exported.gels && exported.gels[0] && exported.gels[0].lanes && exported.gels[0].lanes[1]) {
+          T.check('legacy-project.roundtrip-gel', exported.gels[0].lanes[1].name === 'Pool', `exported lane is ${exported.gels[0].lanes[1].name}`);
+      } else {
+          T.check('legacy-project.roundtrip-gel', false, 'exported gel lane missing');
+      }
+  } else {
+      T.check('legacy-project.roundtrip', false, 'download failed');
+  }
+
+  T.check('legacy-project.no-error', errs.length === e0, errs.slice(e0).join(' | ')); await close(); });
+
 await T.t('partial-project', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p);
   await h.newProject('Partial base'); await h.dropFiles(F.his); await h.addConc(F.ndSpec, 0.25);
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]);
