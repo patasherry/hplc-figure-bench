@@ -137,6 +137,61 @@ for (const cloud of [false, true]) await T.t(cloud ? 'persist-cloud' : 'persist-
     T.check('persist.export-import.same', !diff(a, c), diff(a, c)); } // an exported file imports to the same project
   T.check(`persist.${tag}.no-error`, !errs.length, errs.join(' | ')); await close(); });
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* legacy sec calibrations missing unit and stds */
+await T.t('legacy-sec-proj', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  const projPath = path.join(DATA, 'legacy_sec_proj.json');
+
+  await h.newProject('Legacy Base');
+  await p.setInputFiles('#file', projPath);
+  await p.waitForTimeout(3000);
+
+  const tl2 = await h.timeline();
+  const r2 = tl2.find(x => x.k.startsWith('run:'));
+
+  T.check('legacy-sec.run-found', !!r2, 'timeline: ' + JSON.stringify(tl2));
+
+  if (r2) {
+    await p.evaluate(k => { const el = document.querySelector('#tl [data-step="' + k + '"]'); if (el) el.click(); }, r2.k);
+    await p.waitForTimeout(1000);
+
+    // Check #sec-cal exists.
+    const secCalExists = await p.evaluate(() => !!document.querySelector('#sec-cal'));
+    T.check('legacy-sec.panel-exists', secCalExists, 'sec-cal select element should exist');
+    if (secCalExists) {
+        const calSel = await p.$eval('#sec-cal', e => e.value);
+        const blanks = await p.$eval('#sec-cal option', opts => opts.filter(o => !o.value).length);
+        T.check('legacy-sec.cal-selected', calSel === 'sc_old', 'calSel ' + calSel);
+        T.check('legacy-sec.no-blank-cal', blanks === 0, 'blanks ' + blanks);
+
+        const mwField = await p.evaluate(() => { const e = document.querySelector('#sec-mw'); return e ? e.value : ''; });
+        T.check('legacy-sec.mw-field', mwField !== '', 'mw field is not empty');
+    }
+  }
+
+  T.check('legacy-sec.no-error', !errs.length, errs.join(' | '));
+  await close();
+});
+
 /* ---------------- damaged or partial files ---------------- */
 await T.t('empty-uvs-project', async () => { const {p, errs, close} = await open(), h = H(p);
   await p.setInputFiles(SEL.importFile, path.join(Q, 'empty_uvs_proj.json')); await p.waitForTimeout(3000);

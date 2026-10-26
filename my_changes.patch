@@ -1,0 +1,146 @@
+diff --git a/hplc-figure-bench(WF1.13).html b/hplc-figure-bench(WF1.13).html
+index 404b69f..5df3edd 100644
+--- a/hplc-figure-bench(WF1.13).html
++++ b/hplc-figure-bench(WF1.13).html
+@@ -1807,7 +1807,7 @@ const SEC_STD_SETS = {
+ function newSecCal(col, unit){ const c = SEC_COLUMNS[col] || SEC_COLUMNS.custom, vt = c.vt === '' ? '' : (unit === 'min' ? '' : c.vt);
+   return {id: 'sc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: c.name, col, unit: unit || 'mL', v0: vt === '' ? '' : Math.round(vt*0.36*100)/100, v0est: true, vt, set: 'biorad',
+     stds: SEC_STD_SETS.biorad.stds.map(([name, kda, off]) => ({name, kda, ve: '', off: !!off}))}; }
+-function secCals(){ if (!Array.isArray(opt.secCals)) opt.secCals = []; return opt.secCals; }
++function secCals(){ if (!Array.isArray(opt.secCals)) opt.secCals = []; opt.secCals.forEach(c => { c.unit = c.unit || 'mL'; c.stds = Array.isArray(c.stds) ? c.stds.filter(s => s && typeof s === 'object') : []; }); return opt.secCals; }
+ /* the calibration a run uses: its own choice, else one for its column and units, made on first use */
+ function secCalFor(r){
+   const L = secCals(); let c = r.secCal && L.find(x => x.id === r.secCal);
+@@ -5612,7 +5612,7 @@ async function openProject(data, name, noUndo){
+   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
+   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
+     { const pq = Array.isArray(opt.myQuick) ? opt.myQuick : [], del = new Set([...(myQDel || []), ...(Array.isArray(opt.myQuickDel) ? opt.myQuickDel : [])]); opt.myQuickDel = [...del]; opt.myQuick = myQ.concat(pq.filter(q => !myQ.some(m => m.id === q.id))).filter(q => !del.has(q.id)); }
+-    const pc = Array.isArray(opt.secCals) ? opt.secCals : []; opt.secCals = pc.concat(myCals.filter(c => !pc.some(x => x.id === c.id)));
++    const pc = Array.isArray(opt.secCals) ? opt.secCals : []; opt.secCals = pc.concat(myCals.filter(c => !pc.some(x => x.id === c.id))); opt.secCals.forEach(c => { c.unit = c.unit || 'mL'; c.stds = Array.isArray(c.stds) ? c.stds.filter(s => s && typeof s === 'object') : []; });
+     if (myKnown) { const pk = Array.isArray(dopt.known) ? dopt.known : []; opt.known = myKnown.concat(pk.filter(k => !myKnown.some(m => m.name === k.name && +m.kda === +k.kda))); } tidyOpt(); }
+   let mx = 0; [...runs, ...gels].forEach(x => { const m = String(x.id).match(/\d+/); if (m) mx = Math.max(mx, +m[0]); }); traces.forEach(t => { mx = Math.max(mx, +t.id || 0); }); uid = Math.max(mx + 1, numOr(prep.nextUid, 0));
+   cur = data.cur || 'overlay'; marking = null; tagMode = '';
+diff --git a/tests/data/legacy_sec_proj.json b/tests/data/legacy_sec_proj.json
+new file mode 100644
+index 0000000..80482a5
+--- /dev/null
++++ b/tests/data/legacy_sec_proj.json
+@@ -0,0 +1,40 @@
++{
++  "app": "HPLC Figure Bench",
++  "version": 1,
++  "runs": [
++    {
++      "id": "r1",
++      "name": "SEC Run",
++      "secCal": "sc_old",
++      "isSec": true,
++      "uvs": [{"xs": [0, 10, 20], "ys": [0, 1, 0], "nm": "280", "unit": "mL"}]
++    }
++  ],
++  "traces": [
++    {
++      "id": 1,
++      "name": "SEC Run Trace",
++      "cols": ["mL", "280"],
++      "rows": [[0,0], [10,1], [20,0]],
++      "runs": ["r1"],
++      "isSec": true
++    }
++  ],
++  "gels": [],
++  "nanodrop": [],
++  "opt": {
++    "secStds": true,
++    "secCals": [
++      {
++        "id": "sc_old",
++        "col": "s200i",
++        "v0": 8.5,
++        "vt": 24,
++        "stds": [
++          {"name": "Thyroglobulin", "kda": 670, "ve": 9.5},
++          {"name": "Ovalbumin", "kda": 44, "ve": 14.5}
++        ]
++      }
++    ]
++  }
++}
+diff --git a/tests/package.json b/tests/package.json
+index f5c75f9..c49298d 100644
+--- a/tests/package.json
++++ b/tests/package.json
+@@ -7,6 +7,6 @@
+     "compare": "node compare.js"
+   },
+   "devDependencies": {
+-    "playwright": "^1.40.1"
++    "playwright": "^1.64.1"
+   }
+ }
+diff --git a/tests/suites/30_robust.js b/tests/suites/30_robust.js
+index 90f3f92..04e907c 100644
+--- a/tests/suites/30_robust.js
++++ b/tests/suites/30_robust.js
+@@ -137,6 +137,61 @@ for (const cloud of [false, true]) await T.t(cloud ? 'persist-cloud' : 'persist-
+     T.check('persist.export-import.same', !diff(a, c), diff(a, c)); } // an exported file imports to the same project
+   T.check(`persist.${tag}.no-error`, !errs.length, errs.join(' | ')); await close(); });
+
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++/* legacy sec calibrations missing unit and stds */
++await T.t('legacy-sec-proj', async () => {
++  const {p, errs, close} = await open(), h = H(p);
++  const projPath = path.join(DATA, 'legacy_sec_proj.json');
++
++  await h.newProject('Legacy Base');
++  await p.setInputFiles('#file', projPath);
++  await p.waitForTimeout(3000);
++
++  const tl2 = await h.timeline();
++  const r2 = tl2.find(x => x.k.startsWith('run:'));
++
++  T.check('legacy-sec.run-found', !!r2, 'timeline: ' + JSON.stringify(tl2));
++
++  if (r2) {
++    await p.evaluate(k => { const el = document.querySelector('#tl [data-step="' + k + '"]'); if (el) el.click(); }, r2.k);
++    await p.waitForTimeout(1000);
++
++    // Check #sec-cal exists.
++    const secCalExists = await p.evaluate(() => !!document.querySelector('#sec-cal'));
++    T.check('legacy-sec.panel-exists', secCalExists, 'sec-cal select element should exist');
++    if (secCalExists) {
++        const calSel = await p.$eval('#sec-cal', e => e.value);
++        const blanks = await p.$eval('#sec-cal option', opts => opts.filter(o => !o.value).length);
++        T.check('legacy-sec.cal-selected', calSel === 'sc_old', 'calSel ' + calSel);
++        T.check('legacy-sec.no-blank-cal', blanks === 0, 'blanks ' + blanks);
++
++        const mwField = await p.evaluate(() => { const e = document.querySelector('#sec-mw'); return e ? e.value : ''; });
++        T.check('legacy-sec.mw-field', mwField !== '', 'mw field is not empty');
++    }
++  }
++
++  T.check('legacy-sec.no-error', !errs.length, errs.join(' | '));
++  await close();
++});
++
+ /* ---------------- damaged or partial files ---------------- */
+ await T.t('empty-uvs-project', async () => { const {p, errs, close} = await open(), h = H(p);
+   await p.setInputFiles(SEL.importFile, path.join(Q, 'empty_uvs_proj.json')); await p.waitForTimeout(3000);
