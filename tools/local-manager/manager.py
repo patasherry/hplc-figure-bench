@@ -522,7 +522,7 @@ def gate_problems(pr, files, diff, rep):
 
 AUTO_MERGE = cfg.get('auto_merge', True)  # merge gate-passing PRs that don't change reported numbers
 CLEAN_MARK = '<!-- clean-rebuild -->'
-JUNK_ONLY = ('It adds or changes files outside', 'It conflicts with main')
+JUNK_ONLY = ('It adds or changes files outside', 'It conflicts with main', 'GitHub waits for a person to approve')
 
 
 def clean_rebuild(pr, files, issue):
@@ -545,13 +545,13 @@ def clean_rebuild(pr, files, issue):
         if git('diff', '--name-only', '--diff-filter=U', cwd=wt):
             raise RuntimeError('conflicts remain')
         git('add', '-A', cwd=wt)
-        git('-c', 'user.name=HFB local manager', '-c', 'user.email=hfb-manager@users.noreply.github.com', 'commit', '-q', '-m', f'{pr["title"]} (#{issue})\n\nJules\' changes from #{n}, rebuilt on main by the local manager without stray files.', cwd=wt)
+        git('-c', 'user.name=HFB local manager', '-c', 'user.email=hfb-manager@users.noreply.github.com', 'commit', '-q', '-m', f'{pr["title"]} (#{issue})\n\nThe changes from #{n}, rebuilt on main by the local manager without stray files.', cwd=wt)
         auth = __import__('base64').b64encode(f'x-access-token:{rv.TOKEN}'.encode()).decode()
         git('-c', f'http.https://github.com/.extraheader=AUTHORIZATION: basic {auth}', 'push', '-q', '-f', 'origin', f'HEAD:refs/heads/{branch}', cwd=wt, timeout=600)
         stray = [f for f in files if not ALLOWED.match(f)]
         new = gh(f'repos/{REPO}/pulls', 'POST', {'title': pr['title'], 'head': branch, 'base': 'main',
-                 'body': f'{CLEAN_MARK}\nCloses #{issue}. Jules\' changes from #{n}, rebuilt on the current main by the local manager' +
-                         (f', without {len(stray)} stray file(s): {", ".join(stray[:8])}' if stray else '') + f'.\n\n---\nJules\' description:\n\n{(pr.get("body") or "")[:6000]}'})
+                 'body': f'{CLEAN_MARK}\nCloses #{issue}. The changes from #{n}, rebuilt on the current main by the local manager' +
+                         (f', without {len(stray)} stray file(s): {", ".join(stray[:8])}' if stray else '') + f'.\n\n---\nThe original description:\n\n{(pr.get("body") or "")[:6000]}'})
         post(n, f'**Rebuilt by the local manager** as #{new["number"]}: same app and test changes, on the current main' + (', without the stray files' if stray else '') + '. It goes through the tests and the review gate.' + SIGN.format(rv.MODEL))
         gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
         return new['number']
@@ -585,23 +585,32 @@ def gate(s):
     merged_now = False  # one merge per pass, so each lands on a fresh main
     for pr in gh(f'repos/{REPO}/pulls?state=open&per_page=50'):
         n, sha = pr['number'], pr['head']['sha']
-        if pr.get('draft') or s['gated'].get(str(n)) == sha:
+        # Copilot's cloud agent leaves a finished PR as a draft and asks the owner to review it, and GitHub holds its tests for a person to approve
+        cop_done = 'copilot' in pr['user']['login'].lower() and not pr['title'].startswith('[WIP]') and bool(pr.get('requested_reviewers'))
+        if (pr.get('draft') and not cop_done) or s['gated'].get(str(n)) == sha:
             continue
         runs = gh(f'repos/{REPO}/actions/runs?head_sha={sha}').get('workflow_runs', [])
         t = next((r for r in runs if r['name'] == 'Test suite'), None)
-        if not t or t['status'] != 'completed':
-            continue  # wait for the tests
+        stuck_conflict, waits_approval = False, cop_done  # the API can't approve Copilot's runs: rebuild it on our own branch, where the tests run
+        if t and t.get('conclusion') == 'action_required' and not cop_done:
+            continue
+        if not waits_approval and (not t or t['status'] != 'completed'):
+            age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(pr['created_at'].replace('Z', '+00:00'))).total_seconds()
+            if t or age < 1800 or gh(f'repos/{REPO}/pulls/{n}').get('mergeable_state') != 'dirty':
+                continue  # wait for the tests
+            stuck_conflict = True  # GitHub runs no PR tests while a PR conflicts with main, so without this it would wait forever
         files = [f['filename'] for f in gh(f'repos/{REPO}/pulls/{n}/files?per_page=100')]
-        if rv.APP not in files and all(ALLOWED.match(f) for f in files):
+        if rv.APP not in files and all(ALLOWED.match(f) for f in files) and not (stuck_conflict or waits_approval):
             s['gated'][str(n)] = sha  # tests or docs only and nothing stray: the leader's own merge rule handles it
             continue
         full = gh(f'repos/{REPO}/pulls/{n}')
         diff = gh(f'repos/{REPO}/pulls/{n}', accept='application/vnd.github.v3.diff')
-        probs = gate_problems(full, files, diff, report_of(n))
+        probs = (['It conflicts with main, so GitHub could not run the tests on it. Rebuild it on the current main and open the PR again.'] if stuck_conflict else
+                 ['GitHub waits for a person to approve the tests on this Copilot PR, so the manager rebuilds it on its own branch, where they run.'] if waits_approval else gate_problems(full, files, diff, report_of(n)))
         m = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
         issue = int(m.group(1)) if m else linked_issue(n)
         cop = 'copilot' in pr['user']['login'].lower() or COPILOT_CLI_MARK in (pr.get('body') or '')
-        mine = 'Generated with [Claude Code]' in (pr.get('body') or '') or CC_MARK in (pr.get('body') or '')  # the lead's rebuilds and Claude Code jobs are not sent back to Jules
+        mine = bool(re.search(r'Generated (?:with|by) \[Claude Code\]|claude\.ai/code/session_', pr.get('body') or '')) or CC_MARK in (pr.get('body') or '')  # the lead's rebuilds and Claude Code jobs are not sent back to Jules
         if probs and issue and all(p.startswith(JUNK_ONLY) for p in probs) and CLEAN_MARK not in (pr.get('body') or ''):
             new = clean_rebuild(full, files, issue)  # only stray files or a conflict: fix it here instead of a Jules retry
             if new:
