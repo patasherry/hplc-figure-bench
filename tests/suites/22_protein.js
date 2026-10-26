@@ -3,7 +3,7 @@
 // Tests 6 synthetic sequences: no Trp, no Trp or Tyr, Cys-rich, short (<30 aa), His6-SUMO fusion, and >1,000 aa.
 // Inputs are entered through the UI (pasting sequence and loading GenBank stand-in).
 
-const { open, H, suite, path, DATA } = require('../lib/harness');
+const { open, H, suite, path, DATA, fs } = require('../lib/harness');
 
 /* ---------- Independent Reference Calculations ---------- */
 
@@ -121,6 +121,13 @@ const getA280Cell = r => r['A₂₈₀'] || r['A280'] || '';
   };
 
   /* Helper to clear tag sequence and set tag preset to custom without sequence */
+  const setOpt = async (p, k, v) => {
+    await p.evaluate(({k, v}) => {
+      const el = document.querySelector(`[data-opt="${k}"]`);
+      if (el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+    }, {k, v});
+  };
+
   const clearTagSeq = async () => {
     await p.fill('#tagSeq', '');
     await p.dispatchEvent('#tagSeq', 'input');
@@ -297,6 +304,95 @@ const getA280Cell = r => r['A₂₈₀'] || r['A280'] || '';
     }
   });
 
+
+  /* ================= 7. GenBank Table 11 + Partial CDS ================= */
+  await T.t('7_transl.table11_partial', async () => {
+    // 1. Partial CDS where first codon is non-M initiator (GTG).
+    // GTG + 10x AWY + TAA (96 nt total) -> <1..96
+    const ntSeq = 'GTG' + 'GCTTGGTAT'.repeat(10) + 'TAA';
+    const gbPartial = `LOCUS       test_plasmid          96 bp    DNA
+FEATURES             Location/Qualifiers
+     CDS             <1..96
+                     /transl_table=11
+ORIGIN
+        1 ${ntSeq}
+//`;
+    const partialFile = path.join(DATA, 'standins/partial_test.gb');
+    fs.writeFileSync(partialFile, gbPartial);
+
+    await clearTagSeq();
+    await h.gb(partialFile);
+    await h.wait(1500);
+
+    const partialSeq = await p.$eval('#protSeq', e => e.value);
+    const expPartial = 'V' + 'AWY'.repeat(10); // Not M, because partial5 disables initiation override
+    T.check('7_transl.table11_partial', partialSeq === expPartial, `expected ${expPartial}, got ${partialSeq}`);
+    T.check('7_transl.table11_partial_len', partialSeq.length === expPartial.length, `seq length mismatch ${partialSeq.length}`);
+
+    // 2. Complete CDS with GTG start -> translates to M
+    const gbComplete = `LOCUS       test_plasmid          96 bp    DNA
+FEATURES             Location/Qualifiers
+     CDS             1..96
+                     /transl_table=11
+ORIGIN
+        1 ${ntSeq}
+//`;
+    const completeFile = path.join(DATA, 'standins/complete_test.gb');
+    fs.writeFileSync(completeFile, gbComplete);
+
+    await h.gb(completeFile);
+    await h.wait(1500);
+
+    const compSeq = await p.$eval('#protSeq', e => e.value);
+    const expComplete = 'M' + 'AWY'.repeat(10);
+    T.check('7_transl.table11_complete', compSeq === expComplete, `expected M start (table 11), got ${compSeq}`);
+
+    // 3. Unsupported table test (transl_table=4) - should be filtered out
+    const gbUnsupported = `LOCUS       test_plasmid          96 bp    DNA
+FEATURES             Location/Qualifiers
+     CDS             1..96
+                     /transl_table=4
+ORIGIN
+        1 ${ntSeq}
+//`;
+    const unsupportedFile = path.join(DATA, 'standins/unsupported_test.gb');
+    fs.writeFileSync(unsupportedFile, gbUnsupported);
+
+    // reset sequence first so we can see if it loads nothing
+    await setProtSeq('MAAAAA');
+    await h.gb(unsupportedFile);
+    await h.wait(1500);
+
+    const unsuppSeq = await p.$eval('#protSeq', e => e.value);
+    // If it's filtered, it should not load into the UI and 'MAAAAA' will remain, or it will be cleared.
+    // The previous test will have cleared it to empty maybe, but let's check it doesn't translate it incorrectly.
+    // When gbCassette returns null, the file parsing doesn't load a sequence.
+    T.check('7_transl.unsupported_filtered', !unsuppSeq.includes('VAWY') && !unsuppSeq.includes('MAWY'), `unsupported table should not fallback translate, got ${unsuppSeq}`);
+
+    // 4. Explicit /translation control on unsupported table
+    const gbExplicit = `LOCUS       test_plasmid          96 bp    DNA
+FEATURES             Location/Qualifiers
+     CDS             1..96
+                     /transl_table=4
+                     /translation="EXPLICITEXPLICITEXPLICITEXPLICIT"
+ORIGIN
+        1 ${ntSeq}
+//`;
+    const explicitFile = path.join(DATA, 'standins/explicit_test.gb');
+    fs.writeFileSync(explicitFile, gbExplicit);
+
+    await h.gb(explicitFile);
+    await h.wait(1500);
+    const expSeq = await p.$eval('#protSeq', e => e.value);
+    T.check('7_transl.explicit_translation', expSeq === 'EXPLICITEXPLICITEXPLICITEXPLICIT', `expected EXPLICITEXPLICITEXPLICITEXPLICIT, got ${expSeq}`);
+
+    // Clean up
+    fs.unlinkSync(partialFile);
+    fs.unlinkSync(completeFile);
+    fs.unlinkSync(unsupportedFile);
+    fs.unlinkSync(explicitFile);
+  });
+
   /* ================= 6. Sequence 6: Over 1,000 aa ================= */
   await T.t('6_large_protein', async () => {
     const block = 'MSDSEVNQEAKPEVKPEVKPETHINLKVSDGSSEIFFKIKKTTPLRRLMEAFAKRQGKEMDSLRFLYDGIRIQADQTPEDLDMEDNDIIEAHREQIGGMWYACD'; // 105 aa (1 W, 2 Y)
@@ -328,6 +424,84 @@ const getA280Cell = r => r['A₂₈₀'] || r['A280'] || '';
     T.check('6_large_protein.eps_text_84800', epsText.includes('84,800') || epsText.includes('84800'), `expected ε280 = 84,800, got "${epsText}"`);
   });
 
+  /* ================= 7. Thrombin cleavage product ================= */
+  await T.t('7_thrombin_cleavage', async () => {
+    const seq = 'M' + 'AWY'.repeat(10); // 31 aa
+    await clearTagSeq();
+    await setProtSeq(seq);
+    // wait for a bit
+    await h.wait(500);
+
+    // we need to set the tag preset to His
+    await setOpt(p, 'tagPreset', 'his');
+    await p.waitForTimeout(500);
+
+    // Compare the table
+    const tbl = await getProtTable();
+    T.check('7_thrombin_cleavage.table_has_forms', tbl.length >= 2, JSON.stringify(tbl));
+
+    const untaggedRow = tbl.find(r => /^untagged$/i.test(r.Form || r.form || ''));
+    if (untaggedRow) {
+      const gotAa = num(untaggedRow.aa);
+      const gotKDa = num(untaggedRow.kDa);
+      T.check('7_thrombin_cleavage.cleaved_protein_aa', gotAa === 34, `expected 34 aa (GSH + M + AWYx10), got ${gotAa}`);
+      // expected Da is 4635.15904 -> ~4.6 kDa
+      T.check('7_thrombin_cleavage.cleaved_protein_mw', gotKDa != null && T.near(gotKDa, 4.635, 0.05), `expected cleaved protein ~4.6 kDa, got ${gotKDa}`);
+    }
+
+    // Compare the construct figure and post-cleavage NanoDrop conversion?
+    const epsText = await getProtEps();
+    // E280 for 10 W, 10 Y = 5500*10 + 1490*10 = 69900.
+    // MW = 4635.159. 69900 / 4635.159 = 15.0803887
+    T.check('7_thrombin_cleavage.eps_text', epsText.includes('15.08'), `expected 15.08, got "${epsText}"`);
+  });
+
+
+
+
+
+
+
+  /* ================= 7. Sequence 7: Unknown Residues ================= */
+  await T.t('7_unknown_residues', async () => {
+    // A sequence with unknown residues (30 X's) and W to trigger A280 computation.
+    const unkSeq = 'M' + 'X'.repeat(30) + 'W';
+    await clearTagSeq();
+    await setProtSeq(unkSeq);
+
+    let tbl = await getProtTable();
+    T.check('7_unknown_residues.table_has_row', tbl.length >= 1, JSON.stringify(tbl));
+    if (tbl.length) {
+      const r = tbl[0];
+      T.check('7_unknown_residues.mw_approx', r.kDa && r.kDa.includes('≈'), `expected kDa to be prefixed with '≈', got ${r.kDa}`);
+      T.check('7_unknown_residues.pi_approx', r.pI && r.pI.includes('≈'), `expected pI to be prefixed with '≈', got ${r.pI}`);
+      T.check('7_unknown_residues.a280_approx', getA280Cell(r).includes('≈'), `expected A280 to be prefixed with '≈', got ${getA280Cell(r)}`);
+
+      const formText = r.Form || r.form || '';
+      T.check('7_unknown_residues.approx_label', formText.includes('approximate: 30 unknown residues counted as average'), `expected approximation label in form cell, got ${formText}`);
+    }
+
+    let epsText = await getProtEps();
+    T.check('7_unknown_residues.eps_approx_label', epsText.includes('approximate: 30 unknown residues counted as average'), `expected approximation label in eps text, got "${epsText}"`);
+
+    // Control: Resolved sequence without X's
+    const resolvedSeq = 'MW';
+    await setProtSeq(resolvedSeq);
+
+    tbl = await getProtTable();
+    if (tbl.length) {
+      const r = tbl[0];
+      T.check('7_unknown_residues.control_mw_exact', r.kDa && !r.kDa.includes('≈'), `expected resolved kDa to not be prefixed with '≈', got ${r.kDa}`);
+      T.check('7_unknown_residues.control_pi_exact', r.pI && !r.pI.includes('≈'), `expected resolved pI to not be prefixed with '≈', got ${r.pI}`);
+      T.check('7_unknown_residues.control_a280_exact', !getA280Cell(r).includes('≈'), `expected resolved A280 to not be prefixed with '≈', got ${getA280Cell(r)}`);
+
+      const formText = r.Form || r.form || '';
+      T.check('7_unknown_residues.control_no_approx_label', !formText.includes('approximate'), `expected no approximation label in resolved form cell, got ${formText}`);
+    }
+
+    epsText = await getProtEps();
+    T.check('7_unknown_residues.control_eps_no_approx_label', !epsText.includes('approximate'), `expected no approximation label in resolved eps text, got "${epsText}"`);
+  });
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
