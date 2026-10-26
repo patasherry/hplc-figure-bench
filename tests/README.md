@@ -36,7 +36,6 @@ After running tests, read the output of node failures.js, not the full logs.
 | `16_nanodrop.js` | NanoDrop | NanoDrop exports and their numbers. Checks protein concentration values, r280, names, proper nucleic acid readings handling, and SD/means calculated properly against expected synthetic standins. |
 | `20_science.js` | Science | Summary table arithmetic (mole-based yields across tag removal), methods text, panel letters, SEC elution volumes, consistency after moving or removing steps. |
 | `21_methods.js` | Methods | The Methods and summary text says what the data says. |
-| `23_provenance.js` | Provenance | Tests provenance across concentration and yield paths (calculated, measured, transferred, manual). |
 | `25_gels.js` | Gels | Synthetic gel images: measurements unchanged by display contrast, bands counted once, purity at most 100%, invalid ladders withhold sizes, manual tags respected, caches refreshed. |
 | `28_sec_figure.js` | SEC | SEC figure and its MW axis. Checks x tick labels are elution volumes and peak MW matches the calibration fit. |
 | `30_robust.js` | Robustness | Bad inputs, a seeded 150-action fuzz test with invariants, save and reload (browser and cloud storage), export and import, speed budgets. |

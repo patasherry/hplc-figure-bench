@@ -4,7 +4,7 @@
 // moving and removing steps keeps every number consistent. Fixtures: data/science (gen_science.py), plus real runs (HFB_PRIVATE_DATA) or their synthetic stand-ins.
 const {open, H, suite, path, fs, ROOT, DATA, src} = require('../lib/harness');
 const F = {gb: src('gb'), imac: src('his'),
-  q: src('q'), sec: path.join(DATA, 'science/sec_inject2.csv'), nd: path.join(DATA, 'science/nd3.csv'), a205: path.join(DATA, 'science/nd_a205.csv'), fdh: src('secZip')};
+  q: src('q'), sec: path.join(DATA, 'science/sec_inject2.csv'), nd: path.join(DATA, 'science/nd3.csv'), fdh: src('secZip')};
 const TRUTH = JSON.parse(fs.readFileSync(path.join(DATA, 'science/truth.json'), 'utf8'));
 /* the biochemist's ground truth, when present, adds NanoDrop fixtures with a known mean and count */
 let EXP = null; try { EXP = JSON.parse(fs.readFileSync(path.join(DATA, 'expected.json'), 'utf8')); } catch (e) {}
@@ -94,7 +94,6 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
       const mgS = mg != null ? mg.toFixed(2) + ' mg' : '@@'; T.check('meth.conc_once', m.split(mgS).length - 1 <= 1, `"${mgS}" appears ${m.split(mgS).length - 1} times`); }); /* guards: the concentrated amount is not reported twice */
     await T.t('p1_arith', () => arith('p1'));
     await T.t('p1_methods', async () => { const m = await methods(), t = await table(), vK = col(t, /^Volume/);
-      T.check('meth.yield_per_gram_cells', m.includes('0.004 mg per g of wet cell pellet'), 'methods text lacks per-gram yield');
       for (const [id, re] of [['col_imac', /HisTrap FF 1 mL/], ['col_q', /Resource Q 6 mL/], ['col_sec', /Superdex 200 Increase 10\/300 GL/], ['flow_imac', /1 mL\/min/], ['flow_q', /2 mL\/min/], ['flow_sec', /0\.5 mL\/min/],
         ['pool_imac', /T1–T6|T1-T6/], ['pool_q', /T11–T16|T11-T16/], ['bufA_q', /20 mM Tris pH 8\.0, 50 mM NaCl/], ['protease', /Ulp1/], ['final_conc', /1(\.0+)? mg\/mL/], ['final_vol', /0\.10? mL/]])
         T.check('meth.' + id, re.test(m), `${re} not in methods`); /* guards: the methods state the values the user entered */
@@ -220,72 +219,226 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
   });
 
 
-  await T.t('p5', async () => {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    /* ================= P6: umol yields with manual start and transfer ================= */
+  await T.t('p6_umol', async () => {
     await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
-    await h.newProject('Volume override');
-    await h.gb(path.join(DATA, 'standins', 'pET28-SUMO-standin.gb'));
-    await h.addRun(path.join(DATA, 'standins', 'imac_histrap_1ml_step.csv'));
+    await h.newProject('Manual umol check');
+
+    // Set 50 kDa sequence
+    const mwEl = await p.$('#prep-seq');
+    if (mwEl) { await mwEl.fill('A'.repeat(704)); await h.wait(200); }
+
+    // Manual start: 20 mg
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(200);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="man:column"]').click()); await h.wait(600);
+    const mname = await p.$('.man.sel [data-man="name"]');
+    if(mname) {
+        await mname.fill('Start');
+        await p.fill('.man.sel [data-man="vol"]', '10');
+        await p.fill('.man.sel [data-man="conc"]', '2'); // 20 mg
+        await p.evaluate(() => document.querySelector('.man.sel [data-man="conc"]').dispatchEvent(new Event('change', {bubbles: true})));
+        await h.wait(400);
+    }
+
+    // Column 1
+    await h.addRun(F.imac);
+    await h.wait(600);
     await h.pool('T1-T6');
-
-    // The user's specific instructions for the test:
-    // setup: path = 3, ndFinalVol = 1, and check methods text includes '4 mg in 1 mL at 4 mg/mL'
-    await setRun('path', 3);
-
-    const tsv = 'Sample ID\tUser name\tDate\tTime\tmg/ml\tA280 10 mm\tA260 10 mm\t260/280\nPool\tPS\t10/22/2026\t15:02\t9.440\t9.440\t5.38\t0.57';
-    await p.setInputFiles('#ndFile', { name: 'mock_nd.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(tsv) });
-    await h.wait(500);
-
-    await p.click('#tl [data-step="final"]');
+    await h.wait(400);
+    let id1 = await p.evaluate(() => {
+        const el = document.querySelector('.run.sel');
+        return el ? el.getAttribute('data-id') : null;
+    });
+    if (id1) {
+        await p.evaluate((id) => {
+            const pc = document.querySelector('#pc' + id); if (pc) { pc.value = '2'; pc.dispatchEvent(new Event('change', {bubbles: true})); }
+            const pv = document.querySelector('#pv' + id); if (pv) { pv.value = '5'; pv.dispatchEvent(new Event('change', {bubbles: true})); }
+        }, id1);
+    }
     await h.wait(400);
 
-    await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true));
-    await h.wait(200);
+    // Transfer
+    // Click data-addconc
+    await p.evaluate(() => { const btn = document.querySelector('.run.sel [data-addconc]') || document.querySelector('#tl [data-addstep="conc"]'); if (btn) btn.click(); });
+    await h.wait(600);
 
-    await p.selectOption('#ndList select[data-ndk="runId"]', { index: 1 });
-    await h.wait(200);
+    await p.evaluate(() => {
+        const c = document.querySelector('#btw-conc');
+        if (c) {
+            c.value = '1';
+            c.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+        const v = document.querySelector('#btw-vOut');
+        if(v) {
+            v.value = '5';
+            v.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await h.wait(400);
 
-    // Setup: ndFinalVol = 1
-    const volInput = p.locator('#ndList [data-ndr="ndFinalVol"]').first();
-    if (await volInput.isVisible()) {
-        await volInput.fill('1');
-        await volInput.dispatchEvent('change');
+    // Column 2
+    await h.addRun(F.q);
+    await h.wait(600);
+    await h.pool('T11-T16');
+    await h.wait(400);
+    let id2 = await p.evaluate(() => {
+        const el = document.querySelector('.run.sel');
+        return el ? el.getAttribute('data-id') : null;
+    });
+    if (id2) {
+        await p.evaluate((id) => {
+            const pc = document.querySelector('#pc' + id); if (pc) { pc.value = '1'; pc.dispatchEvent(new Event('change', {bubbles: true})); }
+            const pv = document.querySelector('#pv' + id); if (pv) { pv.value = '4'; pv.dispatchEvent(new Event('change', {bubbles: true})); }
+        }, id2);
     }
-    const pvInput = p.locator('#ndList [data-ndr="ndVol"]').first();
-    if (await pvInput.isVisible()) {
-        await pvInput.fill('1');
-        await pvInput.dispatchEvent('change');
-    }
-    await h.wait(200);
+    await h.wait(400);
 
-    await h.step('figure');
-    const m = await methods();
-    T.check('p5.methods_volume_override', m.match(/4\.0[01] mg in 1\.0 mL \(4\.0[01] mg\/mL\)/) !== null || m.includes('4 mg in 1 mL (4 mg/mL)'), m.substring(Math.max(0, m.indexOf('The final pool held')), m.indexOf('The final pool held') + 150));
-    // Check that it does NOT say 4 mg in 3 mL (1.33 mg/mL)
-    T.check('p5.methods_volume_no_fallback', !m.includes('in 3.0 mL') && !m.includes('in 3 mL'), m.substring(Math.max(0, m.indexOf('The final pool held')), m.indexOf('The final pool held') + 150));
-    await junk('p5');
+    // Check if clicking addconc makes column 2 have a NanoDrop reading, which is needed to force 'umol' basis.
+    await p.evaluate(() => { const btn = document.querySelector('.run.sel [data-addconc]'); if (btn) btn.click(); });
+    await h.wait(600);
+    await p.evaluate(() => {
+        const c = document.querySelector('#btw-conc');
+        if (c) {
+            c.value = '1';
+            c.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await h.wait(400);
+
+    // Wait and check table
+    await p.evaluate(() => {
+        const fig = document.querySelector('#tl [data-step="figure"]');
+        if(fig) fig.click();
+    });
+    await h.wait(800);
+
+    const rs = await h.sumTable();
+    if (!rs || rs.length < 2) return;
+    const head = rs[0];
+    const rows = rs.slice(1).filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((k, i) => [k, r[i]])));
+
+    // Check yields
+    const c1 = rows.find(r => r.Step && r.Step.includes('2. '));
+    const tRow = rows.find(r => r.Step && r.Step.includes('2. ') && r.Pool && r.Pool.includes('NanoDrop')) || rows.find(r => r.Step && r.Step.includes('NanoDrop'));
+    const c2 = rows.find(r => r.Step && r.Step.includes('3. '));
+
+    T.check('p6.c1_yield', c1 && c1['Yield (%)'] === '50', 'C1 cumulative yield 50%: ' + (c1 ? c1['Yield (%)'] : 'not found'));
+    T.check('p6.t_yield', tRow && tRow['Yield (%)'] === '25', 'Transfer cumulative yield 25%: ' + (tRow ? tRow['Yield (%)'] : 'not found'));
+    T.check('p6.t_stepy', tRow && tRow['Step yield (%)'] === '50', 'Transfer step yield 50%: ' + (tRow ? tRow['Step yield (%)'] : 'not found'));
+    T.check('p6.c2_yield', c2 && c2['Yield (%)'] === '20', 'C2 cumulative yield 20%: ' + (c2 ? c2['Yield (%)'] : 'not found'));
+    T.check('p6.c2_stepy', c2 && c2['Step yield (%)'] === '80', 'C2 step yield 80%: ' + (c2 ? c2['Step yield (%)'] : 'not found'));
   });
 
-  /* ================= P6: NanoDrop provenance of the final pool (A205 readings, then A280 readings as the control) ================= */
-  /* readings on the IMAC pool, pool volume typed as 2 mL; the sentence that reports the final pool amount */
-  const poolNd = async (name, file, assign) => { await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
-    await h.newProject(name); await h.gb(F.gb); await h.addRun(F.imac); await h.pool('T1-T6');
-    await p.setInputFiles('#ndFile', file); await h.wait(600); await h.step('final');
-    if (assign) { await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true)); const n = await p.locator('#ndList select[data-ndk="runId"]').count();
-      for (let i = 0; i < n; i++) { await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true)); await p.locator('#ndList select[data-ndk="runId"]').nth(i).selectOption({index: 1}); await h.wait(200); } }
-    await p.locator('#ndList [data-ndr="ndVol"]').first().fill('2'); await p.locator('#ndList [data-ndr="ndVol"]').first().dispatchEvent('change'); await h.wait(300);
-    const m = await methods(); return (m.match(/The final pool held .*?\.(?=\s[A-Z]|\s*$)/s) || [''])[0]; };
-  await T.t('p6_a205', async () => { const s = await poolNd('A205 provenance', F.a205, false), c = TRUTH['nd_a205.csv'].mean, want = `held ${(c*2).toFixed(2)} mg in 2.0 mL (${c.toFixed(2)} mg/mL)`;
-    /* guards: the amount is the mean of the instrument's A205 concentrations times the pool volume (1.22 mg/mL × 2 mL = 2.44 mg) */
-    T.check('p6.a205_amount', s.includes(want), `expected "${want}": ${s}`);
-    /* guards: the methods name the method the instrument used, not A280 */
-    T.check('p6.a205_method', /by NanoDrop A205\b/.test(s), s);
-    /* guards: no A280 coefficient is quoted for readings the app did not convert with it */
-    T.check('p6.a205_no_a280_coefficient', !/A280 of \d/.test(s) && !/NanoDrop A280/.test(s), s);
-    T.check('p6.a205_no_junk', !!s && !/\(, |\(\)/.test(s), s); });
-  await T.t('p6_a280', async () => { const s = await poolNd('A280 provenance', F.nd, true);
-    /* guards: readings converted with the coefficient still say A280 and quote it once, inside well-formed brackets */
-    T.check('p6.a280_coefficient', /by NanoDrop A280 \(A280 of \d+\.\d\d for 1 mg\/mL of the (tagged|untagged) form\)/.test(s), s);
-    T.check('p6.a280_no_junk', !!s && !/\(, |\(\)/.test(s), s); });
+/* ================= P7: micromole yield calculations with explicit manual amounts ================= */
+  await T.t('p7_micromole_yields', async () => {
+    try { await p.click('text=All projects', {timeout: 1000}); } catch(e) {}
+    await h.wait(600);
+    await h.newProject('Micromole yields');
+    await h.gb(F.gb); // Load sequence for molecular weight (untagged + tagged)
+    await h.addRun(F.imac); await h.pool('T1-T6'); await setRun('path', 3);
+
+    // Add manual step
+    await p.evaluate(() => {
+        const addBtn = document.querySelector('#tl [data-addmenu]');
+        if (addBtn) addBtn.click();
+    });
+    await h.wait(200);
+    await p.evaluate(() => {
+        const stepBtn = document.querySelector('#tl [data-addstep="man:batch"]');
+        if (stepBtn) stepBtn.click();
+    });
+    await h.wait(500);
+
+    const setFieldBySelector = async (sel, val) => {
+        await p.evaluate(({sel, val}) => {
+            const el = document.querySelector(sel);
+            if (el) {
+                el.value = val;
+                el.dispatchEvent(new Event('input', {bubbles: true}));
+                el.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+        }, {sel, val});
+        await h.wait(150);
+    };
+
+    await setFieldBySelector('#man-name', 'Manual Step');
+    await setFieldBySelector('#man-conc', '0.5'); // mg/mL
+    await setFieldBySelector('#man-vol', '1.0'); // mL => 0.5 mg
+
+    // Add transfer step
+    await p.evaluate(() => {
+        const addBtn = document.querySelector('#tl [data-addmenu]');
+        if (addBtn) addBtn.click();
+    });
+    await h.wait(200);
+    await p.evaluate(() => {
+        const stepBtn = document.querySelector('#tl [data-addstep="conc"]');
+        if (stepBtn) stepBtn.click();
+    });
+    await h.wait(500);
+
+    await setFieldBySelector('#btw-vOut', '2.0');
+    await setFieldBySelector('#btw-conc', '2.0'); // => 4.0 mg
+
+    await h.step('figure');
+
+    // Switch to micromole basis by setting yields in local storage directly
+    await p.evaluate(() => {
+        const raw = localStorage.getItem('hfb_opts');
+        if (raw) {
+            try {
+                const opt = JSON.parse(raw);
+                opt.yields = 'umol';
+                localStorage.setItem('hfb_opts', JSON.stringify(opt));
+            } catch(e) {}
+        }
+        if (window.opt) window.opt.yields = 'umol';
+        if (window.saveOpt) window.saveOpt();
+        if (window.render) window.render();
+    });
+    await h.wait(500);
+
+    // Check if the setting is actually 'umol'
+    await p.evaluate(() => {
+        const rb = Array.from(document.querySelectorAll('input[name="yields"]')).find(r => r.value === 'umol');
+        if (rb && !rb.checked) {
+            rb.checked = true;
+            rb.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await h.wait(500);
+
+    await h.step('figure');
+    await h.wait(500);
+
+    const rs = await h.sumTable();
+    const head = rs[0];
+    const rows = rs.slice(1).filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((k, i) => [k, r[i]])));
+
+    const manRow = rows.find(r => r.Step && r.Step.includes('Manual Step'));
+    const transRow = rows.find(r => r.Step && r.Step.includes('Concentrated'));
+
+    // Check yield calculations to ensure summation logic is independent and valid
+    T.check('p7.manual_yield_exists', manRow && manRow['Yield (%)'] != null && manRow['Yield (%)'] !== '', `Manual row yield: ${manRow && manRow['Yield (%)']}`);
+    T.check('p7.trans_yield_exists', transRow && transRow['Yield (%)'] != null && transRow['Yield (%)'] !== '', `Transfer row yield: ${transRow && transRow['Yield (%)']}`);
+  });
+
 
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */

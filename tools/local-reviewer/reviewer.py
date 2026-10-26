@@ -53,7 +53,7 @@ def ask_model(system, user):
             'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}]}
     req = urllib.request.Request(OLLAMA + '/api/chat', data=json.dumps(body).encode(),
                                  headers={'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=600) as r:  # 10 minutes for one local answer, so one slow call can't hold up the loop
+    with urllib.request.urlopen(req, timeout=1800) as r:
         out = json.loads(r.read())['message']['content']
     # reasoning models (Qwen3, gpt-oss and others) may put their working in <think> tags: keep only the answer
     return re.sub(r'<think>.*?</think>', '', out, flags=re.S).strip()

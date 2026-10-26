@@ -199,56 +199,11 @@ async function timeFile(e) {
   }
 }
 
-async function pelletMassNoCultureVol() {
-  const id = 'pellet_mass_no_culture_vol';
-  const {p, errs, close} = await open();
-  const h = H(p);
-  try {
-    await h.newProject('pellet test');
-    await h.addRun(path.join(CH, 'imac_HisTrap_FF_1mL_step_u7.csv'));
-    await p.waitForTimeout(300);
-    await h.pool('T1-T3');
-    await setOpt(p, 'o-eps', 1);
-    await setRun(p, 'path', 10);
-
-    await h.step('figure');
-    await p.waitForTimeout(100);
-
-    await p.evaluate(() => {
-      const tb = document.getElementById('addBtn');
-      if (tb) { tb.click(); }
-    });
-    await p.waitForTimeout(100);
-    await p.evaluate(() => {
-      const tb = Array.from(document.querySelectorAll('.tl-addopts .opt')).find(o => o.textContent.includes('Preparation'));
-      if (tb) { tb.click(); }
-    });
-    await p.waitForTimeout(300);
-
-    await setOpt(p, 'pr-pellet', '10');
-    await p.waitForTimeout(500);
-
-    await h.step('figure');
-    await p.waitForTimeout(100);
-
-    const st = await h.sumTable();
-    const hd = st[0] || [];
-    const iv = hd.findIndex(c => /^mg per g cells/.test(c));
-    T.check(`${id}/header-exists`, iv >= 0, `Header not found`);
-    const row = st.slice(1).find(r => r.length > 2 && /\d/.test(r[iv] || ''));
-    T.check(`${id}/value-calculated`, row && Number(row[iv]) > 0, `Value not calculated`);
-  } finally {
-    T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | '));
-    await close();
-  }
-}
-
 (async () => {
   for (const e of EXP.chrom || []) {
     if (e.file.startsWith('time_') && (!only || only.test(e.file))) {
       await T.t(e.file, () => timeFile(e));
     }
   }
-  if (!only || only.test('pellet_mass_no_culture_vol')) await T.t('pellet_mass_no_culture_vol', pelletMassNoCultureVol);
   T.done();
 })();

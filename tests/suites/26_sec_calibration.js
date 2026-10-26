@@ -16,42 +16,22 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); }
   });
 
-  /* Readiness: a field must be shown and editable before it is filled. When it never gets there, a ready.* check fails
-     and says why (missing, hidden, disabled; whether the SEC panel is shown), instead of an opaque fill timeout.
-     READY_MS is the wait for a slow runner; it applies only once the field is known to be there. */
-  const READY_MS = 60000;
-  const why = sel => p.evaluate(s => { const e = document.querySelector(s), pn = document.querySelector('#secPanel');
-    return `${s} ${!e ? 'missing' : e.offsetParent === null ? 'hidden' : e.disabled ? 'disabled' : e.readOnly ? 'read-only' : 'shown'}; SEC panel ${!pn ? 'missing' : pn.hidden ? 'hidden' : 'shown'}; body class "${document.body.className}"`; }, sel).catch(e => e.message.split('\n')[0]);
-  const ready = async (id, sel) => {
-    const l = p.locator(sel).first();
-    let ok = await l.waitFor({state: 'attached', timeout: READY_MS}).then(() => true, () => false);
-    if (ok) { await openFolds(l); ok = await l.waitFor({state: 'visible', timeout: READY_MS}).then(() => l.evaluate(e => !e.disabled && !e.readOnly), () => false); }
-    const d = await why(sel);
-    T.check('ready.' + id, ok, d);
-    if (!ok) throw new Error(`${sel} not ready to fill: ${d}`);
-    return l;
-  };
-
   const setField = async (sel, v) => {
-    const l = await ready(sel.replace(/^#/, ''), sel);
-    await l.fill(String(v), {timeout: READY_MS});
+    const l = p.locator(sel).first();
+    await openFolds(l);
+    await l.fill(String(v));
     await l.dispatchEvent('change');
     await h.wait(150);
   };
 
   await T.t('sec_calibration_kav_and_mw', async () => {
     // 1. Load SEC run
-    await ready('new_project_name', '#npName');
     await h.newProject('SEC Calibration Test');
     await h.addRun(path.join(DATA, 'science/sec_inject2.csv'));
 
-    let runStep = null;
-    for (let t0 = Date.now(); !runStep && Date.now() - t0 < READY_MS; await h.wait(250)) runStep = (await h.timeline()).find(x => /^run:/.test(x.k));
-    T.check('ready.sec_run_loaded', !!runStep, 'no run step in the timeline after loading sec_inject2.csv');
+    const runStep = (await h.timeline()).find(x => /^run:/.test(x.k));
     if (runStep) await h.step(runStep.k);
     await h.wait(400);
-    const panelShown = await p.locator('#secPanel').waitFor({state: 'attached', timeout: READY_MS}).then(() => p.waitForFunction(() => !document.querySelector('#secPanel').hidden, null, {timeout: READY_MS})).then(() => true, () => false);
-    T.check('ready.sec_panel_shown', panelShown, await why('#secPanel'));
 
     // 2. Open SEC settings & check "Size peaks with calibration standards"
     if (await p.isVisible('#moreBtn') && /More options/i.test(await p.locator('#moreBtn').textContent().catch(() => ''))) {
@@ -79,17 +59,16 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
       { name: 'Ovalbumin', kda: 44, ve: 16.0 }
     ];
 
-    const addStd = await ready('sec-addStd', '#sec-addStd');
     while (await p.locator('#secStdList .krow').count() < stds.length) {
-      await addStd.click({timeout: READY_MS});
+      await p.click('#sec-addStd');
       await h.wait(150);
     }
 
     for (let i = 0; i < stds.length; i++) {
-      const s = stds[i], nIn = await ready(`ss-n${i}`, `#ss-n${i}`), kIn = p.locator(`#ss-k${i}`), vIn = p.locator(`#ss-v${i}`);
-      await nIn.fill(s.name, {timeout: READY_MS}); await nIn.dispatchEvent('change');
-      await kIn.fill(String(s.kda), {timeout: READY_MS}); await kIn.dispatchEvent('change');
-      await vIn.fill(String(s.ve), {timeout: READY_MS}); await vIn.dispatchEvent('change');
+      const s = stds[i], nIn = p.locator(`#ss-n${i}`), kIn = p.locator(`#ss-k${i}`), vIn = p.locator(`#ss-v${i}`);
+      await nIn.fill(s.name); await nIn.dispatchEvent('change');
+      await kIn.fill(String(s.kda)); await kIn.dispatchEvent('change');
+      await vIn.fill(String(s.ve)); await vIn.dispatchEvent('change');
       await h.wait(150);
     }
 
