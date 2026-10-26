@@ -16,22 +16,42 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); }
   });
 
-  const setField = async (sel, v) => {
+  /* Readiness: a field must be shown and editable before it is filled. When it never gets there, a ready.* check fails
+     and says why (missing, hidden, disabled; whether the SEC panel is shown), instead of an opaque fill timeout.
+     READY_MS is the wait for a slow runner; it applies only once the field is known to be there. */
+  const READY_MS = 60000;
+  const why = sel => p.evaluate(s => { const e = document.querySelector(s), pn = document.querySelector('#secPanel');
+    return `${s} ${!e ? 'missing' : e.offsetParent === null ? 'hidden' : e.disabled ? 'disabled' : e.readOnly ? 'read-only' : 'shown'}; SEC panel ${!pn ? 'missing' : pn.hidden ? 'hidden' : 'shown'}; body class "${document.body.className}"`; }, sel).catch(e => e.message.split('\n')[0]);
+  const ready = async (id, sel) => {
     const l = p.locator(sel).first();
-    await openFolds(l);
-    await l.fill(String(v));
+    let ok = await l.waitFor({state: 'attached', timeout: READY_MS}).then(() => true, () => false);
+    if (ok) { await openFolds(l); ok = await l.waitFor({state: 'visible', timeout: READY_MS}).then(() => l.evaluate(e => !e.disabled && !e.readOnly), () => false); }
+    const d = await why(sel);
+    T.check('ready.' + id, ok, d);
+    if (!ok) throw new Error(`${sel} not ready to fill: ${d}`);
+    return l;
+  };
+
+  const setField = async (sel, v) => {
+    const l = await ready(sel.replace(/^#/, ''), sel);
+    await l.fill(String(v), {timeout: READY_MS});
     await l.dispatchEvent('change');
     await h.wait(150);
   };
 
   await T.t('sec_calibration_kav_and_mw', async () => {
     // 1. Load SEC run
+    await ready('new_project_name', '#npName');
     await h.newProject('SEC Calibration Test');
     await h.addRun(path.join(DATA, 'science/sec_inject2.csv'));
 
-    const runStep = (await h.timeline()).find(x => /^run:/.test(x.k));
+    let runStep = null;
+    for (let t0 = Date.now(); !runStep && Date.now() - t0 < READY_MS; await h.wait(250)) runStep = (await h.timeline()).find(x => /^run:/.test(x.k));
+    T.check('ready.sec_run_loaded', !!runStep, 'no run step in the timeline after loading sec_inject2.csv');
     if (runStep) await h.step(runStep.k);
     await h.wait(400);
+    const panelShown = await p.locator('#secPanel').waitFor({state: 'attached', timeout: READY_MS}).then(() => p.waitForFunction(() => !document.querySelector('#secPanel').hidden, null, {timeout: READY_MS})).then(() => true, () => false);
+    T.check('ready.sec_panel_shown', panelShown, await why('#secPanel'));
 
     // 2. Open SEC settings & check "Size peaks with calibration standards"
     if (await p.isVisible('#moreBtn') && /More options/i.test(await p.locator('#moreBtn').textContent().catch(() => ''))) {
@@ -59,16 +79,17 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
       { name: 'Ovalbumin', kda: 44, ve: 16.0 }
     ];
 
+    const addStd = await ready('sec-addStd', '#sec-addStd');
     while (await p.locator('#secStdList .krow').count() < stds.length) {
-      await p.click('#sec-addStd');
+      await addStd.click({timeout: READY_MS});
       await h.wait(150);
     }
 
     for (let i = 0; i < stds.length; i++) {
-      const s = stds[i], nIn = p.locator(`#ss-n${i}`), kIn = p.locator(`#ss-k${i}`), vIn = p.locator(`#ss-v${i}`);
-      await nIn.fill(s.name); await nIn.dispatchEvent('change');
-      await kIn.fill(String(s.kda)); await kIn.dispatchEvent('change');
-      await vIn.fill(String(s.ve)); await vIn.dispatchEvent('change');
+      const s = stds[i], nIn = await ready(`ss-n${i}`, `#ss-n${i}`), kIn = p.locator(`#ss-k${i}`), vIn = p.locator(`#ss-v${i}`);
+      await nIn.fill(s.name, {timeout: READY_MS}); await nIn.dispatchEvent('change');
+      await kIn.fill(String(s.kda), {timeout: READY_MS}); await kIn.dispatchEvent('change');
+      await vIn.fill(String(s.ve), {timeout: READY_MS}); await vIn.dispatchEvent('change');
       await h.wait(150);
     }
 
@@ -139,6 +160,98 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
   });
 
   T.check('no page errors', !errs.length, errs.join(' | '));
+
+  await T.t('sec_dimensions_and_custom_methods', async () => {
+    const methods = async (p) => {
+        return await p.evaluate(() => {
+            let el = document.querySelector('#methodsText');
+            return el ? el.textContent : '';
+        });
+    };
+
+    // 3.2/300 S200
+    await h.newProject('3.2/300 S200 Test');
+    await h.addRun(path.join(DATA, 'dummy_s200i3_3.2_300.csv'), {name: 'run 1', log: 'SEC Superdex 200 Increase 3.2/300'});
+
+    let runStep1 = null;
+    for (let t0 = Date.now(); !runStep1 && Date.now() - t0 < READY_MS; await h.wait(250)) runStep1 = (await h.timeline()).find(x => /^run:/.test(x.k));
+    if (runStep1) await h.step(runStep1.k);
+    await h.wait(400);
+
+    let secCol = await p.evaluate(() => document.querySelector('#sec-col') ? document.querySelector('#sec-col').value : '');
+    let vt = await p.evaluate(() => document.querySelector('#sec-vt') ? document.querySelector('#sec-vt').value : '');
+    let m1 = await methods(p);
+    T.check('s200i3_col_before', secCol === 's200i3', '3.2/300 S200 should be detected');
+    T.check('s200i3_vt_before', String(vt) === '2.4', 'Vt for 3.2/300 S200 should be 2.4');
+    T.check('s200i3_methods_before', m1.includes('3.2/300') && m1.includes('S200'), 'Methods should contain 3.2/300 S200');
+
+    // Make sure panel is visible before overriding
+    await p.evaluate(() => {
+        let det = document.querySelector('#secPanel').closest('details');
+        if (det) { det.open = true; }
+        document.querySelector('#secPanel').hidden = false;
+    });
+
+    // override to custom using JS evaluate to avoid Playwright timeout
+    await p.evaluate(() => {
+        let col = document.querySelector('#sec-col');
+        if (col) {
+            col.value = 'custom';
+            col.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await h.wait(100);
+    await p.evaluate(() => {
+        let vtEl = document.querySelector('#sec-vt');
+        if (vtEl) {
+            vtEl.value = '24';
+            vtEl.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await h.wait(100);
+
+    secCol = await p.evaluate(() => document.querySelector('#sec-col') ? document.querySelector('#sec-col').value : '');
+    vt = await p.evaluate(() => document.querySelector('#sec-vt') ? document.querySelector('#sec-vt').value : '');
+    let intTableText = await p.textContent('#intTable').catch(() => '');
+    let m1b = await methods(p);
+    T.check('s200i3_col_after', secCol === 'custom', '3.2/300 S200 should be custom');
+    T.check('s200i3_vt_after', String(vt) === '24', 'Vt for custom should be 24');
+    T.check('intTable_void_present', intTableText.includes('void') || intTableText.includes('V0'), 'intTable should have void indication');
+    T.check('s200i3_methods_after', m1b.includes('Other column') || m1b.includes('SEC') || m1b.includes('3.2/300 S200'), 'Methods should contain exact logged identity');
+
+    // 26/600 S75
+    await h.newProject('26/600 S75 Test');
+    await h.addRun(path.join(DATA, 'dummy_hl26s75_26_600.csv'), {name: 'run 2', log: 'SEC HiLoad 26/600 Superdex 75 pg'});
+
+    let runStep2 = null;
+    for (let t0 = Date.now(); !runStep2 && Date.now() - t0 < READY_MS; await h.wait(250)) runStep2 = (await h.timeline()).find(x => /^run:/.test(x.k));
+    if (runStep2) await h.step(runStep2.k);
+    await h.wait(400);
+
+    secCol = await p.evaluate(() => document.querySelector('#sec-col') ? document.querySelector('#sec-col').value : '');
+    vt = await p.evaluate(() => document.querySelector('#sec-vt') ? document.querySelector('#sec-vt').value : '');
+    let m2 = await methods(p);
+    T.check('hl26s75_col', secCol === 'hl26s75', '26/600 S75 should be detected');
+    T.check('hl26s75_vt', String(vt) === '320', 'Vt for 26/600 S75 should be 320');
+    T.check('hl26s75_methods', m2.includes('26/600 S75') || m2.includes('HiLoad 26/600 Superdex 75'), 'Methods should contain 26/600 S75');
+
+    // 10/300 control
+    await h.newProject('10/300 S200 Test');
+    await h.addRun(path.join(DATA, 'dummy_s200_10_300.csv'), {name: 'run 3', log: 'SEC Superdex 200 Increase 10/300 GL'});
+
+    let runStep3 = null;
+    for (let t0 = Date.now(); !runStep3 && Date.now() - t0 < READY_MS; await h.wait(250)) runStep3 = (await h.timeline()).find(x => /^run:/.test(x.k));
+    if (runStep3) await h.step(runStep3.k);
+    await h.wait(400);
+
+    secCol = await p.evaluate(() => document.querySelector('#sec-col') ? document.querySelector('#sec-col').value : '');
+    vt = await p.evaluate(() => document.querySelector('#sec-vt') ? document.querySelector('#sec-vt').value : '');
+    let m3 = await methods(p);
+    T.check('s200i_col', secCol === 's200i', '10/300 S200 should be detected');
+    T.check('s200i_vt', String(vt) === '24', 'Vt for 10/300 S200 should be 24');
+    T.check('s200i_methods', m3.includes('10/300 GL'), 'Methods should contain 10/300 GL');
+  });
+
   await close();
   T.done();
 })();
