@@ -93,6 +93,28 @@ lines = [','.join(head)] + [','.join([n, '10/22/2026 14:13', f'{a*1000:.3f}', f'
 w('nd_acclaro_ug_ml.csv', '\r\n'.join(lines) + '\r\n')
 rec('nd_acclaro_ug_ml.csv', 'Acclaro nucleic acid corrected concentration in ug/mL', [(r8[0][0], a*0.8, r8[0][2]) for n, a, r in r8])
 
+
+# 9. NanoDrop multiline preamble (comma, UTF-8)
+r9 = [('Sample 1', 2.500, 0.57), ('Sample 2', 2.600, 0.57), ('Sample 3', 2.400, 0.58)]
+preamble = [
+    'Instrument Information',
+    'Model,NanoDrop One',
+    'Serial Number,ND-1000',
+    'Software Version,1.5.0',
+    'Date,2026-10-23',
+    'Time,16:00:00',
+    '',
+    'Experiment Summary',
+    'Operator,Patrick',
+    'Blank Method,Buffer A',
+    'Measurement Type,Protein A280',
+    '',
+    'Data Table Follows'
+]
+lines = preamble + [','.join(ONE_HEAD)] + [','.join(['10/23/2026 16:00:00 AM', n, f'{a:.3f}', f'{a:.3f}', f'{r:.2f}', '1 Abs = 1 mg / mL', '', '', '', '340', '0.012']) for n, a, r in r9]
+w('nd_multiline_preamble.csv', '\r\n'.join(lines) + '\r\n')
+rec('nd_multiline_preamble.csv', 'NanoDrop One with multiline preamble', r9, 'Should skip metadata preamble')
+
 if __name__ == '__main__':
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['nd'] = EXP; doc['nd_note'] = __doc__.split('Ground truth per file')[1].strip()
