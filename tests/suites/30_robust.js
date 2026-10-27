@@ -138,6 +138,66 @@ for (const cloud of [false, true]) await T.t(cloud ? 'persist-cloud' : 'persist-
   T.check(`persist.${tag}.no-error`, !errs.length, errs.join(' | ')); await close(); });
 
 /* ---------------- damaged or partial files ---------------- */
+await T.t('legacy-sec', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  const proj = {
+    app: 'HPLC Figure Bench',
+    version: 1,
+    runs: [{
+      id: '1',
+      name: 'SEC run',
+      inWf: true,
+      secMode: 'on',
+      secCal: 'sc_old',
+      fracs: [],
+      uvs: [{name: 'UV', xs: [8.0, 10.0, 12.0, 14.0, 16.0], ys: [10.0, 50.0, 200.0, 80.0, 15.0]}],
+      run: {vol: 24, cv: 1}
+    }],
+    prep: {name: 'Legacy SEC Protein'},
+    opt: {
+      secStds: true,
+      secCals: [{
+        id: 'sc_old',
+        name: 'Legacy Column',
+        col: 's200i',
+        v0: 8.5,
+        vt: 24,
+        stds: [
+          {name: 'Thyroglobulin', kda: 670, ve: 9.5},
+          {name: 'Ovalbumin', kda: 44, ve: 14.5}
+        ]
+      }]
+    }
+  };
+
+  await h.newProject('Legacy SEC Setup');
+  await p.click('#homeBtn').catch(() => {});
+  await p.waitForTimeout(600);
+  await p.setInputFiles('#projFile', {
+    name: 'legacy_sec.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(proj))
+  });
+  await p.waitForTimeout(3000);
+
+  const tl = await h.timeline();
+  const runStep = tl.find(x => x.k && x.k.startsWith('run:'));
+  T.check('legacy-sec.run-found', !!runStep, `timeline: ${JSON.stringify(tl)}`);
+
+  if (runStep) {
+    await h.step(runStep.k);
+    await p.waitForTimeout(500);
+
+    const calVal = await p.$eval('#sec-cal', el => el.value).catch(e => e.message);
+    T.check('legacy-sec.cal-selected', calVal === 'sc_old', `cal: ${calVal}`);
+
+    const calText = await p.$eval('#sec-cal option:checked', el => el.textContent).catch(e => e.message);
+    T.check('legacy-sec.unit-present', typeof calText === 'string' && calText.includes('(mL)'), `text: ${calText}`);
+  }
+
+  await close();
+});
+
 await T.t('empty-uvs-project', async () => { const {p, errs, close} = await open(), h = H(p);
   await p.setInputFiles(SEL.importFile, path.join(Q, 'empty_uvs_proj.json')); await p.waitForTimeout(3000);
   await h.step('figure'); await p.waitForTimeout(500);
