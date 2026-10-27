@@ -1,0 +1,87 @@
+{
+  "app": "HPLC Figure Bench",
+  "version": 1,
+  "runs": [
+    {
+      "id": "r1",
+      "name": "r1",
+      "inWf": true,
+      "uvs": [
+        {
+          "name": "UV",
+          "xs": [1, 2, 3],
+          "ys": [10, 20, 10]
+        }
+      ],
+      "fracs": [],
+      "meth": {
+        "uvScale": 1
+      },
+      "peaks": [
+        {
+          "x": 2,
+          "y": 20,
+          "v1": 1.5,
+          "v2": 2.5,
+          "h": 10,
+          "a": 10
+        }
+      ],
+      "crop": "auto"
+    }
+  ],
+  "traces": [],
+  "gels": [
+    {
+      "id": "g1",
+      "name": "g1",
+      "lanes": [
+        {
+          "name": "lane1"
+        }
+      ],
+      "marks": [],
+      "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    }
+  ],
+  "nanodrop": [
+    {
+      "id": "nd1",
+      "name": "Concentration Reading",
+      "conc": 5.5,
+      "a280": 2.2,
+      "kind": "protein",
+      "stage": "conc",
+      "runId": "r1",
+      "dil": 1
+    }
+  ],
+  "prep": {
+    "manual": [
+      {
+        "k": "construct",
+        "s": "Legacy Protein"
+      }
+    ],
+    "btw": {
+      "r1": {
+        "how": "conc",
+        "conc": "5.5",
+        "vOut": "1"
+      }
+    }
+  },
+  "opt": {
+    "secCals": [
+      {
+        "id": "c1",
+        "name": "Legacy SEC",
+        "col": "custom",
+        "stds": [
+          {"name": "Standard 1", "kda": 10, "ve": 10},
+          {"name": "Standard 2", "kda": 100, "ve": 2}
+        ]
+      }
+    ]
+  }
+}
