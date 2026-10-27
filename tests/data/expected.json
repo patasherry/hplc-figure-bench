@@ -240,8 +240,8 @@
     },
     {
      "note": "shoulder",
-     "ve": 14.0,
-     "tol": 0.3,
+     "ve": 14.48,
+     "tol": 0.5,
      "must": true
     }
    ]

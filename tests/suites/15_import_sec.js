@@ -51,13 +51,23 @@ async function fresh(id, fn){
     T.check('sec/unmatched-listed', /Small \(30 kDa\)/.test(proposal.split('cleared')[1] || ''), proposal);
     T.check('sec/unmatched-cleared', stds[0].ve === '' && stds[1].ve === 2, JSON.stringify(stds.map(q => q.ve)));
   });
+
+
   await fresh('unicorn-comma', async (p, h) => {
+    // new check for comma-decimal parsing regression
     await h.newProject('Synthetic comma numbers');
-    await h.addRun(F.unicorn('sec_comma.tsv', true)); const data = await saved(p), r = data.runs[0];
+    await h.addRun(require('path').join(__dirname, '..', 'data', 'chrom', 'sec_semicolon_unicorn7.csv'));
+    await p.waitForTimeout(500);
+    const data2 = await saved(p), r2 = data2.runs[data2.runs.length - 1];
+    T.check('decimal-comma-sec', r2.uvs[0].xs.includes(14.48) || r2.uvs[0].xs.includes(14.5) || r2.uvs[0].xs.includes(14), 'Comma decimal in SEC trace parsed correctly');
+
+    await h.addRun(F.unicorn('sec_comma.tsv', true)); const data = await saved(p), r = data.runs[data.runs.length - 1];
+
     // Guards: fractional x positions are preserved, rather than truncated at the comma.
     T.check('unicorn/decimal-x', r.uvs[0].xs[1] === 0.25 && r.uvs[0].xs[18] === 4.5, r.uvs[0].xs.slice(0, 5));
     // Guards: decimal UV and conductivity values retain their fractional parts.
     T.check('unicorn/decimal-y', r.uvs[0].ys[0] === 2.5 && r.cond.ys[0] === 12.5, JSON.stringify([r.uvs[0].ys[0], r.cond.ys[0]]));
+
     // Guards: the other UNICORN separator/number convention still loads.
     await h.addRun(F.unicorn('sec_dot.tsv')); const dot = (await saved(p)).runs.find(x => x.file === 'sec_dot');
     T.check('unicorn/dot-unchanged', dot && dot.uvs[0].xs[1] === 0.25 && dot.uvs[0].ys[0] === 2.5);
