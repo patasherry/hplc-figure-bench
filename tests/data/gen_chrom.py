@@ -358,14 +358,13 @@ def large_header_run():
 
 
 # ---------------------------------------------------------------- L. time parsing formats
-def synthetic_csv():
-    fn = 'synthetic.csv'
+def cross_format_files():
     x = np.round(np.arange(0, 10.01, 0.05), 4)
-    y = np.exp(-0.5 * ((x - 5.0) / 0.2)**2)
-    with open(os.path.join(OUT, fn), 'w') as f:
-        f.write('Volume (mL),Absorbance (AU)\n')
-        for i in range(len(x)):
-            f.write(f'{x[i]:.4f},{y[i]:.4f}\n')
+    y = 100 * np.exp(-0.5 * ((x - 5.0) / 0.2)**2)
+    write_unicorn_csv(os.path.join(OUT, 'synthetic.csv'), [('UV', 'ml', 'mAU', x, y)])
+    write_unicorn_csv(os.path.join(OUT, 'cross_format_dot.csv'), [('UV', 'ml', 'mAU', x, y)])
+    write_unicorn_csv(os.path.join(OUT, 'cross_format_comma.csv'), [('UV', 'ml', 'mAU', x, y)], delim=';', decimal_comma=True)
+
 
 def time_formats():
     x = np.round(np.arange(0, 10.0001, 0.01), 4)
@@ -398,7 +397,7 @@ def time_formats():
 
 
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, synthetic_csv, time_formats): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, cross_format_files, time_formats): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()
