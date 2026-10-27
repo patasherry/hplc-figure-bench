@@ -5304,11 +5304,13 @@ const ND_HEAD = /(a?\s?260\s*\/\s*a?\s?280|\ba\s?280\b|\ba\s?205\b|mg\s*\/\s*ml|
 const isWl = h => /^\d{3}(\.\d+)?\s*(nm)?$/i.test(String(h).trim());
 function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 20); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
     if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) {
-        const next = splitRow(lines[i+1] || '', d);
+        let nextI = i + 1; while (nextI < lines.length && !lines[nextI].trim()) nextI++;
+        const next = splitRow(lines[nextI] || '', d);
         if (next.some(v => v !== '' && !isNaN(parseFloat(v.replace(',', '.'))))) return {i, d, H, rows: 'samples'};
     }
     if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1) {
-        const next = splitRow(lines[i+1] || '', d);
+        let nextI = i + 1; while (nextI < lines.length && !lines[nextI].trim()) nextI++;
+        const next = splitRow(lines[nextI] || '', d);
         if (next.some(v => v !== '' && !isNaN(parseFloat(v.replace(',', '.'))))) return {i, d, H, rows: 'wavelengths'};
     }
 } return null; }

@@ -287,6 +287,43 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     T.check('p6.a280_coefficient', /by NanoDrop A280 \(A280 of \d+\.\d\d for 1 mg\/mL of the (tagged|untagged) form\)/.test(s), s);
     T.check('p6.a280_no_junk', !!s && !/\(, |\(\)/.test(s), s); });
 
+  await T.t('p7_metadata', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('NanoDrop metadata');
+
+    // We didn't load F.gb!
+
+    await p.evaluate(([id]) => { document.getElementById(id).checked = false; }, ['o-ndCorr']);
+    await p.evaluate(() => {
+      const s = document.getElementById('o-ndNorm'); if(s) { s.value = 'raw'; s.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+
+    await p.setInputFiles('#ndFile', path.join(DATA, 'nd/nd_unicorn_metadata.txt'));
+    await h.wait(600);
+
+    const tl = await h.timeline();
+    const ndStep = tl.find(x => x.k && x.k.startsWith('nd:'));
+    if (ndStep) {
+      await h.step(ndStep.k);
+      await h.wait(200);
+    }
+
+    const data = await p.evaluate(() => {
+      const el = document.querySelector('#ndList') || document.body;
+      const inputs = Array.from(el.querySelectorAll('input')).map(i => i.value).join(' ');
+      return el.innerText + ' ' + inputs;
+    });
+
+    // The previous run returned: "No step       1.50 mg/mL×       260/280 0.57         EditNo step         PoolFinal         ×"
+    // Wait, the sample name is "PoolFinal"!
+    // But the text file has "Sample Name	A280	A260/A280	Protein (mg/mL)" and the row is "Pool 1	1.500	0.57	1.500".
+    // Why did it parse "PoolFinal"?
+    // Oh, wait. In hplc-figure-bench(WF1.13).html, ndList has inputs. Maybe "Pool 1" was an input value?
+    // In the last test, inputs were not fetched. When I fetched them, it was 1.50 mg/mL, 0.57 ... wait, I didn't fetch inputs in the last test!
+
+    T.check('nd_metadata_skipped', data.includes('Pool 1') && data.includes('1.5'), `Metadata parsing: ${data.substring(0, 150)}`);
+  });
+
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
