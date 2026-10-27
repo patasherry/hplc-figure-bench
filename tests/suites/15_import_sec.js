@@ -43,6 +43,32 @@ async function fresh(id, fn){
     // Guards: confirmed matches survive an ordinary project export.
     T.check('sec/export-matches', data.opt.secCals.find(c => c.id === 'scTest').stds[1].ve === 2);
   });
+  await fresh('legacy-unit-default', async (p, h) => {
+    // Guards: legacy projects lacking SEC calibration unit fields properly default to 'mL' so MW displays properly (in kDa).
+    const fixture = F.project();
+    const cal = fixture.opt.secCals.find(c => c.id === 'scTest');
+    delete cal.unit;
+
+    await loadProject(p, fixture);
+
+    const runStep = (await h.timeline()).find(x => /^run:/.test(x.k));
+    if (runStep) await h.step(runStep.k);
+    await h.wait(400);
+
+    // Force integration so that peaks are shown in the summary table
+    await p.click('#intAuto').catch(() => {});
+    await h.wait(400);
+
+    const peakTable = await h.peakTable();
+    const head = peakTable[0];
+    const mwCol = head.findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
+
+    // With fix 280, the missing unit is defaulted to "mL". Thus the run matches the calibration, and "Apparent mass (kDa)" is added to the peak table.
+    // So the column index must be >= 0 and the header must include "kDa".
+    // If the check fails because the app looks wrong, we keep it failing and explain it.
+    T.check('sec/legacy-unit-default', mwCol >= 0 && head[mwCol].includes('kDa'), 'SEC mass column should include kDa unit even when missing from project JSON');
+  });
+
   await fresh('sec-unmatched', async p => {
     const fixture = F.project(); fixture.opt.secCals.find(c => c.id === 'scTest').vt = 5; await loadProject(p, fixture);
     let proposal = ''; p.on('dialog', async d => { proposal = d.message(); await d.accept(); });
