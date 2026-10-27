@@ -115,6 +115,22 @@ lines = preamble + [','.join(ONE_HEAD)] + [','.join(['10/23/2026 16:00:00 AM', n
 w('nd_multiline_preamble.csv', '\r\n'.join(lines) + '\r\n')
 rec('nd_multiline_preamble.csv', 'NanoDrop One with multiline preamble', r9, 'Should skip metadata preamble')
 
+# 10. UNICORN metadata
+r10 = [('Pool 1', 1.5, 0.57)]
+lines = [
+    'Result file:\tC:\\UNICORN\\Local\\Default\\Patrick\\NanoDrop',
+    'Result name:\tSynthetic',
+    'User:\tSynthetic',
+    'Date:\t2026-10-27',
+    'Time:\t08:00:00',
+    '',
+    'Sample Name\tA280\tA260/A280\tProtein (mg/mL)',
+    'Pool 1\t1.500\t0.57\t1.500'
+]
+w('nd_unicorn_metadata.txt', '\r\n'.join(lines) + '\r\n')
+rec('nd_unicorn_metadata.txt', 'Synthetic UNICORN metadata fixture', r10, 'vendor metadata preamble')
+
+
 if __name__ == '__main__':
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['nd'] = EXP; doc['nd_note'] = __doc__.split('Ground truth per file')[1].strip()

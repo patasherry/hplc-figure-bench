@@ -103,6 +103,13 @@ async function fresh(id, fn){
           T.check('nd/' + exp.file + '/s1_conc', s1 && Math.abs((s1.a280 != null ? s1.a280 : s1.conc) - 2.5) < 0.001, `Expected Sample 1 concentration 2.5, got ${s1 ? (s1.a280 != null ? s1.a280 : s1.conc) : 'not found'}`);
       }
 
+      // Check UNICORN metadata specific case
+      if (exp.file === 'nd_unicorn_metadata.txt') {
+          const prot = nd.filter(n => n.kind !== 'nucleic');
+          const p1 = prot.find(n => n.name === 'Pool 1');
+          T.check('nd/' + exp.file + '/p1_conc', p1 && Math.abs((p1.a280 != null ? p1.a280 : p1.conc) - 1.5) < 0.001, `Expected Pool 1 concentration 1.5, got ${p1 ? (p1.a280 != null ? p1.a280 : p1.conc) : 'not found'}`);
+      }
+
     });
   }
 
