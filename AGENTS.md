@@ -88,6 +88,7 @@ After running tests, read the output of node failures.js, not the full logs.
 - Tests drive the app only through its UI and DOM, never internal functions.
 - All test data is synthetic. Never add real lab files to `tests/`. Inputs that were first real files are mapped to synthetic stand-ins in `tests/lib/harness.js`.
 - Do not weaken or delete a check to make a change pass. If a check is wrong, say why in the PR.
+- User-visible numerical fixes require minimal main-failing evidence: add one UI-level synthetic case that fails on main and passes on the branch. Assert the displayed value with an appropriate tolerance or exact text when rounding is contractual, allowing domain-specific tests to define the expected semantics.
 
 For a quick manual look: open the HTML file in a browser (example chromatograms load automatically), or add `#quick` to the URL for Quick-Figure mode. `#selftest` exposes internal functions on `window.__HFB` for the browser console.
 
