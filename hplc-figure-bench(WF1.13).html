@@ -1336,8 +1336,10 @@ try { const s = JSON.parse(localStorage.getItem('hplc-fig-opt') || 'null'); if (
 opt.xmin = opt.xmax = opt.ymin = opt.ymax = '';
 /* the tidier defaults reach settings saved before them once */
 const tidyOpt = () => { if (!opt.tidy13) { opt.wfYield = false; opt.secStds = false; opt.tidy13 = true; } if (!opt.tidy14) { opt.noGelSlot = false; if (numOr(opt.wfGelH, 1.8) === 1.8) opt.wfGelH = 1.3; opt.tidy14 = true; } }; tidyOpt();
-if (!Array.isArray(opt.known)) opt.known = KNOWN_DEFAULT.map(k => Object.assign({}, k));
-else { opt.known = opt.known.filter(k => k && typeof k === 'object'); opt.known.forEach(k => { const d = KNOWN_DEFAULT.find(x => x.name === k.name && x.kind === k.kind); if (d) { k.kda = d.kda; k.ctx = d.ctx; k.src = d.src; if (d.app) k.app = d.app; else delete k.app; } }); }
+/* known proteins and SEC calibrations from saved settings or a project file: drop entries that are not objects, and built-in proteins take their current sizes and notes */
+function tidyKnown(L){ L = Array.isArray(L) ? L.filter(k => k && typeof k === 'object' && !Array.isArray(k)) : []; L.forEach(k => { const d = KNOWN_DEFAULT.find(x => x.name === k.name && x.kind === k.kind); if (d) { k.kda = d.kda; k.ctx = d.ctx; k.src = d.src; if (d.app) k.app = d.app; else delete k.app; } }); return L; }
+function tidyLists(){ opt.known = Array.isArray(opt.known) ? tidyKnown(opt.known) : KNOWN_DEFAULT.map(k => Object.assign({}, k)); secCals(); }
+tidyLists();
 function saveOpt(){ try { localStorage.setItem('hplc-fig-opt', JSON.stringify(opt)); } catch(e) {} }
 
 let wfSel = null, wfSelKey = '', gelMovedAt = 0;
@@ -1815,7 +1817,7 @@ const SEC_STD_SETS = {
 function newSecCal(col, unit){ const c = SEC_COLUMNS[col] || SEC_COLUMNS.custom, vt = c.vt === '' ? '' : (unit === 'min' ? '' : c.vt);
   return {id: 'sc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: c.name, col, unit: unit || 'mL', v0: vt === '' ? '' : Math.round(vt*0.36*100)/100, v0est: true, vt, set: 'biorad',
     stds: SEC_STD_SETS.biorad.stds.map(([name, kda, off]) => ({name, kda, ve: '', off: !!off}))}; }
-function secCals(){ if (!Array.isArray(opt.secCals)) opt.secCals = []; opt.secCals.forEach(c => { c.unit = c.unit || 'mL'; c.stds = Array.isArray(c.stds) ? c.stds.filter(s => s && typeof s === 'object') : []; }); return opt.secCals; }
+function secCals(){ const ok = c => c && typeof c === 'object' && !Array.isArray(c); if (!Array.isArray(opt.secCals)) opt.secCals = []; else if (!opt.secCals.every(ok)) opt.secCals = opt.secCals.filter(ok); opt.secCals.forEach(c => { c.unit = c.unit || 'mL'; c.stds = Array.isArray(c.stds) ? c.stds.filter(s => s && typeof s === 'object') : []; }); return opt.secCals; }
 /* the calibration a run uses: its own choice, else one for its column and units, made on first use */
 function secCalFor(r){
   const L = secCals(); let c = r.secCal && L.find(x => x.id === r.secCal);
@@ -6671,8 +6673,10 @@ try { const s = JSON.parse(localStorage.getItem('hplc-fig-opt') || 'null'); if (
 opt.xmin = opt.xmax = opt.ymin = opt.ymax = '';
 /* the tidier defaults reach settings saved before them once */
 const tidyOpt = () => { if (!opt.tidy13) { opt.wfYield = false; opt.secStds = false; opt.tidy13 = true; } if (!opt.tidy14) { opt.noGelSlot = false; if (numOr(opt.wfGelH, 1.8) === 1.8) opt.wfGelH = 1.3; opt.tidy14 = true; } }; tidyOpt();
-if (!Array.isArray(opt.known)) opt.known = KNOWN_DEFAULT.map(k => Object.assign({}, k));
-else { opt.known = opt.known.filter(k => k && typeof k === 'object'); opt.known.forEach(k => { const d = KNOWN_DEFAULT.find(x => x.name === k.name && x.kind === k.kind); if (d) { k.kda = d.kda; k.ctx = d.ctx; k.src = d.src; if (d.app) k.app = d.app; else delete k.app; } }); }
+/* known proteins and SEC calibrations from saved settings or a project file: drop entries that are not objects, and built-in proteins take their current sizes and notes */
+function tidyKnown(L){ L = Array.isArray(L) ? L.filter(k => k && typeof k === 'object' && !Array.isArray(k)) : []; L.forEach(k => { const d = KNOWN_DEFAULT.find(x => x.name === k.name && x.kind === k.kind); if (d) { k.kda = d.kda; k.ctx = d.ctx; k.src = d.src; if (d.app) k.app = d.app; else delete k.app; } }); return L; }
+function tidyLists(){ opt.known = Array.isArray(opt.known) ? tidyKnown(opt.known) : KNOWN_DEFAULT.map(k => Object.assign({}, k)); secCals(); }
+tidyLists();
 function saveOpt(){ try { localStorage.setItem('hplc-fig-opt', JSON.stringify(opt)); } catch(e) {} }
 
 let wfSel = null, wfSelKey = '', gelMovedAt = 0;
@@ -7150,7 +7154,7 @@ const SEC_STD_SETS = {
 function newSecCal(col, unit){ const c = SEC_COLUMNS[col] || SEC_COLUMNS.custom, vt = c.vt === '' ? '' : (unit === 'min' ? '' : c.vt);
   return {id: 'sc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: c.name, col, unit: unit || 'mL', v0: vt === '' ? '' : Math.round(vt*0.36*100)/100, v0est: true, vt, set: 'biorad',
     stds: SEC_STD_SETS.biorad.stds.map(([name, kda, off]) => ({name, kda, ve: '', off: !!off}))}; }
-function secCals(){ if (!Array.isArray(opt.secCals)) opt.secCals = []; opt.secCals.forEach(c => { c.unit = c.unit || 'mL'; c.stds = Array.isArray(c.stds) ? c.stds.filter(s => s && typeof s === 'object') : []; }); return opt.secCals; }
+function secCals(){ const ok = c => c && typeof c === 'object' && !Array.isArray(c); if (!Array.isArray(opt.secCals)) opt.secCals = []; else if (!opt.secCals.every(ok)) opt.secCals = opt.secCals.filter(ok); opt.secCals.forEach(c => { c.unit = c.unit || 'mL'; c.stds = Array.isArray(c.stds) ? c.stds.filter(s => s && typeof s === 'object') : []; }); return opt.secCals; }
 /* the calibration a run uses: its own choice, else one for its column and units, made on first use */
 function secCalFor(r){
   const L = secCals(); let c = r.secCal && L.find(x => x.id === r.secCal);
@@ -10675,8 +10679,13 @@ function parseNanoDrop(text){
   if (hd.rows === 'wavelengths') { return H.slice(1).map((nm, k) => { const wl = [], ab = []; data.forEach(r => { const w = ndNum(r[0]), v = ndNum(r[k + 1]); if (w != null && v != null) { wl.push(w); ab.push(v); } });
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }, a280 = at(280), a260 = at(260);
       return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null); }
-  const cName = col(h => ND_NAME.test(h)), cUnit = col(h => /^units?$/.test(h));
-  const cImp = col(h => /^impurity 1$/.test(h)), cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
+  const cName = col(h => ND_NAME.test(h)), cR280 = col(h => /a?\s?260\s*\/\s*a?\s?280/.test(h)), cR230 = col(h => /a?\s?260\s*\/\s*a?\s?230/.test(h));
+  const absCol = w => col(h => new RegExp(`\\ba ?${w}\\b|^${w}$`).test(h) && !/\//.test(h) && !/conc|mg|µg|ug|ng|raw/.test(h));
+  const cA280 = absCol(280), cA260 = absCol(260), cA230 = absCol(230), cA205 = absCol(205), cA340 = col(h => /\b340\b/.test(h) && !/baseline/.test(h));
+  const cConc = col(h => /conc|mg\s*\/\s*ml|ng\s*\/\s*[µu]l|[µu]g\s*\/\s*ml/.test(h) && !/\/\s*a/.test(h) && !/dye|corrected/.test(h)), cUnit = col(h => /^units?$/.test(h));
+  const cCorr = col(h => /corrected/.test(h) && /mg|conc/.test(h)), cImp = col(h => /^impurity 1$/.test(h)), cImpA = col(h => /^impurity 1 a ?280/.test(h)), cBaseA = col(h => /baseline abs/.test(h));
+  const cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
+  const wcols = H.map((h, i) => ({i, w: parseFloat(h)})).filter(x => isWl(H[x.i]) && x.w >= 190 && x.w <= 850);
   const headAll = hn.join(' '), dyeFile = /dye|degree of label/.test(headAll);
   return data.filter(r => r.length > 2 && (r[cName] || '').length).map((r, i) => {
     const typ = cType >= 0 ? r[cType] : '', unitTxt = ((cUnit >= 0 ? r[cUnit] : '') + ' ' + (cConc >= 0 ? hn[cConc] : '')).toLowerCase();
@@ -10973,7 +10982,7 @@ function cleanProject(d){
   const isO = o => o && typeof o === 'object' && !Array.isArray(o), hasXY = c => isO(c) && Array.isArray(c.xs) && Array.isArray(c.ys); let skipped = 0;
   const keep = (list, ok) => { const a = Array.isArray(list) ? list : []; const out = a.filter(ok); skipped += a.length - out.length; return out; };
   d.runs = keep(d.runs, r => isO(r) && r.id && Array.isArray(r.uvs) && r.uvs.length && r.uvs.every(hasXY));
-  d.traces = keep(d.traces, t => isO(t) && Array.isArray(t.rows) && Array.isArray(t.cols));
+  d.traces = keep(d.traces, t => isO(t) && Array.isArray(t.rows));
   d.gels = keep(d.gels, isO); d.nanodrop = keep(d.nanodrop, isO);
   if (!isO(d.struct)) d.struct = null; if (!isO(d.opt)) d.opt = null;
   return skipped; }
@@ -10984,13 +10993,14 @@ async function openProject(data, name, noUndo){
   const ng = []; failedGels = [];
   for (const sg of data.gels || []) { try { const img = new Image(); await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = sg.image; });
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
-      const g = Object.assign(makeGel(sg.name, c), sg); delete g.image; processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
-  runs = data.runs; traces = data.traces || []; gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
+      const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
+      Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
+  runs = data.runs; traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: Array.isArray(t.peaks) ? t.peaks : []})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
     { const pq = Array.isArray(opt.myQuick) ? opt.myQuick : [], del = new Set([...(myQDel || []), ...(Array.isArray(opt.myQuickDel) ? opt.myQuickDel : [])]); opt.myQuickDel = [...del]; opt.myQuick = myQ.concat(pq.filter(q => !myQ.some(m => m.id === q.id))).filter(q => !del.has(q.id)); }
-    const pc = Array.isArray(opt.secCals) ? opt.secCals : []; opt.secCals = pc.concat(myCals.filter(c => !pc.some(x => x.id === c.id))); opt.secCals.forEach(c => { c.unit = c.unit || 'mL'; c.stds = Array.isArray(c.stds) ? c.stds.filter(s => s && typeof s === 'object') : []; });
-    if (myKnown) { const pk = Array.isArray(dopt.known) ? dopt.known : []; opt.known = myKnown.concat(pk.filter(k => !myKnown.some(m => m.name === k.name && +m.kda === +k.kda))); } tidyOpt(); }
+    const pc = secCals(); opt.secCals = pc.concat(myCals.filter(c => !pc.some(x => x.id === c.id)));
+    if (myKnown) { const pk = tidyKnown(dopt.known); opt.known = myKnown.concat(pk.filter(k => !myKnown.some(m => m.name === k.name && +m.kda === +k.kda))); } tidyLists(); tidyOpt(); }
   let mx = 0; [...runs, ...gels].forEach(x => { const m = String(x.id).match(/\d+/); if (m) mx = Math.max(mx, +m[0]); }); traces.forEach(t => { mx = Math.max(mx, +t.id || 0); }); uid = Math.max(mx + 1, numOr(prep.nextUid, 0));
   cur = data.cur || 'overlay'; marking = null; tagMode = '';
   renderList(); syncControls(); render(); saveOpt();
