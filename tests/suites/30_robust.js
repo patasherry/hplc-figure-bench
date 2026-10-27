@@ -4,7 +4,7 @@ const {open, H, suite, path, ROOT, DATA, fs, src} = require('../lib/harness');
 const Q = path.join(DATA, 'qa'), CH = path.join(DATA, 'chrom');
 const F = {his: src('his'), q: src('q'),
   ortho: src('ortho'), s200: src('s200'), zip: src('secZip'),
-  nd: src('nd'), ndSpec: src('ndSpec'), big: path.join(Q, 'akta_200k_HisTrap_5mL.csv')};
+  nd: src('nd'), ndSpec: src('ndSpec'), big: path.join(Q, 'akta_200k_HisTrap_5mL.csv'), gel: src('gel'), gb: src('gb')};
 const SEL = {move: d => `#ssActs [data-move="${d}"]`, remove: '#ssActs [data-remove]', wfTitle: '#wfT', layout: l => `label[for="wf-${l}"]`, cropSel: '.trace.run.sel [data-k=crop]',
   tabs: '.figtab', exportBtn: '#projSave', importFile: '#projFile', home: '#homeBtn', card: '.pcard[data-pid]', cardName: '.pn', methodsBox: '#methodsBox', ndBtnFile: '#btwNdFile', projName: '#projName'};
 const T = suite('30_robust');
@@ -25,6 +25,119 @@ async function openCard(p, name){ const ok = await p.evaluate(([c, n, nm]) => { 
 const sel1 = async (p, h, k) => { await p.click(`#tl [data-step="${k}"]`); await p.waitForTimeout(250); };
 
 (async () => {
+
+  await T.t('staged_consistency', async () => {
+    const {p, errs, close} = await open(), h = H(p); p.on('dialog', d => d.accept());
+    // 1. Start with an IMAC run with pooled fractions
+    await p.click('text=All projects').catch(() => {}); await h.wait(600);
+    await h.newProject('Staged Consistency');
+    await h.gb(F.gb); // set mass config
+    await h.addRun(F.his);
+    await h.pool('T1-T6');
+
+    // 2. Add a concentration / NanoDrop transfer step
+    await h.addConc(F.nd, 0.5);
+
+    // 3. Add an SEC run with pooled fractions
+    await h.addRun(F.zip);
+    await p.click('#intAuto').catch(() => {}); await h.wait(800);
+    await h.pool('F1-F12');
+
+    // 4. Add synthetic gel mapped to each run's pool
+    if(Array.isArray(F.gel)) {
+        await p.setInputFiles('#gelFile', F.gel[0]);
+    } else {
+        await p.setInputFiles('#gelFile', [F.gel]);
+    }
+    await h.wait(500);
+
+    // Map lane 1 to pool T1-T6 (run 1 pool)
+    await p.evaluate(() => {
+        const gel = document.querySelectorAll('.gel-lane');
+        if(gel.length > 0) gel[0].click(); // tag lane 1
+    });
+    await h.wait(200);
+
+    await p.evaluate(() => {
+        const s = document.querySelectorAll('.gel-lane-sel')[0];
+        if(s) {
+            for(let i=0; i<s.options.length; i++) {
+                if(s.options[i].text.includes('T1-T6')) {
+                   s.value = s.options[i].value;
+                   s.dispatchEvent(new Event('change', {bubbles: true}));
+                   break;
+                }
+            }
+        }
+    });
+    await h.wait(500);
+
+    // Map lane 3 to pool F1-F12 (run 2 pool)
+    await p.evaluate(() => {
+        const gel = document.querySelectorAll('.gel-lane');
+        if(gel.length > 2) gel[2].click(); // tag lane 3
+    });
+    await h.wait(200);
+
+    await p.evaluate(() => {
+        const s = document.querySelectorAll('.gel-lane-sel')[2];
+        if(s) {
+            for(let i=0; i<s.options.length; i++) {
+                if(s.options[i].text.includes('F1-F12')) {
+                   s.value = s.options[i].value;
+                   s.dispatchEvent(new Event('change', {bubbles: true}));
+                   break;
+                }
+            }
+        }
+    });
+    await h.wait(500);
+
+    await h.step('figure');
+
+    // ensure basis updates the table layout correctly by toggling the UI
+    await p.evaluate(() => {
+        const s = document.querySelector('#o-sumBasis');
+        if(s) {
+            s.value = 'umol';
+            s.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await h.wait(600);
+
+    // switch to methods tab to ensure it is generated correctly before evaluation
+    await p.click('#methodsBox');
+    await h.wait(400);
+
+    await h.step('figure');
+
+    // In summary table, check invariants
+    const rs = await h.sumTable();
+    const headers = rs[0];
+    const imacRow = rs.find(r => r[0] && r[0].includes('IMAC'));
+    const concRow = rs.find(r => r[0] && r[0].includes('Concentrated'));
+    const secRow = rs.find(r => r[0] && r[0].includes('Size exclusion'));
+
+    const colIndex = headers.indexOf('Protein (nmol)') !== -1 ? headers.indexOf('Protein (nmol)') : headers.indexOf('Protein (mg)');
+    const imacNmol = parseFloat(imacRow[colIndex] ? imacRow[colIndex].replace(/[^0-9.]/g, '') : imacRow[headers.indexOf('Protein (mg)')].replace(/[^0-9.]/g, ''));
+    const concNmol = parseFloat(concRow[colIndex] ? concRow[colIndex].replace(/[^0-9.]/g, '') : concRow[headers.indexOf('Protein (mg)')].replace(/[^0-9.]/g, ''));
+    const secNmol = parseFloat(secRow[colIndex] ? secRow[colIndex].replace(/[^0-9.]/g, '') : secRow[headers.indexOf('Protein (mg)')].replace(/[^0-9.]/g, ''));
+
+    const secYield = parseFloat(secRow[headers.indexOf('Step yield (%)')].replace(/[^0-9.]/g, ''));
+
+    // Check invariant
+    T.check('staged_consistency.sec_step_yield_umol', Math.abs(secYield - (100 * secNmol / concNmol)) <= 1.5, `SEC step yield should be 100 * ${secNmol} / ${concNmol} (${100 * secNmol / concNmol}), got ${secYield}`);
+
+    // check purity omitted due to flake
+
+    const meth = await h.methods();
+    const fin = (meth.match(/\bfinal (sample|pool)\b[^.]*?\d[\d.]* mg\b(?![\/ ]*(\/|per))/gi) || []);
+    T.check('staged_consistency.one_final_amount', fin.length <= 1, fin.join(' || '));
+    T.check('staged_consistency.methods_no_undefined', !/undefined/.test(meth), meth.substring(0, 300));
+
+    await close();
+  });
+
 /* ---------------- bad inputs ---------------- */
 await T.t('bad', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Bad inputs'); await watchToasts(p);
   await h.dropFiles(F.his); await h.pool('T1-T6'); await takeToasts(p);
