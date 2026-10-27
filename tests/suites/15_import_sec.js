@@ -62,6 +62,13 @@ async function fresh(id, fn){
     await h.addRun(F.unicorn('sec_dot.tsv')); const dot = (await saved(p)).runs.find(x => x.file === 'sec_dot');
     T.check('unicorn/dot-unchanged', dot && dot.uvs[0].xs[1] === 0.25 && dot.uvs[0].ys[0] === 2.5);
   });
+  await fresh('unicorn-semicolon', async (p, h) => {
+    await h.newProject('Synthetic comma numbers');
+    await h.addRun(F.unicorn('sec_semicolon_unicorn7.csv'));
+    await p.waitForTimeout(500);
+    const data2 = await saved(p), r2 = data2.runs.find(x => x.file === 'sec_semicolon_unicorn7');
+    T.check('decimal-comma-sec', r2 && (r2.uvs[0].xs.includes(0.02) || r2.uvs[0].xs.includes(0.25) || r2.uvs[0].xs.includes(14.48)), 'Comma decimal in SEC trace parsed correctly');
+  });
   for (const size of [75, 200]) await fresh('column-' + size, async (p, h) => {
     await h.newProject('Synthetic column ' + size);
     await h.addRun(F.unicorn('sec_Superdex ' + size + ' Increase 5-150 GL.tsv'));
