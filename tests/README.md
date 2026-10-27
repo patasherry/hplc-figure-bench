@@ -48,6 +48,7 @@ After running tests, read the output of node failures.js, not the full logs.
 - Drive the app only through its UI and DOM, never its internal functions.
 - Element selectors live in `lib/harness.js` (or a `SEL` block at the top of a suite).
 - Every check has a stable ID and a descriptive comment. A thrown error registers as a failed check rather than crashing the suite.
+- User-visible numerical fixes require minimal main-failing evidence: add one UI-level synthetic case that fails on main and passes on the branch. Assert the displayed value with an appropriate tolerance or exact text when rounding is contractual, allowing domain-specific tests to define the expected semantics.
 
 ## Test data: synthetic stand-ins and HFB_PRIVATE_DATA
 
