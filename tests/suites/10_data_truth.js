@@ -170,10 +170,33 @@ async function lastFracFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
   } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
 }
 
+async function testSynthetic() {
+  const id = 'synthetic';
+  const {p, errs, close} = await open();
+  const h = H(p);
+  try {
+    await h.newProject('synthetic test');
+    const f = require('path').join(__dirname, '..', 'data', 'chrom', 'synthetic.csv');
+    await p.setInputFiles('#file', f);
+    await p.waitForTimeout(500);
+
+    const svgTexts = await p.evaluate(() => Array.from(document.querySelectorAll('#paper svg text')).map(x => x.textContent));
+    T.check('synthetic/axis-mL', svgTexts.some(t => t && t.includes('mL')), `SVG text has mL: ${svgTexts}`);
+    T.check('synthetic/axis-AU', svgTexts.some(t => t && t.includes('AU') && !t.includes('mAU')), `SVG text has AU, not mAU: ${svgTexts}`);
+
+    T.check('synthetic/peak-pos', svgTexts.includes('5.00') || svgTexts.includes('5.0'), `Apex should be 5.0, texts: ${svgTexts}`);
+    T.check('synthetic/peak-height', svgTexts.some(t => t && (t === '1.0' || t === '1')), `Height tick should be 1.0, texts: ${svgTexts}`);
+  } finally {
+    T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | '));
+    await close();
+  }
+}
+
 (async () => {
   for (const e of EXP.lastfrac || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => lastFracFile(e)); }
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);
+  if (!only || only.test('synthetic')) await T.t('synthetic', testSynthetic);
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
   for (const e of EXP.time_tests || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => timeFile(e)); }
