@@ -224,6 +224,20 @@ await T.t('malformed-prep', async () => { const {p, errs, close} = await open(),
   for (const x of tl) { await h.step(x.k); await p.waitForTimeout(250); } // every step, including the run's, renders from the normalized prep
   T.check('malformed-prep.no-error', errs.length === e0, errs.slice(e0).join(' | '));
   await close(); });
+/* migrating legacy NanoDrop stage: 'final' to 'conc' properly checks for prep.btw to prevent yield loss */
+await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Migrate ND'); await h.dropFiles(F.his);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const projPath = path.join(ROOT, 'results', 'migrate_src.json'); await dl.saveAs(projPath);
+  const d = JSON.parse(fs.readFileSync(projPath, 'utf8')), rId = d.runs[0].id;
+  d.prep = d.prep || {}; d.prep.btw = d.prep.btw || {}; d.prep.btw[rId] = {how: 'conc', conc: '10', vOut: '1'};
+  d.nanodrop = [ {id: 'nd1', name: 'Has conc', a280: 2.5, kind: 'protein', stage: 'final', runId: rId, dil: 1}, {id: 'nd2', name: 'No conc', a280: 3.5, kind: 'protein', stage: 'final', runId: rId + '_fake', dil: 1} ];
+  await p.click(SEL.home); await p.waitForTimeout(600);
+  await p.setInputFiles(SEL.importFile, {name: 'migrate_proj.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))}); await p.waitForTimeout(3000);
+  const [dl2] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const outPath = path.join(ROOT, 'results', 'migrate_out.json'); await dl2.saveAs(outPath);
+  const d2 = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+  const nd1 = d2.nanodrop.find(x => x.id === 'nd1'), nd2 = d2.nanodrop.find(x => x.id === 'nd2');
+  T.check('legacy-nd.migrated', nd1 && nd1.stage === 'conc', 'valid runId with btw migrated to conc');
+  T.check('legacy-nd.preserved', nd2 && nd2.stage === 'final', 'no btw preserved as final');
+  await close(); });
 /* a project file dropped together with other files: the others are not loaded, and the user is told */
 await T.t('project-with-others', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Mixed drop'); await watchToasts(p); const e0 = errs.length;
   await p.setInputFiles('#file', [{name: 'tiny_project.json', mimeType: 'application/json', buffer: Buffer.from('{"app":"HPLC Figure Bench","version":1,"runs":[]}')}, {name: path.basename(F.his), mimeType: 'text/csv', buffer: fs.readFileSync(F.his)}]); await p.waitForTimeout(3000);
