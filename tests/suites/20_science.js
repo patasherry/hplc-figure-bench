@@ -291,8 +291,6 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
     await h.newProject('NanoDrop metadata');
 
-    // We didn't load F.gb!
-
     await p.evaluate(([id]) => { document.getElementById(id).checked = false; }, ['o-ndCorr']);
     await p.evaluate(() => {
       const s = document.getElementById('o-ndNorm'); if(s) { s.value = 'raw'; s.dispatchEvent(new Event('change', {bubbles: true})); }
@@ -313,13 +311,6 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
       const inputs = Array.from(el.querySelectorAll('input')).map(i => i.value).join(' ');
       return el.innerText + ' ' + inputs;
     });
-
-    // The previous run returned: "No step       1.50 mg/mL×       260/280 0.57         EditNo step         PoolFinal         ×"
-    // Wait, the sample name is "PoolFinal"!
-    // But the text file has "Sample Name	A280	A260/A280	Protein (mg/mL)" and the row is "Pool 1	1.500	0.57	1.500".
-    // Why did it parse "PoolFinal"?
-    // Oh, wait. In hplc-figure-bench(WF1.13).html, ndList has inputs. Maybe "Pool 1" was an input value?
-    // In the last test, inputs were not fetched. When I fetched them, it was 1.50 mg/mL, 0.57 ... wait, I didn't fetch inputs in the last test!
 
     T.check('nd_metadata_skipped', data.includes('Pool 1') && data.includes('1.5'), `Metadata parsing: ${data.substring(0, 150)}`);
   });
