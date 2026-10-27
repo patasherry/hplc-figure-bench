@@ -224,6 +224,18 @@ await T.t('malformed-prep', async () => { const {p, errs, close} = await open(),
   for (const x of tl) { await h.step(x.k); await p.waitForTimeout(250); } // every step, including the run's, renders from the normalized prep
   T.check('malformed-prep.no-error', errs.length === e0, errs.slice(e0).join(' | '));
   await close(); });
+/* a project whose opt.known has a null entry and whose opt.secCals is not a list opens, and the known-protein list renders with built-in sizes (#145) */
+await T.t('malformed-opt', async () => { const {p, errs, close} = await open(); await p.click('#homeQuick'); await p.waitForTimeout(600); await watchToasts(p); const e0 = errs.length;
+  const image = await p.evaluate(() => { const c = document.createElement('canvas'); c.width = 200; c.height = 240; const x = c.getContext('2d'); x.fillStyle = '#eee'; x.fillRect(0, 0, 200, 240); x.fillStyle = '#333'; [40, 90, 150].forEach(y => x.fillRect(10, y, 80, 6)); x.fillRect(110, 100, 80, 8); return c.toDataURL('image/png'); });
+  const d = {app: 'HPLC Figure Bench', version: 1, runs: [], traces: [], cur: 'g1', gels: [{id: 'g1', name: 'synthetic gel', image, nLanes: 2, labels: 'M, A', marksManual: true, marks: [{kda: 100, y: .15}, {kda: 10, y: .65}], black: 0, white: 255, autoLv: false, tags: [], cl: 0, cr: 0, ct: 0, cb: 0, rot: 0, fine: 0, assign: []}],
+    opt: {known: [null, {name: 'Synthetic X', kda: 42, kind: 'label', on: true, src: 'added by you'}, {name: 'DnaK', kda: 1, kind: 'contam', on: true, ctx: 'any', src: 'old note'}], secCals: 'invalid', gelAutoCrop: false, tidy13: true, tidy14: true}};
+  await p.setInputFiles(SEL.importFile, {name: 'malformed_opt.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))}); await p.waitForTimeout(2500);
+  const ts = await takeToasts(p), rows = await p.$$eval('#knownList .krow', rs => rs.map(r => [r.querySelector('[data-kf=name]').value, r.querySelector('[data-kf=kda]').value]));
+  T.check('malformed-opt.opens', ts.some(t => /Opened malformed_opt/.test(t)) && !ts.some(t => /could not open/i.test(t)), `toasts: ${ts.join(' | ') || 'none'}`); // the null entry does not stop the project opening
+  T.check('malformed-opt.known-listed', rows.some(r => r[0] === 'Synthetic X' && +r[1] === 42), `rows: ${JSON.stringify(rows)}`); // the project's own protein is kept
+  const dnak = rows.filter(r => r[0] === 'DnaK'); T.check('malformed-opt.builtin-size', dnak.length === 1 && +dnak[0][1] === 69.1, `DnaK rows: ${JSON.stringify(dnak)}`); // a built-in protein takes its current size, once
+  T.check('malformed-opt.no-error', errs.length === e0, errs.slice(e0).join(' | '));
+  await close(); });
 /* migrating legacy NanoDrop stage: 'final' to 'conc' properly checks for prep.btw to prevent yield loss */
 await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Migrate ND'); await h.dropFiles(F.his);
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const projPath = path.join(ROOT, 'results', 'migrate_src.json'); await dl.saveAs(projPath);
