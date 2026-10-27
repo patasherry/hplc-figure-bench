@@ -303,6 +303,18 @@ await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p);
     T.check('perf.workflow-8-steps-under-1.5s', n >= 8 && ms < 1500, `${n} steps, ${ms} ms`); } // the full figure renders in time
   T.check('perf.no-error', !errs.length, errs.join(' | ')); await close(); });
 
+/* a hand-made or older project file whose trace has only an id, a name and rows still opens, and the trace is drawn on the overlay (#148) */
+await T.t('missing-trace-fields', async () => { const {p, errs, close} = await open();
+  await p.locator('#homeQuick').evaluate(e => e.click()); await p.waitForTimeout(600); await watchToasts(p); const e0 = errs.length;
+  const d = {app: 'HPLC Figure Bench', version: 1, cur: 'overlay', runs: [], traces: [{id: 1, name: 'Trace 1', rows: [[0, 0], [1, 10], [2, 0]]}]};
+  await p.setInputFiles(SEL.importFile, {name: 'bare_trace.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))}); await p.waitForTimeout(2000);
+  const ts = await takeToasts(p), op = ts.find(t => /^Opened/.test(t)) || '';
+  T.check('missing-trace-fields.trace-kept', /1 trace,/.test(op) && !/skipped/i.test(op), `toast: ${op || ts.join(' | ') || 'none'}`); // the trace is not dropped as damaged
+  const nPath = await p.$$eval('#paper svg path', ps => ps.filter(e => (e.getAttribute('d') || '').split(/[ML]/).filter(s => s.trim()).length >= 3).length).catch(() => 0);
+  T.check('missing-trace-fields.renders-path', nPath > 0, `${nPath} data paths in #paper svg`); // the three points are drawn as a line
+  T.check('missing-trace-fields.no-error', errs.length === e0, errs.slice(e0).join(' | '));
+  await close(); });
+
 await T.t('legacy-project', async () => { const {p, errs, close} = await open(), h = H(p);
   await p.locator('#homeQuick').evaluate(e => e.click());
   await p.setInputFiles('#projFile', path.join(__dirname, '..', 'data', 'legacy_project.json'));
