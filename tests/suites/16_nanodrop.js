@@ -89,10 +89,20 @@ async function fresh(id, fn){
         }
       }
 
+
       // Nucleic acid readings shouldn't be counted as protein. Check they are marked as nucleic
       if (exp.nucleic !== undefined) {
           T.check('nd/' + exp.file + '/nucleic', nd.filter(n => n.kind === 'nucleic').length === exp.nucleic, `Expected ${exp.nucleic} nucleic acid readings, got ${nd.filter(n => n.kind === 'nucleic').length}`);
       }
+
+      // Specifically test the new multiline preamble file for expected parsed concentration
+      if (exp.file === 'nd_multiline_preamble.csv') {
+          const prot = nd.filter(n => n.kind !== 'nucleic');
+          // Find the concentration for Sample 1
+          const s1 = prot.find(n => n.name === 'Sample 1');
+          T.check('nd/' + exp.file + '/s1_conc', s1 && Math.abs((s1.a280 != null ? s1.a280 : s1.conc) - 2.5) < 0.001, `Expected Sample 1 concentration 2.5, got ${s1 ? (s1.a280 != null ? s1.a280 : s1.conc) : 'not found'}`);
+      }
+
     });
   }
 
