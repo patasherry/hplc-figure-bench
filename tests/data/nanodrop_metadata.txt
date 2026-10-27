@@ -1,0 +1,17 @@
+Instrument Information
+Model,NanoDrop One
+Serial Number,ND-1000
+Software Version,1.5.0
+Date,2026-10-23
+Time,16:00:00
+
+Experiment Summary
+Operator,Patrick
+Blank Method,Buffer A
+Measurement Type,Protein A280
+
+Data Table Follows
+Date,Sample Name,Protein (mg/mL),A280,A260/A280,Sample Type,MW,E / 1000,Extinction coefficient,Baseline Correction (nm),Baseline Absorbance
+10/23/2026 16:00:00 AM,Sample 1,2.500,2.500,0.57,1 Abs = 1 mg / mL,,,,340,0.012
+10/23/2026 16:00:00 AM,Sample 2,2.600,2.600,0.57,1 Abs = 1 mg / mL,,,,340,0.012
+10/23/2026 16:00:00 AM,Sample 3,2.400,2.400,0.58,1 Abs = 1 mg / mL,,,,340,0.012

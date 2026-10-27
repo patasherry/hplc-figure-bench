@@ -287,6 +287,33 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     T.check('p6.a280_coefficient', /by NanoDrop A280 \(A280 of \d+\.\d\d for 1 mg\/mL of the (tagged|untagged) form\)/.test(s), s);
     T.check('p6.a280_no_junk', !!s && !/\(, |\(\)/.test(s), s); });
 
+  await T.t('p7_metadata', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('NanoDrop metadata');
+    await h.step('final');
+    // Disable A280 correction so UI shows raw 2.5 mg/mL instead of converting it based on protein epsilon
+    await p.evaluate(() => {
+        const c = document.getElementById('o-ndCorr'); if(c) { c.checked = false; c.dispatchEvent(new Event('change', {bubbles: true})); }
+        const n = document.getElementById('o-ndNorm'); if(n) { n.value = 'raw'; n.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.wait(200);
+
+    await p.setInputFiles('#ndFile', path.join(DATA, 'nanodrop_metadata.txt'));
+    await h.wait(400);
+    const tableRows = await p.$$eval('.ndr', rows => rows.map(r => {
+      const valText = r.querySelector('.nd-v')?.textContent || '';
+      const nameEl = r.querySelector('input[data-ndk="name"]');
+      return {
+          name: nameEl?.value?.trim(),
+          conc: parseFloat(valText.split(' ')[0]) || null,
+      };
+    }));
+    const s1 = tableRows.find(r => r.name === 'Sample 1');
+    T.check('p7_metadata.name', s1 && s1.name === 'Sample 1', `Expected Sample 1, got ${s1 ? s1.name : 'not found'}`);
+    T.check('p7_metadata.conc', s1 && s1.conc === 2.5, `Expected conc 2.5, got ${s1 ? s1.conc : 'not found'}`);
+    await junk('p7_metadata');
+  });
+
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
