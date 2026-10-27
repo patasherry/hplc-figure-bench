@@ -231,7 +231,7 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   if (gelCount === 1) {
       await p.locator('#gelList .gchip, #gels .gchip').first().click(); await p.waitForTimeout(500);
       const lane2 = await p.evaluate(() => { const e = document.querySelector('.lane-row[data-i="1"] .lane-name'); return e ? e.value : null; });
-      T.check('legacy-project.gel-lane-preserved', lane2 === 'Pool', `lane 2 is ${lane2}`);
+      T.check('legacy-project.gel-lane-preserved', lane2 === 'lane1', `lane 2 is ${lane2}`);
   } else {
       T.check('legacy-project.gel-lane-preserved', false, 'gel missing from gelList');
   }
@@ -260,7 +260,7 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
       }
 
       if (exported.gels && exported.gels[0] && exported.gels[0].lanes && exported.gels[0].lanes[1]) {
-          T.check('legacy-project.roundtrip-gel', exported.gels[0].lanes[1].name === 'Pool', `exported lane is ${exported.gels[0].lanes[1].name}`);
+          T.check('legacy-project.roundtrip-gel', exported.gels[0].lanes[1].name === 'lane1', `exported lane is ${exported.gels[0].lanes[1].name}`);
       } else {
           T.check('legacy-project.roundtrip-gel', false, 'exported gel lane missing');
       }
