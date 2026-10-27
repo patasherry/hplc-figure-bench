@@ -291,4 +291,30 @@ await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p);
     T.check('perf.workflow-8-steps-under-1.5s', n >= 8 && ms < 1500, `${n} steps, ${ms} ms`); } // the full figure renders in time
   T.check('perf.no-error', !errs.length, errs.join(' | ')); await close(); });
 
+await T.t('legacy-project', async () => { const {p, errs, close} = await open(), h = H(p);
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.setInputFiles('#projFile', path.join(__dirname, '..', 'data', 'legacy_project.json'));
+  await p.waitForTimeout(3000);
+
+  const tl = await h.timeline();
+
+  const r = tl.find(x => x.k.startsWith('run:'));
+  T.check('legacy-project.run-preserved', !!r);
+  if (r) {
+    await h.step(r.k);
+    await p.waitForTimeout(500);
+  }
+
+  const methods = await h.methods();
+  T.check('legacy-project.prep-name-preserved', methods.includes('Legacy Protein') || !!tl.find(x => x.k === 'construct'));
+
+  T.check('legacy-project.gel-lane-preserved', await p.locator('#gelList .gchip, #gels .gchip').count() === 1);
+
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
+  const exported = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
+  T.check('legacy-project.export-run-preserved', exported.runs && exported.runs.length === 1 && exported.runs[0].id === 'r1');
+
+  await close();
+});
+
 T.done(); })();
