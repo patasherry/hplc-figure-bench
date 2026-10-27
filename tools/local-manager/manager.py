@@ -102,7 +102,14 @@ def issues(lab):
 
 
 def comments(n):
-    return gh(f'repos/{REPO}/issues/{n}/comments?per_page=100')
+    """Every comment on an issue, oldest first. GitHub gives 100 a page, and busy issues like the board (#222) have more."""
+    out, page = [], 1
+    while True:
+        got = gh(f'repos/{REPO}/issues/{n}/comments?per_page=100&page={page}')
+        out += got
+        if len(got) < 100 or page >= 50:
+            return out
+        page += 1
 
 
 # ---------- outside models ----------
@@ -927,7 +934,7 @@ def board_round(s, topic=''):
                               'evidence': str(p.get('evidence', ''))[:400], 'risk': str(p.get('risk', ''))[:300], 'change': str(p.get('change', ''))[:500], 'out': False})
     if not props:
         return log(f'board: no proposals ({"; ".join(notes)})')
-    head = f'### Team meeting, {dt.datetime.now():%Y-%m-%d %H:%M}' + (f': {topic}' if topic else '')
+    head = f'### Team meeting, {dt.datetime.now():%Y-%m-%d %H:%M}' + (f': {topic.splitlines()[0][:120]}' if topic else '')  # a long request keeps a short heading
     post(BOARD, '\n'.join([BOARD_MARK + '-open', head + ', opening', '', '**How the work is going**', ''] + [f'**{n}:** {t}' + '\n' for n, t in reviews] +
                           ['**Proposals**', ''] + [f'- **{p["id"]}** ({p["by"]}): {p["title"]}. {p["why"]}' for p in props]) + SIGN.format(rv.MODEL))
     talk.extend(f'Opening review, {n}: {t}' for n, t in reviews)
@@ -1038,7 +1045,7 @@ def board(s):
     now = dt.datetime.now()
     if ask and str(ask['id']) != b.get('asked'):
         b['asked'] = str(ask['id']); b['at'] = time.time()
-        board_round(s, re.sub(r'^\W*discuss\s*:\s*', '', ask['body'], flags=re.I).strip()[:300])
+        board_round(s, re.sub(r'^\W*discuss\s*:\s*', '', ask['body'], flags=re.I).strip()[:4000])  # Patrick's whole request, which may be a plan of several paragraphs
     else:
         since = b.setdefault('since', dt.datetime.now(dt.timezone.utc).isoformat())
         merged = [p for p in gh(f'repos/{REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=50') if p.get('merged_at') and p['merged_at'] > since]
