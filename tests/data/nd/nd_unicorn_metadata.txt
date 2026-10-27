@@ -1,0 +1,8 @@
+Result file:	C:\UNICORN\Local\Default\Patrick\NanoDrop
+Result name:	Synthetic
+User:	Synthetic
+Date:	2026-10-27
+Time:	08:00:00
+
+Sample Name	A280	A260/A280	Protein (mg/mL)
+Pool 1	1.500	0.57	1.500
