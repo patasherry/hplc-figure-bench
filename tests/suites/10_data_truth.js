@@ -1,3 +1,28 @@
+
+async function nanodropComma() {
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('nd_comma');
+    const file = path.join(DATA, 'ND_comma.csv');
+    // We navigate to prep where NanoDrop is visible, or just upload directly to #ndFile.
+    await h.step('prep');
+    await p.setInputFiles('#ndFile', file);
+    await p.waitForTimeout(500);
+
+    const nd = await p.evaluate(() => typeof window.ndSamples !== 'undefined' ? window.ndSamples : []);
+    T.check('nd_loaded', nd && nd.length === 2, 'Loaded 2 NanoDrop samples');
+    if (nd && nd.length === 2) {
+      T.check('nd_sample1_name', nd[0].name === 'Sample, One', 'Sample name with comma parsed intact');
+      T.check('nd_sample1_conc', nd[0].conc === 1.5, 'Conc with comma parsed as decimal');
+      T.check('nd_sample1_a280', nd[0].a280 === 2.0, 'A280 with comma parsed as decimal');
+      T.check('nd_sample2_conc', nd[1].conc === 3.5, 'Conc with comma parsed as decimal');
+    }
+  } finally {
+    T.check('nd_comma/no-page-errors', !errs.length, errs.join(' | '));
+    await close();
+  }
+}
+
 // 10 data truth (biochemist): load synthetic files with known answers (data/expected.json, made by data/gen_chrom.py and data/gen_nd.py)
 // and check what the app shows in its UI: SEC detection, column, flow, UV path, fraction count and labels, peak Ve, pool area and mg, NanoDrop means.
 // Everything is read from the DOM (timeline, run card, peak table, step sheet), never from app internals.
@@ -272,6 +297,7 @@ async function pelletMassNoCultureVol() {
       await T.t(e.file, () => timeFile(e));
     }
   }
+  if (!only || only.test('nanodrop_comma')) await T.t('nanodrop_comma', nanodropComma);
   if (!only || only.test('pellet_mass_no_culture_vol')) await T.t('pellet_mass_no_culture_vol', pelletMassNoCultureVol);
   T.done();
 })();
