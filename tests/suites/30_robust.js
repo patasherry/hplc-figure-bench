@@ -217,4 +217,37 @@ await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p);
     T.check('perf.workflow-8-steps-under-1.5s', n >= 8 && ms < 1500, `${n} steps, ${ms} ms`); } // the full figure renders in time
   T.check('perf.no-error', !errs.length, errs.join(' | ')); await close(); });
 
+
+/* ---------------- legacy project compatibility ---------------- */
+await T.t('legacy-acceptance-boundary', async () => { if (T.test) { T.test.setTimeout(30000); } const {p, errs, close} = await open(), h = H(p);
+  await p.click('#homeQuick'); await p.waitForTimeout(400);
+  await p.setInputFiles('#projFile', Object.assign({name: 'legacy_acceptance_project.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({
+    app: 'HPLC Figure Bench',
+    version: 1,
+    runs: [{ id: 'r1', name: 'Legacy Run', inWf: true, uvs: [{name: 'UV', xs: [1, 2, 3], ys: [0.1, 0.2, 0.1]}], secCal: 'sc_legacy', ndFinalVol: 2 }],
+    traces: {},
+    gels: [{id: 'g1', name: 'Legacy Gel', nLanes: 3, lanes: []}],
+    nanodrop: [{id: 'nd1', runId: 'r1', name: 'Legacy Conc', conc: 1.5, kind: 'protein', stage: 'final', dil: 1}],
+    opt: { secCals: [{id: 'sc_legacy', name: 'Legacy SEC Cal', stds: [{name: 'Std1', mw: 100, ve: 1}]}] },
+    prep: {}
+  }))}));
+  await p.waitForTimeout(1000);
+  const tl0 = await h.timeline();
+  T.check('legacy.run-loaded', tl0.some(x => x.k.startsWith('run:')), 'timeline has run');
+  T.check('legacy.nd-loaded', tl0.some(x => /mg\/mL/.test(x.s || '') || /mg/.test(x.s || '')), 'timeline has concentration');
+  const tabs = await tabsOf(p);
+  T.check('legacy.gel-loaded', tabs.some(t => /Gel:/i.test(t)), 'gel tab present');
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]);
+  const exportPath = path.join(ROOT, 'results', 'legacy_export.json');
+  await dl.saveAs(exportPath);
+  const exportedJson = JSON.parse(fs.readFileSync(exportPath, 'utf8'));
+  T.check('legacy.exported.secCal', exportedJson.opt.secCals.some(c => c.id === 'sc_legacy' && c.unit === 'mL'), 'SEC cal got default unit');
+  await p.click(SEL.home); await p.waitForTimeout(600);
+  await p.setInputFiles(SEL.importFile, exportPath); await p.waitForTimeout(1500);
+  const tl1 = await h.timeline();
+  T.check('legacy.roundtrip.run-loaded', tl1.some(x => x.k.startsWith('run:')), 'timeline has run after roundtrip');
+  T.check('legacy.roundtrip.nd-loaded', tl1.some(x => /mg\/mL/.test(x.s || '') || /mg/.test(x.s || '')), 'timeline has concentration after roundtrip');
+  await close();
+});
+
 T.done(); })();
