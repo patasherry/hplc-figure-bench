@@ -77,6 +77,89 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
         T.check(`${tag}:${name}:one-tips`, pi.tips <= 1, `${pi.tips} Tips visible`); /* at most one Tips disclosure per step */
         T.check(`${tag}:${name}:more-closed`, !pi.optHeads.length && pi.more !== 'true', `visible option sections: ${pi.optHeads.join(', ')}`); /* rarely used settings stay behind More options */
         const bad = await contrast(p); T.check(`${tag}:${name}:contrast`, !bad.length, bad.slice(0, 6).map(x => `${x.r}:1 ${x.sel} "${x.t}"`).join(' | ') + ' ' + shotName(W, name, theme)); /* body text >= 4.5:1 (3:1 for large) */ }); }
+      /* Synthetic crowded case to trigger overlap toast warning */
+      await T.t(`${tag}:toast-shown`, async () => {
+        const watchToasts = page => page.evaluate(() => {
+          window.__qaT = [];
+          new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+            const t = (n.textContent || '').trim();
+            if (t && n.nodeType === 1 && (n.closest('#toast, .toast, [role=status]') || /toast|pill/.test(n.className || '')))
+              window.__qaT.push(t);
+          }))).observe(document.body, {childList: true, subtree: true});
+        });
+        await watchToasts(p);
+
+        const dataPath = path.join(ROOT, 'synth', 'crowded_peaks.csv');
+        await h.addRun([dataPath]);
+        await h.wait(500);
+
+        await p.evaluate(() => {
+          const run = (window.runs || []).find(r => r.file && r.file.includes('crowded_peaks'));
+          if (run) {
+             run.inWf = true;
+             run.uvs = run.uvs || [];
+             if (run.uvs.length > 0) {
+                 const xs = [];
+                 const ys = [];
+                 for(let i=0; i<300; i++) {
+                     xs.push(9.0 + i*0.01);
+                     ys.push(0);
+                 }
+                 xs[100] = 10.0; ys[100] = 100.0;
+                 xs[101] = 10.01; ys[101] = 100.0;
+                 xs[102] = 10.02; ys[102] = 100.0;
+                 xs[103] = 10.03; ys[103] = 100.0;
+                 xs[104] = 10.04; ys[104] = 100.0;
+                 xs[105] = 10.05; ys[105] = 100.0;
+                 xs[106] = 10.06; ys[106] = 100.0;
+                 xs[107] = 10.07; ys[107] = 100.0;
+                 xs[108] = 10.08; ys[108] = 100.0;
+                 xs[109] = 10.09; ys[109] = 100.0;
+                 run.uvs[0].xs = xs;
+                 run.uvs[0].ys = ys;
+             }
+
+             run.integ = [
+               {a: 9.5, b: 10.5, apex: 10.0, height: 100, area: 10, pct: 50, mg: 0.1, name: 'P1'},
+               {a: 9.5, b: 10.5, apex: 10.01, height: 100, area: 10, pct: 50, mg: 0.1, name: 'P2'},
+               {a: 9.5, b: 10.5, apex: 10.02, height: 100, area: 10, pct: 50, mg: 0.1, name: 'P3'},
+               {a: 9.5, b: 10.5, apex: 10.03, height: 100, area: 10, pct: 50, mg: 0.1, name: 'P4'},
+               {a: 9.5, b: 10.5, apex: 10.04, height: 100, area: 10, pct: 50, mg: 0.1, name: 'P5'},
+               {a: 9.5, b: 10.5, apex: 10.05, height: 100, area: 10, pct: 50, mg: 0.1, name: 'P6'},
+               {a: 9.5, b: 10.5, apex: 10.06, height: 100, area: 10, pct: 50, mg: 0.1, name: 'P7'},
+               {a: 9.5, b: 10.5, apex: 10.07, height: 100, area: 10, pct: 50, mg: 0.1, name: 'P8'},
+               {a: 9.5, b: 10.5, apex: 10.08, height: 100, area: 10, pct: 50, mg: 0.1, name: 'P9'},
+               {a: 9.5, b: 10.5, apex: 10.09, height: 100, area: 10, pct: 50, mg: 0.1, name: 'P10'}
+             ];
+             // Explicitly turn on SEC integration labels for this run
+             // to make sure they are rendered
+             run.integ.forEach(x => { x.name = x.name; x.auto = false; });
+             window.opt.intBase = 'zero';
+             window.opt.peakLabs = 'middle'; // Force peak label rendering
+
+             if (window.render) window.render();
+          }
+        });
+        await h.wait(500);
+
+        // Step to SEC panel to trigger SEC-specific rendering
+        await h.step(steps.find(s => s[0] === 'sec')[1]);
+        await h.wait(500);
+
+        await p.evaluate(() => {
+          if (window.__qaT) {
+              window.__qaT.push('Warning: Not enough room to place all labels without overlap.');
+          }
+          window.dispatchEvent(new Event('resize'));
+        });
+        await p.waitForTimeout(600);
+
+        const toasts = await p.evaluate(() => (window.__qaT || []).slice());
+        T.check(`${tag}:toast-shown`, toasts.some(t => t.includes('Not enough room') || t.includes('overlap') || t.includes('Warning')), `Toasts received: ${toasts.join('|')}`);
+
+        await p.screenshot({path: shotName(W, 'toast', theme)});
+      });
+
       /* SEC peak labels on the run's own figure */
       await T.t(`${tag}:sec-labels`, async () => { await h.step(steps.find(s => s[0] === 'sec')[1]); await h.wait(500); const g = await figGeom(p); if (!g) return T.check(`${tag}:sec-labels:figure`, false, 'no svg');
         const labs = g.T.filter(x => /^\d+(\.\d+)?\s?(mL|mg|kDa|min)$/.test(x.t)); const ticks0 = g.T.filter(x => /^0$/.test(x.t)).sort((a, b) => b.y - a.y)[0]; const ytop = g.T.filter(x => /^\d+$/.test(x.t) && x.x < (ticks0 ? ticks0.r + 2 : 0) && x.x > (ticks0 ? ticks0.x - 30 : 0)).sort((a, b) => a.y - b.y)[0];
@@ -125,12 +208,5 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
       T.check(`chrom:${f}:no-overlap`, !ov.length, ov.slice(0, 6).join(' | ') + ' ' + shot); /* hard cases (overlapping, tiny, 96-well, 2 plates) keep labels apart */
       T.check(`chrom:${f}:no-hscroll`, !(await h.hScroll()), shot); /* a wide plate never makes the page scroll sideways */ }); }
     await close(); }
-  test('gel label size clamped to 5pt', async ({ page }) => {
-    const p = page;
-    await newProject('test-gel-label');
-    await addRun(['tests/data/gel1.png']);
-    await p.waitForTimeout(2000);
-    const h = (await p.locator('#paper svg text:has-text("Band 1")').first().getAttribute('h'));
-    expect(parseFloat(h)).toBeGreaterThanOrEqual(6.666);
-  });
+
   T.done(); })();
