@@ -1,0 +1,5 @@
+test: Add synthetic UNICORN NanoDrop metadata test
+
+Adds synthetic UNICORN metadata fixture to verify NanoDrop parsing bypasses metadata properly, without leaking private laboratory data.
+
+Decided by: Acting Lead (Gemini). Path: synthetic UNICORN metadata fixture and tests-only scope.

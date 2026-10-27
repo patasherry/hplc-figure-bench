@@ -689,6 +689,24 @@
    "nucleic": 0,
    "warn_high_ratio": false,
    "note": "Should skip metadata preamble"
+  },
+  {
+   "file": "nd_unicorn_metadata.txt",
+   "format": "Synthetic UNICORN metadata fixture",
+   "n": 1,
+   "names": [
+    "Pool 1"
+   ],
+   "r280": [
+    0.57
+   ],
+   "mean_abs1": 1.5,
+   "sd_abs1": null,
+   "mean_eps": 1.7442,
+   "eps": 0.86,
+   "nucleic": 0,
+   "warn_high_ratio": false,
+   "note": "vendor metadata preamble"
   }
  ],
  "nd_note": "n           protein readings the app should keep (nucleic acid readings are not protein)\n  mean_abs1   mean mg/mL with \"1 Abs = 1 mg/mL\" (no coefficient set anywhere): the mean A280 (10 mm)\n  mean_eps    mean mg/mL when the A280 of a 1 mg/mL solution is set to EPS: mean A280 / EPS\n  sd_abs1     sample SD (n-1) of the readings with 1 Abs = 1 mg/mL\n  names       sample names exactly as they should be shown\n  r280        A260/A280 of each reading\nFixed values (no randomness), so the means are exact.",
