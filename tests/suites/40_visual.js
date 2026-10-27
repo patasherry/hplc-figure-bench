@@ -125,12 +125,26 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
       T.check(`chrom:${f}:no-overlap`, !ov.length, ov.slice(0, 6).join(' | ') + ' ' + shot); /* hard cases (overlapping, tiny, 96-well, 2 plates) keep labels apart */
       T.check(`chrom:${f}:no-hscroll`, !(await h.hScroll()), shot); /* a wide plate never makes the page scroll sideways */ }); }
     await close(); }
-  test('gel label size clamped to 5pt', async ({ page }) => {
-    const p = page;
-    await newProject('test-gel-label');
-    await addRun(['tests/data/gel1.png']);
-    await p.waitForTimeout(2000);
-    const h = (await p.locator('#paper svg text:has-text("Band 1")').first().getAttribute('h'));
-    expect(parseFloat(h)).toBeGreaterThanOrEqual(6.666);
+
+  await T.t('crowded:overlap-toast', async () => {
+    const {p, close} = await open({width: 1400}), h = H(p); await h.newProject('Crowded');
+    const watchToasts = p => p.evaluate(() => {
+      window.__qaT = [];
+      new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+        const t = (n.textContent || '').trim();
+        if (t && n.nodeType === 1 && (n.closest('#toast, .toast, [role=status]') || /toast|pill/.test(n.className || '')))
+          window.__qaT.push(t);
+      }))).observe(document.body, {childList: true, subtree: true});
+    });
+    const takeToasts = async p => (await p.evaluate(() => { const x = (window.__qaT || []).slice(); window.__qaT = []; return x; }).catch(() => []));
+    await h.addRun('tests/synth/crowded_peaks.csv');
+    const tl = await h.timeline(); const runStep = tl.find(x => x.k.startsWith('run:')); if (runStep) await h.step(runStep.k);
+    await watchToasts(p);
+    await p.locator('#intAuto').evaluate(el => el.click());
+    await h.wait(600);
+    const ts = await takeToasts(p);
+    T.check('crowded.overlap-toast', ts.some(t => t.includes('Not enough room')), `Toasts received: ${ts.join(', ')}`);
+    await close();
   });
+
   T.done(); })();

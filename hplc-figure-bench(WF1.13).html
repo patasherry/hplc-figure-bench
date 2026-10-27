@@ -2413,10 +2413,12 @@ function buildRunSVG(run, ov){
       const cOf = sg => (Math.max(sg.a, xlo) + Math.min(sg.b, xhi))/2, linkOf = sg => links.find(l => l.t.x !== undefined && Math.abs(l.t.a - sg.a) < 1e-9);
       const impOf = (sg, k) => !!linkOf(sg) || (shaded.has(sg.i) && o.poolStyle !== 'none' && (!nonW[k-1] || !shaded.has(nonW[k-1].i) || !nonW[k+1] || !shaded.has(nonW[k+1].i)));
       const wOfL = sg => rot ? pf*1.15 : labOf(sg).length*pf*0.56 + pf*0.5, placedX = [], keep = new Set();
-      const tryPut = (sg, k) => { const c = cOf(sg); if (c < xlo || c > xhi) return; const X = px(c); if (X - (rot ? pf*0.5 : wOfL(sg)/2) < L + pf*0.25) return;
-        if (placedX.some(p => Math.abs(p.X - X) < (p.w + wOfL(sg))/2)) return; placedX.push({X, w: wOfL(sg)}); keep.add(k); };
-      const tryImp = (sg, k) => { const c = cOf(sg); if (c < xlo || c > xhi) return; const X = px(c); if (X - (rot ? pf*0.5 : wOfL(sg)/2) < L + pf*0.25) return;
-        if (placedX.some(p => Math.abs(p.X - X) < (rot ? pf*0.7 : (p.w + wOfL(sg))/2*0.85))) return; placedX.push({X, w: wOfL(sg)}); keep.add(k); };
+      const placeCheck = (X, w, W, skipGap) => { if (X - w/2 < L + pf*0.25 || X + w/2 > R - pf*0.25) return null;
+        if (placedX.some(p => Math.abs(p.X - X) < (p.w + w)/2 * (skipGap ? 0.85 : 1))) return null; return {X, w}; };
+      const tryPut = (sg, k) => { const c = cOf(sg); if (c < xlo || c > xhi) return; const bx = placeCheck(px(c), rot ? pf*1.0 : wOfL(sg), W, false);
+        if (bx) { placedX.push(bx); keep.add(k); } else if (FIG_SCREEN && !rot) toast('Not enough room to place all labels safely.'); };
+      const tryImp = (sg, k) => { const c = cOf(sg); if (c < xlo || c > xhi) return; const bx = placeCheck(px(c), rot ? pf*1.4 : wOfL(sg), W, true);
+        if (bx) { placedX.push(bx); keep.add(k); } else if (FIG_SCREEN && !rot) toast('Not enough room to place all labels safely.'); };
       nonW.forEach((sg, k) => { if (linkOf(sg)) tryImp(sg, k); }); nonW.forEach((sg, k) => { if (!keep.has(k) && impOf(sg, k)) tryPut(sg, k); });
       nonW.forEach((sg, k) => { if (!keep.has(k) && (every <= 1 || k % every === 0)) tryPut(sg, k); });
       nonW.forEach((sg, k) => {
@@ -2451,8 +2453,11 @@ function buildRunSVG(run, ov){
       if (clampX() > ww*0.2 && /\s\(.*\)$/.test(tt)) { tt = tt.replace(/\s*\(.*\)$/, ''); ww = tt.length*fs*0.45; pick.x = xOrig; clampX(); }
       const e2 = ext(), lift = Math.max(base, hiIn(xlo + (pick.x + e2[0] - L)*k, xlo + (pick.x + e2[1] - L)*k));
       let Y = Math.max(T + fs*0.8, py(lift) - 3), guard = 0; const cx0 = pick.x + (e2[0] + e2[1])/2;
-      if (placed.some(q => Math.abs(q.x - cx0) < (q.w + ww)/2 + 1 && Math.abs(q.y - Y) < fs*0.85)) return;
-      placed.push({x: cx0, y: Y, w: ww}); s.push(`<text x="${r2(pick.x)}" y="${r2(Y)}"${pick.an !== 'middle' ? ` text-anchor="${pick.an}"` : ''}>${esc(tt)}</text>`);
+      const placeCheck = (X, y, w) => { if (X - w/2 < L || X + w/2 > R) return null;
+        if (placed.some(q => Math.abs(q.x - X) < (q.w + w)/2 + 1 && Math.abs(q.y - y) < fs*0.85)) return null; return {x: X, y, w}; };
+      const bx = placeCheck(cx0, Y, ww);
+      if (!bx) { if (FIG_SCREEN) toast('Not enough room to place all labels safely.'); return; }
+      placed.push(bx); s.push(`<text x="${r2(pick.x)}" y="${r2(Y)}"${pick.an !== 'middle' ? ` text-anchor="${pick.an}"` : ''}>${esc(tt)}</text>`);
       /* a label lifted clear of its peak gets a short leader down to the apex */
       const ay = py(base); if (ay - Y > fs*1.4) s.push(`<line x1="${r2(X)}" y1="${r2(Y + fs*0.25)}" x2="${r2(X)}" y2="${r2(ay - 1.5)}" stroke="#777777" stroke-width="0.4"/>`); });
     s.push('</g>');

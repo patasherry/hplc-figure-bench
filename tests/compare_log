@@ -1,0 +1,7 @@
+Baseline: hplc-figure-bench(WF1.13).html at origin/main
+== baseline
+00_preflight.js                    pass   0  fail   1  1s
+00_smoke.js                        pass   4  fail   0  5s
+05_quick.js                        pass  10  fail   0  46s
+10_data_truth.js                   pass 331  fail   2  290s
+11_unicorn_zip.js                  pass  13  fail   1  45s
