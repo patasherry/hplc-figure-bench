@@ -1,4 +1,5 @@
-const {open, H, suite, path, DATA} = require('../lib/harness');
+const {open, H, suite, path, DATA, fs: hfs} = require('../lib/harness');
+async function saved(p) { const dl = p.waitForEvent('download'); await p.locator('#projSave').evaluate(e => e.click()); return JSON.parse(hfs.readFileSync(await (await dl).path(), 'utf8')); }
 const T = suite('17_cross_format');
 const CH = path.join(DATA, 'chrom');
 
@@ -43,6 +44,8 @@ async function testFormat(filename, desc) {
 
         const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, String(v)]);
 
+        await setOpt(p, 'o-eps', 1.0);
+        await setOpt(p, 'o-path', 2.0);
         // Use setOpt to set prominence to 0.5 before detect
         await setOpt(p, 'o-intProm', 0.5);
 
@@ -69,14 +72,23 @@ async function testFormat(filename, desc) {
     }
 
     T.check(`${desc}/no-errors`, errs.length === 0, errs.join(' | '));
+    return await saved(p);
   } finally {
     await close();
   }
 }
 
 (async () => {
-  await T.t('cross_format_synthetic', () => testFormat('synthetic.csv', 'synthetic'));
-  await T.t('cross_format_dot', () => testFormat('cross_format_dot.csv', 'dot'));
-  await T.t('cross_format_comma', () => testFormat('cross_format_comma.csv', 'comma'));
+  let synth, dot, comma;
+  await T.t('cross_format_synthetic', async () => { synth = await testFormat('synthetic.csv', 'synthetic'); });
+  await T.t('cross_format_dot', async () => { dot = await testFormat('cross_format_dot.csv', 'dot'); });
+  await T.t('cross_format_comma', async () => { comma = await testFormat('cross_format_comma.csv', 'comma'); });
+
+  if (synth && dot && comma) {
+      T.check('cross_format_invariant/dot_vs_synth_uv', JSON.stringify(dot.runs[0].uvs) === JSON.stringify(synth.runs[0].uvs), 'Dot and Synthetic UVs identical');
+      T.check('cross_format_invariant/comma_vs_synth_uv', JSON.stringify(comma.runs[0].uvs) === JSON.stringify(synth.runs[0].uvs), 'Comma and Synthetic UVs identical');
+      T.check('cross_format_invariant/dot_peaks', JSON.stringify(dot.runs[0].peaks) === JSON.stringify(synth.runs[0].peaks), 'Dot and Synth peaks identical');
+      T.check('cross_format_invariant/comma_peaks', JSON.stringify(comma.runs[0].peaks) === JSON.stringify(synth.runs[0].peaks), 'Comma and Synth peaks identical');
+  }
   T.done();
 })();
