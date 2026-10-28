@@ -214,6 +214,18 @@ await T.t('damaged-project', async () => { const {p, errs, close} = await open()
   T.check('partial.keeps-usable-run', tl.some(x => x.k.startsWith('run:')), `timeline: ${tl.map(x => x.k).join(', ')}`); // the good run is not lost
   T.check('partial.says-skipped', ts.some(t => /skipped 4/i.test(t)), `toasts: ${ts.join(' | ') || 'none'}`); // the user is told 4 entries were unusable
   await close(); });
+
+/* malformed IDs (e.g. mabc, m-1) do not disrupt ID allocation */
+await T.t('malformed-ids', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p); const e0 = errs.length;
+  const d = {app: 'HPLC Figure Bench', version: 1, runs: [{id: 'mabc', name: 'Bad ID 1'}, {id: 'm-1', name: 'Bad ID 2'}], traces: [], cur: 'overlay', gels: [], prep: {nextUid: 0}};
+  await p.setInputFiles(SEL.importFile, {name: 'malformed_ids.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))}); await p.waitForTimeout(2500);
+  await p.click('#addManBtn'); await p.waitForTimeout(500);
+  const ts = await takeToasts(p), tl = await h.timeline();
+  T.check('malformed-ids.opens', ts.some(t => /Opened malformed_ids/.test(t)) && !ts.some(t => /could not open/i.test(t)), `toasts: ${ts.join(' | ') || 'none'}`);
+  const manStep = tl.find(x => x.k.startsWith('man:'));
+  T.check('malformed-ids.allocated', manStep && manStep.k === 'man:m1', `allocated manual step: ${manStep ? manStep.k : 'none'}`);
+  T.check('malformed-ids.no-error', errs.length === e0, errs.slice(e0).join(' | '));
+  await close(); });
 /* a project file whose prep sub-objects are null or the wrong type (hand-edited, or from another tool) opens, and every step still renders (#146) */
 await T.t('malformed-prep', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Malformed prep'); await h.dropFiles(F.his); await h.pool('T1-T6');
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const src = path.join(ROOT, 'results', 'malformed_prep_src.json'); await dl.saveAs(src);
