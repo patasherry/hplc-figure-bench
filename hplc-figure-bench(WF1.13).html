@@ -1500,7 +1500,7 @@ function parseAkta(text, fname){
   for (let i=u+1;i<lines.length;i++){ const L = lines[i]; if (!L) continue; const f = sp(L);
     for (const cv of curves){ const xs = f[cv.col]; if (xs === undefined || xs === '') continue; const x = toNum(xs, d !== ','); if (!isFinite(x)) continue;
       const v = (f[cv.col+1] || '').trim().replace(/^"|"$/g, '');
-      if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
+      if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') { if (v) cv.ev.push({x, label: v}); }
       else { const y = toNum(v, d !== ','); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
   return aktaFromCurves(curves, fname);
 }

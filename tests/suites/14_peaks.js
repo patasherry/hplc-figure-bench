@@ -134,5 +134,30 @@ async function peakFile(e) {
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }
+
+  await T.t('sec_semicolon_unicorn7', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await h.newProject('peaks sec semicolon');
+      await h.addRun(path.join(CH, 'sec_semicolon_unicorn7.csv'));
+      await p.waitForTimeout(300);
+
+      const runStep = (await h.timeline()).find(x => /^run:/.test(x.k));
+      if (runStep) await h.step(runStep.k);
+      await p.waitForTimeout(300);
+
+      await detect(p);
+
+      const P = await peaks(p, h);
+      const pk = P.rows.filter(r => !/^pool/i.test(r.name));
+
+      T.check('peak1.area', pk.length > 0 && Math.abs(pk[0].area - 196) <= 2, `Peak 1 area ${pk[0]?.area} near 196`);
+      T.check('peak2.area', pk.length > 1 && Math.abs(pk[1].area - 30) <= 2, `Peak 2 area ${pk[1]?.area} near 30`);
+
+    } finally {
+      await close();
+    }
+  });
+
   T.done();
 })();
