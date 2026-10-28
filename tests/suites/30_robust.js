@@ -325,6 +325,9 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   const r = tl.find(x => x.k.startsWith('run:'));
   T.check('legacy-project.run-preserved', !!r);
   if (r) {
+    T.check('legacy-project.run-name-loaded', (await h.timeline()).find(x => x.k === r.k).t.includes('Legacy Run Name'));
+  }
+  if (r) {
     await h.step(r.k);
     await p.waitForTimeout(500);
   }
@@ -346,6 +349,7 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
   const exported = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
   T.check('legacy-project.export-run-preserved', exported.runs && exported.runs.length === 1 && exported.runs[0].id === 'r1');
+  T.check('legacy-project.export-run-name', exported.runs && exported.runs.length === 1 && exported.runs[0].name === 'Legacy Run Name');
 
   await close();
 });
