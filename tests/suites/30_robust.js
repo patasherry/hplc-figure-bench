@@ -198,6 +198,56 @@ await T.t('legacy-sec', async () => {
   await close();
 });
 
+
+await T.t('sec-unit-default', async () => { const {p, errs, close} = await open(), h = H(p);
+  const proj = {
+    app: 'HPLC Figure Bench',
+    version: 1,
+    runs: [{
+      id: '1',
+      name: 'SEC run',
+      inWf: true,
+      secMode: 'on',
+      secCal: 'sc_test',
+      fracs: [],
+      uvs: [{name: 'UV', xs: [8.0], ys: [10.0]}],
+      run: {vol: 24, cv: 1}
+    }],
+    prep: {name: 'Legacy SEC Protein'},
+    opt: {
+      secStds: true,
+      secCals: [{
+        id: 'sc_test',
+        name: 'Test Column',
+        col: 's200i',
+        v0: 8.5,
+        vt: 24,
+        stds: []
+      }]
+    }
+  };
+  await h.newProject('Test SEC Setup');
+  await p.click('#homeBtn').catch(() => {});
+  await p.waitForTimeout(600);
+  await p.setInputFiles('#projFile', {
+    name: 'test_sec.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(proj))
+  });
+  await p.waitForTimeout(3000);
+  const tl = await h.timeline();
+  const runStep = tl.find(x => x.k && x.k.startsWith('run:'));
+  if (runStep) {
+    await h.step(runStep.k);
+    await p.waitForTimeout(500);
+    const calText = await p.$eval('#sec-cal option:checked', el => el.textContent).catch(e => e.message);
+    T.check('sec-unit.defaults-to-mL', typeof calText === 'string' && calText.includes('(mL)'), `text: ${calText}`);
+  } else {
+    T.check('sec-unit.defaults-to-mL', false, 'Run step not found in timeline');
+  }
+  await close();
+});
+
 await T.t('empty-uvs-project', async () => { const {p, errs, close} = await open(), h = H(p);
   await p.setInputFiles(SEL.importFile, path.join(Q, 'empty_uvs_proj.json')); await p.waitForTimeout(3000);
   await h.step('figure'); await p.waitForTimeout(500);
