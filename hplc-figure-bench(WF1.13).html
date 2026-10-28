@@ -1789,7 +1789,7 @@ function applyInjShift(r){
   const hasInjShift = Object.prototype.hasOwnProperty.call(r, 'injShift');
   const ix = hasInjX ? r.injX : 0;
   const have = hasInjShift ? r.injShift : 0;
-  const want = ix && isSec(r) ? ix : 0;
+  const want = hasInjX && r.injX && isSec(r) ? r.injX : 0;
   const d = want - have;
   if (!hasInjX && !hasInjShift) return;
   if (hasInjX) r.injX = ix;
