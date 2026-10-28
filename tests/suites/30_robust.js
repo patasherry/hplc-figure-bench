@@ -198,6 +198,51 @@ await T.t('legacy-sec', async () => {
   await close();
 });
 
+await T.t('falsey-preserve', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  const proj = {
+    app: 'HPLC Figure Bench',
+    version: 1,
+    runs: [{
+      id: '1',
+      name: 'Falsey test run',
+      inWf: true,
+      secMode: 'on',
+      fracs: [],
+      uvs: [{name: 'UV', xs: [8.0, 10.0, 12.0], ys: [10.0, 50.0, 15.0]}],
+      run: {vol: 24, cv: 1},
+      injShift: 0,
+      injX: 0,
+      pathFromFile: false
+    }],
+    prep: {name: 'Protein'},
+    opt: {}
+  };
+
+  await h.newProject('Falsey Preserve');
+  await p.click('#homeBtn').catch(() => {});
+  await p.waitForTimeout(600);
+  await p.setInputFiles('#projFile', {
+    name: 'falsey_preserve.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(proj))
+  });
+  await p.waitForTimeout(3000);
+
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
+  const f = path.join(ROOT, 'results', 'falsey_preserve_export.json');
+  await dl.saveAs(f);
+
+  const exported = JSON.parse(fs.readFileSync(f, 'utf8'));
+  const expRun = exported.runs[0];
+
+  T.check('falsey-preserve.injShift', expRun.injShift === 0, `injShift is ${expRun.injShift}`);
+  T.check('falsey-preserve.injX', expRun.injX === 0, `injX is ${expRun.injX}`);
+  T.check('falsey-preserve.pathFromFile', expRun.pathFromFile === false, `pathFromFile is ${expRun.pathFromFile}`);
+  T.check('falsey-preserve.no-error', !errs.length, errs.join(' | '));
+  await close();
+});
+
 await T.t('empty-uvs-project', async () => { const {p, errs, close} = await open(), h = H(p);
   await p.setInputFiles(SEL.importFile, path.join(Q, 'empty_uvs_proj.json')); await p.waitForTimeout(3000);
   await h.step('figure'); await p.waitForTimeout(500);
