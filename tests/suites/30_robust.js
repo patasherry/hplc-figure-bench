@@ -360,6 +360,27 @@ await T.t('missing-trace-fields', async () => { const {p, errs, close} = await o
   T.check('missing-trace-fields.no-error', errs.length === e0, errs.slice(e0).join(' | '));
   await close(); });
 
+await T.t('legacy-prep-name', async () => { const {p, errs, close} = await open(), h = H(p);
+  const fixture = {
+    app: 'HPLC Figure Bench',
+    version: 1,
+    runs: [],
+    traces: [],
+    gels: [],
+    nanodrop: [],
+    prep: {
+      manual: [],
+      name: 'Test Prep'
+    }
+  };
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.setInputFiles('#projFile', {name: 'legacy_prep.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture))});
+  await p.waitForTimeout(1000);
+  const methodsText = await p.locator('#methodsText').inputValue();
+  T.check('legacy/prep-name', methodsText.includes('Test Prep'), methodsText);
+  await close();
+});
+
 await T.t('legacy-project', async () => { const {p, errs, close} = await open(), h = H(p);
   await p.locator('#homeQuick').evaluate(e => e.click());
   await p.setInputFiles('#projFile', path.join(__dirname, '..', 'data', 'legacy_project.json'));
