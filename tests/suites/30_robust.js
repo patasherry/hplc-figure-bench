@@ -236,9 +236,9 @@ await T.t('falsey-preserve', async () => {
   const exported = JSON.parse(fs.readFileSync(f, 'utf8'));
   const expRun = exported.runs[0];
 
-  T.check('falsey-preserve.injShift', expRun.injShift === 0, `injShift is ${expRun.injShift}`);
-  T.check('falsey-preserve.injX', expRun.injX === 0, `injX is ${expRun.injX}`);
-  T.check('falsey-preserve.pathFromFile', expRun.pathFromFile === false, `pathFromFile is ${expRun.pathFromFile}`);
+  T.check('falsey-preserve.injShift', expRun.injShift === 0, \`injShift is \${expRun.injShift}\`);
+  T.check('falsey-preserve.injX', expRun.injX === 0, \`injX is \${expRun.injX}\`);
+  T.check('falsey-preserve.pathFromFile', expRun.pathFromFile === false, \`pathFromFile is \${expRun.pathFromFile}\`);
   T.check('falsey-preserve.no-error', !errs.length, errs.join(' | '));
   await close();
 });
