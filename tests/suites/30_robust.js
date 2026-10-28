@@ -241,7 +241,7 @@ await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open
   await h.addConc(F.ndSpec, 0.25);
 
   // Set UI exactly before first export for all four fixes
-  await h.step('prep');
+  await h.step('construct');
   await p.waitForTimeout(500);
 
   // Setup exact SEC Coordinates, workflow settings, contaminant metadata
