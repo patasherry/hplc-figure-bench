@@ -334,12 +334,16 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
 
   T.check('legacy-project.gel-lane-preserved', await p.locator('#gelList .gchip, #gels .gchip').count() === 1);
 
+  let fallbackSize = 'none';
   if (await p.locator('#gelList .gchip, #gels .gchip').count() === 1) {
-    const size = await p.evaluate(() => {
-      return document.querySelector('#gelCanvas') ? {w: document.querySelector('#gelCanvas').width, h: document.querySelector('#gelCanvas').height} : null;
+    await p.click('#gelList .gchip, #gels .gchip');
+    await p.waitForTimeout(500);
+    fallbackSize = await p.evaluate(() => {
+      const c = document.querySelector('#gelCanvas');
+      return c ? c.width + 'x' + c.height : 'none';
     });
-    T.check('legacy-project.gel-image-fallback', size && size.w === 100 && size.h === 100, `Fallback image dimensions: ${size ? size.w + 'x' + size.h : 'null'}`);
   }
+  T.check('legacy-project.gel-image-fallback', fallbackSize === '100x100', `Fallback image dimensions: ${fallbackSize}`);
 
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
   const exported = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
