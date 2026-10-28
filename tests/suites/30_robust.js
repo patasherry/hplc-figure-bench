@@ -395,4 +395,29 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   await close();
 });
 
+await T.t('malformed-id-allocation', async () => { const {p, errs, close} = await open(), h = H(p);
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.waitForTimeout(600);
+
+  const d = {app: 'HPLC Figure Bench', version: 1, runs: [], prep: {manual: [{id: 'mabc', kind: 'column', name: 'Bad 1'}, {id: 'm-1', kind: 'other', name: 'Bad 2'}]}};
+  await p.setInputFiles('#projFile', {name: 'malformed_proj.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))});
+  await p.waitForTimeout(1000);
+
+  await p.evaluate(() => {
+    const m = document.querySelector('#tl [data-addmenu]');
+    if (m) m.click();
+  });
+  await p.waitForTimeout(300);
+  await p.evaluate(() => {
+    const opt = document.querySelector('#tl [data-addstep="man:column"]');
+    if (opt) opt.click();
+  });
+  await p.waitForTimeout(500);
+
+  const steps = await p.$$eval('#tl button[data-step^="man:"]', els => els.map(e => e.getAttribute('data-step')));
+  T.check('malformed.ignored', steps.includes('man:m1'), 'Should allocate man:m1, got: ' + steps.join(', '));
+  T.check('malformed.no-error', errs.length === 0, errs.join(' | '));
+  await close();
+});
+
 T.done(); })();
