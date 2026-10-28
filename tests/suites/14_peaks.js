@@ -130,9 +130,48 @@ async function peakFile(e) {
   }
 }
 
+
+async function test215(p, h) {
+  const id = 'sec_semicolon_unicorn7';
+  await h.newProject('peaks ' + id);
+  await h.addRun(path.join(CH, 'sec_semicolon_unicorn7.csv'));
+  await p.waitForTimeout(500);
+
+  const runStep = (await h.timeline()).find(x => x.k.startsWith('run:'));
+  if (runStep) await h.step(runStep.k);
+
+  await p.evaluate(() => { const b = document.getElementById('intAuto'); if (b) b.click(); });
+  await p.waitForTimeout(1000);
+
+  const t = await h.peakTable();
+  const iv = t[0].findIndex(c => /^(Ve|Center|Apex|Elution time)\b/.test(c));
+  const ia = t[0].findIndex(c => /^Area/.test(c));
+  const pk = t.slice(1).filter(r => r.length > 3 && !/^pool/i.test(r[0])).map(r => ({
+    name: r[0],
+    ve: iv >= 0 ? num(r[iv]) : NaN,
+    area: ia >= 0 ? num(r[ia]) : NaN
+  }));
+
+  if (pk.length >= 2) {
+    T.check(`${id}/peak1.area`, Math.abs(pk[0].area - 196) <= 2, `peak 1 area ${pk[0].area} is near 196`);
+    T.check(`${id}/peak2.area`, Math.abs(pk[1].area - 30) <= 2, `peak 2 area ${pk[1].area} is near 30`);
+  } else {
+    T.check(`${id}/peaks-found`, pk.length >= 2, `Found at least 2 peaks, actually found ${pk.length}`);
+  }
+}
+
 (async () => {
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }
+  await T.t('sec_semicolon_unicorn7', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await test215(p, h);
+    } finally {
+      T.check(`sec_semicolon_unicorn7/no-page-errors`, !errs.length, errs.join(' | '));
+      await close();
+    }
+  });
   T.done();
 })();
