@@ -1560,7 +1560,7 @@ async function parseUnicornZip(buf, fname){
     curves.push({name: nm, xu: kid(c, 'VolumeUnit') || 'ml', yu, kind, xs: xs.slice(0, n).map(v => Math.round(v*1e5)/1e5), ys: ys.slice(0, n), ev: []}); }
   for (const ec of doc.querySelectorAll('EventCurves > EventCurve')) { const t = ec.getAttribute('EventCurveType') || '', kind = /^frac/i.test(t) ? 'frac' : /^inject/i.test(t) ? 'inj' : /log/i.test(t) ? 'log' : ''; if (!kind) continue;
     curves.push({name: t, xu: 'ml', yu: '', kind, xs: [], ys: [], ev: [...ec.querySelectorAll('Event')].map(e => ({x: parseFloat(kid(e, 'EventVolume')), label: kid(e, 'EventText')})).filter(e => isFinite(e.x))}); }
-  const ak = aktaFromCurves(curves, fname, path ? {path: String(path), pathFromFile: true} : null), uvLost = lost.find(c => c.kind === 'uv');
+  const ak = aktaFromCurves(curves, fname, path != null ? {path: String(path), pathFromFile: true} : null), uvLost = lost.find(c => c.kind === 'uv');
   if (!ak) return uvLost ? {bad: `its UV curve (${uvLost.nm}) has no readable data points`} : null;
   if (lost.length) ak.lost = lost.map(c => c.nm);
   return ak; }
@@ -1786,8 +1786,15 @@ function secGuess(r){
 const isSec = r => !!r && (r.secMode === 'on' ? true : r.secMode === 'off' ? false : !!r.secAuto);
 /* size exclusion counts elution volume from the injection. A run logged from the method start (injX) is moved back by it while it is SEC, and put back when it is not. injShift is the amount applied now; integrated regions and the zoom window move with it */
 function applyInjShift(r){
-  const ix = r.injX || r.injShift || 0, have = r.injShift || 0, want = ix && isSec(r) ? ix : 0, d = want - have; if (!ix) return;
-  r.injX = ix; if (!d) return;
+  const hasInjX = Object.prototype.hasOwnProperty.call(r, 'injX');
+  const hasInjShift = Object.prototype.hasOwnProperty.call(r, 'injShift');
+  const ix = hasInjX ? r.injX : 0;
+  const have = hasInjShift ? r.injShift : 0;
+  const want = ix && isSec(r) ? ix : 0;
+  const d = want - have;
+  if (!ix) return;
+  r.injX = ix;
+  if (!d) return;
   const mv = c => { if (c && c.xs) c.xs = c.xs.map(x => x - d); };
   (r.uvs || []).forEach(mv); mv(r.grad); mv(r.cond);
   if (r.fracEnd != null && isFinite(+r.fracEnd)) r.fracEnd = +r.fracEnd - d;
@@ -1795,7 +1802,8 @@ function applyInjShift(r){
   r.phases = (r.phases || []).map(e => ({x: e.x - d, label: e.label}));
   r.integ = (r.integ || []).map(g => Object.assign({}, g, {a: g.a - d, b: g.b - d}));
   ['xmin', 'xmax'].forEach(k => { if (r[k] !== '' && r[k] != null && isFinite(+r[k])) r[k] = +(+r[k] - d).toFixed(4); });
-  r.injShift = want || null; }
+  r.injShift = want || null;
+  if (want === 0 && hasInjShift && r.injShift === null) r.injShift = 0; }
 /* column presets: the bed volume is the column's geometric volume; V0 is a typical starting value (about 36% of the bed for
    Superdex and Superose), so measure it with blue dextran or use a large standard for real work */
 const SEC_COLUMNS = {
@@ -5640,7 +5648,7 @@ function renderNext(){ const n = nextStep(), bar = $('#nextBar'); if (!n || next
   const go = $('#nextGo'); go.hidden = !n.go; go.textContent = n.go || ''; go.onclick = n.act || null; bar.dataset.k = n.k; }
 $('#nextHide').addEventListener('click', () => { const k = $('#nextBar').dataset.k; if (k === 'undoOpen') projUndo = null; else nextHidden.add(k); renderNext(); });
 /* ---------- projects: everything in one JSON file ---------- */
-const plain = o => { const out = {}; Object.keys(o).forEach(k => { if (k[0] === '_' || typeof o[k] === 'function') return; out[k] = o[k]; }); return out; };
+const plain = o => { const out = {}; Object.keys(o).forEach(k => { if (k[0] === '_' || typeof o[k] === 'function') return; if ((k === 'injX' || k === 'injShift' || k === 'pathFromFile') && !Object.prototype.hasOwnProperty.call(o, k)) return; out[k] = o[k]; }); return out; };
 function projectData(){
   const gs = gels.map(g => { const o = plain(g); ['src', 'thumb', 'out', 'pix', 'hist', 'crop', 'cropPrev', 'bandHist'].forEach(k => delete o[k]);
     let img = g._img || ''; if (!img) { try { img = g.src.toDataURL('image/png'); if (img.length > 12e6) img = g.src.toDataURL('image/jpeg', 0.95); g._img = img; } catch (e) {} } o.image = img; delete o.imageId; return o; });
