@@ -1,0 +1,28 @@
+Add synthetic regression test for generic HPLC export loading
+
+This change addresses a critical gap in test coverage per GOALS.md by introducing
+a UI-level regression test for generic, two-column HPLC export files.
+
+- Modified `tests/data/gen_chrom.py` to deterministically generate a minimal, generic
+  two-column synthetic export file (`tests/data/chrom/hplc_export.csv`) using a Gaussian profile.
+- Created test suite `tests/suites/18_hplc_load.js` that directly interacts with the
+  `#file` input to verify the `parseText` loading pathway.
+- The test exports the project and asserts that the trace data is successfully
+  extracted into correctly-sized arrays with matched unit headings and endpoints.
+
+Test failures log (no regressions):
+00_preflight: pass 1, fail 0
+00_smoke: pass 4, fail 0
+05_quick: pass 10, fail 0
+10_data_truth: pass 331, fail 2 (invariants)
+11_unicorn_zip: pass 13, fail 1 (timeout)
+12_genbank: pass 32, fail 0
+14_peaks: pass 16, fail 0
+15_import_sec: pass 43, fail 1 (invariant)
+16_nanodrop: pass 59, fail 0
+17_cross_format: pass 19, fail 0
+18_hplc_load: pass 6, fail 0
+
+Closes #351
+
+Decided by: ChatGPT (Codex, read-only). Path: local attempt 1 failed its check -> local attempt 2 failed its check -> local attempt 3 failed its check -> Gemini failed: HTTP Error 503: Service Unavailable -> ChatGPT answered.
