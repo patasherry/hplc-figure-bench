@@ -137,6 +137,115 @@ for (const cloud of [false, true]) await T.t(cloud ? 'persist-cloud' : 'persist-
     T.check('persist.export-import.same', !diff(a, c), diff(a, c)); } // an exported file imports to the same project
   T.check(`persist.${tag}.no-error`, !errs.length, errs.join(' | ')); await close(); });
 
+
+
+/* ---------------- four-fix round-trip evidence ---------------- */
+await T.t('four-fix-roundtrip', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+
+  const baseProj = {
+    app: 'HPLC Figure Bench',
+    version: 1,
+    runs: [{
+      id: '1',
+      name: 'SEC run',
+      inWf: true,
+      secMode: 'on',
+      secCal: 'sc_test',
+      fracs: [],
+      uvs: [{name: 'UV', xs: [8.0, 10.0, 12.0, 14.0, 16.0], ys: [10.0, 50.0, 200.0, 80.0, 15.0]}],
+      run: {vol: 24, cv: 1}
+    }],
+    prep: {
+      name: 'Test Protein'
+    },
+    opt: {
+      secStds: true,
+      secCals: [{
+        id: 'sc_test',
+        name: 'Test Column',
+        col: 's200i',
+        v0: 8.5,
+        vt: 24,
+        stds: [
+          {name: 'Thyroglobulin', kda: 670, ve: 9.5},
+          {name: 'Ovalbumin', kda: 44, ve: 14.5}
+        ]
+      }],
+      known: [{name: 'Contaminant A', kda: 40, kind: 'contaminant'}]
+    },
+    nanodrop: [
+      {id: 'nd1', name: 'Has conc', a280: 2.5, kind: 'protein', stage: 'final', runId: '1', dil: 1}
+    ]
+  };
+
+  const variants = [
+    { desc: 'absent legacy fields', mods: {} },
+    { desc: 'explicitly present legacy fields', mods: { prep: { btw: { '1': {how: 'conc', conc: '15', vOut: '2'} } } } }
+  ];
+
+  for (const variant of variants) {
+    const proj = JSON.parse(JSON.stringify(baseProj));
+    if (variant.mods.prep && variant.mods.prep.btw) {
+      proj.prep.btw = variant.mods.prep.btw;
+    }
+
+    await h.newProject('Four-Fix Round-Trip - ' + variant.desc);
+    await p.click('#homeBtn').catch(() => {});
+    await p.waitForTimeout(600);
+
+    const preReloadStr = JSON.stringify(proj);
+
+    await p.setInputFiles('#projFile', {
+      name: 'four_fix_' + variant.desc.replace(/ /g, '_') + '.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(preReloadStr)
+    });
+    await p.waitForTimeout(3000);
+
+    const runStep = (await h.timeline()).find(x => x.k.startsWith('run:'));
+    if (runStep) {
+      await h.step(runStep.k);
+      await p.waitForTimeout(500);
+      const calVal = await p.$eval('#sec-cal', el => el.value).catch(e => null);
+      T.check('four-fix.sec-coordinates.' + variant.desc, calVal === 'sc_test', 'SEC display values preserved');
+    }
+
+    await h.step('figure');
+    await p.waitForTimeout(500);
+
+    const opt = await p.evaluate(() => {
+      try { return JSON.parse(localStorage.getItem('hplc-fig-opt') || '{}'); } catch(e) { return {}; }
+    });
+    T.check('four-fix.metadata.' + variant.desc, (opt.known || []).some(k => k.name === 'Contaminant A'), 'Contaminant metadata preserved in storage');
+
+    const [dl] = await Promise.all([
+      p.waitForEvent('download', {timeout: 10000}).catch(() => null),
+      p.evaluate(() => { const e = document.querySelector('#projSave'); if(e) e.click(); })
+    ]);
+
+    if (dl) {
+      const fPath = path.join(ROOT, 'results', 'four_fix_export_' + variant.desc.replace(/ /g, '_') + '.json');
+      await dl.saveAs(fPath);
+
+      const exportedJSON = JSON.parse(fs.readFileSync(fPath, 'utf8'));
+
+      const secCalExported = (exportedJSON.opt && exportedJSON.opt.secCals) ? exportedJSON.opt.secCals.find(c => c.id === 'sc_test') : null;
+      T.check('four-fix.roundtrip.sec.' + variant.desc, !!secCalExported && secCalExported.v0 === 8.5, 'Exact SEC preserved round-trip');
+
+      const ndExported = exportedJSON.nanodrop ? exportedJSON.nanodrop.find(n => n.id === 'nd1') : null;
+      T.check('four-fix.roundtrip.nanodrop.' + variant.desc, !!ndExported && ndExported.a280 === 2.5, 'Exact NanoDrop preserved round-trip');
+
+      if (variant.desc === 'explicitly present legacy fields') {
+         T.check('four-fix.roundtrip.metadata-refresh.' + variant.desc, ndExported && ndExported.stage === 'conc', 'Intentional metadata refreshes correctly applied when btw present');
+      } else {
+         T.check('four-fix.roundtrip.metadata-refresh.' + variant.desc, ndExported && ndExported.stage === 'final', 'Legacy stage preserved when btw is absent');
+      }
+    }
+  }
+  await close();
+});
+
 /* ---------------- damaged or partial files ---------------- */
 await T.t('legacy-sec', async () => {
   const {p, errs, close} = await open(), h = H(p);
