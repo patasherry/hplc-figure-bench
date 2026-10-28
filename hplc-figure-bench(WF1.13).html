@@ -5644,9 +5644,30 @@ let projUndo = null, failedGels = [];
 function cleanProject(d){
   const isO = o => o && typeof o === 'object' && !Array.isArray(o), hasXY = c => isO(c) && Array.isArray(c.xs) && Array.isArray(c.ys); let skipped = 0;
   const keep = (list, ok) => { const a = Array.isArray(list) ? list : []; const out = a.filter(ok); skipped += a.length - out.length; return out; };
-  d.runs = keep(d.runs, r => isO(r) && r.id && Array.isArray(r.uvs) && r.uvs.length && r.uvs.every(hasXY));
+  d.runs = keep(d.runs, r => {
+    if (!isO(r) || !r.id) return false;
+    if (r.data && Array.isArray(r.data) && (!r.uvs || !r.uvs.length)) r.uvs = r.data;
+    if (r.uvs && !Array.isArray(r.uvs) && typeof r.uvs === 'object') r.uvs = [r.uvs];
+    if (!Array.isArray(r.uvs) || !r.uvs.length) return false;
+    for (const u of r.uvs) {
+       if (isO(u) && !u.xs && Array.isArray(u.rows)) { u.xs = u.rows.map(x => x[0]); u.ys = u.rows.map(x => x[1]); }
+       if (isO(u) && !u.xs && u.data && Array.isArray(u.data)) { u.xs = u.data.map(x => x[0]); u.ys = u.data.map(x => x[1]); }
+    }
+    return r.uvs.every(hasXY);
+  });
   d.traces = keep(d.traces, t => isO(t) && Array.isArray(t.rows));
   d.gels = keep(d.gels, isO); d.nanodrop = keep(d.nanodrop, isO);
+  if (Array.isArray(d.gels)) {
+      d.gels.forEach(g => {
+          if (!g.assign && Array.isArray(g.lanes)) {
+              g.assign = g.lanes.map(l => (isO(l) ? l.name : l) || '');
+          }
+      });
+  }
+  if (isO(d.prep)) {
+      if (Array.isArray(d.prep.manual)) d.prep.manual = d.prep.manual.map(m => typeof m === 'string' ? {k: 'construct', s: m} : m);
+      if (typeof d.prep.name === 'string' && d.prep.name && !d.prep.manual) d.prep.manual = [{k: 'construct', s: d.prep.name}];
+  }
   if (!isO(d.struct)) d.struct = null; if (!isO(d.opt)) d.opt = null;
   return skipped; }
 async function openProject(data, name, noUndo){
