@@ -330,9 +330,10 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   }
 
   const methods = await h.methods();
-  T.check('legacy-project.prep-name-preserved', methods.includes('Legacy Protein') || !!tl.find(x => x.k === 'construct'));
+  T.check('legacy-project.prep-name-preserved', methods.includes('Legacy Protein'), 'prep manual name fallback');
 
-  T.check('legacy-project.gel-lane-preserved', await p.locator('#gelList .gchip, #gels .gchip').count() === 1);
+  const gchips = await p.$$eval('.ss-gels .gchip, #gelList .gchip', els => els.map(e => e.textContent));
+  T.check('legacy-project.gel-lane-preserved', gchips.includes('g1'), 'gel g1 is present in UI indicating assigned lane');
 
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
   const exported = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
