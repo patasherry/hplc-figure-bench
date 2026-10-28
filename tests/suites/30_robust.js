@@ -331,8 +331,17 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
 
   const methods = await h.methods();
   T.check('legacy-project.prep-name-preserved', methods.includes('Legacy Protein') || !!tl.find(x => x.k === 'construct'));
+  T.check('legacy-project.prep-name-exact', methods.includes('Legacy Protein'));
 
   T.check('legacy-project.gel-lane-preserved', await p.locator('#gelList .gchip, #gels .gchip').count() === 1);
+  if (await p.locator('#gelList .gchip, #gels .gchip').count() === 1) {
+    await p.click('#gelList .gchip, #gels .gchip');
+    await p.waitForTimeout(500);
+    const lanesText = await p.evaluate(() => Array.from(document.querySelectorAll('#gelLanes .lane')).map(e => e.textContent.trim()).join(','));
+    T.check('legacy-project.gel-lane-exact', lanesText.includes('lane1'), `Lanes found: ${lanesText}`);
+  } else {
+    T.check('legacy-project.gel-lane-exact', false, 'Gel not found');
+  }
 
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
   const exported = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
