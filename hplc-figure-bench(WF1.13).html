@@ -5648,6 +5648,10 @@ function cleanProject(d){
   d.traces = keep(d.traces, t => isO(t) && Array.isArray(t.rows));
   d.gels = keep(d.gels, isO); d.nanodrop = keep(d.nanodrop, isO);
   if (!isO(d.struct)) d.struct = null; if (!isO(d.opt)) d.opt = null;
+  if (d.opt) {
+    if (Array.isArray(d.opt.secCals)) d.opt.secCals.forEach(c => { if (c && typeof c === 'object' && !('unit' in c)) c.unit = 'mL'; });
+    if (!('secStds' in d.opt) && (d.runs.some(r => r.secMode === 'on') || (Array.isArray(d.opt.secCals) && d.opt.secCals.length > 0))) d.opt.secStds = true;
+  }
   return skipped; }
 async function openProject(data, name, noUndo){
   if (!data || data.app !== 'HPLC Figure Bench' || !Array.isArray(data.runs)) { toast(`${name || 'That file'} is not a project saved by this tool`); return; }
