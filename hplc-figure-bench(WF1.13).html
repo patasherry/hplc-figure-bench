@@ -4993,9 +4993,8 @@ async function addGelFiles(files){
   if (bad.length) toast(`Could not open ${bad.join(', ')}. Try exporting the gel as PNG or JPEG.`);
 }
 async function loadFiles(files){
-  const proj = files.find(f => /\.json$/i.test(f.name)); if (proj && MODE !== 'quick') { let d = null; try { d = JSON.parse(await proj.text()); } catch (e) { toast(`Could not open ${proj.name}`); } if (d) await importAsProject(d, proj.name);
+  const proj = files.find(f => /\.json$/i.test(f.name)); if (proj) { let d = null; try { d = JSON.parse(await proj.text()); } catch (e) { toast(`Could not open ${proj.name}`); } if (d) { if (MODE === 'quick' && !d.prep && (!d.runs || !d.runs.some(r => r.inWf))) { await openProject(d, proj.name); } else { await importAsProject(d, proj.name); } }
     const rest = files.length - 1; if (rest) toast(`${rest} other file${rest === 1 ? ' was' : 's were'} dropped with the project and not loaded. Drop ${rest === 1 ? 'it' : 'them'} again once the project is open.`); return; }
-  if (proj) { try { await openProject(JSON.parse(await proj.text()), proj.name); } catch (e) { toast(`Could not open ${proj.name}`); } files = files.filter(f => f !== proj); if (!files.length) return; }
   const gbf = files.filter(f => /\.(gb|gbk|genbank|ape|dna)$/i.test(f.name)); for (const f of gbf) await loadGenBank(f); files = files.filter(f => !gbf.includes(f)); if (!files.length) return;
   const sf = files.filter(f => /\.(cif|mmcif|pdb|ent)$/i.test(f.name)); for (const f of sf) await loadStructFile(f); files = files.filter(f => !sf.includes(f)); if (!files.length) return;
   const imgs = files.filter(isImage), data = files.filter(f => !isImage(f));
@@ -5671,7 +5670,7 @@ $('#projSave').addEventListener('click', () => { if (!runs.length && !gels.lengt
 $('#projOpen').addEventListener('click', () => $('#projFile').click());
 $('#projFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; let data;
   try { data = JSON.parse(await f.text()); } catch (err) { toast(`Could not open ${f.name}`); return; }
-  if (MODE === 'quick') { try { await openProject(data, f.name); } catch (err) { toast(`Could not open ${f.name}`); } return; }
+  if (MODE === 'quick' && !data.prep && (!data.runs || !data.runs.some(r => r.inWf))) { try { await openProject(data, f.name); } catch (err) { toast(`Could not open ${f.name}`); } return; }
   await importAsProject(data, f.name); });
 /* from the home screen or a project, a project file opens as a project of its own and never replaces the open one */
 async function importAsProject(data, fname){
