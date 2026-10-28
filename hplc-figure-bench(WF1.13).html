@@ -507,7 +507,8 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
       <div class="ss-head"><h2 id="ssTitle"></h2><label class="ss-date">Date<input type="date" id="ssDate"></label></div>
       <p class="hint ss-what" id="ssWhat"></p>
       <div class="ss-quick" id="ssQuick" hidden></div>
-      <div class="ss-gels" id="ssGels"></div>
+      <div id="gels"><div class="ss-gels" id="ssGels"></div></div>
+      <div id="gelLanes" hidden></div>
     </section>
     <section class="grp stepfoot" id="stepFoot" hidden>
       <label class="f">Notebook notes<textarea id="ssNotes" rows="2" placeholder="Anything to remember about this step"></textarea></label>
@@ -4361,6 +4362,8 @@ function renderKnown(){
 function renderLaneTable(){
   const g = curGel(), el = $('#laneTable'); if (!g) { el.innerHTML = ''; return; }
   const labs = gelLabels(g), short = t => t.length > 24 ? t.slice(0, 23) + '…' : t;
+  const gl = document.getElementById('gelLanes');
+  if (gl) gl.innerHTML = labs.map(l => `<div class="lane">${esc(l)}</div>`).join('');
   el.innerHTML = labs.map((l, i) => { const a = laneAssign(g, i);
     const am = !(g.assign || [])[i] && a === '' && g._auto && g._auto.amb && g._auto.amb[i];
     return `<div class="lrow${am ? ' amb' : ''}"${am ? ` title="${esc(l)} is a fraction in ${am.length} runs. Pick the run it came from, or set the runs' pooled fractions."` : ''}><span>${i + 1}</span><input type="text" id="ln${i}" data-lane="${i}" data-lk="label" value="${esc(l)}" aria-label="Lane ${i + 1} label"><select id="la${i}" data-lane="${i}" data-lk="assign" aria-label="Lane ${i + 1} belongs to"><option value="marker" ${a === 'marker' ? 'selected' : ''}>Ladder</option><option value="" ${a === '' ? 'selected' : ''}>Not shown with a run</option>${PREP_OPT().replace(`value="${a}"`, `value="${a}" selected`)}${runs.map((r, k) => `<option value="${r.id}" ${a === r.id ? 'selected' : ''}>${k + 1}. ${esc(short(shortRunName(r)))}</option>`).join('')}</select></div>`; }).join('');
@@ -5682,8 +5685,11 @@ async function openProject(data, name, noUndo){
   const skipped = cleanProject(data);
   projUndo = !noUndo && (runs.length || gels.length || traces.some(t => !t.ex)) ? projectData() : null;
   const ng = []; failedGels = [];
-  for (const sg of data.gels || []) { try { const img = new Image(); await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = sg.image; });
-      const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
+  for (const sg of data.gels || []) { try {
+      const img = new Image();
+      if (sg.image) await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = sg.image; });
+      const c = document.createElement('canvas'); c.width = img.naturalWidth || 1; c.height = img.naturalHeight || 1;
+      if (sg.image) c.getContext('2d').drawImage(img, 0, 0);
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
       Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
   runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: Array.isArray(t.peaks) ? t.peaks : []})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
