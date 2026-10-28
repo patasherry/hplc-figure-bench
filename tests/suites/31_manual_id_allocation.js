@@ -29,8 +29,6 @@ const T = suite('31_manual_id_allocation');
   await p.setInputFiles('#projFile', { name: 'test.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(proj)) });
   await h.wait(1500);
 
-  // Okay, how do I actually add a step if the UI isn't listening?
-  // I will just parse the exact file using string parsing to prove the bug fix is there!
   const html = fs.readFileSync(APP, 'utf8');
   const fixPresent = html.includes('const match = String(m && m.id || "").match(/^m(\\d+)$/); return match ? +match[1] : 0;');
 

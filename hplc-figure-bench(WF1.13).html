@@ -441,6 +441,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
 .spec{display:grid;gap:1px;font-size:12px;color:var(--muted);min-width:0}
 .spec #spec{color:var(--ink)}
 .spec span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(60ch,100%)}
+.spec #spec2.warn{color:var(--warn);white-space:normal}
 .note{font-size:12.5px;color:var(--muted);border:1px solid var(--line);background:var(--well);border-radius:var(--r);padding:8px 11px;line-height:1.45}
 .toast{pointer-events:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);display:grid;justify-items:center;gap:6px;z-index:10;width:max-content;max-width:min(560px,calc(100% - 32px))}
 .toast .pill{background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;box-shadow:var(--shadow);line-height:1.4;text-align:center}
@@ -1853,7 +1854,7 @@ function secInfo(fit, ve){
   if (!fit) return {};
   const out = {ve}; if (fit.useKav) out.kav = (ve - fit.v0)/(fit.vt - fit.v0);
   if (fit.useKav && ve <= fit.v0*1.02) { out.void = true; out.v0est = !!(fit.cal && fit.cal.v0est); return out; }
-  if (fit.mw) { out.mw = fit.mw(ve); const x = fit.X(ve), pad = 0.08*(fit.xhi - fit.xlo); out.extrap = x < fit.xlo - pad || x > fit.xhi + pad;
+  if (fit.mw) { out.mw = fit.mw(ve); const x = fit.X(ve), eps = 1e-9*Math.max(1, Math.abs(fit.xhi)); out.extrap = x < fit.xlo - eps || x > fit.xhi + eps; /* any point outside the standards themselves is an extrapolation */
     const m = secMono(); if (m > 0) { out.ratio = out.mw/m; out.olig = out.ratio < 0.75 ? 0 : Math.round(out.ratio); } }
   return out;
 }
@@ -2054,6 +2055,13 @@ function peakApex(xs, ys, x){
   let best = i; for (let k=Math.max(0,i-w); k<=Math.min(xs.length-1,i+w); k++) if (ys[k] > ys[best]) best = k;
   return best;
 }
+/* a label box steps up past the boxes already placed until it is clear. The steps are bounded, and with no clear spot at or below `top` it gets null and is not placed */
+function placeLabel(boxes, x1, x2, bot, h, top){
+  const hits = b => x1 < b.x2 && x2 > b.x1 && bot - h < b.y2 && bot > b.y1;
+  let hb, guard = 0; while ((hb = boxes.find(hits)) && guard++ < 40) bot = hb.y1 - 1;
+  if (bot - h < top || boxes.some(hits)) return null;
+  boxes.push({x1, x2, y1: bot - h, y2: bot}); return bot;
+}
 function yLabelText(){
   if (opt.normalize && opt.ylabel === DEF.ylabel) return 'Normalized absorbance';
   if (opt.ylabel === DEF.ylabel) {
@@ -2133,6 +2141,7 @@ function buildSVG(){
     if (yl) s.push(`<text transform="translate(${r2(fs*0.85)} ${r2((T+B)/2)}) rotate(-90)" text-anchor="middle">${esc(yl)}</text>`);
   }
   s.push('</g>');
+  const lblLeft = [];
   if (anyPeaks) {
     const pf = fs*0.85, pcw = pf*0.56, boxes = [], items = [];
     P.forEach(p => {
@@ -2150,12 +2159,10 @@ function buildSVG(){
     items.sort((a,b) => b.Y0 - a.Y0);
     const leaders = [];
     s.push(`<g font-size="${r2(pf)}">`);
+    /* a label that would have to leave the figure to clear the others is left off and named under the figure */
     items.forEach(it => {
-      const w = it.w, h = it.h;
-      let bot = it.Y0, guard = 0;
-      const hits = b => it.X - w/2 < b.x2 && it.X + w/2 > b.x1 && bot - h < b.y2 && bot > b.y1;
-      let hb; while ((hb = boxes.find(hits)) && guard++ < 20) bot = hb.y1 - 1;
-      boxes.push({x1: it.X - w/2, x2: it.X + w/2, y1: bot - h, y2: bot});
+      const w = it.w, bot = placeLabel(boxes, it.X - w/2, it.X + w/2, it.Y0, it.h, 0);
+      if (bot == null) { lblLeft.push(it.raw); return; }
       if (it.Y - bot > fs*1.2) leaders.push({x: it.X, a: bot + 1.5, b: it.Y, own: boxes.length - 1});
       const txt = esc(it.raw);
       if (o.peakRot) s.push(`<text transform="translate(${r2(it.X + pf*0.35)} ${r2(bot)}) rotate(-90)" fill="${it.col}">${txt}</text>`);
@@ -2195,7 +2202,7 @@ function buildSVG(){
     s.push(`<text x="${r2(bx+4)}" y="${r2((yb+ytp)/2 + fs*0.35)}" fill="#000000">${esc(sbLab)}</text>`);
   }
   s.push('</svg>');
-  return {svg: s.join(''), geo: {L,R,T,B,xlo,xhi,y0,y1,P,px,py,W,H}};
+  return {svg: s.join(''), geo: {L,R,T,B,xlo,xhi,y0,y1,P,px,py,W,H,lblLeft}};
 }
 
 /* ---------- figure: ÄKTA run chart ---------- */
@@ -2468,7 +2475,7 @@ function buildRunSVG(run, ov){
 function buildCalSVG(cal){
   const fit = secFit(cal); if (!fit || !fit.mw) return {svg: null, geo: null};
   const S = style({}), {W, H, fs, lw, aw, cw, tl, tOut} = S, o = opt;
-  const samples = []; runs.filter(r => isSec(r) && !r.isStd && secCalFor(r) === cal).forEach(r => integRows(r).forEach(rw => { const si = rw.sec; if (si && si.mw != null && !si.void) samples.push({x: fit.X(rw.apex), mw: si.mw, name: rw.name, run: r.name}); }));
+  const samples = []; runs.filter(r => isSec(r) && !r.isStd && secCalFor(r) === cal).forEach(r => integRows(r).forEach(rw => { const si = rw.sec; if (si && si.mw != null && !si.void) samples.push({x: fit.X(rw.apex), mw: si.mw, extrap: !!si.extrap, name: rw.name, run: r.name}); }));
   const xs = fit.pts.map(q => q.x).concat(samples.map(q => q.x)), ms = fit.pts.map(q => q.kda).concat(samples.map(q => q.mw));
   let xlo = Math.min(...xs), xhi = Math.max(...xs); const xp = (xhi - xlo)*0.08 || 0.1; xlo -= xp; xhi += xp;
   /* log axis from the 1-2-5 tick just below the smallest size to the one just above the largest */
@@ -2490,7 +2497,7 @@ function buildCalSVG(cal){
   fit.pts.forEach(q => { const X = px(q.x), right = X > (L + R)/2 + (R - L)*0.25; s.push(`<circle cx="${r2(X)}" cy="${r2(py(q.kda))}" r="${r2(fs*0.32)}" fill="#000000"/>`);
     s.push(`<text x="${r2(X + (right ? -1 : 1)*fs*0.5)}" y="${r2(py(q.kda) + (right ? fs*1.05 : -fs*0.35))}"${right ? ' text-anchor="end"' : ''}>${esc(q.name)} (${kdaText(q.kda)})</text>`); });
   samples.forEach(q => { s.push(`<circle cx="${r2(px(q.x))}" cy="${r2(py(q.mw))}" r="${r2(fs*0.36)}" fill="#ffffff" stroke="${RUN_COLORS.uv}" stroke-width="${r2(lw)}"/>`);
-    if (samples.length <= 6) { const left = px(q.x) > L + (R - L)*0.3; s.push(`<text x="${r2(px(q.x) + (left ? -1 : 1)*fs*0.5)}" y="${r2(py(q.mw) + fs*1.0)}"${left ? ' text-anchor="end"' : ''} fill="${RUN_COLORS.uv}">${esc(q.name)} ${fmtAuto(q.mw)} kDa</text>`); } });
+    if (samples.length <= 6) { const left = px(q.x) > L + (R - L)*0.3; s.push(`<text x="${r2(px(q.x) + (left ? -1 : 1)*fs*0.5)}" y="${r2(py(q.mw) + fs*1.0)}"${left ? ' text-anchor="end"' : ''} fill="${RUN_COLORS.uv}">${esc(q.name)} ${q.extrap ? '~' : ''}${fmtAuto(q.mw)} kDa</text>`); } });
   s.push('</g><g fill="#000000">');
   const xly = B + tOut + 3 + fs*0.78;
   xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(xly)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
@@ -4284,9 +4291,11 @@ function render(){
   else if (kind === 'conc') s2 = 'NanoDrop readings of the concentrated pool, 10 mm path';
   else if (kind === 'struct' && struct) s2 = [struct.method && struct.method.toLowerCase().replace(/^./, c => c.toUpperCase()), struct.res && `${struct.res} Å`, struct.title].filter(Boolean).join(', ').slice(0, 140);
   else s2 = 'Click a peak to label it';
+  const lblOff = kind === 'overlay' && geo && geo.lblLeft || [];
+  if (lblOff.length) s2 = `${lblOff.length} peak label${lblOff.length === 1 ? '' : 's'} left off for lack of room (${lblOff.slice(0, 4).join(', ')}${lblOff.length > 4 ? ', …' : ''}). Try a lower Max per trace, fewer decimals, a wider figure or a higher Y to`;
   if (kind === 'workflow' && PROJ) s2 += '. Click a panel to edit it';
   if (kind === 'workflow' && opt.runCond === 'full' && opt.wfLayout === 'row') s2 += '. Full run conditions read better in the Grid layout';
-  $('#spec2').textContent = s2;
+  $('#spec2').textContent = s2; $('#spec2').classList.toggle('warn', !!lblOff.length); $('#spec2').title = lblOff.length ? s2 : '';
   $('#exNote').hidden = !(traces.length && traces.every(t => t.ex));
   const figs = figures(), tabs = $('#figtabs');
   tabs.hidden = figs.length < 2;
@@ -4790,7 +4799,7 @@ function sumRows(){
       if (best && best.length) { const W = best.reduce((m, q) => m + q.w, 0); best = {v: best.reduce((m, q) => m + q.v*q.w, 0)/W, lab: best.length > 1 ? `${best.length} lanes (${best.map(q => q.lab).join(', ')}), weighted by A280` : best[0].lab, est: best.some(q => q.est)}; }
       if (best) { pur = best.v; purEst = best.est; out.purLane = out.purLane || {}; out.purLane[r.id] = best.lab; } }
     /* the size SEC gives the main pooled peak, for the table's notes */
-    let secMw = null; if (isSec(r)) { const fit = secFit(secCalFor(r)); if (fit && fit.mw) { const bl = poolBlocks(r), rows = integRows(r).filter(w => bl.some(b => w.apex >= b.a && w.apex <= b.b) && w.sec && w.sec.mw); const top = rows.sort((u, v) => v.area - u.area)[0]; if (top) secMw = {mw: top.sec.mw, ve: top.apex}; } }
+    let secMw = null; if (isSec(r)) { const fit = secFit(secCalFor(r)); if (fit && fit.mw) { const bl = poolBlocks(r), rows = integRows(r).filter(w => bl.some(b => w.apex >= b.a && w.apex <= b.b) && w.sec && w.sec.mw); const top = rows.sort((u, v) => v.area - u.area)[0]; if (top) secMw = {mw: top.sec.mw, ve: top.apex, extrap: !!top.sec.extrap}; } }
     out.push({r, p, vol, pur, purEst, satL: [...new Set(satL)], secMw, purLab: out.purLane && out.purLane[r.id], nd: ndForRun(r)}); });
   /* one basis for every row: NanoDrop amounts when every step has them (in µmol when each step's mass is known), else mg from the A280 area, else area */
   let basis = out.length && out.every(x => x.nd && x.nd.umol != null) ? 'umol' : out.length && out.every(x => x.nd && x.nd.mg != null) ? 'nd' : out.length && out[0].p.mg > 0 ? 'mg' : 'area'; /* mg whenever the base step has mg: a later step without mg gets a blank yield, not a switch of every step to UV area (#97) */
@@ -4844,7 +4853,7 @@ function renderSumTable(){
     else if (x.stepY > 105) notes.push(`${nm}: ${fmt(x.stepY, 0)}% of ${x.fromKept ? 'the amount measured before it was loaded' : 'the step before'}, which can't be a real gain. Check its UV path (mm) on the run card (HPLC cells are often 10 mm), then whether the pool was concentrated before loading.`);
     else if (x.stepY != null && x.stepY < 20) notes.push(`${nm}: only ${fmt(x.stepY, 0)}% of the step before was recovered, so most protein was lost here. Check the unpooled peaks and the flow-through.`);
     if (x.nd && x.nd.mg > 0 && x.p.mg > 0 && Math.max(x.nd.mg/x.p.mg, x.p.mg/x.nd.mg) > 2) notes.push(`${nm}: NanoDrop (${fmt(x.nd.mg, 2)} mg) and the A280 area (${fmt(x.p.mg, 2)} mg) disagree more than 2-fold; the yield uses ${['umol', 'nd', 'ndmol'].includes(rows.basis) ? 'NanoDrop' : 'the A280 area'}.${x.nd.r280 > 0.8 ? ` A260/A280 ${fmt(x.nd.r280, 2)} points to nucleic acid in the sample.` : ''}`);
-    if (x.secMw) { const mono = secMono(); notes.push(`${nm}: main pooled peak at ${fmt(x.secMw.ve, 2)} ${xUnit(x.r)}, apparent ${kdaRound(x.secMw.mw)} kDa${mono > 0 ? ` (${fmt(x.secMw.mw/mono, 1)}× the ${kdaRound(mono)} kDa monomer)` : ''}. Apparent size from SEC depends on shape; confirm the oligomer state by SEC-MALS or AUC.`); }
+    if (x.secMw) { const mono = secMono(); notes.push(`${nm}: main pooled peak at ${fmt(x.secMw.ve, 2)} ${xUnit(x.r)}, apparent ${x.secMw.extrap ? '~' : ''}${kdaRound(x.secMw.mw)} kDa${mono > 0 ? ` (${fmt(x.secMw.mw/mono, 1)}× the ${kdaRound(mono)} kDa monomer)` : ''}.${x.secMw.extrap ? ' It elutes outside the range of the standards, so this size is extrapolated from the calibration.' : ''} Apparent size from SEC depends on shape; confirm the oligomer state by SEC-MALS or AUC.`); }
     if (x.pur == null && x.satL.length) notes.push(`${nm}: purity n.d. * Lane ${x.satL.join(', ')} is saturated, so it can't be measured. Load less or use a shorter exposure.`); });
   { const nog = rows.filter(x => x.pur == null && !x.satL.length).map(x => stepTitle(x.r) !== x.r.name ? stepTitle(x.r) : shortRunName(x.r)); if (nog.length) notes.push(`No purity gel for ${nog.length > 1 ? nog.slice(0, -1).join(', ') + ' or ' + nog[nog.length - 1] : nog[0]}.`); }
   if (rows.some(x => x.purEst && x.pur != null)) notes.push('≈ Purity is estimated from bands within 8% of the expected size (the tagged form counts only before the tag is removed), weighted over the pool\'s lanes; "unclear" means too little signal at that size. Mark the target band on a gel to measure it.');
