@@ -1,0 +1,36 @@
+Vendor Metadata Line 0
+Vendor Metadata Line 1
+Vendor Metadata Line 2
+Vendor Metadata Line 3
+Vendor Metadata Line 4
+Vendor Metadata Line 5
+Vendor Metadata Line 6
+Vendor Metadata Line 7
+Vendor Metadata Line 8
+Vendor Metadata Line 9
+Vendor Metadata Line 10
+Vendor Metadata Line 11
+Vendor Metadata Line 12
+Vendor Metadata Line 13
+Vendor Metadata Line 14
+Vendor Metadata Line 15
+Vendor Metadata Line 16
+Vendor Metadata Line 17
+Vendor Metadata Line 18
+Vendor Metadata Line 19
+Vendor Metadata Line 20
+Vendor Metadata Line 21
+Vendor Metadata Line 22
+Vendor Metadata Line 23
+Vendor Metadata Line 24
+Sample Name	A280	A260/A280	Protein (mg/mL)
+Pool 1	1.500	0.57	1.500
+Pool 2	1.500	0.57	1.500
+Pool 3	1.500	0.57	1.500
+Pool 4	1.500	0.57	1.500
+Pool 5	1.500	0.57	1.500
+Pool 6	1.500	0.57	1.500
+Pool 7	1.500	0.57	1.500
+Pool 8	1.500	0.57	1.500
+Pool 9	1.500	0.57	1.500
+Pool 10	1.500	0.57	1.500
