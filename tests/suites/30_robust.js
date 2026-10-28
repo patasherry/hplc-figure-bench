@@ -350,4 +350,106 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   await close();
 });
 
+
+
+
+
+/* exact four-fix round-trip evidence: SEC coordinates, ND yields, sizing settings, and contaminant metadata */
+await T.t('roundtrip-four-fixes', async () => {
+  const {p, close} = await open(), h = H(p);
+
+  const fixture = {
+    app: 'HPLC Figure Bench',
+    version: 1,
+    runs: [{
+      id: 'r1', name: 'SEC Run', inWf: true,
+      uvs: [{name: 'UV', xs: [1, 2, 3], ys: [10, 20, 10]}],
+      fracs: {name: 'Fractions', xs: [], xe: [], label: []}
+    }],
+    traces: [], gels: [],
+    nanodrop: [
+      {id: 'nd1', name: 'Legacy missing btw', a280: 2.5, kind: 'protein', stage: 'final', runId: 'r1', dil: 1},
+      {id: 'nd2', name: 'Explicit btw', a280: 3.5, kind: 'protein', stage: 'final', runId: 'r1_fake', dil: 1}
+    ],
+    prep: { manual: [], btw: { 'r1': { how: 'conc', conc: '10', vOut: '1' } } },
+    opt: {
+      secCals: [
+        { id: 'scLegacy', name: 'Legacy Cal', m: -0.5, b: 2.5, unit: undefined, stds: [] },
+        { id: 'scExplicit', name: 'Explicit Cal', m: -0.5, b: 2.5, unit: 'mL', stds: [] }
+      ],
+      known: [
+        { name: 'DnaK', kda: 10, kind: 'contam', src: 'old' },
+        { name: 'MyCustom', kda: 42, kind: 'label', src: 'custom' }
+      ],
+      tidy13: true,
+      tidy14: false
+    }
+  };
+
+  await p.locator('#homeQuick').evaluate(e => e.click()); await p.waitForTimeout(600);
+  await p.setInputFiles('#projFile', {name: 'fixture.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture))});
+  await p.waitForTimeout(3000);
+
+  const getUIStates = async () => {
+    const states = {};
+
+    // Workflow settings
+    await p.locator('[data-tab="opt"]').click(); await p.waitForTimeout(400);
+    states.tidy13 = await p.evaluate(() => { const el = document.querySelector('#opt-tidy13'); return el ? el.checked : null; });
+    states.tidy14 = await p.evaluate(() => { const el = document.querySelector('#opt-tidy14'); return el ? el.checked : null; });
+
+    // Contaminants
+    await p.locator('[data-tab="known"]').click(); await p.waitForTimeout(400);
+    states.knowns = await p.$$eval('#knownList .krow', rs => rs.map(r => ({
+      name: r.querySelector('[data-kf=name]') ? r.querySelector('[data-kf=name]').value : null,
+      kda: r.querySelector('[data-kf=kda]') ? r.querySelector('[data-kf=kda]').value : null
+    })));
+
+    // SEC
+    await p.locator('[data-tab="sec"]').click(); await p.waitForTimeout(400);
+    states.calList = await p.evaluate(() => Array.from(document.querySelectorAll('#secCalList option')).map(o => o.textContent));
+
+    // ND
+    await p.locator('[data-tab="nd"]').click(); await p.waitForTimeout(400);
+    states.ndRows = await p.$$eval('#ndTable tr.data', rs => rs.map(r => ({
+      name: r.querySelector('td:nth-child(2)') ? r.querySelector('td:nth-child(2)').textContent : null,
+      stage: r.querySelector('select[data-f=stage]') ? r.querySelector('select[data-f=stage]').value : null
+    })));
+
+    return states;
+  };
+
+  const state1 = await getUIStates();
+
+  const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.locator('#projSave').evaluate(e => e.click())]);
+  const exportPath = require('path').join(__dirname, '..', 'results', 'roundtrip.json');
+  await dl.saveAs(exportPath);
+
+  await p.evaluate(() => window.location.reload()); await p.waitForTimeout(1000);
+  await p.setInputFiles('#projFile', exportPath);
+  await p.waitForTimeout(3000);
+
+  const state2 = await getUIStates();
+
+  T.check('roundtrip.settings', state1.tidy13 === true && state1.tidy13 === state2.tidy13 && state1.tidy14 === state2.tidy14, 'Settings invariant');
+  T.check('roundtrip.sec-coords', JSON.stringify(state1.calList) === JSON.stringify(state2.calList) && state1.calList.join('').includes('(mL)'), 'SEC invariant');
+
+  const nd1a = state1.ndRows.find(x => x.name && x.name.includes('Legacy'));
+  const nd2a = state1.ndRows.find(x => x.name && x.name.includes('Explicit'));
+  const nd1b = state2.ndRows.find(x => x.name && x.name.includes('Legacy'));
+  const nd2b = state2.ndRows.find(x => x.name && x.name.includes('Explicit'));
+
+  T.check('roundtrip.nd-yield', nd1a && nd1a.stage === 'conc' && nd1b.stage === 'conc' && nd2a.stage === 'final' && nd2b.stage === 'final', 'ND invariant and correctly migrated');
+
+  const dnak1 = state1.knowns.find(x => x.name === 'DnaK');
+  const cust1 = state1.knowns.find(x => x.name === 'MyCustom');
+  const dnak2 = state2.knowns.find(x => x.name === 'DnaK');
+  const cust2 = state2.knowns.find(x => x.name === 'MyCustom');
+
+  T.check('roundtrip.contam-refresh', dnak1 && String(dnak1.kda) === '69.1' && String(cust1.kda) === '42', 'Contaminant intentionally refreshed');
+  T.check('roundtrip.contam-invariant', String(dnak1.kda) === String(dnak2.kda) && String(cust1.kda) === String(cust2.kda), 'Contaminant invariant across save/load');
+
+  await close();
+});
+
 T.done(); })();
