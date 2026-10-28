@@ -333,10 +333,12 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   T.check('legacy-project.prep-name-preserved', methods.includes('Legacy Protein') || !!tl.find(x => x.k === 'construct'));
   T.check('legacy-project.prep-name-exact', methods.includes('Legacy Protein'));
 
-  T.check('legacy-project.gel-lane-preserved', await p.locator('#gelList .gchip, #gels .gchip').count() === 1);
-  if (await p.locator('#gelList .gchip, #gels .gchip').count() === 1) {
-    await p.click('#gelList .gchip, #gels .gchip');
+  const count = await p.locator('#gelList .gchip, #gels .gchip').count();
+  T.check('legacy-project.gel-lane-preserved', count === 1);
+  if (count === 1) {
+    await p.locator('#gelList .gchip, #gels .gchip').first().click();
     await p.waitForTimeout(500);
+    await p.waitForSelector('#gelLanes .lane', { timeout: 5000 });
     const lanesText = await p.evaluate(() => Array.from(document.querySelectorAll('#gelLanes .lane')).map(e => e.textContent.trim()).join(','));
     T.check('legacy-project.gel-lane-exact', lanesText.includes('lane1'), `Lanes found: ${lanesText}`);
   } else {

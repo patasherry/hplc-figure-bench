@@ -1,0 +1,3 @@
+30_robust.js                       pass  96  fail   4  457s
+
+TOTAL pass 96  fail 4  crashed suites 0  (APP=/app/hplc-figure-bench(WF1.13).html)
