@@ -333,8 +333,8 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   T.check('legacy-project.prep-name-preserved', methods.includes('Legacy Protein') || !!tl.find(x => x.k === 'construct'));
   T.check('legacy-project.prep-name-exact', methods.includes('Legacy Protein'));
 
-  T.check('legacy-project.gel-lane-preserved', await p.locator('#gelList .gchip, #gels .gchip').count() === 1);
-  if (await p.locator('#gelList .gchip, #gels .gchip').count() === 1) {
+  const gelCount = await p.locator('#gelList .gchip, #gels .gchip').count(); T.check('legacy-project.gel-lane-preserved', gelCount === 1);
+  if (gelCount === 1) {
     await p.click('#gelList .gchip, #gels .gchip');
     await p.waitForTimeout(500);
     const lanesText = await p.evaluate(() => Array.from(document.querySelectorAll('#gelLanes .lane')).map(e => e.textContent.trim()).join(','));
@@ -347,6 +347,24 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   const exported = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
   T.check('legacy-project.export-run-preserved', exported.runs && exported.runs.length === 1 && exported.runs[0].id === 'r1');
 
+  await close();
+});
+
+
+await T.t('malformed-manual-id', async () => { const {p, errs, close} = await open(), h = H(p);
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.waitForTimeout(600);
+  const d = {app: 'HPLC Figure Bench', version: 1, runs: [], prep: {manual: [{k: 'man:mabc', id: 'mabc', s: 'A'}, {k: 'man:m-1', id: 'm-1', s: 'B'}]}};
+  await p.setInputFiles('#projFile', {name: 'malformed_manual_id.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))});
+  await p.waitForTimeout(2000);
+
+  await p.locator('#tl [data-addmenu]').click();
+  await p.waitForTimeout(300);
+  await p.locator('#tl [data-addstep="man:other"]').click();
+  await p.waitForTimeout(500);
+
+  const steps = await p.$$eval('#tl button[data-step^="man:"]', els => els.map(e => e.getAttribute('data-step')));
+  T.check('malformed-manual-id.next-id', steps.includes('man:m1'), `Should allocate man:m1, got: ${steps.join(', ')}`);
   await close();
 });
 
