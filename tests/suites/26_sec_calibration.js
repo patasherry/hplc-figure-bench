@@ -161,5 +161,49 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
 
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
+
+  /* Extrapolation (#131): a peak outside the standards' own elution interval must be marked as extrapolated in the peak table,
+     the summary note and the calibration figure, with no allowance beyond the outermost standards.
+     sec_inject2.csv has peaks at Ve 12.00 and 15.00 mL from injection. Two standards: 100 kDa and 10 kDa.
+     Case A at 14 and 18 mL: log10(kDa) = 5.5 - 0.25 Ve, so 12 mL is 316.23 kDa (outside) and 15 mL is 56.23 kDa (inside).
+     Case B at 12.2 and 18.2 mL: 12 mL is 10^(2 + 0.2/6) = 107.98 kDa, 0.2 mL before the first standard, so still outside. */
+  const extrapCase = async (tag, ves, inMw, outMw) => {
+    const o = await open(), q = o.p, hq = H(q); q.on('dialog', d => d.accept());
+    const fill = async (sel, v) => { const l = q.locator(sel).first(); await openFolds(l); await l.fill(String(v)); await l.dispatchEvent('change'); await hq.wait(150); };
+    await T.t(tag, async () => {
+      await hq.newProject('SEC extrapolation ' + tag);
+      await hq.addRun(path.join(DATA, 'science/sec_inject2.csv'));
+      const rs = (await hq.timeline()).find(x => /^run:/.test(x.k)); if (rs) await hq.step(rs.k);
+      if (await q.isVisible('#moreBtn') && /More options/i.test(await q.locator('#moreBtn').textContent().catch(() => ''))) { await q.click('#moreBtn').catch(() => {}); await hq.wait(300); }
+      const sc = q.locator('#o-secStds'); await openFolds(sc); if (!(await sc.isChecked())) { await sc.check({force: true}); await hq.wait(300); }
+      await fill('#sec-v0', 8); await fill('#sec-vt', 24);
+      const nRows = await q.locator('#secStdList .krow').count();
+      for (let i = 0; i < nRows; i++) { if (i < 2) { await fill(`#ss-n${i}`, i ? 'Small' : 'Large'); await fill(`#ss-k${i}`, i ? 10 : 100); } await fill(`#ss-v${i}`, i < 2 ? ves[i] : ''); }
+      const fh = await q.textContent('#sec-fit').catch(() => '');
+      T.check(`${tag}.fit_from_2`, /Fit from 2 standards/i.test(fh), fh);
+      await q.click('#intAuto'); await hq.wait(600);
+      /* peak table: the outside peak has ~, the inside one does not */
+      const pt = await hq.peakTable(), head = pt[0] || [], veC = head.findIndex(c => /^Ve|Center|Elution/i.test(c)), mwC = head.findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
+      const rowAt = v => pt.slice(1).find(r => T.near(num(r[veC]), v, 0.05)), rO = rowAt(12), rI = rowAt(15);
+      T.check(`${tag}.table_outside_marked`, rO && /^~/.test(rO[mwC]) && T.near(num(rO[mwC]), outMw, 1), `12 mL row: ${JSON.stringify(rO)}; expected ~${outMw.toFixed(2)} kDa`);
+      T.check(`${tag}.table_inside_unmarked`, rI && !/~/.test(rI[mwC]) && T.near(num(rI[mwC]), inMw, 1), `15 mL row: ${JSON.stringify(rI)}; expected ${inMw.toFixed(2)} kDa`);
+      /* summary note for the pooled main peak (12 mL) */
+      await hq.suggest(); await hq.step('figure'); await hq.wait(400);
+      const notes = await q.$$eval('#sumNotes li', ls => ls.map(l => l.textContent)).catch(() => []), nl = notes.find(t => /main pooled peak/.test(t)) || '';
+      T.check(`${tag}.summary_note_marked`, new RegExp(`apparent ~${Math.round(outMw)} kDa`).test(nl) && /extrapolat/i.test(nl), `note: ${nl || notes.join(' / ').slice(0, 300)}`);
+      /* calibration figure: its tab shows in Quick mode, and the calibration (a setting) carries over. The label at 12 mL keeps the ~ */
+      await q.click('#homeBtn'); await hq.wait(500); await q.click('#homeQuick'); await hq.wait(1500);
+      await hq.dropFiles(path.join(DATA, 'science/sec_inject2.csv'));
+      await q.click('#intAuto'); await hq.wait(600);
+      await q.click('#figtabs [data-fig^="cal:"]'); await hq.wait(500);
+      const labs = (await hq.svgTexts()).map(x => x.t).filter(t => /^P\d+ .*kDa$/.test(t));
+      T.check(`${tag}.cal_figure_outside_marked`, labs.some(t => /~/.test(t) && T.near(num(t.replace(/^P\d+/, '')), outMw, 1)), `sample labels: ${labs.join(' | ')}`);
+      T.check(`${tag}.cal_figure_inside_unmarked`, labs.some(t => !/~/.test(t) && T.near(num(t.replace(/^P\d+/, '')), inMw, 1)), `sample labels: ${labs.join(' | ')}`);
+    });
+    T.check(`${tag}.no page errors`, !o.errs.length, o.errs.join(' | '));
+    await o.close();
+  };
+  await extrapCase('extrap_14_18', [14, 18], Math.pow(10, 5.5 - 0.25*15), Math.pow(10, 5.5 - 0.25*12));
+  await extrapCase('extrap_12p2_18p2', [12.2, 18.2], Math.pow(10, 2 - 2.8/6), Math.pow(10, 2 + 0.2/6));
   T.done();
 })();
