@@ -5658,7 +5658,7 @@ async function openProject(data, name, noUndo){
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
       Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
-  runs = data.runs; traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: Array.isArray(t.peaks) ? t.peaks : []})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
+  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: Array.isArray(t.peaks) ? t.peaks : []})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
     { const pq = Array.isArray(opt.myQuick) ? opt.myQuick : [], del = new Set([...(myQDel || []), ...(Array.isArray(opt.myQuickDel) ? opt.myQuickDel : [])]); opt.myQuickDel = [...del]; opt.myQuick = myQ.concat(pq.filter(q => !myQ.some(m => m.id === q.id))).filter(q => !del.has(q.id)); }
@@ -5675,7 +5675,7 @@ $('#projSave').addEventListener('click', () => { if (!runs.length && !gels.lengt
 $('#projOpen').addEventListener('click', () => $('#projFile').click());
 $('#projFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; let data;
   try { data = JSON.parse(await f.text()); } catch (err) { toast(`Could not open ${f.name}`); return; }
-  if (MODE === 'quick') { try { await openProject(data, f.name); } catch (err) { toast(`Could not open ${f.name}`); } return; }
+  if (MODE === 'quick' && !data.prep && (!data.runs || !data.runs.some(r => r.inWf))) { try { await openProject(data, f.name); } catch (err) { toast(`Could not open ${f.name}`); } return; }
   await importAsProject(data, f.name); });
 /* from the home screen or a project, a project file opens as a project of its own and never replaces the open one */
 async function importAsProject(data, fname){
@@ -5684,7 +5684,8 @@ async function importAsProject(data, fname){
   PROJ = mkProj(newPid(), fname.replace(/(_project)?\.json$/i, '').replace(/_/g, ' '), Date.now());
   if (failedGels.length) PROJ.lost.gels = failedGels.map(g => Object.assign({}, g, {imageId: undefined}));
   prep.on = true; MODE = 'proj'; enterApp(); applyProjUI(); renderList();
-  selectStep(stepList().some(s => s.k === data.step) ? data.step : 'construct'); await flushSave(true); toast(`Opened ${PROJ.name} as a new project`); }
+  const defStep = stepList().some(s => s.k === data.step) ? data.step : (data.cur && stepList().some(s => s.k === 'run:' + data.cur)) ? 'run:' + data.cur : (data.cur && stepList().some(s => s.k === data.cur)) ? data.cur : (runs.some(r => r.inWf) ? 'run:' + runs.find(r => r.inWf).id : 'construct');
+  selectStep(defStep); await flushSave(true); toast(`Opened ${PROJ.name} as a new project`); }
 /* ---------- projects: a project per purification, saved with the page (db + assets) or in this browser ---------- */
 let PROJ = null, MODE = 'quick', curStep = 'construct';
 const STORE = {mode: 'pending', db: null, assets: null, uid: null, idb: null, ready: null};
