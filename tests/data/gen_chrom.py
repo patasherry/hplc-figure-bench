@@ -358,6 +358,21 @@ def large_header_run():
 
 
 # ---------------------------------------------------------------- L. time parsing formats
+
+def hplc_export():
+    fn = 'hplc_export.csv'
+    x = np.round(np.arange(0, 30.0001, 0.05), 4)
+    y = 10 * np.exp(-0.5 * ((x - 15.0) / 0.5)**2)
+
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=',', lineterminator='\r\n')
+    w.writerow(['Time (min)', 'UV 280 (mAU)'])
+    for i in range(len(x)):
+        w.writerow([f'{x[i]:.4f}', f'{y[i]:.3f}'])
+
+    with open(os.path.join(OUT, fn), 'wb') as f:
+        f.write(buf.getvalue().encode('utf-8'))
+
 def cross_format_files():
     x = np.round(np.arange(0, 10.01, 0.05), 4)
     y = 100 * np.exp(-0.5 * ((x - 5.0) / 0.2)**2)
@@ -397,7 +412,7 @@ def time_formats():
 
 
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, cross_format_files, time_formats): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, hplc_export, cross_format_files, time_formats): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()
