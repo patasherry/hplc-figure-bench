@@ -707,6 +707,26 @@
    "nucleic": 0,
    "warn_high_ratio": false,
    "note": "vendor metadata preamble"
+  },
+  {
+   "file": "nd_comma_decimal.csv",
+   "format": "NanoDrop One, semicolon CSV, comma decimals, sample names with commas",
+   "n": 2,
+   "names": [
+    "Pool 1,2",
+    "Pool 3,4"
+   ],
+   "r280": [
+    0.57,
+    0.58
+   ],
+   "mean_abs1": 1.75,
+   "sd_abs1": 0.3536,
+   "mean_eps": 2.0349,
+   "eps": 0.86,
+   "nucleic": 0,
+   "warn_high_ratio": false,
+   "note": ""
   }
  ],
  "nd_note": "n           protein readings the app should keep (nucleic acid readings are not protein)\n  mean_abs1   mean mg/mL with \"1 Abs = 1 mg/mL\" (no coefficient set anywhere): the mean A280 (10 mm)\n  mean_eps    mean mg/mL when the A280 of a 1 mg/mL solution is set to EPS: mean A280 / EPS\n  sd_abs1     sample SD (n-1) of the readings with 1 Abs = 1 mg/mL\n  names       sample names exactly as they should be shown\n  r280        A260/A280 of each reading\nFixed values (no randomness), so the means are exact.",
