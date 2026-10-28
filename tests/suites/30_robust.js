@@ -341,4 +341,42 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   await close();
 });
 
-T.done(); })();
+T.done();
+/* ---------------- explicit falsey values (injX, injShift, pathFromFile) ---------------- */
+await T.t('explicit_falsey', async () => {
+  const {p, errs, close} = await open(), h = H(p); await h.newProject('Falsey Values');
+  await h.dropFiles(F.his);
+
+  // Directly modify the run object to have explicit falsey values
+  await p.evaluate(() => {
+    const r = window.__HFB.runs()[0];
+    r.injShift = 0;
+    r.injX = 0;
+    r.pathFromFile = false;
+  });
+
+  // Save and reopen project
+  await p.locator('#projSave').evaluate(e => e.click());
+  const dl = await p.waitForEvent('download');
+  const path_dl = await dl.path();
+
+  await h.click('#homeBtn');
+  await p.waitForTimeout(500);
+
+  await p.setInputFiles('#projFile', path_dl);
+  await p.waitForTimeout(1000);
+
+  // Check that the values were preserved
+  const runState = await p.evaluate(() => {
+    const r = window.__HFB.runs()[0];
+    return { injShift: r.injShift, injX: r.injX, pathFromFile: r.pathFromFile };
+  });
+
+  T.check('falsey.injShift', runState.injShift === 0, 'injShift should be 0');
+  T.check('falsey.injX', runState.injX === 0, 'injX should be 0');
+  T.check('falsey.pathFromFile', runState.pathFromFile === false, 'pathFromFile should be false');
+
+  await close();
+});
+
+})();
