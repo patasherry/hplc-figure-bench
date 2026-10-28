@@ -113,5 +113,33 @@ async function fresh(id, fn){
     });
   }
 
+
+
+
+  await T.t('nanodrop-metadata-skip', async () => {
+    const app = await open();
+    const p = app.p, h = H(p);
+
+    await h.newProject('metadata_test');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await p.waitForTimeout(500);
+
+    await h.step('final');
+    await p.waitForTimeout(200);
+
+    await p.evaluate(([id]) => { const el = document.getElementById(id); if (el) el.checked = false; }, ['o-ndCorr']);
+    await p.evaluate(() => { const el = document.getElementById('o-ndNorm'); if (el) { el.value = 'raw'; el.dispatchEvent(new Event('change', {bubbles: true})); } });
+    await p.waitForTimeout(200);
+
+    await p.setInputFiles('#ndFile', 'data/nanodrop_metadata.txt');
+    await p.waitForTimeout(400);
+
+    await p.waitForFunction(() => document.querySelectorAll('.ndr').length === 10 || document.querySelector('.toast'), {timeout: 2000}).catch(() => {});
+
+    T.check('nanodrop-metadata-skip', await p.locator('.ndr').count() === 10, 'Expected 10 data rows after skipping metadata');
+
+    await app.close();
+  });
+
   T.done();
 })();
