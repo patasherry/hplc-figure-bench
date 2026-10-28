@@ -391,6 +391,29 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
   const exported = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
   T.check('legacy-project.export-run-preserved', exported.runs && exported.runs.length === 1 && exported.runs[0].id === 'r1');
+  T.check('legacy-project.export-prep-name-preserved', exported.prep && Array.isArray(exported.prep.manual) && exported.prep.manual.some(m => m.name === 'Legacy Protein'));
+  T.check('legacy-project.export-gel-lane-preserved', exported.gels && exported.gels.length === 1 && Array.isArray(exported.gels[0].assign) && exported.gels[0].assign.includes('lane1'));
+  const r1 = exported.runs[0];
+  T.check('legacy-project.export-uvs-preserved', r1 && Array.isArray(r1.uvs) && r1.uvs.length === 1 && r1.uvs[0].ys && r1.uvs[0].ys[1] === 20);
+
+  await p.click('#homeBtn').catch(() => {});
+  await p.waitForTimeout(600);
+  await p.setInputFiles('#projFile', {
+    name: 'current.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      app: "HPLC Figure Bench", version: 1,
+      runs: [{id: "r2", name: "r2", inWf: true, uvs: [{name: "UV", xs: [1, 2, 3], ys: [10, 20, 10]}], fracs: {name: "Fractions", xs: [], xe: [], label: []}}],
+      traces: [], gels: [{name: "g2", assign: ["lane1"], marks: []}], nanodrop: [],
+      prep: {manual: [{k: "construct", name: "Current Protein"}]}
+    }))
+  });
+  await p.waitForTimeout(3000);
+  const [dl2] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
+  const exported2 = JSON.parse(require('fs').readFileSync(await dl2.path(), 'utf8'));
+  T.check('current-project.export-run-preserved', exported2.runs && exported2.runs.length === 1 && exported2.runs[0].id === 'r2');
+  T.check('current-project.export-prep-name-preserved', exported2.prep && Array.isArray(exported2.prep.manual) && exported2.prep.manual.some(m => m.name === 'Current Protein'));
+  T.check('current-project.export-gel-lane-preserved', exported2.gels && exported2.gels.length === 1 && Array.isArray(exported2.gels[0].assign) && exported2.gels[0].assign.includes('lane1'));
 
   await close();
 });

@@ -5661,9 +5661,24 @@ let projUndo = null, failedGels = [];
 function cleanProject(d){
   const isO = o => o && typeof o === 'object' && !Array.isArray(o), hasXY = c => isO(c) && Array.isArray(c.xs) && Array.isArray(c.ys); let skipped = 0;
   const keep = (list, ok) => { const a = Array.isArray(list) ? list : []; const out = a.filter(ok); skipped += a.length - out.length; return out; };
-  d.runs = keep(d.runs, r => isO(r) && r.id && Array.isArray(r.uvs) && r.uvs.length && r.uvs.every(hasXY));
+  d.runs = keep(d.runs, r => {
+    if (!isO(r) || !r.id || !Array.isArray(r.uvs) || !r.uvs.length) return false;
+    const ok = r.uvs.every(c => hasXY(c) || (isO(c) && isO(c.uv) && Array.isArray(c.uv.xs) && Array.isArray(c.uv.ys)));
+    if (ok) {
+      r.uvs.forEach(c => {
+        if (!hasXY(c) && isO(c.uv)) {
+          c.xs = c.uv.xs;
+          c.ys = c.uv.ys;
+        }
+      });
+      return true;
+    }
+    return false;
+  });
   d.traces = keep(d.traces, t => isO(t) && Array.isArray(t.rows));
   d.gels = keep(d.gels, isO); d.nanodrop = keep(d.nanodrop, isO);
+  if (Array.isArray(d.gels)) d.gels.forEach(g => { if (Array.isArray(g.lanes) && !Array.isArray(g.assign)) g.assign = g.lanes.map(l => isO(l) ? l.name || '' : ''); });
+  if (isO(d.prep) && Array.isArray(d.prep.manual)) d.prep.manual.forEach(m => { if (m.s && !m.name) m.name = m.s; });
   if (!isO(d.struct)) d.struct = null; if (!isO(d.opt)) d.opt = null;
   if (d.opt) {
     if (Array.isArray(d.opt.secCals)) d.opt.secCals.forEach(c => { if (c && typeof c === 'object' && !('unit' in c)) c.unit = 'mL'; });
