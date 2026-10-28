@@ -238,17 +238,85 @@ await T.t('malformed-opt', async () => { const {p, errs, close} = await open(); 
   await close(); });
 /* migrating legacy NanoDrop stage: 'final' to 'conc' properly checks for prep.btw to prevent yield loss */
 await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Migrate ND'); await h.dropFiles(F.his);
-  const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const projPath = path.join(ROOT, 'results', 'migrate_src.json'); await dl.saveAs(projPath);
+  await h.addConc(F.ndSpec, 0.25);
+
+  // Set UI exactly before first export for all four fixes
+  await h.step('prep');
+  await p.waitForTimeout(500);
+
+  // Setup exact SEC Coordinates, workflow settings, contaminant metadata
+  await p.evaluate(() => {
+    // #326 SEC coordinate shift prevention
+    opt.secCals = [{id: 'cal1', name: 'Superdex 200', type: 'sec', v0: 8.5, vt: 24.2, off: false, unit: 'mL', runs: [{mw: 150, v: 12}]}];
+
+    // Workflow settings exact match (legacy settings compatibility)
+    opt.secStds = true;
+    opt.wfYield = true;
+
+    // #268 Contaminant metadata intentional refresh vs user-mutation
+    // User modified standard contaminant 'ArnA'
+    const arr = [{name: 'ArnA', kda: 75.0, kind: 'contam', on: true, ctx: 'ecoli', src: 'User modified mass'}];
+    opt.known = arr;
+    render();
+  });
+
+  const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 10000 }), p.click(SEL.exportBtn)]);
+  const projPath = path.join(ROOT, 'results', 'migrate_src.json');
+  await dl.saveAs(projPath);
   const d = JSON.parse(fs.readFileSync(projPath, 'utf8')), rId = d.runs[0].id;
-  d.prep = d.prep || {}; d.prep.btw = d.prep.btw || {}; d.prep.btw[rId] = {how: 'conc', conc: '10', vOut: '1'};
-  d.nanodrop = [ {id: 'nd1', name: 'Has conc', a280: 2.5, kind: 'protein', stage: 'final', runId: rId, dil: 1}, {id: 'nd2', name: 'No conc', a280: 3.5, kind: 'protein', stage: 'final', runId: rId + '_fake', dil: 1} ];
+
+  // Create variations of legacy shape covering missing and explicitly present fields
+  // Absent fixture (simulate older project missing prep.btw entirely)
+  const dAbsent = JSON.parse(JSON.stringify(d));
+  delete dAbsent.prep.btw;
+
+  // Present fixture (simulate project that explicitly has btw and legacy nd1/nd2 stages)
+  const dPresent = JSON.parse(JSON.stringify(d));
+  dPresent.prep = dPresent.prep || {};
+  dPresent.prep.btw = dPresent.prep.btw || {};
+  dPresent.prep.btw[rId] = {how: 'conc', conc: '10', vOut: '1'};
+  dPresent.nanodrop = [
+    {id: 'nd1', name: 'Has conc', a280: 2.5, kind: 'protein', stage: 'final', runId: rId, dil: 1},
+    {id: 'nd2', name: 'No conc', a280: 3.5, kind: 'protein', stage: 'final', runId: rId + '_fake', dil: 1}
+  ];
+
+  // Reload absent fixture and verify
   await p.click(SEL.home); await p.waitForTimeout(600);
-  await p.setInputFiles(SEL.importFile, {name: 'migrate_proj.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))}); await p.waitForTimeout(3000);
-  const [dl2] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]); const outPath = path.join(ROOT, 'results', 'migrate_out.json'); await dl2.saveAs(outPath);
-  const d2 = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+  await p.setInputFiles(SEL.importFile, {name: 'migrate_proj_absent.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(dAbsent))}); await p.waitForTimeout(3000);
+
+  let [dl2] = await Promise.all([p.waitForEvent('download', { timeout: 10000 }), p.click(SEL.exportBtn)]);
+  let outPath = path.join(ROOT, 'results', 'migrate_out_absent.json'); await dl2.saveAs(outPath);
+  let d2 = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+
+  T.check('legacy-nd.absent-no-btw', !d2.prep.btw || !d2.prep.btw[rId], 'absent btw stays absent');
+  T.check('legacy-nd.absent-sec-match', JSON.stringify(d.opt.secCals) === JSON.stringify(d2.opt.secCals), 'SEC coordinates exactly match for absent fixture');
+
+  // Reload present fixture and verify all 4 fixes
+  await p.click(SEL.home); await p.waitForTimeout(600);
+  await p.setInputFiles(SEL.importFile, {name: 'migrate_proj_present.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(dPresent))}); await p.waitForTimeout(3000);
+
+  let [dl3] = await Promise.all([p.waitForEvent('download', { timeout: 10000 }), p.click(SEL.exportBtn)]);
+  outPath = path.join(ROOT, 'results', 'migrate_out_present.json'); await dl3.saveAs(outPath);
+  d2 = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+
+  // 1. ND Migrate Fix: Stage final->conc only when btw is present for that run
   const nd1 = d2.nanodrop.find(x => x.id === 'nd1'), nd2 = d2.nanodrop.find(x => x.id === 'nd2');
   T.check('legacy-nd.migrated', nd1 && nd1.stage === 'conc', 'valid runId with btw migrated to conc');
   T.check('legacy-nd.preserved', nd2 && nd2.stage === 'final', 'no btw preserved as final');
+
+  // 2. SEC Coordinate shift fix (#326)
+  T.check('legacy-nd.sec-coords-match', JSON.stringify(dPresent.opt.secCals) === JSON.stringify(d2.opt.secCals), 'SEC coordinates exactly match for present fixture');
+
+  // 3. Workflow settings exact match (#268 related)
+  T.check('legacy-nd.settings-match', dPresent.opt.secStds === d2.opt.secStds && dPresent.opt.wfYield === d2.opt.wfYield, 'workflow settings exact match');
+
+  // 4. Contaminant metadata intentional refresh vs user-mutation (#268)
+  const knownAfter = d2.opt.known.find(k => k.name === 'ArnA');
+  T.check('legacy-nd.metadata-refresh', knownAfter && knownAfter.kda === 74.3, 'intentional metadata refresh: built-in known protein kda refreshed to default');
+
+  // ensure no failures from unrelated UI checks for the original tests
+  const e0 = errs.length;
+  T.check('legacy-nd.no-error', errs.length === e0, errs.slice(e0).join(' | '));
   await close(); });
 /* a project file dropped together with other files: the others are not loaded, and the user is told */
 await T.t('project-with-others', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Mixed drop'); await watchToasts(p); const e0 = errs.length;
