@@ -1,0 +1,13 @@
+Normalize comma decimals in NanoDrop exports
+
+Patrick's NanoDrop files frequently use commas for decimals (e.g., 1,5 instead of 1.5), causing concentration calculation errors and manual data cleanup. This change integrates normalization directly into the NanoDrop parser.
+
+- Modified `ndNum` to handle comma decimals natively and passed the delimiter argument to it.
+- Enabled locale-specific parsing for semicolon-delimited numeric columns only.
+- Added test fixtures for comma-decimal numbers and comma-separated sample names.
+- Verified test suite passes locally.
+
+Closes #339
+
+Decided by: qwen3:30b-a3b (local). Path: local model answered (attempt 1).
+From the local manager on the owner's PC (qwen3:30b-a3b (local)). Advisory: the lead reviews every app change.

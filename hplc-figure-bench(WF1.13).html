@@ -5315,7 +5315,7 @@ function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 20); i++) {
     }
 } return null; }
 function looksNanoDrop(text){ const L = text.split(/\r?\n/).filter(l => l.trim()); return !!ndHeader(L) || (L.slice(0, 20).some(l => /^wavelength/i.test(l.trim()) && /absorbance/i.test(l)) && L.some(l => /^a?\s?260\s*\/\s*a?280\b/i.test(l.trim()))); }
-const ndNum = v => { const s = String(v ?? '').replace(/\s/g, ''), m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/), x = parseFloat(m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, '')); return isFinite(x) ? x : null; };
+const ndNum = (v, d) => { const s = String(v ?? '').replace(/\s/g, ''); if (d === ';') { const m = s.match(/^[+-]?(\d*)(?:\.(\d{3}))*,(\d+)(?:[eE][+-]?\d+)?$/); const x = parseFloat(m ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '.')); return isFinite(x) ? x : null; } const m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/), x = parseFloat(m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, '')); return isFinite(x) ? x : null; };
 const CRUDE_RE = /lys|load|flow|\bft\b|supernat|pellet|crude|input|clarif/i;
 function ndNew(o){ return Object.assign({id: 'nd' + (ndUid++), name: '', kind: 'protein', a280: null, a260: null, a230: null, a340: null, r280: null, r230: null, conc: null, unit: 'mg/mL', runId: '', stage: 'pool', dil: 1, hide: false}, o); }
 /* NanoDrop One per-sample file: name, date, a "Wavelength (nm) / 10mm Absorbance" header, calibration comments, A260/A280 and A280 lines, then the spectrum */
@@ -5334,7 +5334,7 @@ function parseNanoDrop(text){
   const hd = ndHeader(lines); if (!hd) return [];
   const {H, d} = hd, data = lines.slice(hd.i + 1).map(l => splitRow(l, d));
   /* spectra laid out as rows: one column per sample, one row per wavelength */
-  if (hd.rows === 'wavelengths') { return H.slice(1).map((nm, k) => { const wl = [], ab = []; data.forEach(r => { const w = ndNum(r[0]), v = ndNum(r[k + 1]); if (w != null && v != null) { wl.push(w); ab.push(v); } });
+  if (hd.rows === 'wavelengths') { return H.slice(1).map((nm, k) => { const wl = [], ab = []; data.forEach(r => { const w = ndNum(r[0], d), v = ndNum(r[k + 1], d); if (w != null && v != null) { wl.push(w); ab.push(v); } });
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }, a280 = at(280), a260 = at(260);
       return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null); }
   const hn = H.map(h => h.toLowerCase().replace(/\s+/g, ' ')), col = f => hn.findIndex(f);
@@ -5349,13 +5349,13 @@ function parseNanoDrop(text){
   return data.filter(r => r.length > 2 && (r[cName] || '').length).map((r, i) => {
     const typ = cType >= 0 ? r[cType] : '', unitTxt = ((cUnit >= 0 ? r[cUnit] : '') + ' ' + (cConc >= 0 ? hn[cConc] : '')).toLowerCase();
     const kind = /ng\s*\/\s*[µu]l|nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
-    let conc = cConc >= 0 ? ndNum(r[cConc]) : null;
-    const g = c => c >= 0 ? ndNum(r[c]) : null, a280 = g(cA280), a260 = g(cA260); let corr = g(cCorr);
+    let conc = cConc >= 0 ? ndNum(r[cConc], d) : null;
+    const g = c => c >= 0 ? ndNum(r[c], d) : null, a280 = g(cA280), a260 = g(cA260); let corr = g(cCorr);
     if (/[µu]g\s*\/\s*ml/.test(unitTxt)) { if (conc != null) conc /= 1000; if (corr != null) corr /= 1000; }
     const s = ndNew({name: r[cName], row: i, when: [cDate >= 0 ? r[cDate] : '', cTime >= 0 ? r[cTime] : ''].filter(Boolean).join(' '), type: typ, kind, a280, a260, a230: g(cA230), a340: g(cA340), r280: g(cR280), r230: g(cR230),
       conc, unit: kind === 'nucleic' ? 'ng/µL' : 'mg/mL', base: cBase >= 0 ? r[cBase] : '', baseA: g(cBaseA), corr, imp: cImp >= 0 && r[cImp] ? {name: r[cImp], a280: g(cImpA)} : null, hide: CRUDE_RE.test(r[cName])});
     if (s.r280 == null && a260 != null && a280 > 0) s.r280 = a260/a280; if (s.r230 == null && a260 != null && s.a230 > 0) s.r230 = a260/s.a230;
-    if (wcols.length > 10) { const wl = [], ab = []; wcols.forEach(x => { const v = ndNum(r[x.i]); if (v != null) { wl.push(x.w); ab.push(v); } }); if (wl.length > 10) s.spec = {wl, ab};
+    if (wcols.length > 10) { const wl = [], ab = []; wcols.forEach(x => { const v = ndNum(r[x.i], d); if (v != null) { wl.push(x.w); ab.push(v); } }); if (wl.length > 10) s.spec = {wl, ab};
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }; if (s.a280 == null) s.a280 = at(280); if (s.a230 == null) s.a230 = at(230); if (s.a340 == null) s.a340 = at(340);
       if (s.r230 == null && s.a230 > 0 && at(260) != null) s.r230 = at(260)/s.a230; }
     return s; }).filter(s => s.a280 != null || s.conc != null);

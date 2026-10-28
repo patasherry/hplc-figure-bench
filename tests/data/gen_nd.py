@@ -132,6 +132,16 @@ rec('nd_unicorn_metadata.txt', 'Synthetic UNICORN metadata fixture', r10, 'vendo
 
 
 if __name__ == '__main__':
-    p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
+    p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else {}
     doc['nd'] = EXP; doc['nd_note'] = __doc__.split('Ground truth per file')[1].strip()
-    json.dump(doc, open(p, 'w'), indent=1, ensure_ascii=False); print(f'{len(EXP)} NanoDrop files -> {OUT}')
+    json.dump(doc, open(p, 'w', encoding='utf-8'), indent=1, ensure_ascii=False); print(f'{len(EXP)} NanoDrop files -> {OUT}')
+# 11. Semicolon delimiter with comma decimals (European locale)
+r11 = [('Pool 1,2', 1.500, 0.57), ('Pool 3,4', 2.000, 0.58)]
+lines = [';'.join(ONE_HEAD)] + [';'.join(['10/22/2026 9:58:00 AM', n, f'{a:.3f}'.replace('.', ','), f'{a:.3f}'.replace('.', ','), f'{r:.2f}'.replace('.', ','), '1 Abs = 1 mg / mL', '', '', '', '340', '0,011']) for n, a, r in r11]
+w('nd_comma_decimal.csv', '\r\n'.join(lines) + '\r\n')
+rec('nd_comma_decimal.csv', 'NanoDrop One, semicolon CSV, comma decimals, sample names with commas', r11)
+
+if __name__ == '__main__':
+    p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else {}
+    doc['nd'] = EXP; doc['nd_note'] = __doc__.split('Ground truth per file')[1].strip()
+    json.dump(doc, open(p, 'w', encoding='utf-8'), indent=1, ensure_ascii=False); print(f'{len(EXP)} NanoDrop files -> {OUT}')
