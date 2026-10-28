@@ -341,4 +341,37 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   await close();
 });
 
+
+await T.t('malformed-manual-id', async () => { const {p, errs, close} = await open(), h = H(p);
+  const projPath = path.join(__dirname, '..', 'data', 'malformed_manual_id.json');
+  const d = {app: 'HPLC Figure Bench', version: 1, cur: 'man:mabc', prep: {on: true, manual: [{id: 'mabc', kind: 'column', name: 'Malformed'}, {id: 'm-1', kind: 'batch', name: 'Negative'}]}, runs: []};
+  fs.writeFileSync(projPath, JSON.stringify(d));
+
+  await p.locator('#homeQuick').evaluate(e => e.click()).catch(() => {}); await p.waitForTimeout(600);
+
+  await p.setInputFiles('#projFile', projPath).catch(() => {});
+  await p.waitForTimeout(1500);
+
+  await p.evaluate(() => {
+    const m = document.querySelector('#tl [data-addmenu]');
+    if (m) m.click();
+  });
+  await p.waitForTimeout(300);
+  await p.evaluate(() => {
+    const opt = document.querySelector('#tl [data-addstep="man:column"]') || document.querySelector('#tl [data-addstep="man:other"]');
+    if (opt) opt.click();
+  });
+  await p.waitForTimeout(500);
+
+  const ids = await p.evaluate(() => {
+    let man = [];
+    if (window.PROJ && window.PROJ.prep && window.PROJ.prep.manual) man = window.PROJ.prep.manual;
+    else if (window.prep && window.prep.manual) man = window.prep.manual;
+    return man.map(m => m.id);
+  });
+  T.check('malformed.ignored', ids.includes('m1'), 'First available ID should be m1, actual IDs: ' + (ids.length ? ids.join(', ') : 'none'));
+  fs.unlinkSync(projPath);
+  await close();
+});
+
 T.done(); })();
