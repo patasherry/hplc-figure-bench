@@ -1424,7 +1424,7 @@ function decode(buf){
 const clean = f => f.trim().replace(/^"(.*)"$/,'$1').trim();
 function splitLine(L, d){ return d === 'ws' ? L.trim().split(/\s+/) : L.split(d); }
 function toNum(f, dc){ f = clean(f); if (dc) f = f.replace(/^-?\d+,\d+(?:[eE][-+]?\d+)?$/, m => m.replace(',', '.')); return NUM.test(f) ? parseFloat(f) : NaN; }
-function parseText(text){
+function parseText(text, isAktaFallback){
   const lines = text.split(/\r\n|\n|\r/);
   const sample = lines.length > 6000 ? lines.slice(0,3000).concat(lines.slice(-3000)) : lines;
   let best = null;
@@ -1438,6 +1438,8 @@ function parseText(text){
     /* a single column of signal values (some detectors export only that): plot against point number */
     const vals = []; let head = null; for (const L of lines) { const t = L.trim(); if (!t) continue; const v = toNum(t, false), v2 = toNum(t, true); const x = !isNaN(v) ? v : v2; if (!isNaN(x)) vals.push(x); else if (!vals.length) head = clean(t); }
     if (vals.length >= 20) return {rows: vals.map((v, i) => [i + 1, v]), cols: ['Point number', head || 'Signal'], xc: 0, yc: 1};
+    if (isAktaFallback) throw new Error('is_akta_zero');
+    if (vals.length > 0) throw new Error('has no usable measurements');
     throw new Error('No numeric columns found');
   }
   const {d, dc} = best; const runsN = []; let cr = null;
@@ -1483,7 +1485,7 @@ function parseRunTime(s){
   } else return null;
   return {t, str};
 }
-function parseAkta(text, fname){
+function parseAkta(text, fname, checkOnly){
   const lines = text.split(/\r\n|\n|\r/); let u = -1, d = ',';
   for (let i=0;i<Math.min(50, lines.length) && u < 0;i++) for (const dd of [',', '	', ';']) {
     const c = (dd === '	' ? lines[i].split('	') : csvSplit(lines[i], dd)).map(s => s.trim());
@@ -1492,6 +1494,7 @@ function parseAkta(text, fname){
     if (i > 0 && c.filter(Boolean).length === 2 && /^(ml|min)$/i.test(c[0]) && /^m?AU$/i.test(c[1]) && curveKind(((dd === '	' ? lines[i-1].split('	') : csvSplit(lines[i-1], dd))[0] || '').trim(), c[1]) === 'uv') { u = i; d = dd; break; }
   }
   if (u < 1) return null;
+  if (checkOnly) return true;
   const sp = L => d === '\t' ? L.split('\t') : csvSplit(L, d);
   const names = sp(lines[u-1]).map(s => s.trim()), units = sp(lines[u]).map(s => s.trim());
   const curves = [];
@@ -1503,7 +1506,8 @@ function parseAkta(text, fname){
       const v = (f[cv.col+1] || '').trim().replace(/^"|"$/g, '');
       if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
       else { const y = toNum(v, d !== ','); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
-  return aktaFromCurves(curves, fname);
+  const ak = aktaFromCurves(curves, fname);
+  return ak || {bad: 'has no usable UV traces'};
 }
 /* what a UNICORN curve is, from its name and unit. UV path length (cm) and derived UV curves (UV_CUT_TEMP@100) are not traces */
 function curveKind(nm, yu){ yu = yu || '';
@@ -1561,7 +1565,7 @@ async function parseUnicornZip(buf, fname){
   for (const ec of doc.querySelectorAll('EventCurves > EventCurve')) { const t = ec.getAttribute('EventCurveType') || '', kind = /^frac/i.test(t) ? 'frac' : /^inject/i.test(t) ? 'inj' : /log/i.test(t) ? 'log' : ''; if (!kind) continue;
     curves.push({name: t, xu: 'ml', yu: '', kind, xs: [], ys: [], ev: [...ec.querySelectorAll('Event')].map(e => ({x: parseFloat(kid(e, 'EventVolume')), label: kid(e, 'EventText')})).filter(e => isFinite(e.x))}); }
   const ak = aktaFromCurves(curves, fname, path ? {path: String(path), pathFromFile: true} : null), uvLost = lost.find(c => c.kind === 'uv');
-  if (!ak) return uvLost ? {bad: `its UV curve (${uvLost.nm}) has no readable data points`} : null;
+  if (!ak) return uvLost ? {bad: `its UV curve (${uvLost.nm}) has no readable data points`} : {bad: 'has no usable UV traces'};
   if (lost.length) ak.lost = lost.map(c => c.nm);
   return ak; }
 
@@ -5018,10 +5022,11 @@ async function loadFiles(files){
         if (ak && ak.bad) bad.push(`${f.name} (a UNICORN result archive, but ${ak.bad}: export the result from UNICORN again, or export its curves as .csv)`);
         else if (ak) { if (ak.lost) { lost.push(`${ak.lost.join(', ')} in ${f.name}`); delete ak.lost; } newRuns.push(makeRun(ak)); } else bad.push(`${f.name} (not a UNICORN result archive)`); continue; }
       const text = decode(await f.arrayBuffer()), nm = f.name.replace(/\.[^.]+$/, '');
-      if (looksNanoDrop(text)) { addNanoDrop(parseNanoDrop(text), f.name); continue; }
+      if (looksNanoDrop(text)) { const nd = parseNanoDrop(text); if (!nd.length) { bad.push(`${f.name} (a NanoDrop file, but has no usable measurements)`); continue; } addNanoDrop(nd, f.name); continue; }
       const ak = parseAkta(text, nm);
-      if (ak) newRuns.push(makeRun(ak)); else added.push({name: nm, parsed: parseText(text)});
-    } catch (err) { bad.push(f.size === 0 ? `${f.name} (the file is empty)` : `${f.name} (no columns of numbers found)`); }
+      if (ak && ak.bad) { bad.push(`${f.name} (an ÄKTA/UNICORN file, but ${ak.bad})`); continue; }
+      if (ak) newRuns.push(makeRun(ak)); else added.push({name: nm, parsed: parseText(text, !!parseAkta(text, nm, true))});
+    } catch (err) { bad.push(f.size === 0 ? `${f.name} (the file is empty)` : err.message === 'is_akta_zero' ? `${f.name} (an ÄKTA/UNICORN file, but has no usable UV traces)` : err.message === 'has no usable measurements' ? `${f.name} (a text file, but has no usable traces or measurements)` : `${f.name} (no columns of numbers found)`); }
   }
   if ((added.length || newRuns.length) && traces.length && traces.every(t => t.ex)) { traces = []; opt.xmin = opt.xmax = opt.ymin = opt.ymax = ''; }
   /* a run already loaded (same file and points) is added again, but left out of the workflow until it is ticked in */

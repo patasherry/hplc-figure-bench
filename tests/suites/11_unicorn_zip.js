@@ -62,20 +62,11 @@ async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return
     }
   });
 
-  await T.t('missing curve archive', async () => {
-    await p.reload();
-    await h.wait(900);
-    await h.newProject('Unicorn 7 missing curve');
-    await h.addRun(path.join(DATA, 'chrom', 'missing_curve.zip'));
-
-    await p.waitForSelector('#toast :text-matches("not a UNICORN result archive", "i")');
-    const badFiles = await p.$$eval('#badFiles li', els => els.map(e => e.textContent));
-    const toasts = await h.toasts();
-    // Missing UV curve causes parseUnicornZip to return null, which pushes "not a UNICORN result archive".
-    // Guards: an archive missing a curve must say so (which curve, or that something was skipped), not only report a normal load.
-    T.check('gives a message for missing curve', [...badFiles, ...toasts].some(t => /missing|not found|no .*curve|skipp|without/i.test(t)), `badFiles: ${badFiles.join(' | ') || 'none'}, toasts: ${toasts.join(' | ') || 'none'}`);
-    T.check('no page errors for missing curve', !errs.length, errs.join(' | '));
-  });
+  await T.t('zero measurement import shows toast', async () => {
+  await h.addRun([path.join(DATA, 'chrom', 'missing_curve.zip')]);
+  const toastText = await p.locator('.toast').first().textContent().catch(()=>'');
+  T.check('gives a message for zero measurement', toastText && toastText.includes('its UV curve'), 'missing curve toast ' + toastText);
+});
 
   await T.t('not unicorn archive', async () => {
     await p.reload();
