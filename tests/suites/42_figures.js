@@ -113,6 +113,40 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
       for (const st of settings) if (st.checks.leg && svgTexts[st.id]) T.check(`svg_${st.id}_legend`, legend.every(t => svgTexts[st.id].includes(t)), `missing legend entries: ${legend.filter(t => !svgTexts[st.id].includes(t)).join(', ')}`); }
   });
 
+  // Crowded peak labels (#230): eight peaks 0.1 min apart cannot all be labelled above their apexes. A label that has no room
+  // is left off and the footer under the figure says so; no label is drawn outside the figure. A fresh page, so the settings above do not carry over.
+  await T.t('crowded_peak_labels', async () => {
+    const {crowdedCsv, LABELS} = require('../data/gen_crowded_peaks');
+    const q = await open(), hq = H(q.p), pg = q.p;
+    try {
+      await pg.click('#homeQuick'); await hq.wait(800);
+      const foot = () => pg.$eval('#spec2', e => ({t: e.textContent, warn: e.classList.contains('warn'), shown: e.getClientRects().length > 0}));
+      let f = await foot();
+      T.check('crowded/example_no_warning', !/left off/.test(f.t) && !f.warn, f.t);
+      await pg.setInputFiles('#file', {name: 'crowded_peaks.csv', mimeType: 'text/csv', buffer: Buffer.from(crowdedCsv())});
+      await hq.wait(900);
+      const g = await pg.evaluate(labels => { const svg = document.querySelector('#paper svg'); if (!svg) return null; const sr = svg.getBoundingClientRect();
+        const labs = [...svg.querySelectorAll('text')].filter(t => labels.includes(t.textContent.trim())).map(t => { const r = t.getBoundingClientRect(); return {t: t.textContent.trim(), top: r.top - sr.top, bot: r.bottom - sr.top, l: r.left - sr.left, r: r.right - sr.left}; });
+        return {w: sr.width, h: sr.height, labs}; }, LABELS);
+      T.check('crowded/figure_drawn', g && g.labs.length > 0, g ? `${g.labs.length} peak labels drawn` : 'no figure');
+      if (!g) return;
+      const out = g.labs.filter(l => l.top < -1 || l.bot > g.h + 1 || l.l < -1 || l.r > g.w + 1);
+      T.check('crowded/labels_inside_figure', !out.length, `outside the figure: ${out.map(l => `${l.t} (top ${Math.round(l.top)} px)`).join(', ')}`);
+      const ov = (await hq.overlaps()).filter(s => LABELS.some(L => s.includes(L)));
+      T.check('crowded/labels_dont_overlap', !ov.length, ov.join(', '));
+      f = await foot();
+      const nOff = +((f.t.match(/^(\d+) peak labels? left off/) || [])[1] || 0), drawn = new Set(g.labs.map(l => l.t));
+      T.check('crowded/warning_shown', nOff > 0 && f.warn && f.shown, `footer: ${f.t}`);
+      T.check('crowded/every_label_drawn_or_counted', drawn.size === g.labs.length && drawn.size + nOff === LABELS.length, `${drawn.size} drawn + ${nOff} left off, ${LABELS.length} peaks`);
+      // two peaks per trace fit, so the warning goes away
+      await pg.evaluate(() => { const e = document.getElementById('o-peakMax'); e.value = '2'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); document.getElementById('detectAll').click(); });
+      await hq.wait(600);
+      f = await foot();
+      T.check('crowded/warning_clears', !/left off/.test(f.t) && !f.warn, f.t);
+      T.check('crowded/no_page_errors', !q.errs.length, q.errs.join(' | '));
+    } finally { await q.close(); }
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();

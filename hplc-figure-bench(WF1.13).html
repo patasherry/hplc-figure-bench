@@ -441,6 +441,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
 .spec{display:grid;gap:1px;font-size:12px;color:var(--muted);min-width:0}
 .spec #spec{color:var(--ink)}
 .spec span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(60ch,100%)}
+.spec #spec2.warn{color:var(--warn);white-space:normal}
 .note{font-size:12.5px;color:var(--muted);border:1px solid var(--line);background:var(--well);border-radius:var(--r);padding:8px 11px;line-height:1.45}
 .toast{pointer-events:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);display:grid;justify-items:center;gap:6px;z-index:10;width:max-content;max-width:min(560px,calc(100% - 32px))}
 .toast .pill{background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;box-shadow:var(--shadow);line-height:1.4;text-align:center}
@@ -2054,6 +2055,13 @@ function peakApex(xs, ys, x){
   let best = i; for (let k=Math.max(0,i-w); k<=Math.min(xs.length-1,i+w); k++) if (ys[k] > ys[best]) best = k;
   return best;
 }
+/* a label box steps up past the boxes already placed until it is clear. The steps are bounded, and with no clear spot at or below `top` it gets null and is not placed */
+function placeLabel(boxes, x1, x2, bot, h, top){
+  const hits = b => x1 < b.x2 && x2 > b.x1 && bot - h < b.y2 && bot > b.y1;
+  let hb, guard = 0; while ((hb = boxes.find(hits)) && guard++ < 40) bot = hb.y1 - 1;
+  if (bot - h < top || boxes.some(hits)) return null;
+  boxes.push({x1, x2, y1: bot - h, y2: bot}); return bot;
+}
 function yLabelText(){
   if (opt.normalize && opt.ylabel === DEF.ylabel) return 'Normalized absorbance';
   if (opt.ylabel === DEF.ylabel) {
@@ -2133,6 +2141,7 @@ function buildSVG(){
     if (yl) s.push(`<text transform="translate(${r2(fs*0.85)} ${r2((T+B)/2)}) rotate(-90)" text-anchor="middle">${esc(yl)}</text>`);
   }
   s.push('</g>');
+  const lblLeft = [];
   if (anyPeaks) {
     const pf = fs*0.85, pcw = pf*0.56, boxes = [], items = [];
     P.forEach(p => {
@@ -2150,12 +2159,10 @@ function buildSVG(){
     items.sort((a,b) => b.Y0 - a.Y0);
     const leaders = [];
     s.push(`<g font-size="${r2(pf)}">`);
+    /* a label that would have to leave the figure to clear the others is left off and named under the figure */
     items.forEach(it => {
-      const w = it.w, h = it.h;
-      let bot = it.Y0, guard = 0;
-      const hits = b => it.X - w/2 < b.x2 && it.X + w/2 > b.x1 && bot - h < b.y2 && bot > b.y1;
-      let hb; while ((hb = boxes.find(hits)) && guard++ < 20) bot = hb.y1 - 1;
-      boxes.push({x1: it.X - w/2, x2: it.X + w/2, y1: bot - h, y2: bot});
+      const w = it.w, bot = placeLabel(boxes, it.X - w/2, it.X + w/2, it.Y0, it.h, 0);
+      if (bot == null) { lblLeft.push(it.raw); return; }
       if (it.Y - bot > fs*1.2) leaders.push({x: it.X, a: bot + 1.5, b: it.Y, own: boxes.length - 1});
       const txt = esc(it.raw);
       if (o.peakRot) s.push(`<text transform="translate(${r2(it.X + pf*0.35)} ${r2(bot)}) rotate(-90)" fill="${it.col}">${txt}</text>`);
@@ -2195,7 +2202,7 @@ function buildSVG(){
     s.push(`<text x="${r2(bx+4)}" y="${r2((yb+ytp)/2 + fs*0.35)}" fill="#000000">${esc(sbLab)}</text>`);
   }
   s.push('</svg>');
-  return {svg: s.join(''), geo: {L,R,T,B,xlo,xhi,y0,y1,P,px,py,W,H}};
+  return {svg: s.join(''), geo: {L,R,T,B,xlo,xhi,y0,y1,P,px,py,W,H,lblLeft}};
 }
 
 /* ---------- figure: ÄKTA run chart ---------- */
@@ -4284,9 +4291,11 @@ function render(){
   else if (kind === 'conc') s2 = 'NanoDrop readings of the concentrated pool, 10 mm path';
   else if (kind === 'struct' && struct) s2 = [struct.method && struct.method.toLowerCase().replace(/^./, c => c.toUpperCase()), struct.res && `${struct.res} Å`, struct.title].filter(Boolean).join(', ').slice(0, 140);
   else s2 = 'Click a peak to label it';
+  const lblOff = kind === 'overlay' && geo && geo.lblLeft || [];
+  if (lblOff.length) s2 = `${lblOff.length} peak label${lblOff.length === 1 ? '' : 's'} left off for lack of room (${lblOff.slice(0, 4).join(', ')}${lblOff.length > 4 ? ', …' : ''}). Try a lower Max per trace, fewer decimals, a wider figure or a higher Y to`;
   if (kind === 'workflow' && PROJ) s2 += '. Click a panel to edit it';
   if (kind === 'workflow' && opt.runCond === 'full' && opt.wfLayout === 'row') s2 += '. Full run conditions read better in the Grid layout';
-  $('#spec2').textContent = s2;
+  $('#spec2').textContent = s2; $('#spec2').classList.toggle('warn', !!lblOff.length); $('#spec2').title = lblOff.length ? s2 : '';
   $('#exNote').hidden = !(traces.length && traces.every(t => t.ex));
   const figs = figures(), tabs = $('#figtabs');
   tabs.hidden = figs.length < 2;
