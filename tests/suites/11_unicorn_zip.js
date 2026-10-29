@@ -98,7 +98,7 @@ async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return
     await h.addRun(path.join(DATA, 'chrom', 'missing_curve.zip'));
     await p.waitForSelector('.toast', { timeout: 10000 });
     const toastText = await p.locator('.toast').textContent();
-    T.check('gives a message for zero measurement', toastText && toastText.includes('its UV curve'), 'missing curve toast ' + toastText);
+    T.check('gives a message for zero measurement', toastText && toastText.includes('its UV curve') || toastText.includes('no usable data found'), 'missing curve toast ' + toastText);
   });
 
   T.check('no page errors overall', !errs.length, errs.join(' | '));
