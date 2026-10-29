@@ -243,6 +243,34 @@ await T.t('falsey-preserve', async () => {
   await close();
 });
 
+await T.t('legacy-sec-project', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  await p.setInputFiles(SEL.importFile, path.join(Q, 'legacy_sec_proj.json'));
+  await p.waitForTimeout(3000);
+
+  const tl = await h.timeline();
+  T.check('legacy-sec.opens', tl.some(x => x.k.startsWith('run:')), `timeline: ${tl.map(x => x.k).join(', ')}`);
+
+  const r = tl.find(x => x.k.startsWith('run:'));
+  if (r) {
+    await h.step(r.k);
+    await p.waitForTimeout(500);
+  }
+
+  const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 10000 }), p.click(SEL.exportBtn)]);
+  const f = path.join(ROOT, 'results', 'legacy_sec_proj_export.json');
+  await dl.saveAs(f);
+
+  const exported = JSON.parse(fs.readFileSync(f, 'utf8'));
+  const expRun = exported.runs[0];
+
+  T.check('legacy-sec.injShift', expRun.injShift === 1.2, `injShift is ${expRun.injShift}`);
+  T.check('legacy-sec.injX', expRun.injX === 1.2, `injX is ${expRun.injX}`);
+  T.check('legacy-sec.no-error', !errs.length, errs.join(' | '));
+
+  await close();
+});
+
 await T.t('empty-uvs-project', async () => { const {p, errs, close} = await open(), h = H(p);
   await p.setInputFiles(SEL.importFile, path.join(Q, 'empty_uvs_proj.json')); await p.waitForTimeout(3000);
   await h.step('figure'); await p.waitForTimeout(500);
