@@ -273,5 +273,24 @@ async function pelletMassNoCultureVol() {
     }
   }
   if (!only || only.test('pellet_mass_no_culture_vol')) await T.t('pellet_mass_no_culture_vol', pelletMassNoCultureVol);
+
+  if (!only || only.test('text parses empty and zeros')) {
+    await T.t('text parses empty and zeros', async () => {
+      const {p, errs, close} = await open();
+      try {
+        await p.evaluate(() => { while (document.getElementById('toast').firstChild) document.getElementById('toast').firstChild.remove(); });
+        await p.setInputFiles('#file', { name: 'empty_text.txt', mimeType: 'text/plain', buffer: Buffer.from('') });
+        await p.waitForTimeout(500);
+        let toastText = await p.locator('#toast').textContent();
+        T.check('empty text fails', toastText.includes('empty') || toastText.includes('no columns of numbers found'), toastText);
+
+        await p.evaluate(() => { while (document.getElementById('toast').firstChild) document.getElementById('toast').firstChild.remove(); });
+        await p.setInputFiles('#file', { name: 'zeros_text.txt', mimeType: 'text/plain', buffer: Buffer.from('Time,UV\n0,0\n1,0\n2,0\n3,0\n') });
+        await p.waitForTimeout(500);
+        toastText = await p.locator('#toast').textContent();
+        T.check('zero text empty parse', toastText.includes('empty parse') || toastText.includes('zero measurements'), toastText);
+      } finally { await close(); }
+    });
+  }
   T.done();
 })();

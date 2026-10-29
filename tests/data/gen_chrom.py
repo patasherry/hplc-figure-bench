@@ -417,3 +417,13 @@ if __name__ == '__main__':
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()
     json.dump(doc, open(p, 'w'), indent=1); print(f'{len(EXP)} chromatograms -> {OUT}')
+
+def zeros_unicorn():
+    fn = 'zeros_unicorn_u7.zip'
+    inj = 0.0; flow = 1.0; x = np.array([0, 1, 2, 3], dtype=float)
+    y = np.zeros(4, dtype=float)
+    curves = [dict(name='UV', type='UV', yu='mAU', xs=x, ys=y, num=1, uvpath=2)]
+    write_unicorn_zip(os.path.join(OUT, fn), 24.0, curves, {}, flow)
+    add(dict(file=fn, format='UNICORN 7 result archive', kind='sec', step='Size exclusion', unit='mL', column='Superdex 200 Increase 10/300 GL', cv=24.0, flow=flow, path_mm=2,
+             frac=dict(n=0, first='', last=''), injection=inj, peaks=[], pool=None))
+zeros_unicorn()

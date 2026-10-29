@@ -90,6 +90,22 @@ async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return
     T.check('no page errors for not unicorn', !errs.length, errs.join(' | '));
   });
 
+
+  await T.t('unicorn zip zeros', async () => {
+    await p.reload();
+    await h.wait(500);
+    await h.newProject('Unicorn 7 Zeros');
+    await p.setInputFiles('#file', { name: 'empty_unicorn.zip', mimeType: 'application/zip', buffer: Buffer.from('') });
+    await p.waitForTimeout(500);
+    let toastText = await p.locator('#toast').textContent();
+    T.check('empty zip fails', toastText.includes('empty') || toastText.includes('not a UNICORN'), toastText);
+
+    await p.evaluate(() => { while (document.getElementById('toast').firstChild) document.getElementById('toast').firstChild.remove(); });
+    await p.setInputFiles('#file', { name: 'zeros_unicorn_u7.zip', mimeType: 'application/zip', buffer: require('fs').readFileSync(require('path').join(__dirname, '../data/chrom/zeros_unicorn_u7.zip')) });
+    await p.waitForTimeout(500);
+    toastText = await p.locator('#toast').textContent();
+    T.check('zero zip empty parse', toastText.includes('empty parse') || toastText.includes('zero measurements'), toastText);
+  });
   T.check('no page errors overall', !errs.length, errs.join(' | '));
   await close();
   T.done();

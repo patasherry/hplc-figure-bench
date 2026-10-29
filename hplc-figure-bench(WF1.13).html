@@ -1437,7 +1437,7 @@ function parseText(text){
   if (!best || best.cnt < 3) {
     /* a single column of signal values (some detectors export only that): plot against point number */
     const vals = []; let head = null; for (const L of lines) { const t = L.trim(); if (!t) continue; const v = toNum(t, false), v2 = toNum(t, true); const x = !isNaN(v) ? v : v2; if (!isNaN(x)) vals.push(x); else if (!vals.length) head = clean(t); }
-    if (vals.length >= 20) return {rows: vals.map((v, i) => [i + 1, v]), cols: ['Point number', head || 'Signal'], xc: 0, yc: 1};
+    if (vals.length >= 20) { const empty = vals.length === 0; return {rows: vals.map((v, i) => [i + 1, v]), cols: ['Point number', head || 'Signal'], xc: 0, yc: 1, empty}; }
     throw new Error('No numeric columns found');
   }
   const {d, dc} = best; const runsN = []; let cr = null;
@@ -1456,7 +1456,8 @@ function parseText(text){
   const cols = []; for (let c=0;c<ncol;c++) cols.push((names && names[c]) || ('Column ' + (c+1)));
   let xc = 0, yc = 1;
   if (ncol >= 3) { const rs = run.rows.slice(0, 6); if (rs.length > 3 && rs.every((r,i) => r[0] === rs[0][0] + i)) { xc = 1; yc = 2; } }
-  return {rows: run.rows, cols, xc, yc};
+  const empty = run.rows.length === 0;
+  return {rows: run.rows, cols, xc, yc, empty};
 }
 
 /* ---------- parsing: ÄKTA / UNICORN ---------- */
@@ -1528,8 +1529,9 @@ function aktaFromCurves(curves, fname, extra){
   const flowMed = med(pick('flow')), tempMed = med(pick('temp'));
   /* UNICORN logs the column it was told: "Base CV, 0.962 {ml}, HisTrap FF, 1 ml" */
   const cvl = log.map(e => /Base CV,\s*(?:Vc\s*=\s*)?([\d.]+)\s*\{ml\},\s*([^,]+)(?:,\s*([\d.]+)\s*ml)?/i.exec(e.label)).find(Boolean), colLog = cvl && !/^any$/i.test(cvl[2].trim()) ? `${cvl[2].trim()}${cvl[3] ? ` ${+cvl[3]} mL` : ''}` : '', cvLog = cvl ? +cvl[1] : null;
+  const empty = uvs.every(c => c.ys.length === 0);
   return {name: tidyName(fname), file: fname, flowAuto: flowMed, tempAuto: tempMed, colLog, cvLog, uvs: uvs.map(c => ({name: c.name, yu: c.yu, xs: c.xs, ys: c.ys})), grad: pick('grad'), cond: pick('cond'),
-    fracs: fr.map(e => ({x: e.x - shift, label: e.label})), fracEnd: fracEnd == null ? null : fracEnd - shift, phases, shift, injX, injShift: null, xu: uvs[0].xu, method, time: rt ? rt.t : null, timeStr: rt ? rt.str : '', ...(extra || {})};
+    fracs: fr.map(e => ({x: e.x - shift, label: e.label})), fracEnd: fracEnd == null ? null : fracEnd - shift, phases, shift, injX, injShift: null, xu: uvs[0].xu, method, time: rt ? rt.t : null, timeStr: rt ? rt.str : '', empty, ...(extra || {})};
 }
 /* ---------- UNICORN 7 result archive (.zip) ---------- */
 /* the archive and each curve inside it are zip files, the curves in zip64 form; their points are .NET float arrays */
@@ -5034,21 +5036,23 @@ async function loadFiles(files){
   if ((added.length || newRuns.length) && traces.length && traces.every(t => t.ex)) { traces = []; opt.xmin = opt.xmax = opt.ymin = opt.ymax = ''; }
   /* a run already loaded (same file and points) is added again, but left out of the workflow until it is ticked in */
   const dup = newRuns.filter(n => runs.some(r => r.file === n.file && r.uvs && n.uvs && r.uvs[0].xs.length === n.uvs[0].xs.length)); dup.forEach(d => { d.inWf = false; });
-  newRuns.sort((a,b) => (a.time ?? -Infinity) - (b.time ?? -Infinity)).forEach(r => { runs.push(r); if (isSec(r) && !r.integ.length) autoIntegrate(r); });
+  newRuns.sort((a,b) => (a.time ?? -Infinity) - (b.time ?? -Infinity)).forEach(r => { runs.push(r); if (isSec(r) && !r.integ.length && !r.empty) autoIntegrate(r); });
   addParsed(added, true);
   const steps = runs.filter(r => r.inWf);
   if (newRuns.length) cur = steps.length > 1 && !newRuns.every(isSec) ? 'workflow' : (newRuns.find(r => !r.isStd) || newRuns[0]).id;
   if (PROJ && newRuns.length) { const nr = newRuns.filter(r => r.inWf).pop() || newRuns[newRuns.length - 1]; curStep = 'run:' + nr.id; cur = nr.id; } else if (added.length) cur = 'overlay';
   renderList(); syncControls(); render();
+  const zeros = newRuns.filter(r => r.empty).map(r => r.file).concat(added.filter(a => a.parsed.empty).map(a => a.name));
+  const zMsg = zeros.length ? `. Warning: ${zeros.join(', ')} loaded as zero measurements (empty parse)` : '';
   const n = added.length + newRuns.length, lostMsg = lost.length ? `. Curves with no readable data points were left out: ${lost.join('; ')}. Export the result from UNICORN again to include them.` : '';
   if (bad.length) toast(`Could not read ${bad.join(', ')}. Use an ÄKTA (UNICORN) export or a text file with time and signal columns${lostMsg || '.'}`);
-  else if (n) toast((dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}` : `Loaded ${n} trace${n > 1 ? 's' : ''}`) + lostMsg);
+  else if (n) toast((dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}` : `Loaded ${n} trace${n > 1 ? 's' : ''}`) + lostMsg + zMsg);
   if (imgs.length) addGelFiles(imgs);
 }
 function addParsed(added, quiet){
   if (!added.length) return;
   if (traces.length && traces.every(t => t.ex)) { traces = []; opt.xmin = opt.xmax = opt.ymin = opt.ymax = ''; }
-  added.forEach(a => { const t = makeTrace(a.name, a.parsed); traces.push(t); detectPeaks(t); });
+  added.forEach(a => { const t = makeTrace(a.name, a.parsed); t.empty = a.parsed.empty; traces.push(t); if (!t.empty) detectPeaks(t); });
   if (opt.palette === 'blues' || opt.palette === 'warm') applyPalette();
   if (!quiet) { cur = 'overlay'; renderList(); syncControls(); render(); }
 }

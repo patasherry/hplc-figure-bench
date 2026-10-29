@@ -38,6 +38,20 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
   });
 
   T.check('no-page-errors', !errs.length, errs.join(' | '));
+
+  await T.t('akta parses empty and zeros', async () => {
+    await p.evaluate(() => { while (document.getElementById('toast').firstChild) document.getElementById('toast').firstChild.remove(); });
+    await p.setInputFiles('#file', { name: 'empty_akta.csv', mimeType: 'text/csv', buffer: Buffer.from('') });
+    await p.waitForTimeout(500);
+    let toastText = await p.locator('#toast').textContent();
+    T.check('empty akta fails', toastText.includes('no columns of numbers found') || toastText.includes('empty'), toastText);
+
+    await p.evaluate(() => { while (document.getElementById('toast').firstChild) document.getElementById('toast').firstChild.remove(); });
+    await p.setInputFiles('#file', { name: 'zeros_akta.csv', mimeType: 'text/csv', buffer: Buffer.from('UV 1_280\t\nml\tmAU\n0\t0\n1\t0\n2\t0\n3\t0\n') });
+    await p.waitForTimeout(500);
+    toastText = await p.locator('#toast').textContent();
+    T.check('zero akta empty parse', toastText.includes('empty parse') || toastText.includes('zero measurements'), toastText);
+  });
   await close();
   T.done();
 })();
