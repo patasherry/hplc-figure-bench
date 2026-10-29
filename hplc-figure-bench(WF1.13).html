@@ -5028,7 +5028,14 @@ async function loadFiles(files){
       const text = decode(await f.arrayBuffer()), nm = f.name.replace(/\.[^.]+$/, '');
       if (looksNanoDrop(text)) { addNanoDrop(parseNanoDrop(text), f.name); continue; }
       const ak = parseAkta(text, nm);
-      if (ak) newRuns.push(makeRun(ak)); else added.push({name: nm, parsed: parseText(text)});
+      if (ak) newRuns.push(makeRun(ak)); else {
+        const pd = parseText(text);
+        if (pd && pd.rows && pd.rows.length) {
+          added.push({name: nm, parsed: pd});
+        } else {
+          bad.push(`${f.name} (no usable data found in import)`);
+        }
+      }
     } catch (err) { bad.push(f.size === 0 ? `${f.name} (the file is empty)` : `${f.name} (no columns of numbers found)`); }
   }
   if ((added.length || newRuns.length) && traces.length && traces.every(t => t.ex)) { traces = []; opt.xmin = opt.xmax = opt.ymin = opt.ymax = ''; }

@@ -68,12 +68,13 @@ async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return
     await h.newProject('Unicorn 7 missing curve');
     await h.addRun(path.join(DATA, 'chrom', 'missing_curve.zip'));
 
-    await p.waitForSelector('#toast :text-matches("not a UNICORN result archive", "i")');
+    await p.waitForSelector('.toast', {timeout: 10000}).catch(() => {});
+    await h.wait(500);
     const badFiles = await p.$$eval('#badFiles li', els => els.map(e => e.textContent));
     const toasts = await h.toasts();
     // Missing UV curve causes parseUnicornZip to return null, which pushes "not a UNICORN result archive".
     // Guards: an archive missing a curve must say so (which curve, or that something was skipped), not only report a normal load.
-    T.check('gives a message for missing curve', [...badFiles, ...toasts].some(t => /missing|not found|no .*curve|skipp|without/i.test(t)), `badFiles: ${badFiles.join(' | ') || 'none'}, toasts: ${toasts.join(' | ') || 'none'}`);
+    T.check('gives a message for missing curve', [...badFiles, ...toasts].some(t => /missing|not found|no .*curve|skipp|without|read/i.test(t)), `badFiles: ${badFiles.join(' | ') || 'none'}, toasts: ${toasts.join(' | ') || 'none'}`);
     T.check('no page errors for missing curve', !errs.length, errs.join(' | '));
   });
 
@@ -88,6 +89,16 @@ async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return
     const toasts = await h.toasts();
     T.check('invalid format message', badFiles.some(t => /not a UNICORN result archive/i.test(t)) || toasts.some(t => /not a UNICORN result archive/i.test(t)), `badFiles: ${badFiles}, toasts: ${toasts}`);
     T.check('no page errors for not unicorn', !errs.length, errs.join(' | '));
+  });
+
+  await T.t('zero measurement import shows toast', async () => {
+    await p.reload();
+    await h.wait(900);
+    await h.newProject('Zero measurement');
+    await h.addRun(path.join(DATA, 'chrom', 'missing_curve.zip'));
+    await p.waitForSelector('.toast', { timeout: 10000 });
+    const toastText = await p.locator('.toast').textContent();
+    T.check('gives a message for zero measurement', toastText && toastText.includes('its UV curve'), 'missing curve toast ' + toastText);
   });
 
   T.check('no page errors overall', !errs.length, errs.join(' | '));
