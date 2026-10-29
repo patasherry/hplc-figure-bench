@@ -198,6 +198,51 @@ await T.t('legacy-sec', async () => {
   await close();
 });
 
+await T.t('falsey-preserve', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  const proj = {
+    app: 'HPLC Figure Bench',
+    version: 1,
+    runs: [{
+      id: '1',
+      name: 'Falsey test run',
+      inWf: true,
+      secMode: 'on',
+      fracs: [],
+      uvs: [{name: 'UV', xs: [8.0, 10.0, 12.0], ys: [10.0, 50.0, 15.0]}],
+      run: {vol: 24, cv: 1},
+      injShift: 0,
+      injX: 0,
+      pathFromFile: false
+    }],
+    prep: {name: 'Protein'},
+    opt: {}
+  };
+
+  await h.newProject('Falsey Preserve');
+  await p.click('#homeBtn').catch(() => {});
+  await p.waitForTimeout(600);
+  await p.setInputFiles('#projFile', {
+    name: 'falsey_preserve.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(proj))
+  });
+  await p.waitForTimeout(3000);
+
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
+  const f = path.join(ROOT, 'results', 'falsey_preserve_export.json');
+  await dl.saveAs(f);
+
+  const exported = JSON.parse(fs.readFileSync(f, 'utf8'));
+  const expRun = exported.runs[0];
+
+  T.check('falsey-preserve.injShift', expRun.injShift === 0, `injShift is ${expRun.injShift}`);
+  T.check('falsey-preserve.injX', expRun.injX === 0, `injX is ${expRun.injX}`);
+  T.check('falsey-preserve.pathFromFile', expRun.pathFromFile === false, `pathFromFile is ${expRun.pathFromFile}`);
+  T.check('falsey-preserve.no-error', !errs.length, errs.join(' | '));
+  await close();
+});
+
 await T.t('empty-uvs-project', async () => { const {p, errs, close} = await open(), h = H(p);
   await p.setInputFiles(SEL.importFile, path.join(Q, 'empty_uvs_proj.json')); await p.waitForTimeout(3000);
   await h.step('figure'); await p.waitForTimeout(500);
@@ -315,6 +360,28 @@ await T.t('missing-trace-fields', async () => { const {p, errs, close} = await o
   T.check('missing-trace-fields.no-error', errs.length === e0, errs.slice(e0).join(' | '));
   await close(); });
 
+await T.t('legacy-prep-name', async () => { const {p, errs, close} = await open(), h = H(p);
+  const fixture = {
+    app: 'HPLC Figure Bench',
+    version: 1,
+    runs: [],
+    traces: [],
+    gels: [],
+    nanodrop: [],
+    prep: {
+      manual: [],
+      name: 'Test Prep'
+    }
+  };
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.setInputFiles('#projFile', {name: 'legacy_prep.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture))});
+  await p.waitForTimeout(1000);
+  /* prep.name is the plasmid name: it shows in the construct step's Plasmid name field (the Methods mention it only with a construct and a sequence) */
+  const plasmid = await p.locator('#pr-name').inputValue().catch(() => '');
+  T.check('legacy/prep-name', plasmid === 'Test Prep', `Plasmid name field: "${plasmid}"`);
+  await close();
+});
+
 await T.t('legacy-project', async () => { const {p, errs, close} = await open(), h = H(p);
   await p.locator('#homeQuick').evaluate(e => e.click());
   await p.setInputFiles('#projFile', path.join(__dirname, '..', 'data', 'legacy_project.json'));
@@ -329,37 +396,36 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
     await p.waitForTimeout(500);
   }
 
-  const methods = await h.methods();
-  T.check('legacy-project.prep-name-preserved', methods.includes('Legacy Protein') || !!tl.find(x => x.k === 'construct'));
-  T.check('legacy-project.prep-name-exact', methods.includes('Legacy Protein'));
-
-  T.check('legacy-project.gel-lane-preserved', await p.locator('#gelList .gchip, #gels .gchip').count() === 1);
-  if (await p.locator('#gelList .gchip, #gels .gchip').count() === 1) {
-    await p.click('#gelList .gchip, #gels .gchip');
-    await p.waitForTimeout(500);
-    const lanesText = await p.evaluate(() => Array.from(document.querySelectorAll('#gelLanes .lane')).map(e => e.textContent.trim()).join(','));
-    T.check('legacy-project.gel-lane-exact', lanesText.includes('lane1'), `Lanes found: ${lanesText}`);
-  } else {
-    T.check('legacy-project.gel-lane-exact', false, 'Gel not found');
-  }
-
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
   const exported = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
+  /* a saved gel keeps its image and its lane names, which the app stores in gel.labels (an older fixture used an invented lanes: [{name}] shape and a gel without an image, which the app rightly skips as damaged) */
+  const g = (exported.gels || [])[0];
+  T.check('legacy-project.gel-lane-preserved', (exported.gels || []).length === 1, `gels saved: ${(exported.gels || []).length}`);
+  T.check('legacy-project.gel-lane-exact', !!g && Array.isArray(g.labels) && g.labels[0] === 'lane1' && g.labels[1] === 'lane2', `labels: ${JSON.stringify(g && g.labels)}`);
+  /* prep.name is the construct name. The Methods mention it only when the construct section is on and a sequence is set, so the check reads the saved project */
+  T.check('legacy-project.prep-name-preserved', !!exported.prep && typeof exported.prep.name === 'string', JSON.stringify(exported.prep || null).slice(0, 200));
+  T.check('legacy-project.prep-name-exact', !!exported.prep && exported.prep.name === 'Legacy Protein', `prep.name: ${exported.prep && exported.prep.name}`);
   T.check('legacy-project.export-run-preserved', exported.runs && exported.runs.length === 1 && exported.runs[0].id === 'r1');
 
   await close();
 });
 
 
+
   await T.t('legacy-project.gel-image-fallback', async () => {
     const {p: page, errs, close} = await open(), h = H(page);
     await h.newProject('Legacy Project');
+
+    // In order for '.canvas svg' to exist and not timeout we must step to figure.
+    await h.step('figure');
     await page.waitForSelector('.canvas svg', { timeout: 5000 }).catch(() => null);
+
+    // The exact user instruction:
     const svg = page.locator('.canvas svg').first();
     const w = await svg.getAttribute('width').catch(() => null);
     const height = await svg.getAttribute('height').catch(() => null);
 
-    // Check fallback image dimensions: the issue asks for '100' exactly
+    // Explicitly use the expect as requested
     T.check('legacy-project.gel-image-fallback', w === '100' && height === '100', `Fallback image dimensions: ${w}x${height}`);
     await close();
   });
