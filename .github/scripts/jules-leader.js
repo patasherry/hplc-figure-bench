@@ -25,6 +25,16 @@ module.exports = async ({github, context, core}) => {
   const jules = async (path, body) => { const r = await fetch(API + path, {method: body ? 'POST' : 'GET', headers: {'X-Goog-Api-Key': key, 'Content-Type': 'application/json'}, body: body ? JSON.stringify(body) : undefined});
     const t = await r.text(); if (!r.ok) throw new Error(`Jules API ${r.status} on ${path}: ${t.slice(0, 300)}`); return t ? JSON.parse(t) : {}; };
   const labels = i => (i.labels || []).map(l => typeof l === 'string' ? l : l.name);
+  /* the cloud manager stands in for the PC manager while the PC is off. GitHub rarely fires its schedule, so the leader starts it:
+     at once after posting a Jules question, and otherwise when its last run is over 10 minutes old (it stands aside by itself while the PC runs) */
+  let woke = false;
+  const wakeCloud = async (now) => { if (woke) return; try {
+    const runs = (await github.rest.actions.listWorkflowRuns({owner, repo, workflow_id: 'cloud-manager.yml', per_page: 5})).data.workflow_runs;
+    if (runs.some(r => r.status !== 'completed') && !now) return;
+    if (!now && runs[0] && Date.now() - Date.parse(runs[0].created_at) < 10 * 60e3) return;
+    if (runs.some(r => r.status === 'queued')) return;
+    await github.rest.actions.createWorkflowDispatch({owner, repo, workflow_id: 'cloud-manager.yml', ref: 'main'}); woke = true; say('started the cloud manager');
+  } catch (e) { say(`could not start the cloud manager: ${e.message}`); } };
   const issues = async label => (await github.paginate(github.rest.issues.listForRepo, {owner, repo, state: 'open', labels: label, per_page: 100})).filter(i => !i.pull_request);
   const ensureLabels = async () => { const have = new Set((await github.paginate(github.rest.issues.listLabelsForRepo, {owner, repo, per_page: 100})).map(l => l.name));
     const want = {[L.queue]: '0E8A16', [L.run]: 'FBCA04', [L.done]: '5319E7', [L.fail]: 'D93F0B', [L.triage]: 'C5DEF5'};
@@ -86,7 +96,7 @@ module.exports = async ({github, context, core}) => {
       /* the local manager on the owner's PC answers first: post the question once, then give it LOCAL_FIRST minutes before the automatic reply */
       if (qt && s.posted !== qt) { s.posted = qt; s.postedAt = new Date().toISOString(); await putState(i.number, s, `Jules leader: attempt ${s.attempt} asked a question. The local manager answers first.`);
         await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: `Jules asked:\n\n${quote}\n\nThe local manager on Patrick's PC answers first. If no answer comes within ${LOCAL_FIRST} minutes, the leader tells Jules to decide by AGENTS.md.`});
-        say(`#${i.number}: question posted for the local manager`); continue; }
+        say(`#${i.number}: question posted for the local manager`); await wakeCloud(true); continue; }
       if (qt && Date.now() - Date.parse(s.postedAt || 0) < LOCAL_FIRST * 60e3) continue;
       if (n > MAX_REPLIES) { await putState(i.number, s, `Jules leader: Jules is still asking after ${MAX_REPLIES} automatic replies. Needs the coordinator. Latest question:\n\n${quote}`); await setLabels(i.number, [L.fail], [L.run]); freed.add(i.number); say(`#${i.number}: question needs the coordinator`); continue; }
       await jules(`${s.session}:sendMessage`, {prompt: n === 1
@@ -134,6 +144,7 @@ module.exports = async ({github, context, core}) => {
         const exists = (await github.rest.search.issuesAndPullRequests({q: `repo:${owner}/${repo} is:issue in:title "${title.replace(/"/g, '')}"`})).data.total_count;
         if (!exists) { await github.rest.issues.create({owner, repo, title, labels: [L.triage], body: `${body}\n\n_From ${f} (#${p.number})._`}); say(`follow-up issue: ${title}`); } } } }
 
+  await wakeCloud(false);
   /* tell the workflow whether to check again soon (GitHub rarely fires the 15-minute schedule) */
   core.setOutput('active', key && ((await issues(L.run)).length + (await issues(L.queue)).length) > 0 ? 'true' : 'false');
   await core.summary.addHeading('Jules leader').addList(log.length ? log : ['nothing to do']).write();
