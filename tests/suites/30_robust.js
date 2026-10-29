@@ -350,4 +350,18 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   await close();
 });
 
+
+  await T.t('legacy-project.gel-image-fallback', async () => {
+    const {p: page, errs, close} = await open(), h = H(page);
+    await h.newProject('Legacy Project');
+    await page.waitForSelector('.canvas svg', { timeout: 5000 }).catch(() => null);
+    const svg = page.locator('.canvas svg').first();
+    const w = await svg.getAttribute('width').catch(() => null);
+    const height = await svg.getAttribute('height').catch(() => null);
+
+    // Check fallback image dimensions: the issue asks for '100' exactly
+    T.check('legacy-project.gel-image-fallback', w === '100' && height === '100', `Fallback image dimensions: ${w}x${height}`);
+    await close();
+  });
+
 T.done(); })();
