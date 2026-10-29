@@ -403,8 +403,8 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   if (await p.locator('#gelList .gchip, #gels .gchip').count() === 1) {
     await p.click('#gelList .gchip, #gels .gchip');
     await p.waitForTimeout(500);
-    const lanesText = await p.evaluate(() => Array.from(document.querySelectorAll('#gelLanes .lane')).map(e => e.textContent.trim()).join(','));
-    T.check('legacy-project.gel-lane-exact', lanesText.includes('lane1'), `Lanes found: ${lanesText}`);
+    const labels = await p.locator('#g-labels').inputValue();
+    T.check('legacy-project.gel-lane-exact', labels.includes('lane1'), `Labels found: ${labels}`);
   } else {
     T.check('legacy-project.gel-lane-exact', false, 'Gel not found');
   }
