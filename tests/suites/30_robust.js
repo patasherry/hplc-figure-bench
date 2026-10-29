@@ -383,7 +383,18 @@ await T.t('legacy-prep-name', async () => { const {p, errs, close} = await open(
 
 await T.t('legacy-project', async () => { const {p, errs, close} = await open(), h = H(p);
   await p.locator('#homeQuick').evaluate(e => e.click());
-  await p.setInputFiles('#projFile', path.join(__dirname, '..', 'data', 'legacy_project.json'));
+    const fixture = {
+    app: 'HPLC Figure Bench',
+    runs: [{id: 'r1', name: 'Legacy SEC Run', uvs: [{xs: [1,2], ys: [1,2]}], inWf: true}],
+    traces: [],
+    gels: [{id: 'g1', name: 'gel', lanes: [{name: 'lane1'}], image: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'}],
+    nanodrop: [],
+    prep: {
+      manual: [],
+      name: 'Legacy Protein'
+    }
+  };
+  await p.setInputFiles('#projFile', {name: 'legacy_project.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture))});
   await p.waitForTimeout(3000);
 
   const tl = await h.timeline();
@@ -393,6 +404,8 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   if (r) {
     await h.step(r.k);
     await p.waitForTimeout(500);
+    const runNameValue = await p.locator('.trace.run .name, [data-k=name]').inputValue();
+    T.check('legacy-project.run-name-loaded', runNameValue === 'Legacy SEC Run');
   }
 
   const methods = await h.methods();
@@ -412,6 +425,7 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
   const exported = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
   T.check('legacy-project.export-run-preserved', exported.runs && exported.runs.length === 1 && exported.runs[0].id === 'r1');
+  T.check('legacy-project.export-run-name', exported.runs && exported.runs[0] && exported.runs[0].name === 'Legacy SEC Run');
 
   await close();
 });
