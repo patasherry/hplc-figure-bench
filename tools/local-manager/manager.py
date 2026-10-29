@@ -828,6 +828,11 @@ def copilot_cli_job(s, i, retry):
         post(n, f'The Copilot CLI opened #{pr["number"]}. It goes through the Test suite and the automatic review like any PR.' + SIGN.format(rv.MODEL))
         log(f'#{n}: Copilot CLI opened PR #{pr["number"]}')
     except Exception as e:
+        if re.search(r'authenticat|not logged in|login', str(e), re.I):  # a sign-in problem fails every job at once: pause instead of retrying every pass
+            s['copilot_cli_off_until'] = time.time() + 6 * 3600
+            label(n, add=[back], remove=['copilot-running'])
+            log(f'#{n}: Copilot CLI is not signed in ({str(e)[:120]}). Paused for 6 hours: run `copilot` and /login on this PC')
+            return
         label(n, add=[back], remove=['copilot-running'])
         post(n, f'The Copilot CLI job on the owner\'s PC did not finish ({str(e)[:300]}), so the job goes {"on to Claude Code" if retry else "back to Jules"}.' + SIGN.format(rv.MODEL))
         log(f'#{n}: Copilot CLI job failed: {e}')
@@ -1102,7 +1107,7 @@ def copilot(s):
     queue = [i for i in issues('jules-queue') if 'pull_request' not in i and not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
     retry = [i for i in issues('for-copilot') if 'pull_request' not in i]  # Jules is out of tries on these: Copilot goes first, before Claude Code
     off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
-    cli = bool(shutil.which('copilot')) and (COPILOT_MODE == 'cli' or (COPILOT_MODE == 'auto' and off))
+    cli = bool(shutil.which('copilot')) and s.get('copilot_cli_off_until', 0) < time.time() and (COPILOT_MODE == 'cli' or (COPILOT_MODE == 'auto' and off))
     off = off and not cli  # the CLI covers for the paused cloud agent
     if off or len(issues('copilot-running')) >= COPILOT_AT_ONCE or not (retry or len(queue) >= COPILOT_WHEN_QUEUE):
         if retry and off:
