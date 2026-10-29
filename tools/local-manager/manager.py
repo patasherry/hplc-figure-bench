@@ -50,8 +50,27 @@ SIGN = ('\n\n_From the local manager, running in the cloud on GitHub Actions whi
 HEARTBEAT = '<!-- pc-heartbeat '  # a comment on the tracking issue the PC manager refreshes, so the cloud copy knows to stand aside
 
 
+LOGGED = []  # this run's lines, for the cloud report
+
+
 def log(*a):
-    print(time.strftime('%m-%d %H:%M'), *a, flush=True)
+    line = ' '.join(str(x) for x in (time.strftime('%m-%d %H:%M'),) + a)
+    LOGGED.append(line)
+    print(line, flush=True)
+
+
+def cloud_report(s):
+    """Cloud: keep one comment on the tracking issue with what the last cloud pass did, since the Actions log is hard to reach."""
+    body = '<!-- cloud-report -->\n**Last cloud manager pass** (GitHub Actions, while the PC is off)\n\n```\n' + '\n'.join(LOGGED[-60:])[-6000:] + '\n```'
+    try:
+        cid = s.get('report_id') or next((c['id'] for c in comments(TRACK) if c['body'].startswith('<!-- cloud-report -->')), None)
+        if cid:
+            gh(f'repos/{REPO}/issues/comments/{cid}', 'PATCH', {'body': body})
+        else:
+            cid = gh(f'repos/{REPO}/issues/{TRACK}/comments', 'POST', {'body': body})['id']
+        s['report_id'] = cid
+    except Exception as e:
+        print('cloud report failed:', e, flush=True)
 
 
 def load():
@@ -1285,6 +1304,8 @@ def one_pass():
         s.pop('busy', None)
         save(s)
     s['last_pass'] = time.time()
+    if CLOUD and not DRY:
+        cloud_report(s)
     save(s)
 
 
