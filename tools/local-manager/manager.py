@@ -157,7 +157,7 @@ def ask_codex(q):
     return out.split('\ncodex\n', 1)[-1].split('\ntokens used', 1)[0].strip()  # keep only the answer
 
 
-GEMINI_MODELS = cfg.get('gemini_models', ['gemini-flash-latest', 'gemini-flash-lite-latest'])  # the lite model has its own, larger free quota
+GEMINI_MODELS = cfg.get('gemini_models', ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'])  # free tier per day: flash-lite 500, the others about 20 each, so the lite model goes first
 GEMINI_GAP = cfg.get('gemini_gap_seconds', 8)  # at least this long between calls, to stay under the free per-minute limit
 _gem = {'last': 0.0, 'rest_until': {}, 'strikes': {}}
 
