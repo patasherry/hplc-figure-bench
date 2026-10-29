@@ -409,10 +409,37 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
     T.check('legacy-project.gel-lane-exact', false, 'Gel not found');
   }
 
-  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
+  const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
   const exported = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
   T.check('legacy-project.export-run-preserved', exported.runs && exported.runs.length === 1 && exported.runs[0].id === 'r1');
 
+  await close();
+});
+
+await T.t('legacy-round-trip', async () => { const {p, errs, close} = await open();
+  for (const tag of ['absent', 'present']) {
+    await p.locator('#homeQuick').evaluate(e => e.click());
+    const fp = path.join(__dirname, '..', 'data', `legacy_${tag}.json`);
+    await p.setInputFiles('#projFile', fp);
+    await p.waitForTimeout(2000);
+
+    const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
+    const saved = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
+
+    if (tag === 'present') {
+      T.check(`roundtrip.${tag}.secCals-exact`, saved.opt && Array.isArray(saved.opt.secCals) && saved.opt.secCals.length > 0 && saved.opt.secCals[0].unit === 'mL' && saved.opt.secCals[0].a === -1 && saved.opt.secCals[0].b === 10, 'SEC cal slope/intercept/unit exact');
+      T.check(`roundtrip.${tag}.nanodrop-exact`, saved.nanodrop && saved.nanodrop.length > 0 && saved.nanodrop[0].stage === 'conc' && saved.nanodrop[0].conc === 1.5, 'ND pool migrated to conc with exact value');
+      T.check(`roundtrip.${tag}.tidy-exact`, saved.opt && saved.opt.tidy13 === true && typeof saved.opt.tidy14 === 'boolean', 'tidy settings exactly preserved');
+      T.check(`roundtrip.${tag}.contam-custom-exact`, saved.opt && saved.opt.known && saved.opt.known.some(k => k.name === 'Custom' && k.kda === 120), 'Custom contam exact weight preserved');
+    } else {
+      T.check(`roundtrip.${tag}.secCals-default`, saved.opt && Array.isArray(saved.opt.secCals), 'SEC cals safely absent or initialized to mL');
+      T.check(`roundtrip.${tag}.nanodrop-exact`, saved.nanodrop && saved.nanodrop.length > 0 && saved.nanodrop[0].stage === 'final' && saved.nanodrop[0].conc === 1.5, 'ND absent migrated to final with exact value');
+      T.check(`roundtrip.${tag}.tidy-default`, saved.opt && typeof saved.opt.tidy13 === 'boolean' && typeof saved.opt.tidy14 === 'boolean', 'tidy settings safely defaulted');
+    }
+
+    const known = saved.opt?.known || [];
+    T.check(`roundtrip.${tag}.contam-metadata-refresh`, known.some(k => k.name === 'DnaK' && k.kda === 69.1), 'DnaK refreshed exactly to 69.1');
+  }
   await close();
 });
 

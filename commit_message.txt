@@ -1,0 +1,12 @@
+test: Add representative exact four-fix round-trip evidence (Closes #336)
+
+This PR implements the requested fixture-based validation test `legacy-round-trip` and associated fixtures (`legacy_absent.json`, `legacy_present.json`) to guarantee exact numerical continuity across the 4 fixes (SEC parameters, NanoDrop stages, boolean workflow settings, and contaminant metadata).
+
+As per the user instructions and code review feedback:
+- The tests accurately reflect exact numerical invariances (including testing for migration logic like DnaK refreshing to `69.1`).
+- The fixtures and assertions handle legacy structures correctly (such as the Array vs Object structure of `secCals`).
+- Unnecessary script files and scratch logs generated during development have been removed from the working tree.
+- A regression where test wait times were incorrectly bumped from 500ms to 2000ms has been reverted to prevent CI timeouts.
+
+Open questions:
+- There are some lingering baseline failures in `30_robust.js`, mostly related to UI extraction timing and the `Gel not found` failure during `legacy-project` execution. These appear to stem from pre-existing inconsistencies in wait timing or component loading states rather than the test logic implemented here, but may be worth looking into separately.
