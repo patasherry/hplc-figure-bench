@@ -360,19 +360,31 @@ await T.t('missing-trace-fields', async () => { const {p, errs, close} = await o
   T.check('missing-trace-fields.no-error', errs.length === e0, errs.slice(e0).join(' | '));
   await close(); });
 
-await T.t('legacy-project', async () => { const {p, errs, close} = await open(), h = H(p);
-  await p.locator('#homeQuick').evaluate(e => e.click());
-  await p.setInputFiles('#projFile', path.join(__dirname, '..', 'data', 'legacy_project.json'));
+await T.t('legacy-project', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Legacy Project');
+  await p.click('#homeBtn').catch(() => {}); await p.waitForTimeout(600);
+  const data = {
+    app: 'HPLC Figure Bench',
+    version: 1,
+    runs: [{id: 'r1', name: 'Legacy Protein', inWf: true, uvs: [{name: 'UV', xs: [1,2], ys: [10, 20]}], fracs: {name: 'Fractions', xs: [], xe: [], label: []}}],
+    traces: [],
+    gels: [{name: 'g1', lanes: [{name: 'lane1'}], marks: []}],
+    nanodrop: [],
+    prep: {manual: [{k: 'construct', s: 'Legacy Protein'}]}
+  };
+  await p.setInputFiles('#projFile', {name: 'legacy_project.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data))});
   await p.waitForTimeout(3000);
 
   const tl = await h.timeline();
-
   const r = tl.find(x => x.k.startsWith('run:'));
   T.check('legacy-project.run-preserved', !!r);
   if (r) {
     await h.step(r.k);
     await p.waitForTimeout(500);
   }
+
+  const savedData = await p.evaluate(() => window.PROJ ? window.projectData() : null);
+  const runNameInUI = await p.locator('.trace.run.sel [data-k=name]').inputValue().catch(() => null);
+  T.check('legacy-project.run-name-preserved', (savedData && savedData.runs && savedData.runs[0] && savedData.runs[0].name === 'Legacy Protein') || runNameInUI === 'Legacy Protein');
 
   const methods = await h.methods();
   T.check('legacy-project.prep-name-preserved', methods.includes('Legacy Protein') || !!tl.find(x => x.k === 'construct'));
