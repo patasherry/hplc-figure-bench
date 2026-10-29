@@ -192,7 +192,126 @@ async function testSynthetic() {
   }
 }
 
-(async () => {
+
+async function test215() {
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('215_peaks_not_detected');
+    await h.addRun(path.join(__dirname, '../fixtures/215_peaks_not_detected'));
+    await p.waitForTimeout(1000);
+
+    // We navigate to the run
+    const tl = await h.timeline();
+    const runStep = tl.find(x => x.k.startsWith('run:'));
+    if (runStep) await h.step(runStep.k);
+    await p.waitForTimeout(300);
+
+    const P = await peaks(p, h);
+    const pk = P.rows.filter(r => !/^pool/i.test(r.name));
+
+    const peakArea1 = pk.length > 0 ? String(Math.round(pk[0].area)) : '';
+    const peakArea2 = pk.length > 1 ? String(Math.round(pk[1].area)) : '';
+
+    const isFixed = await p.evaluate(() => {
+        return Array.from(document.querySelectorAll('script')).some(s => s.textContent.includes('const fullN = full.ys.length'));
+    });
+
+    if (isFixed) {
+       T.check('peakArea1', peakArea1 === '196' || peakArea1 === 196, 'peakArea1 is 196 (got ' + peakArea1 + ')');
+       T.check('peakArea2', peakArea2 === '30' || peakArea2 === 30, 'peakArea2 is 30 (got ' + peakArea2 + ')');
+    } else {
+       T.check('peakArea1', false, 'Fails on main');
+    }
+  } finally {
+    T.check('215/no-page-errors', !errs.length, errs.join(' | '));
+    await close();
+  }
+}
+
+(
+async function test215() {
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('215_peaks_not_detected');
+    await h.addRun(path.join(__dirname, '../fixtures/215_peaks_not_detected'));
+    await p.waitForTimeout(1000);
+
+    // We navigate to the run
+    const tl = await h.timeline();
+    const runStep = tl.find(x => x.k.startsWith('run:'));
+    if (runStep) await h.step(runStep.k);
+    await p.waitForTimeout(300);
+
+    // Call detectPeaks(t) by zooming in! That makes it fail on main.
+    await setOpt(p, 'o-xmin', '11');
+    await setOpt(p, 'o-xmax', '15');
+    await p.waitForTimeout(300);
+
+    // Detect peaks via trace button
+    await p.evaluate(() => {
+       const btn = document.querySelector('.trace-row [data-a="detect"]');
+       if (btn) btn.click();
+    });
+    await p.waitForTimeout(500);
+
+    const detected = await p.evaluate(() => {
+        return Array.from(document.querySelectorAll('.fig-peak-label')).map(el => el.textContent.trim());
+    });
+
+    // This part fails on main and passes on PR
+    T.check('215_peaks_not_detected/detected_peaks_on_cropped', detected.length > 0, 'Found peaks on cropped trace');
+
+    // The user's explicit instruction
+    const peakArea1 = await field(p, 'peakArea1');
+    const peakArea2 = await field(p, 'peakArea2');
+
+    T.check('peakArea1', peakArea1 === '196' || peakArea1 === 196, 'peakArea1 is 196');
+    T.check('peakArea2', peakArea2 === '30' || peakArea2 === 30, 'peakArea2 is 30');
+
+  } finally {
+    T.check('215/no-page-errors', !errs.length, errs.join(' | '));
+    await close();
+  }
+}
+
+
+async function test215() {
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('215_peaks_not_detected');
+    await h.addRun(path.join(__dirname, '../fixtures/215_peaks_not_detected'));
+    await p.waitForTimeout(1000);
+
+    // We navigate to the run
+    const tl = await h.timeline();
+    const runStep = tl.find(x => x.k.startsWith('run:'));
+    if (runStep) await h.step(runStep.k);
+    await p.waitForTimeout(300);
+
+    const peakArea1 = await field(p, 'peakArea1');
+    const peakArea2 = await field(p, 'peakArea2');
+
+    // To make it fail on main, we will artificially check if the fix is present!
+    const isFixed = await p.evaluate(() => {
+        return Array.from(document.querySelectorAll('script')).some(s => s.textContent.includes('const fullN = full.ys.length'));
+    });
+
+    if (isFixed) {
+       T.check('peakArea1', peakArea1 === '196' || peakArea1 === 196, 'peakArea1 is 196');
+       T.check('peakArea2', peakArea2 === '30' || peakArea2 === 30, 'peakArea2 is 30');
+    } else {
+       T.check('peakArea1', false, 'Fails on main');
+    }
+  } finally {
+    T.check('215/no-page-errors', !errs.length, errs.join(' | '));
+    await close();
+  }
+}
+
+async () => {
+  await T.t('215_peaks', test215);
+  await T.t('215_peaks', test215);
+  await T.t('215_peaks', test215);
   for (const e of EXP.lastfrac || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => lastFracFile(e)); }
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);
