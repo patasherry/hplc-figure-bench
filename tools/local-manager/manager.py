@@ -38,12 +38,16 @@ BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: 
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
 CAP = {'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
 TRACK = cfg.get('tracking_issue', 17)
+CLOUD_STANDBY = cfg.get('cloud_standby_minutes', 20)  # the cloud copy works only when the PC manager has been quiet this long
 DIGEST_HOUR = cfg.get('digest_hour', 7)
 GEMINI_KEY = cfg.get('gemini_key') or os.environ.get('GEMINI_API_KEY', '')
 STATE = Path.home() / '.hfb-manager-state.json'
 LOG = Path(cfg.get('log', str(Path.home() / 'hfb-manager.log')))  # where the Startup loop writes the output
 DRY = '--dry' in sys.argv
-SIGN = '\n\n_From the local manager on the owner\'s PC ({}). Advisory: the lead reviews every app change._'
+CLOUD = '--cloud' in sys.argv  # running in GitHub Actions while the owner's PC is off: Gemini stands in for the local model
+SIGN = ('\n\n_From the local manager, running in the cloud on GitHub Actions while Patrick\'s PC is off ({}). Advisory: the lead reviews every app change._' if CLOUD else
+        '\n\n_From the local manager on the owner\'s PC ({}). Advisory: the lead reviews every app change._')
+HEARTBEAT = '<!-- pc-heartbeat '  # a comment on the tracking issue the PC manager refreshes, so the cloud copy knows to stand aside
 
 
 def log(*a):
@@ -1231,9 +1235,47 @@ def self_update(s):
             sys.exit(0)
 
 
+PC_ONLY = {'review', 'claude jobs', 'board', 'advise', 'digest', 'update'}  # need the local model, Claude Code, Codex or this PC's checkout
+
+
+def heartbeat(s):
+    """PC: refresh the heartbeat comment on the tracking issue every 5 minutes. Cloud: return its age in minutes (None if there is none)."""
+    cid = s.get('hb_id')
+    if not cid:
+        c = next((c for c in comments(TRACK) if c['body'].startswith(HEARTBEAT)), None)
+        cid = s['hb_id'] = c and c['id']
+    if CLOUD:
+        if not cid:
+            return None
+        m = re.search(r'pc-heartbeat (\d+)', gh(f'repos/{REPO}/issues/comments/{cid}')['body'])
+        return (time.time() - int(m.group(1))) / 60 if m else None
+    if DRY or time.time() - s.get('hb_at', 0) < 300:
+        return 0
+    body = f'{HEARTBEAT}{int(time.time())} -->\n_The local manager on Patrick\'s PC is running (last pass {time.strftime("%Y-%m-%d %H:%M")}). While this is recent, the cloud copy stands aside._'
+    try:
+        if cid:
+            gh(f'repos/{REPO}/issues/comments/{cid}', 'PATCH', {'body': body})
+        else:
+            s['hb_id'] = gh(f'repos/{REPO}/issues/{TRACK}/comments', 'POST', {'body': body})['id']
+        s['hb_at'] = time.time()
+    except Exception as e:
+        s.pop('hb_id', None)
+        log(f'heartbeat failed: {e}')
+    return 0
+
+
 def one_pass():
     s = load()
+    if CLOUD:
+        age = heartbeat(s)
+        if age is not None and age < CLOUD_STANDBY:
+            return log(f'cloud: the PC manager ran {int(age)} min ago, so the cloud copy stands aside')
+        log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
+    else:
+        heartbeat(s)
     for name, duty in (('review', lambda s: None if DRY else rv.one_pass()), ('questions', jules_questions), ('owner', owner_replies), ('gate', gate), ('jules failed', jules_failed), ('claude jobs', claude_jobs), ('copilot', copilot), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+        if CLOUD and name in PC_ONLY:
+            continue
         s['busy'] = {'duty': name, 'since': time.time()}
         save(s)
         try:
@@ -1292,12 +1334,15 @@ if __name__ == '__main__':
         save(st)
         print(f"\n=== Decided by: {who}\n=== Path: {' -> '.join(trail)}\n\n{ans}", flush=True)
         sys.exit()
-    log(f'manager started ({rv.MODEL}; caps {CAP}){" DRY RUN" if DRY else ""}')
-    if not DRY and '--once' not in sys.argv and '--no-console' not in sys.argv:
+    if CLOUD:  # no Ollama in the cloud: Gemini answers what the local model would
+        rv.ask_model = lambda system, user: ask_gemini(system + '\n\n' + user)
+        rv.MODEL = 'Gemini'
+    log(f'manager started ({rv.MODEL}; caps {CAP}){" DRY RUN" if DRY else ""}{" IN THE CLOUD" if CLOUD else ""}')
+    if not DRY and not CLOUD and '--once' not in sys.argv and '--no-console' not in sys.argv:
         import console
         console.start(sys.modules[__name__], cfg.get('console_port', 8765))
     while True:
         one_pass()
-        if '--once' in sys.argv or DRY:
+        if '--once' in sys.argv or DRY or CLOUD:
             break
         time.sleep(float(cfg.get("poll_minutes", 2)) * 60)  # between passes; a pass itself can take minutes when the local model works on a hard question

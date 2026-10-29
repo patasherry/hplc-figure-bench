@@ -1,0 +1,55 @@
+name: Cloud manager
+
+# Runs the local manager (tools/local-manager/manager.py --cloud) on GitHub while Patrick's PC is off.
+# It stands aside whenever the PC manager's heartbeat on the tracking issue is under 20 minutes old.
+# In the cloud, Gemini stands in for the local model. Board meetings, Claude Code jobs and the Copilot CLI stay on the PC.
+# Needs two repository secrets: HFB_TOKEN (a fine-grained token for this repo) and GEMINI_API_KEY.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_run:
+    workflows: ['Test suite']
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: cloud-manager
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pass:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.HFB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Restore the manager's memory from the last cloud pass
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.hfb-manager-state.json
+          key: hfb-cloud-state-${{ github.run_id }}
+          restore-keys: hfb-cloud-state-
+      - name: One pass
+        env:
+          GITHUB_TOKEN: ${{ secrets.HFB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GITHUB_TOKEN" ]; then echo "The HFB_TOKEN secret is not set, so the cloud manager does nothing."; exit 0; fi
+          git config --global user.name "HFB local manager"
+          git config --global user.email "hfb-manager@users.noreply.github.com"
+          python tools/local-manager/manager.py --cloud
+      - name: Keep the manager's memory for the next pass
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.hfb-manager-state.json
+          key: hfb-cloud-state-${{ github.run_id }}
