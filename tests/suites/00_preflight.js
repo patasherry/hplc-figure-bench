@@ -18,7 +18,7 @@ const { suite } = require('../lib/harness');
 
     const files = [...new Set([...untracked, ...changed])];
     const ALLOWED = /^(hplc-figure-bench\(WF1\.13\)\.html|README\.md|tests\/(suites|data|lib)\/|tests\/README\.md|docs\/)/;
-    const SAFE = /^(tests\/|docs\/|\.github\/ISSUE_TEMPLATE\/)/;
+    const SAFE = /^(tests\/|docs\/|\.github\/ISSUE_TEMPLATE\/|\.github\/PULL_REQUEST_TEMPLATE\.md)/;
 
     const badFiles = [];
     for (const f of files) {
