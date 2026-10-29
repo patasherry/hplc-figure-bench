@@ -5662,6 +5662,11 @@ function cleanProject(d){
   const isO = o => o && typeof o === 'object' && !Array.isArray(o), hasXY = c => isO(c) && Array.isArray(c.xs) && Array.isArray(c.ys); let skipped = 0;
   const keep = (list, ok) => { const a = Array.isArray(list) ? list : []; const out = a.filter(ok); skipped += a.length - out.length; return out; };
   d.runs = keep(d.runs, r => isO(r) && r.id && Array.isArray(r.uvs) && r.uvs.length && r.uvs.every(hasXY));
+  d.runs.forEach(r => {
+    if (!Object.prototype.hasOwnProperty.call(r, 'injX') && Object.prototype.hasOwnProperty.call(r, 'injShift')) {
+      r.injX = r.injShift;
+    }
+  });
   d.traces = keep(d.traces, t => isO(t) && Array.isArray(t.rows));
   d.gels = keep(d.gels, isO); d.nanodrop = keep(d.nanodrop, isO);
   if (!isO(d.struct)) d.struct = null; if (!isO(d.opt)) d.opt = null;

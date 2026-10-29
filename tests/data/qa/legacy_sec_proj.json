@@ -1,0 +1,1 @@
+{"app": "HPLC Figure Bench", "version": 1, "runs": [{"id": 1, "name": "Legacy SEC", "secMode": "on", "inWf": true, "uvs": [{"name": "UV", "xs": [8.0, 10.0, 12.0], "ys": [10.0, 50.0, 15.0]}], "fracs": {"name": "Fractions", "xs": [], "xe": [], "label": []}, "injShift": 1.2}]}
