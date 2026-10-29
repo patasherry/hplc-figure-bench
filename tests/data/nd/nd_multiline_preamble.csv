@@ -10,6 +10,24 @@ Operator,Patrick
 Blank Method,Buffer A
 Measurement Type,Protein A280
 
+Extra Data 13,foo
+Extra Data 14,foo
+Extra Data 15,foo
+Extra Data 16,foo
+Extra Data 17,foo
+Extra Data 18,foo
+Extra Data 19,foo
+Extra Data 20,foo
+Extra Data 21,foo
+Extra Data 22,foo
+Extra Data 23,foo
+Extra Data 24,foo
+Extra Data 25,foo
+Extra Data 26,foo
+Extra Data 27,foo
+Extra Data 28,foo
+Extra Data 29,foo
+Extra Data 30,foo
 Data Table Follows
 Date,Sample Name,Protein (mg/mL),A280,A260/A280,Sample Type,MW,E / 1000,Extinction coefficient,Baseline Correction (nm),Baseline Absorbance
 10/23/2026 16:00:00 AM,Sample 1,2.500,2.500,0.57,1 Abs = 1 mg / mL,,,,340,0.012

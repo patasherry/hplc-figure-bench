@@ -5321,7 +5321,7 @@ const splitRow = (line, d) => { const out = []; let cur = '', q = false; for (le
   if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; } else if (c === '"') q = true; else if (c === d) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out.map(v => v.trim()); };
 const ND_HEAD = /(a?\s?260\s*\/\s*a?\s?280|\ba\s?280\b|\ba\s?205\b|mg\s*\/\s*ml|ng\s*\/\s*[µu]l|conc)/i, ND_NAME = /sample\s*(name|id)|^"?sample"?\s*$/i;
 const isWl = h => /^\d{3}(\.\d+)?\s*(nm)?$/i.test(String(h).trim());
-function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 50); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
+function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
     if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) {
         for (let j = i + 1; j < lines.length; j++) {
             const row = splitRow(lines[j], d);
@@ -5335,7 +5335,7 @@ function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 50); i++) {
         }
     }
 } return null; }
-function looksNanoDrop(text){ const L = text.split(/\r?\n/).filter(l => l.trim()); return !!ndHeader(L) || (L.slice(0, 50).some(l => /^wavelength/i.test(l.trim()) && /absorbance/i.test(l)) && L.some(l => /^a?\s?260\s*\/\s*a?280\b/i.test(l.trim()))); }
+function looksNanoDrop(text){ const L = text.split(/\r?\n/).filter(l => l.trim()); return !!ndHeader(L) || (L.slice(0, 80).some(l => /^wavelength/i.test(l.trim()) && /absorbance/i.test(l)) && L.some(l => /^a?\s?260\s*\/\s*a?280\b/i.test(l.trim()))); }
 const ndNum = (v, d) => { const s = String(v ?? '').replace(/\s/g, ''); if (d === ';') { const m = s.match(/^[+-]?(\d*)(?:\.(\d{3}))*,(\d+)(?:[eE][+-]?\d+)?$/); const x = parseFloat(m ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '.')); return isFinite(x) ? x : null; } const m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/), x = parseFloat(m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, '')); return isFinite(x) ? x : null; };
 const CRUDE_RE = /lys|load|flow|\bft\b|supernat|pellet|crude|input|clarif/i;
 function ndNew(o){ return Object.assign({id: 'nd' + (ndUid++), name: '', kind: 'protein', a280: null, a260: null, a230: null, a340: null, r280: null, r230: null, conc: null, unit: 'mg/mL', runId: '', stage: 'pool', dil: 1, hide: false}, o); }
