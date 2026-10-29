@@ -272,6 +272,29 @@ async function pelletMassNoCultureVol() {
       await T.t(e.file, () => timeFile(e));
     }
   }
+  T.t('empty vs zeros text', async () => {
+    const {p, h, close} = await open();
+    await h.addRun(path.join(DATA, 'synthetic', 'zeros_text.txt'));
+    T.check('zeros_text/empty', await p.locator('.trace[data-kind="trace"]:nth-child(1) .err').count(), 1, 'empty parse pill for zeros');
+    await close();
+  });
+
+  T.t('empty vs zeros text', async () => {
+    const {p, h, close} = await open();
+    await h.addRun(path.join(DATA, 'synthetic', 'zeros_text.txt'));
+    T.check('zeros_text/empty', await p.locator('.trace[data-kind="trace"]:nth-child(1) .err').count(), 1, 'empty parse pill for zeros');
+    await close();
+  });
+
+  await T.t('empty vs zeros text', async () => {
+    const {p, errs, close} = await open();
+    const h = H(p);
+    await h.newProject('zeros text');
+    await h.addRun(path.join(DATA, 'synthetic', 'zeros_text.txt'));
+    T.check('zeros_text/empty', await p.locator('.trace[data-kind="trace"]:nth-child(1) .err').count(), 1, 'empty parse pill for zeros');
+    await close();
+  });
+
   if (!only || only.test('pellet_mass_no_culture_vol')) await T.t('pellet_mass_no_culture_vol', pelletMassNoCultureVol);
   T.done();
 })();

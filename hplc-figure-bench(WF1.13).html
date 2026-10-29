@@ -1569,11 +1569,14 @@ async function parseUnicornZip(buf, fname){
 function makeTrace(name, p, ex){
   const xc = p.xc ?? 0, yc = p.yc ?? 1;
   const mx = (p.cols[xc] || '').match(/\(([^)]+)\)/), my = (p.cols[yc] || '').match(/\(([^)]+)\)/);
+  const empty = p.rows && p.rows.length > 0 && p.rows.every(r => r[yc] === 0);
   return {id: uid++, name, color: paletteColor(traces.length, traces.length+1), visible: true, rows: p.rows, cols: p.cols,
-    xc, yc, offset: 0, scale: 1, xshift: 0, peaks: [], ex: !!ex, xu: mx ? mx[1] : null, yu: my ? my[1] : null};
+    xc, yc, offset: 0, scale: 1, xshift: 0, peaks: [], ex: !!ex, xu: mx ? mx[1] : null, yu: my ? my[1] : null, empty};
 }
-function makeRun(p){ const r = Object.assign({id: 'r' + (uid++), color: RUN_COLORS.uv, uvi: 0, xmin:'', xmax:'', ymin:'', ymax:'', shade:'', inWf: true, integ: [], secMode: 'auto'}, p);
-  r.secAuto = secGuess(r); applyInjShift(r);
+function makeRun(p){
+  const empty = p.uvs && p.uvs.length > 0 && p.uvs.every(c => c.ys && c.ys.length > 0 && c.ys.every(y => y === 0));
+  const r = Object.assign({id: 'r' + (uid++), color: RUN_COLORS.uv, uvi: 0, xmin:'', xmax:'', ymin:'', ymax:'', shade:'', inWf: true, integ: [], secMode: 'auto'}, p, {empty});
+  r.secAuto = r.empty ? false : secGuess(r); applyInjShift(r);
   /* size exclusion opens on the fractions around its peaks */
   if (r.secAuto && r.crop === undefined) r.crop = 'peaks';
   /* a calibration standards run is not a purification step */
@@ -4384,7 +4387,7 @@ function renderList(){
         <button type="button" class="icon" data-act="up" title="Move earlier in the workflow" aria-label="Move earlier" ${idx === 0 ? 'disabled' : ''}>↑</button>
         <button type="button" class="icon" data-act="del" title="Remove run" aria-label="Remove run">✕</button>
       </div>
-      <div class="meta"><span class="mk">${r.inWf ? `Step ${runs.filter(x => x.inWf).indexOf(r) + 1}` : r.isStd ? 'Standards' : 'Not in workflow'}</span>${r.timeStr ? `<span>${esc(r.timeStr)}</span>` : ''}<br>${segs.length ? `${segs.length} fractions, ${esc(segs[0].label)} to ${esc(segs[segs.length-1].label)}` : 'No fractions collected'}${r.shift || r.injShift ? `, ${xUnit(r) === 'min' ? 'times' : 'volumes'} from injection` : ''}${nGel ? `, ${nGel} gel${nGel > 1 ? 's' : ''}` : ''}${fracRepeats(r) ? `<br>Tube names repeat after a full rack, so write T5#2 for the second T5.` : ''}${fracNotes(r)}</div>
+      <div class="meta"><span class="mk">${r.inWf ? `Step ${runs.filter(x => x.inWf).indexOf(r) + 1}` : r.isStd ? 'Standards' : 'Not in workflow'}</span>${r.timeStr ? `<span>${esc(r.timeStr)}</span>` : ''}<br>${r.empty ? '<span class="pill tag err" title="The file loaded successfully but all measurements are zero.">Empty parse</span> ' : ''}${segs.length ? `${segs.length} fractions, ${esc(segs[0].label)} to ${esc(segs[segs.length-1].label)}` : 'No fractions collected'}${r.shift || r.injShift ? `, ${xUnit(r) === 'min' ? 'times' : 'volumes'} from injection` : ''}${nGel ? `, ${nGel} gel${nGel > 1 ? 's' : ''}` : ''}${fracRepeats(r) ? `<br>Tube names repeat after a full rack, so write T5#2 for the second T5.` : ''}${fracNotes(r)}</div>
       ${segs.length ? '' : '<!--'}<label class="f">Pooled fractions<span class="joined"><input type="text" id="sh${r.id}" data-k="shade" value="${esc(r.shade)}" placeholder="${isPlate(r) ? 'e.g. E6-F9, plate 2: #2A1' : 'e.g. T3-T6'}"${isPlate(r) ? ' title="Plate 1 wells by name (E6-F9). Another plate with # and its number: #2A1-#2A6"' : ''}><button type="button" class="btn" data-act="suggest" title="Pick the fractions under the main peak. You can edit the result.">Suggest</button></span></label>${segs.length ? '' : '-->'}
       ${segs.length && r.inWf ? (pr0 => (ms => ms.src !== 'card' ? (pr0 && pr0.measured ? `<p class="hint">${sig2(pr0.mg)} mg after concentrating (${fmt(pr0.conc, 2)} mg/mL × ${fmtAuto(pr0.measVol)} mL, from ${fmt(pr0.vol, 1)} ${xUnit(r)}). The peak mg use this amount. Change it on the Concentrated step.</p>` : '') : `<div class="row"><label class="f" title="Your NanoDrop reading. If you concentrated the pool first, this is the reading of the concentrated protein">NanoDrop (mg/mL)<input type="number" step="any" min="0" id="pc${r.id}" data-k="poolConc" value="${esc(ms.src === 'card' || (ms.src === 'btw' && !ms.nd) ? ms.c : '')}" placeholder="${ms.nd ? `${fmt(ms.nd.m, 2)}, from NanoDrop file` : 'mg/mL'}"></label><label class="f" title="The volume the reading was taken in. After concentrating, the volume left in the concentrator. Empty means the pool volume from the fractions">Volume after concentrating (mL)<input type="number" step="any" min="0" id="pv${r.id}" data-k="poolFinalVol" value="${esc((ms.src === 'card' || ms.src === 'btw') && ms.v > 0 ? ms.v : '')}" placeholder="${pr0 && xUnit(r) === 'mL' && pr0.vol > 0 ? `not concentrated: ${fmt(pr0.vol, 1)}` : 'pool volume'}"></label></div>${pr0 && pr0.measured ? `<p class="hint">Measured ${sig2(pr0.mg)} mg (${fmtAuto(pr0.conc)} mg/mL × ${fmtAuto(pr0.measVol)} mL${pr0.concentrated ? `, concentrated from ${fmt(pr0.vol, 1)} ${xUnit(r)}` : ''})${pr0.mgArea > 0 ? `, ${fmt(100*pr0.mg/pr0.mgArea, 0)}% of the ${sig2(pr0.mgArea)} mg from the UV area` : ''}. Every peak on this run is scaled by the same factor, so any loss while concentrating is folded into the peak mg.${pr0.src === 'btw' ? ' Also shown on the Concentrated step after this column.' : pr0.src === 'nd' ? ' From the NanoDrop readings marked Final.' : ''}</p>` : ''}`)(poolMeas(r)))(poolRows(r)) : ''}
       ${uvSel}
@@ -4438,6 +4441,7 @@ function renderList(){
         <label class="f">Y scale ×<input type="number" step="any" id="sc${t.id}" data-k="scale" value="${t.scale}"></label>
         <label class="f">X shift<input type="number" step="any" id="xs${t.id}" data-k="xshift" value="${t.xshift}"></label>
       </div>
+      <div class="meta">${t.empty ? '<span class="pill tag err" title="The file loaded successfully but all measurements are zero.">Empty parse</span>' : ''}</div>
       <div class="peaks"><span class="plabel">Peaks</span>${chips || '<span class="hint">none</span>'}
         <button type="button" class="mini" data-act="detect">Detect</button>
         <button type="button" class="mini" data-act="clear">Clear</button></div>
