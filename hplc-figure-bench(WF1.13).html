@@ -1611,9 +1611,14 @@ function processTrace(t){
   return processXY(xs, ys, numOr(opt.xmin, -Infinity), numOr(opt.xmax, Infinity), opt.normalize, numOr(t.scale, 1));
 }
 function detectPeaks(t){
-  const {xs, ys} = processTrace(t); const n = ys.length; if (n < 7) return;
+  const sh = +t.xshift || 0; let xs0 = [], ys0 = [], sorted = true;
+  for (const r of t.rows) { const x = r[t.xc], y = r[t.yc]; if (x != null && y != null && isFinite(x) && isFinite(y)) { if (xs0.length && x+sh < xs0[xs0.length-1]) sorted = false; xs0.push(x+sh); ys0.push(y); } }
+  if (!sorted) { const idx = xs0.map((_,i)=>i).sort((a,b)=>xs0[a]-xs0[b]); xs0 = idx.map(i=>xs0[i]); ys0 = idx.map(i=>ys0[i]); }
+  const full_n = ys0.length;
+
+  const {xs, ys} = processXY(xs0, ys0, numOr(opt.xmin, -Infinity), numOr(opt.xmax, Infinity), opt.normalize, numOr(t.scale, 1)); const n = ys.length; if (n < 7) return;
   const range = arrMax(ys) - arrMin(ys); if (!(range > 0)) return;
-  const thr = range * numOr(opt.prom, 5)/100, w = Math.max(2, Math.round(n*0.004)), span = Math.max(10, Math.round(n*0.08));
+  const thr = range * numOr(opt.prom, 5)/100, w = Math.max(2, Math.round(full_n*0.004)), span = Math.max(10, Math.round(full_n*0.08));
   const found = [];
   for (let i=w;i<n-w;i++){
     const v = ys[i]; if (!(v > ys[i-1] && v >= ys[i+1])) continue;

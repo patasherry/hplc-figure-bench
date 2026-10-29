@@ -53,6 +53,12 @@ async function chromFile(e){ const id = e.file.replace(/\.[^.]+$/, ''), t0 = Dat
     const P = await peaks(p, h), pk = P.rows.filter(r => !/^pool/i.test(r.name));
     // guards: the axis unit follows the file (mL, or min for a time-based export)
     T.check(`${id}/unit`, P.unit === e.unit, `expected ${e.unit}, table header "${P.head.join(' | ')}"`);
+    if (e.file === 'sec_semicolon_unicorn7.csv') {
+      const p1 = pk.find(x => Math.abs(x.ve - 12) <= 0.5);
+      const p2 = pk.find(x => Math.abs(x.ve - 14) <= 0.5);
+      T.check(`${id}/peakArea1`, p1 && Math.abs(p1.area - 196) <= 5, `Expected peak1 area near 196, got ${p1 ? p1.area : 'not found'}`);
+      T.check(`${id}/peakArea2`, p2 && Math.abs(p2.area - 30) <= 5, `Expected peak2 area near 30, got ${p2 ? p2.area : 'not found'}`);
+    }
     for (const [k, x] of e.peaks.entries()) { const hit = pk.find(r => Math.abs(r.ve - x.ve) <= x.tol);
       // guards: each real peak is found at its true elution volume (from the injection for SEC); optional peaks are only reported
       if (x.must) T.check(`${id}/peak${k + 1}@${x.ve}`, hit, `${x.note}: expected Ve ${x.ve} ±${x.tol}, table has ${pk.map(r => r.ve).join(', ') || 'none'}`);

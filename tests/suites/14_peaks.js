@@ -131,6 +131,44 @@ async function peakFile(e) {
 }
 
 (async () => {
+async function test215() {
+  const id = 'sec_semicolon_unicorn7';
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('peaks 215');
+    await h.addRun(path.join(CH, 'sec_semicolon_unicorn7.csv'));
+
+    // Explicitly select the run step in timeline so the `#intAuto` button is visible.
+    const tl = await h.timeline();
+    const runStep = tl.find(x => x.k && x.k.startsWith('run:'));
+    if (runStep) {
+        await h.step(runStep.k);
+    }
+    await p.waitForTimeout(300);
+
+    // Zoom/crop to a small window where peak detection currently fails on main
+    // because it uses the small n of the zoomed region.
+    await setOpt(p, 'o-xmin', 11.5);
+    await setOpt(p, 'o-xmax', 15.5);
+    await p.waitForTimeout(100);
+
+    // Run detectPeaks via UI button
+    await detect(p);
+
+    const P = await peaks(p, h);
+    const pk = P.rows.filter(r => !/^pool/i.test(r.name));
+    const p1 = pk.find(x => Math.abs(x.ve - 12) <= 0.5);
+    const p2 = pk.find(x => Math.abs(x.ve - 14) <= 0.5);
+    T.check(`test215/peak1.area`, p1 && Math.abs(p1.area - 196) <= 5, `Expected peak1 area near 196, got ${p1 ? p1.area : 'not found'}`);
+    T.check(`test215/peak2.area`, p2 && Math.abs(p2.area - 30) <= 5, `Expected peak2 area near 30, got ${p2 ? p2.area : 'not found'}`);
+
+  } finally {
+    T.check(`test215/no-page-errors`, !errs.length, errs.join(' | '));
+    await close();
+  }
+}
+
+  await T.t('test215', test215);
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }
