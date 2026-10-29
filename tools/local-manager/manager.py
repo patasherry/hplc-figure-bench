@@ -923,13 +923,16 @@ def antigravity(s):
         try:
             it = gem_api(f'interactions/{job["id"]}')
         except Exception as e:
+            log(f'#{n}: Antigravity status check failed: {str(e)[:200]}')
             if time.time() - job['at'] > 3 * 3600:
                 label(int(n), add=[job.get('src', 'jules-queue')], remove=['antigravity-running']); a.pop(n)
                 log(f'#{n}: Antigravity job lost ({e}), back to Jules')
             continue
         st = it.get('status', '')
         if st in ('in_progress', 'queued', '') and time.time() - job['at'] < 3 * 3600:
+            log(f'#{n}: Antigravity still working ({st or "no status"}, {int((time.time() - job["at"]) / 60)} min, {it.get("usage", {}).get("total_tokens", "?")} tokens)')
             continue
+        log(f'#{n}: Antigravity finished with status {st}; result keys: {", ".join(sorted(it.keys()))[:200]}')
         a.pop(n)
         txt = it.get('output_text') or all_text(it.get('outputs') or it.get('steps') or it)
         try:
