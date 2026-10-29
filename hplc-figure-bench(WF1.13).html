@@ -5669,6 +5669,11 @@ function cleanProject(d){
     if (Array.isArray(d.opt.secCals)) d.opt.secCals.forEach(c => { if (c && typeof c === 'object' && !('unit' in c)) c.unit = 'mL'; });
     if (!('secStds' in d.opt) && (d.runs.some(r => r.secMode === 'on') || (Array.isArray(d.opt.secCals) && d.opt.secCals.length > 0))) d.opt.secStds = true;
   }
+  if (d.prep && typeof d.prep.name === 'string' && d.prep.name) {
+    if (!Array.isArray(d.prep.manual)) d.prep.manual = [];
+    if (!d.prep.manual.some(m => m.k === 'construct')) d.prep.manual.unshift({id: 'm1', kind: 'column', k: 'construct', s: d.prep.name, after: ''});
+  }
+  d.gels.forEach(g => { if (Array.isArray(g.lanes) && g.labels === undefined) g.labels = g.lanes.map(l => l.name || '').join(','); });
   return skipped; }
 async function openProject(data, name, noUndo){
   if (!data || data.app !== 'HPLC Figure Bench' || !Array.isArray(data.runs)) { toast(`${name || 'That file'} is not a project saved by this tool`); return; }
