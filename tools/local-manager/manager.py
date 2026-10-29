@@ -876,7 +876,7 @@ AG_MARK = '<!-- antigravity-job -->'
 AG_AGENT = cfg.get('antigravity_agent', 'antigravity-preview-09-2026')
 AG_AT_ONCE = cfg.get('antigravity_at_once', 2)
 AG_WHEN_QUEUE = cfg.get('antigravity_when_queue', 2)  # hand a job over while at least this many wait for Jules
-AG_TOKENS = cfg.get('antigravity_max_tokens', 400000)
+AG_TOKENS = cfg.get('antigravity_max_tokens', 1500000)  # the app file alone is large; 400k ran out before the first job finished
 AG_JOB = """You are the Google Antigravity agent working on issue #{n} of HPLC Figure Bench, a public GitHub repository.
 1. Clone it: git clone --depth 50 https://github.com/{repo}.git && cd {name}
 2. Read AGENTS.md and follow it exactly, then docs/CODEMAP.md. Make the change the issue asks for, and nothing more.
@@ -925,7 +925,7 @@ def antigravity(s):
         except Exception as e:
             log(f'#{n}: Antigravity status check failed: {str(e)[:200]}')
             if time.time() - job['at'] > 3 * 3600:
-                label(int(n), add=[job.get('src', 'jules-queue')], remove=['antigravity-running']); a.pop(n)
+                label(int(n), add=[job.get('src', 'jules-queue')], remove=['antigravity-running']); a.pop(n); s.setdefault('ag_tried', {})[n] = time.time()
                 log(f'#{n}: Antigravity job lost ({e}), back to Jules')
             continue
         st = it.get('status', '')
@@ -934,9 +934,10 @@ def antigravity(s):
             continue
         log(f'#{n}: Antigravity finished with status {st}; result keys: {", ".join(sorted(it.keys()))[:200]}')
         a.pop(n)
-        txt = it.get('output_text') or all_text(it.get('outputs') or it.get('steps') or it)
+        steps = [x for x in (it.get('steps') or []) if isinstance(x, dict) and x.get('type') not in ('function_call', 'function_result')]
+        txt = it.get('output_text') or all_text(it.get('outputs') or steps[-3:])  # the agent's last words only: tool output can hold other diffs
         try:
-            if st not in ('completed', 'incomplete'):
+            if st != 'completed':  # 'incomplete' means it ran out of its token budget before finishing
                 raise RuntimeError(f'the agent ended with status {st or "timeout"}')
             diff = txt.rsplit('===DIFF START===', 1)[1].split('===DIFF END===', 1)[0].strip('\n') + '\n' if '===DIFF START===' in txt else ''
             desc = txt.rsplit('===PR BODY START===', 1)[1].split('===PR BODY END===', 1)[0].strip() if '===PR BODY START===' in txt else '(No description.)'
@@ -947,16 +948,17 @@ def antigravity(s):
             post(int(n), f'Antigravity opened #{pr}. It goes through the Test suite and the automatic review like any PR.' + SIGN.format(rv.MODEL))
             log(f'#{n}: Antigravity opened PR #{pr}')
         except Exception as e:
+            s.setdefault('ag_tried', {})[n] = time.time()
             back = job.get('src', 'jules-queue')
             label(int(n), add=[back], remove=['antigravity-running'])
             post(int(n), f'The Antigravity job did not produce a usable change ({str(e)[:300]}), so the job goes back to `{back}`.' + SIGN.format(rv.MODEL))
             log(f'#{n}: Antigravity job failed: {e}')
     # hand out: first jobs that wait for a worker that isn't there (Copilot while it is paused, Claude Code while the PC is off), then Jules' backlog
-    ok = lambda i: not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
+    ok = lambda i: str(i['number']) not in s.get('ag_tried', {}) and str(i['number']) not in a and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
     cop_off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
     waiting = ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
               ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] if CLOUD else [])
-    queue = [i for i in issues('jules-queue') if not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
+    queue = [i for i in issues('jules-queue') if ok(i) and not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
     if not waiting and len(queue) >= AG_WHEN_QUEUE:
         waiting = [(sorted(queue, key=lambda x: x['number'])[-1], 'jules-queue')]  # the newest: Jules takes the oldest first
     if len(a) >= AG_AT_ONCE or not waiting or s.get('ag_off_until', 0) > time.time() or DRY:
