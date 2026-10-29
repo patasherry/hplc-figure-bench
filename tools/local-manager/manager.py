@@ -924,7 +924,7 @@ def antigravity(s):
             it = gem_api(f'interactions/{job["id"]}')
         except Exception as e:
             if time.time() - job['at'] > 3 * 3600:
-                label(int(n), add=['jules-queue'], remove=['antigravity-running']); a.pop(n)
+                label(int(n), add=[job.get('src', 'jules-queue')], remove=['antigravity-running']); a.pop(n)
                 log(f'#{n}: Antigravity job lost ({e}), back to Jules')
             continue
         st = it.get('status', '')
@@ -944,14 +944,21 @@ def antigravity(s):
             post(int(n), f'Antigravity opened #{pr}. It goes through the Test suite and the automatic review like any PR.' + SIGN.format(rv.MODEL))
             log(f'#{n}: Antigravity opened PR #{pr}')
         except Exception as e:
-            label(int(n), add=['jules-queue'], remove=['antigravity-running'])
-            post(int(n), f'The Antigravity job did not produce a usable change ({str(e)[:300]}), so the job goes back to Jules.' + SIGN.format(rv.MODEL))
+            back = job.get('src', 'jules-queue')
+            label(int(n), add=[back], remove=['antigravity-running'])
+            post(int(n), f'The Antigravity job did not produce a usable change ({str(e)[:300]}), so the job goes back to `{back}`.' + SIGN.format(rv.MODEL))
             log(f'#{n}: Antigravity job failed: {e}')
-    # hand out new jobs while Jules has a backlog
+    # hand out: first jobs that wait for a worker that isn't there (Copilot while it is paused, Claude Code while the PC is off), then Jules' backlog
+    ok = lambda i: not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
+    cop_off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
+    waiting = ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
+              ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] if CLOUD else [])
     queue = [i for i in issues('jules-queue') if not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
-    if len(a) >= AG_AT_ONCE or len(queue) < AG_WHEN_QUEUE or s.get('ag_off_until', 0) > time.time() or DRY:
+    if not waiting and len(queue) >= AG_WHEN_QUEUE:
+        waiting = [(sorted(queue, key=lambda x: x['number'])[-1], 'jules-queue')]  # the newest: Jules takes the oldest first
+    if len(a) >= AG_AT_ONCE or not waiting or s.get('ag_off_until', 0) > time.time() or DRY:
         return
-    i = sorted(queue, key=lambda x: x['number'])[-1]  # the newest: Jules takes the oldest first
+    i, src = waiting[0]
     if not use(s, 'antigravity'):
         return
     n = i['number']
@@ -963,9 +970,10 @@ def antigravity(s):
         s['count']['antigravity'] -= 1
         s['ag_off_until'] = time.time() + 6 * 3600
         return log(f'Antigravity not available ({str(e)[:200]}), paused for 6 hours')
-    a[str(n)] = {'id': it['id'], 'at': time.time(), 'title': i['title']}
-    label(n, add=['antigravity-running'], remove=['jules-queue'])
-    post(n, f'Handed to the **Google Antigravity agent** through the Gemini API (Jules has {len(queue)} jobs waiting). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
+    a[str(n)] = {'id': it['id'], 'at': time.time(), 'title': i['title'], 'src': src}
+    label(n, add=['antigravity-running'], remove=[src])
+    why = {'for-copilot': 'Copilot is paused', 'for-claude-code': "Claude Code needs Patrick's PC, which is off"}.get(src, f'Jules has {len(queue)} jobs waiting')
+    post(n, f'Handed to the **Google Antigravity agent** through the Gemini API ({why}). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
     log(f'#{n}: handed to Antigravity')
 
 
