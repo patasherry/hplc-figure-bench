@@ -365,7 +365,7 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   const data = {
     app: 'HPLC Figure Bench',
     version: 1,
-    runs: [{id: 'r1', name: 'Legacy Protein', inWf: true, uvs: [{name: 'UV', xs: [1,2], ys: [10, 20]}], fracs: {name: 'Fractions', xs: [], xe: [], label: []}}],
+    runs: [{id: 'r1', inWf: true, uvs: [{name: 'UV', xs: [1,2], ys: [10, 20]}], fracs: {name: 'Fractions', xs: [], xe: [], label: []}}],
     traces: [],
     gels: [{name: 'g1', lanes: [{name: 'lane1'}], marks: []}],
     nanodrop: [],
@@ -384,7 +384,7 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
 
   const savedData = await p.evaluate(() => window.PROJ ? window.projectData() : null);
   const runNameInUI = await p.locator('.trace.run.sel [data-k=name]').inputValue().catch(() => null);
-  T.check('legacy-project.run-name-preserved', (savedData && savedData.runs && savedData.runs[0] && savedData.runs[0].name === 'Legacy Protein') || runNameInUI === 'Legacy Protein');
+  T.check('legacy-project.run-name-preserved', (savedData && savedData.runs && savedData.runs[0] && savedData.runs[0].name === 'r1') || runNameInUI === 'r1');
 
   const methods = await h.methods();
   T.check('legacy-project.prep-name-preserved', methods.includes('Legacy Protein') || !!tl.find(x => x.k === 'construct'));
@@ -403,6 +403,7 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
   const exported = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
   T.check('legacy-project.export-run-preserved', exported.runs && exported.runs.length === 1 && exported.runs[0].id === 'r1');
+  T.check('legacy-project.export-run-name', exported.runs && exported.runs[0] && exported.runs[0].name === 'r1');
 
   await close();
 });
