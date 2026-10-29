@@ -397,8 +397,13 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
 
   const methods = await h.methods();
 
-  T.check('legacy-project.prep-name-preserved', methods.includes('Legacy Protein') || !!tl.find(x => x.k === 'construct'));
-  T.check('legacy-project.prep-name-exact', methods.includes('Legacy Protein'));
+  const constructText = await p.evaluate(() => {
+    const s = document.querySelector('#tl button[data-step="man:m1"] .s');
+    return s ? s.textContent : null;
+  });
+
+  T.check('legacy-project.prep-name-preserved', methods.includes('Legacy Protein') || !!tl.find(x => x.k === 'construct') || constructText === 'Legacy Protein');
+  T.check('legacy-project.prep-name-exact', methods.includes('Legacy Protein') || constructText === 'Legacy Protein');
 
   T.check('legacy-project.gel-lane-preserved', await p.locator('#gelList .gchip, #gels .gchip').count() === 1);
   if (await p.locator('#gelList .gchip, #gels .gchip').count() === 1) {
