@@ -178,12 +178,16 @@ def ask_gemini(q):
         req = urllib.request.Request(f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', data=body,
                                      headers={'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY})
         try:
-            with urllib.request.urlopen(req, timeout=300) as r:
+            with urllib.request.urlopen(req, timeout=150) as r:
                 _gem['strikes'][model] = 0
                 return json.loads(r.read())['candidates'][0]['content']['parts'][0]['text'].strip()
-        except urllib.error.HTTPError as e:
-            if e.code != 429:
+        except (TimeoutError, urllib.error.URLError) as e:
+            if isinstance(e, urllib.error.HTTPError) and e.code not in (429, 500, 502, 503, 504):
                 raise
+            if not isinstance(e, urllib.error.HTTPError) or e.code != 429:  # Google busy (5xx) or no answer in time: try the next model, and this one again after a minute
+                _gem['rest_until'][model] = time.time() + 60
+                log(f'Gemini {model}: {getattr(e, "code", "timeout")}, trying the next model')
+                continue
             k = _gem['strikes'][model] = _gem['strikes'].get(model, 0) + 1
             now = dt.datetime.now()
             rest = 120 if k == 1 else 900 if k == 2 else (dt.datetime.combine(now.date() + dt.timedelta(days=1), dt.time(0, 30)) - now).total_seconds()
