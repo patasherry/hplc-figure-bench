@@ -1423,7 +1423,7 @@ function decode(buf){
 }
 const clean = f => f.trim().replace(/^"(.*)"$/,'$1').trim();
 function splitLine(L, d){ return d === 'ws' ? L.trim().split(/\s+/) : L.split(d); }
-function toNum(f, dc){ f = clean(f); if (dc) f = f.replace(/^-?\d+,\d+(?:[eE][-+]?\d+)?$/, m => m.replace(',', '.')); return NUM.test(f) ? parseFloat(f) : NaN; }
+function toNum(f, dc){ f = clean(f); if (f === '') return NaN; if (dc) f = f.replace(/^-?\d+,\d+(?:[eE][-+]?\d+)?$/, m => m.replace(',', '.')); return NUM.test(f) ? Number(f) : NaN; }
 function parseText(text){
   const lines = text.split(/\r\n|\n|\r/);
   const sample = lines.length > 6000 ? lines.slice(0,3000).concat(lines.slice(-3000)) : lines;
@@ -5336,7 +5336,7 @@ function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 50); i++) {
     }
 } return null; }
 function looksNanoDrop(text){ const L = text.split(/\r?\n/).filter(l => l.trim()); return !!ndHeader(L) || (L.slice(0, 50).some(l => /^wavelength/i.test(l.trim()) && /absorbance/i.test(l)) && L.some(l => /^a?\s?260\s*\/\s*a?280\b/i.test(l.trim()))); }
-const ndNum = (v, d) => { const s = String(v ?? '').replace(/\s/g, ''); if (d === ';') { const m = s.match(/^[+-]?(\d*)(?:\.(\d{3}))*,(\d+)(?:[eE][+-]?\d+)?$/); const x = parseFloat(m ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '.')); return isFinite(x) ? x : null; } const m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/), x = parseFloat(m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, '')); return isFinite(x) ? x : null; };
+const ndNum = (v, d) => { const s = String(v ?? '').replace(/\s/g, ''); if (s === '') return null; if (d === ';') { const m = s.match(/^[+-]?(\d*)(?:\.(\d{3}))*,(\d+)(?:[eE][+-]?\d+)?$/); const p = m ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '.'); const x = Number(p); return isFinite(x) ? x : null; } const m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/), p = m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, ''); const x = Number(p); return isFinite(x) ? x : null; };
 const CRUDE_RE = /lys|load|flow|\bft\b|supernat|pellet|crude|input|clarif/i;
 function ndNew(o){ return Object.assign({id: 'nd' + (ndUid++), name: '', kind: 'protein', a280: null, a260: null, a230: null, a340: null, r280: null, r230: null, conc: null, unit: 'mg/mL', runId: '', stage: 'pool', dil: 1, hide: false}, o); }
 /* NanoDrop One per-sample file: name, date, a "Wavelength (nm) / 10mm Absorbance" header, calibration comments, A260/A280 and A280 lines, then the spectrum */
