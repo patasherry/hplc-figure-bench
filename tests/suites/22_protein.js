@@ -502,6 +502,24 @@ ORIGIN
     epsText = await getProtEps();
     T.check('7_unknown_residues.control_eps_no_approx_label', !epsText.includes('approximate'), `expected no approximation label in resolved eps text, got "${epsText}"`);
   });
+
+  /* ================= 8. Cleared sequence ================= */
+  await T.t('8_cleared_seq', async () => {
+    await clearTagSeq();
+    await setProtSeq('MAWYKLLPEDG');
+
+    const tbl = await getProtTable();
+    T.check('8_cleared_seq.has_rows_first', tbl.length >= 1, `expected at least 1 row before clearing, got ${tbl.length}`);
+
+    await setProtSeq('');
+
+    const tbl2 = await getProtTable();
+    T.check('8_cleared_seq.no_rows', tbl2.length === 0, `expected no rows after clearing, got ${tbl2.length}`);
+
+    const epsText = await getProtEps();
+    T.check('8_cleared_seq.eps_empty', epsText === '', `expected eps text to be empty after clearing, got "${epsText}"`);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
