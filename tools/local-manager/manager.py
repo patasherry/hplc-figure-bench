@@ -954,6 +954,10 @@ def antigravity(s):
             label(int(n), add=[back], remove=['antigravity-running'])
             post(int(n), f'The Antigravity job did not produce a usable change ({str(e)[:300]}), so the job goes back to `{back}`.' + SIGN.format(rv.MODEL))
             log(f'#{n}: Antigravity job failed: {e}')
+    for i in issues('antigravity-running'):  # labelled, but the manager has no job for it (its memory was lost): put it back
+        if str(i['number']) not in a:
+            label(i['number'], add=['jules-queue'], remove=['antigravity-running'])
+            log(f'#{i["number"]}: Antigravity job not tracked any more, back to Jules')
     # hand out: first jobs that wait for a worker that isn't there (Copilot while it is paused, Claude Code while the PC is off), then Jules' backlog
     ok = lambda i: str(i['number']) not in s.get('ag_tried', {}) and str(i['number']) not in a and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
     cop_off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
