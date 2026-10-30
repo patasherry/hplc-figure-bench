@@ -1440,7 +1440,8 @@ function parseText(text){
     /* a single column of signal values (some detectors export only that): plot against point number */
     const vals = []; let head = null; for (const L of lines) { const t = L.trim(); if (!t) continue; const v = toNum(t, false), v2 = toNum(t, true); const x = !isNaN(v) ? v : v2; if (!isNaN(x)) vals.push(x); else if (!vals.length) head = clean(t); }
     if (vals.length >= 20) return {rows: vals.map((v, i) => [i + 1, v]), cols: ['Point number', head || 'Signal'], xc: 0, yc: 1};
-    const isChrom = lines.slice(0, 20).some(L => { const s = L.trim(); if (!s) return false;
+    /* the column header of an export with no points can sit under a long metadata block (LabSolutions ASCII: [Header], [Sample Information], ...) */
+    const isChrom = lines.slice(0, 200).some(L => { const s = L.trim(); if (!s) return false;
       for (const d of ['\t', ',', ';']) { const fs = splitLine(s, d).map(clean);
         if (fs.length >= 2 && fs.some(f => /\b(time|min|sec|vol|ml|retention)\b/i.test(f)) && fs.some(f => /\b(uv|absorb|sig|mau|au|od|fluor|intensity|resp|\d{3}\s*nm)\b/i.test(f))) return true; }
       return false; });
