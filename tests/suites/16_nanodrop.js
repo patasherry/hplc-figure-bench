@@ -137,6 +137,17 @@ async function fresh(id, fn){
     await p.waitForFunction(() => document.querySelectorAll('.ndr').length === 10 || document.querySelector('.toast'), {timeout: 2000}).catch(() => {});
 
     T.check('nanodrop-metadata-skip', await p.locator('.ndr').count() === 10, 'Expected 10 data rows after skipping metadata');
+    const firstRowConc = await p.evaluate(() => {
+      const el = document.querySelector('.ndr .nd-v');
+      return el ? parseFloat(el.textContent.split(' ')[0]) : null;
+    });
+    T.check('nanodrop-metadata-skip/first-row-conc', Math.abs((firstRowConc ?? 0) - 1.5) < 0.001, `Expected first row concentration 1.5, got ${firstRowConc}`);
+    const firstRowRatio = await p.evaluate(() => {
+      const el = document.querySelector('.ndr .nd-r');
+      const m = (el ? el.textContent : '').match(/260\/280\s+([0-9.]+)/);
+      return m ? parseFloat(m[1]) : null;
+    });
+    T.check('nanodrop-metadata-skip/first-row-ratio', firstRowRatio === 0.57, `Expected first row ratio 0.57, got ${firstRowRatio}`);
 
     await app.close();
   });

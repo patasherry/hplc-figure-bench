@@ -5324,17 +5324,21 @@ const splitRow = (line, d) => { const out = []; let cur = '', q = false; for (le
   if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; } else if (c === '"') q = true; else if (c === d) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out.map(v => v.trim()); };
 const ND_HEAD = /(a?\s?260\s*\/\s*a?\s?280|\ba\s?280\b|\ba\s?205\b|mg\s*\/\s*ml|ng\s*\/\s*[µu]l|conc)/i, ND_NAME = /sample\s*(name|id)|^"?sample"?\s*$/i;
 const isWl = h => /^\d{3}(\.\d+)?\s*(nm)?$/i.test(String(h).trim());
-function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
-    if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) {
-        for (let j = i + 1; j < lines.length; j++) {
+function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i]; if (!l.trim()) continue; const d = (l.match(/\t/g) || []).length >= 1 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
+    const cN = H.findIndex(h => ND_NAME.test(h) && !/:$/.test(h.trim()));
+    if (cN >= 0 && H.some((h, k) => k !== cN && ND_HEAD.test(h) && !/:$/.test(h.trim()) && !/^[\d.]/.test(h.trim()))) {
+        for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+            if (!lines[j].trim()) continue;
             const row = splitRow(lines[j], d);
-            if (row.some(v => v !== '' && !isNaN(parseFloat(v.replace(',', '.'))))) return {i, d, H, rows: 'samples'};
+            if (row[cN] && !/:$/.test(row[cN].trim()) && !/^vendor\b/i.test(row[cN].trim()) &&
+                H.some((h, k) => k !== cN && ND_HEAD.test(h) && !/:$/.test(h.trim()) && !/^[\d.]/.test(h.trim()) && !isNaN(parseFloat((row[k] || '').replace(',', '.'))))) return {i, d, H, rows: 'samples'};
         }
     }
-    if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1) {
-        for (let j = i + 1; j < lines.length; j++) {
+    if (/^(wavelength|wl|nm)/i.test(H[0] || '') && !/:$/.test((H[0] || '').trim()) && H.length > 1) {
+        for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+            if (!lines[j].trim()) continue;
             const row = splitRow(lines[j], d);
-            if (row.some(v => v !== '' && !isNaN(parseFloat(v.replace(',', '.'))))) return {i, d, H, rows: 'wavelengths'};
+            if (row.length > 1 && !isNaN(parseFloat((row[0] || '').replace(',', '.'))) && !isNaN(parseFloat((row[1] || '').replace(',', '.')))) return {i, d, H, rows: 'wavelengths'};
         }
     }
 } return null; }
@@ -5370,7 +5374,7 @@ function parseNanoDrop(text){
   const cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
   const wcols = H.map((h, i) => ({i, w: parseFloat(h)})).filter(x => isWl(H[x.i]) && x.w >= 190 && x.w <= 850);
   const headAll = hn.join(' '), dyeFile = /dye|degree of label/.test(headAll);
-  return data.filter(r => r.length > 2 && (r[cName] || '').length).map((r, i) => {
+  return data.filter(r => r.length > 2 && (r[cName] || '').length && !/:$/.test(r[cName].trim()) && !/^vendor\b/i.test(r[cName].trim())).map((r, i) => {
     const typ = cType >= 0 ? r[cType] : '', unitTxt = ((cUnit >= 0 ? r[cUnit] : '') + ' ' + (cConc >= 0 ? hn[cConc] : '')).toLowerCase();
     const kind = /ng\s*\/\s*[µu]l|nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
     let conc = cConc >= 0 ? ndNum(r[cConc], d) : null;
