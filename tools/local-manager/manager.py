@@ -1074,7 +1074,8 @@ def openclaw(s):
         return
     ok = lambda i: str(i['number']) not in s.get('oc_tried', {}) and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
     cop_off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
-    waiting = ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
+    waiting = [(i, 'for-openclaw') for i in issues('for-openclaw') if ok(i)] + \
+              ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
               [(i, 'jules-queue') for i in sorted(issues('jules-queue'), key=lambda x: -x['number']) if ok(i) and 'from-patrick' not in {l['name'] for l in i['labels']}]
     if not waiting or not use(s, 'openclaw'):
         return
