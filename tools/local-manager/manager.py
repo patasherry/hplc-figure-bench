@@ -187,9 +187,13 @@ def ask_gemini(q, models=None):
                                      headers={'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY})
         try:
             with urllib.request.urlopen(req, timeout=150) as r:
-                _gem['strikes'][model] = 0
+                _gem['strikes'][model] = 0; _gem['used'] = model
                 return json.loads(r.read())['candidates'][0]['content']['parts'][0]['text'].strip()
         except (TimeoutError, urllib.error.URLError) as e:
+            if isinstance(e, urllib.error.HTTPError) and e.code in (400, 403, 404) and (models or GEMINI_MODELS)[-1] != model:
+                _gem['rest_until'][model] = time.time() + 24 * 3600
+                log(f'Gemini {model}: not available on this key ({e.code}), using the next model')
+                continue
             if isinstance(e, urllib.error.HTTPError) and e.code not in (429, 500, 502, 503, 504):
                 raise
             if not isinstance(e, urllib.error.HTTPError) or e.code != 429:  # Google busy (5xx) or no answer in time: try the next model, and this one again after a minute
@@ -1137,7 +1141,8 @@ def codex_jobs(s):
 
 # ---------- AI lead review: PRs that change a reported number, reviewed by the AI the owner picks ----------
 REVIEW_MARK = '<!-- ai-lead-review '
-REVIEW_MODELS = cfg.get('review_models', ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest'])  # the stronger models first: few reviews a day
+REVIEW_MODELS = cfg.get('review_models', ['gemini-4-argon', 'gemini-pro-latest', 'gemini-2.5-pro', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest'])  # strongest first; a model the key can't use is skipped for a day
+REVIEW_AG_MODEL = cfg.get('review_antigravity_model', 'gemini-4-argon')  # the strongest model the Antigravity agent offers
 LEAD_REVIEW = """You are the lead reviewer of HPLC Figure Bench, a single-file HTML app a biochemistry graduate student (Patrick) uses for real protein purification data.
 This pull request changes a number the app reports. It has passed the tests and the automatic gate, and the change was approved by {approval}.
 Decide whether it is scientifically correct and safe to merge. Check, in order:
@@ -1258,7 +1263,7 @@ def lead_review(s):
             checks = LEAD_REVIEW.split('Check, in order:', 1)[1].split('Return ONE JSON', 1)[0].strip()
             try:
                 it = gem_api('interactions', 'POST', {'agent': AG_AGENT, 'environment': 'remote', 'background': True,
-                                                      'agent_config': {'type': 'antigravity', 'max_total_tokens': AG_TOKENS},
+                                                      'agent_config': {'type': 'antigravity', 'max_total_tokens': AG_TOKENS, 'model': REVIEW_AG_MODEL},
                                                       'input': AG_REVIEW.format(repo=REPO, name=REPO.split('/')[1], n=n, issue=issue, checks=checks, ititle=iss.get('title', ''),
                                                                                 ibody=(iss.get('body') or '')[:6000], title=pr['title'], body=(pr.get('body') or '')[:6000])})
                 jobs[str(n)] = {'id': it['id'], 'at': time.time(), 'sha': sha, 'issue': issue}
@@ -1276,10 +1281,11 @@ def lead_review(s):
                                body=(pr.get('body') or '')[:6000], report=rep_[:3000], diff=diff[:60000] + ('\n[diff truncated]' if len(diff) > 60000 else ''))
         try:
             r = helper_json(ask_gemini(q, REVIEW_MODELS))
+            r['_model'] = _gem.get('used', '')
         except Exception as e:
             log(f'PR #{n}: Gemini review failed: {str(e)[:150]}')
             continue
-        act_on_review(s, pr, issue, 'Gemini', r or {'decision': 'lead', 'summary': 'Gemini gave no verdict.'})
+        act_on_review(s, pr, issue, f'Gemini ({r.get("_model") or "?"})', r or {'decision': 'lead', 'summary': 'Gemini gave no verdict.'})
         if str(r.get('decision', '')).lower() == 'merge':
             return  # one merge per pass, so the next one lands on a fresh main
 
