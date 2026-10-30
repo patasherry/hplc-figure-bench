@@ -153,8 +153,13 @@ def ask_claude(q):
     return run(['claude', '-p', '--permission-mode', 'plan'], q)
 
 
+CODEX_MODEL = cfg.get('codex_model')  # e.g. a smaller model, to use less of the ChatGPT plan's 5-hour allowance; unset = Codex's own default
+CODEX_EFFORT = cfg.get('codex_effort')  # reasoning effort: low, medium or high; unset = Codex's own default
+CODEX_OPTS = (['-m', CODEX_MODEL] if CODEX_MODEL else []) + (['-c', f'model_reasoning_effort="{CODEX_EFFORT}"'] if CODEX_EFFORT else [])
+
+
 def ask_codex(q):
-    out = run(['codex', 'exec', '--sandbox', 'read-only'], q)
+    out = run(['codex', 'exec', '--sandbox', 'read-only'] + CODEX_OPTS, q)
     return out.split('\ncodex\n', 1)[-1].split('\ntokens used', 1)[0].strip()  # keep only the answer
 
 
@@ -1038,7 +1043,7 @@ BG = {  # how each local coding worker is started and labelled
                  'args': lambda wt: ['agent', 'exec', '--message-file', str(wt / TASK_FILE), '--cwd', str(wt)],
                  'own': 'for-openclaw', 'takes_claude': False, 'cap': 'openclaw', 'desc': "the local model writing code"},
     'codex': {'name': 'Codex', 'who': lambda: 'ChatGPT Codex on the owner\'s PC', 'mark': '<!-- codex-job -->', 'exe': 'codex',
-              'args': lambda wt: ['exec', '--sandbox', 'workspace-write', '-C', str(wt), f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE}.'],
+              'args': lambda wt: ['exec', '--sandbox', 'workspace-write'] + CODEX_OPTS + ['-C', str(wt), f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE}.'],
               'own': 'for-codex', 'takes_claude': True, 'cap': 'codex_jobs', 'desc': 'ChatGPT Codex writing code'},
 }
 OC_MARK = BG['openclaw']['mark']
