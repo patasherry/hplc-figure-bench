@@ -160,6 +160,34 @@ const files = {
     T.check('orispan.his_tag', txt.includes('6xHis') || txt.includes('His6 protein') || txt.includes('His6-protein'), `svg: ${txt}`);
   });
 
+  /* 11. Pasted GenBank text (Benchling copy/paste) */
+  const paste = async txt => { await p.click('#tl [data-step=construct]'); await h.wait(300); if (await p.$eval('#gbPasteBox', e => e.hidden)) await p.click('#gbPasteBtn'); await p.fill('#gbPaste', txt); await p.click('#gbPasteUse'); await h.wait(1000); };
+  await T.t('paste_genbank', async () => {
+    await p.click('text=All projects').catch(() => {}); await h.wait(400);
+    await h.newProject('GenBank Paste');
+    const comp = fs.readFileSync(files.comp, 'utf8');
+    await paste(comp);
+    const st = await status();
+    T.check('paste.status_loaded', st.includes('pCOMP') && st.includes('1,000 bp') && st.includes('255 residues'), `status: ${st}`);
+    T.check('paste.same_as_file', (await svgText()).includes('27.1 kDa'), 'cleaved mass');
+  });
+  await T.t('paste_rejects_bad_text', async () => {
+    const before = await status();
+    for (const [k, txt, re] of [['fasta', '>seq1\nATGAAAGGGCCC\n', /FASTA/], ['junk', 'hello world', /does not look like GenBank/], ['protein', 'LOCUS       pPROT    120 aa            linear   UNK\nFEATURES             Location/Qualifiers\n     Protein         1..120\nORIGIN\n        1 mkk\n//\n', /protein GenBank record/]]) {
+      await paste(txt); const toasts = await h.toasts();
+      T.check(`paste.reject_${k}`, toasts.some(t => re.test(t)), `toasts: ${toasts.join(' | ')}`);
+    }
+    T.check('paste.rejects_leave_construct', (await status()) === before, `status: ${await status()}`);
+  });
+  await T.t('paste_two_records', async () => {
+    await p.click('text=All projects').catch(() => {}); await h.wait(400);
+    await h.newProject('GenBank Two Records');
+    const comp = fs.readFileSync(files.comp, 'utf8').replace(/\r/g, '').trim();
+    await paste(comp + '\n' + fs.readFileSync(files.join, 'utf8').replace(/\r/g, ''));
+    const toasts = await h.toasts(), st = await status();
+    T.check('paste.two_records_first_only', st.includes('pCOMP') && !st.includes('pJOIN') && toasts.some(t => /first of 2 records/.test(t)), `status: ${st}; toasts: ${toasts.join(' | ')}`);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();

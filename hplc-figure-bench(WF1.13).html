@@ -593,7 +593,9 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
       <label class="check" id="prOnWrap"><input type="checkbox" id="pr-on" data-prep="on">Show construct, expression and lysis panels</label>
       <details class="sub" data-sub="pcon" open><summary>Construct</summary>
         <div class="btns"><button type="button" class="btn" id="gbPick">Load GenBank file</button><button type="button" class="btn quiet" id="gbClear" hidden>Draw from the Protein section</button>
-          <input type="file" id="gbFile" accept=".gb,.gbk,.genbank,.ape,.dna,.txt" hidden></div>
+          <input type="file" id="gbFile" accept=".gb,.gbk,.genbank,.ape,.dna,.txt" hidden><button type="button" class="btn" id="gbPasteBtn">Paste GenBank text</button></div>
+        <div id="gbPasteBox" hidden><textarea id="gbPaste" rows="5" spellcheck="false" placeholder="In Benchling export or copy the construct as GenBank and paste the text here (it starts with LOCUS)." style="width:100%;font-family:monospace"></textarea>
+          <div class="btns"><button type="button" class="btn" id="gbPasteUse">Use pasted text</button></div></div>
         <p class="hint" id="gbStatus"></p>
         <div class="row">
           <label class="f">Plasmid name<input type="text" id="pr-name" data-prep="name" placeholder="e.g. pET28-SUMO-NADK" spellcheck="false"></label>
@@ -3812,7 +3814,9 @@ const CODON = 'FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG'
 const revComp = s => s.split('').reverse().map(c => ({A: 'T', T: 'A', G: 'C', C: 'G'})[c] || 'N').join('');
 function translateNt(nt, codonStart, table, isPartial5){ if (table && table !== 1 && table !== 11) return ''; let p = ''; const startIdx = (codonStart - 1) || 0; for (let i = startIdx; i + 2 < nt.length; i += 3) { const a = NT[nt[i]], b = NT[nt[i+1]], c = NT[nt[i+2]]; let aa = a == null || b == null || c == null ? 'X' : CODON[a*16 + b*4 + c]; if (i === startIdx && !isPartial5) { const codon = nt.slice(i, i+3).toUpperCase(); if (table === 11 && ['TTG', 'CTG', 'ATT', 'ATC', 'ATA', 'ATG', 'GTG'].includes(codon)) aa = 'M'; else if ((table === 1 || !table) && ['ATG', 'TTG', 'CTG'].includes(codon)) aa = 'M'; } p += aa; } return p; }
 function parseGenBank(text){
-  const L = text.replace(/\r/g, '').split('\n'), loc = L.find(l => /^LOCUS/.test(l)) || '', lm = loc.match(/^LOCUS\s+(\S+)\s+(\d+)\s*bp/i);
+  let L = text.replace(/\r/g, '').split('\n'); const end = L.findIndex(l => /^\/\/\s*$/.test(l)), records = L.filter(l => /^LOCUS/.test(l)).length; if (end >= 0) L = L.slice(0, end); /* only the first record counts, so a second plasmid is never mixed in */
+  const loc = L.find(l => /^LOCUS/.test(l)) || '', lm = loc.match(/^LOCUS\s+(\S+)\s+(\d+)\s*bp/i);
+  if (/^LOCUS\s+\S+\s+\d+\s*aa\b/i.test(loc)) throw new Error('protein record');
   if (!lm && !L.some(l => /^FEATURES/.test(l))) throw new Error('not GenBank');
   const def = (() => { const i = L.findIndex(l => /^DEFINITION/.test(l)); if (i < 0) return ''; let t = L[i].slice(12).trim(); for (let k = i + 1; k < L.length && /^ {12}/.test(L[k]); k++) t += ' ' + L[k].trim(); return t.replace(/\.$/, ''); })();
   const feats = []; let inF = false, cur = null, qk = null;
@@ -3831,7 +3835,7 @@ function parseGenBank(text){
     const wrap = /join/.test(f.loc) && nums[0] > nums[nums.length - 1];
     const codonStart = parseInt(f.q.codon_start) || 1, translTable = parseInt(f.q.transl_table) || 1, partial5 = f.rev ? />/.test(f.loc) : /</.test(f.loc);
     return {type: f.type, a: wrap ? nums[0] : Math.min(...nums), b: wrap ? nums[nums.length - 1] : Math.max(...nums), rev: /complement/.test(f.loc), label: lab, tx: (f.q.translation || '').replace(/[^A-Z*]/gi, '').toUpperCase(), wrap, loc: f.loc, codonStart, translTable, partial5}; }).filter(Boolean);
-  return {name: lm ? lm[1] : 'plasmid', len, circ: /circular/i.test(loc), def, feats: out, seq};
+  return {name: lm ? lm[1] : 'plasmid', len, circ: /circular/i.test(loc), def, feats: out, seq, records, lenMismatch: !!(lm && seq.length >= 100 && seq.length !== len)};
 }
 const RES_RE = /\bkan|neo|aph\(|nptii|\bbla\b|amp|beta-lactamase|\bcat\b|chloramph|\bcmr?\b|\btet|spec|aad|strep|gent|zeo|\bble\b|hyg|\bbsd/i, REG_RE = /laci|\brop\b|arac|tetr|lacz|lac ?y|\bori\b/i;
 const resName = t => /kan|neo|aph|nptii/i.test(t) ? 'kanamycin' : /bla|amp|lactamase/i.test(t) ? 'ampicillin' : /\bcat\b|chloramph|\bcm/i.test(t) ? 'chloramphenicol' : /tet/i.test(t) ? 'tetracycline' : /spec|aad/i.test(t) ? 'spectinomycin' : /strep/i.test(t) ? 'streptomycin' : /gent/i.test(t) ? 'gentamicin' : /zeo|ble/i.test(t) ? 'zeocin' : /hyg/i.test(t) ? 'hygromycin' : t;
@@ -5261,14 +5265,20 @@ function useOrf(m, quiet){ if (!m || !m.tagSeq) { if (m) { opt.protSeq = m.protS
   applyProt(quiet); }
 async function loadGenBank(f){
   if (/\.dna$/i.test(f.name)) { toast(`${f.name} is a SnapGene file. In SnapGene choose Export, then GenBank (.gb), and drop that file here.`); return; }
-  try { const gb = parseGenBank(await f.text()); if (!gb.feats.length) throw new Error('no features');
-    prep.gb = gb; prep.on = true; prep.construct = true; const m = constructModel();
+  loadGenBankText(await f.text(), f.name); }
+/* a file or pasted text: anything that is not one clean GenBank record is refused with the reason, never half-read */
+function loadGenBankText(text, fname){
+  const f = {name: fname};
+  try { if (/^\s*>/.test(text)) { toast(`${f.name} looks like FASTA, which has no features. Paste a protein sequence in the Protein section, or export the construct as GenBank (.gb).`); return; }
+    if (!/^\s*(LOCUS|DEFINITION|FEATURES)/m.test(text)) { toast(`${f.name} does not look like GenBank text (it should start with LOCUS). Nothing was changed.`); return; }
+    const gb = parseGenBank(text); if (!gb.feats.length) throw new Error('no features');
+    prep.gb = gb; prep.on = true; prep.construct = true; const m = constructModel(), warn = (gb.records > 1 ? ` Only the first of ${gb.records} records was read.` : '') + (gb.lenMismatch ? ` Warning: the sequence has ${gb.seq.length} bases but LOCUS says ${gb.len}; check the export.` : '');
     /* the plasmid is what was expressed: its ORF becomes the Protein section's sequence, with a way back */
     if (m && m.src === 'gb' && !cleanSeq(opt.protSeq)) useOrf(m, true);
     else if (m && m.src === 'gb' && ((m.match && !m.match.ok) || (m.tagSeq && m.tagSeq !== (cleanSeq(opt.tagSeq) || TAG_SEQ[opt.tagPreset] || '')))) { prep.prevProt = {protSeq: opt.protSeq, tagSeq: opt.tagSeq, tagPreset: opt.tagPreset, tagPos: opt.tagPos, protSrc: opt.protSrc}; useOrf(m, true); }
     if (!cur || cur === 'overlay') { if (runs.filter(r => r.inWf).length >= 2) cur = 'workflow'; }
-    render(); toast(m && m.src === 'gb' ? `Loaded ${gb.name}: ORF of ${m.tx.length} residues${m.cut ? `, cut by ${m.cut.name}` : ''}.${prep.prevProt ? ' The Protein section now uses this ORF.' : ''}` : `Loaded ${gb.name}, but found no ORF to draw.`); }
-  catch (e) { toast(`Could not read ${f.name} as GenBank. Export it from SnapGene or Benchling as GenBank (.gb).`); }
+    render(); toast(m && m.src === 'gb' ? `Loaded ${gb.name}: ORF of ${m.tx.length} residues${m.cut ? `, cut by ${m.cut.name}` : ''}.${prep.prevProt ? ' The Protein section now uses this ORF.' : ''}${warn}` : `Loaded ${gb.name}, but found no ORF to draw.${warn}`); }
+  catch (e) { toast(e && e.message === 'protein record' ? `${f.name} is a protein GenBank record. Paste its sequence in the Protein section, or export the plasmid as DNA GenBank (.gb).` : `Could not read ${f.name} as GenBank. Export it from SnapGene or Benchling as GenBank (.gb).`); }
 }
 function renderPrep(){
   const pn = $('#prepPanel'); if (!pn) return;
@@ -5302,6 +5312,8 @@ $('#prepPanel').addEventListener('input', e => { const el = e.target, k = el.dat
   if (el.type === 'text') { clearTimeout(prepT); prepT = setTimeout(render, 260); return; } if (['on', 'lysLanes', 'lysis', 'cleave'].includes(k)) gels.forEach(g => { g._prepA = null; }); render(); });
 $('#gbPick').addEventListener('click', () => $('#gbFile').click());
 $('#gbFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) loadGenBank(f); });
+$('#gbPasteBtn').addEventListener('click', () => { const b = $('#gbPasteBox'); b.hidden = !b.hidden; if (!b.hidden) $('#gbPaste').focus(); });
+$('#gbPasteUse').addEventListener('click', () => { const t = $('#gbPaste').value; if (!t.trim()) { toast('Paste the GenBank text first.'); return; } loadGenBankText(t, 'Pasted text'); });
 $('#gbClear').addEventListener('click', () => { prep.gb = null; prep.prevProt = null; render(); });
 $('#gbStatus').addEventListener('click', e => { if (e.target.id === 'gbUse') { prep.prevProt = null; useOrf(constructModel()); }
   else if (e.target.id === 'gbBack' && prep.prevProt) { Object.assign(opt, prep.prevProt); prep.prevProt = null; applyProt(); } });
