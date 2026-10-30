@@ -438,4 +438,31 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   await close();
 });
 
+/* malformed manual step IDs do not disrupt ID allocation (#380) */
+await T.t('malformed-id', async () => { const {p, errs, close} = await open(), h = H(p);
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.waitForTimeout(600);
+  const d1 = {app: 'HPLC Figure Bench', version: 1, runs: [], prep: {manual: [{id: 'mabc', kind: 'column', name: 'Bad 1'}, {id: 'm-1', kind: 'other', name: 'Bad 2'}, {id: 'm1.5', kind: 'other', name: 'Bad 3'}]}};
+  await p.setInputFiles('#projFile', {name: 'malformed_only.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d1))});
+  await p.waitForTimeout(1000);
+  await p.click('#tl [data-addmenu]');
+  await p.waitForTimeout(300);
+  await p.click('#tl [data-addstep="man:column"]');
+  await p.waitForTimeout(500);
+  const steps1 = await p.$$eval('#tl button[data-step^="man:"]', els => els.map(e => e.getAttribute('data-step')));
+  T.check('malformed-id.first-available', steps1.includes('man:m1'), `first available ID: ${steps1.join(', ')}`);
+  T.check('malformed-id.no-error', errs.length === 0, errs.join(' | '));
+
+  const d2 = {app: 'HPLC Figure Bench', version: 1, runs: [], prep: {manual: [{id: 'm999', kind: 'column', name: 'Valid 999'}, {id: 'mabc', kind: 'other', name: 'Bad 1'}, {id: 'm1.5', kind: 'other', name: 'Bad 2'}]}};
+  await p.setInputFiles('#projFile', {name: 'malformed_pair.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d2))});
+  await p.waitForTimeout(1000);
+  await p.click('#tl [data-addmenu]');
+  await p.waitForTimeout(300);
+  await p.click('#tl [data-addstep="man:column"]');
+  await p.waitForTimeout(500);
+  const steps2 = await p.$$eval('#tl button[data-step^="man:"]', els => els.map(e => e.getAttribute('data-step')));
+  T.check('malformed-id.advances-valid', steps2.includes('man:m1000'), `advances valid highest suffix: ${steps2.join(', ')}`);
+  await close();
+});
+
 T.done(); })();
