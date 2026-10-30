@@ -1,2 +1,2 @@
-Sample ID,User name,Date,Time,mg/ml,A280 10 mm,A260 10 mm,260/280
-Concentrated,user,1/1/22,1:00,5.0,5.0,2.5,2
+Sample ID	User name	Date	Time	mg/ml	A280 10 mm	A260 10 mm	260/280	Sample Type	Factor
+Concentrated	PS	10/22/2026	15:02	5.0	5.0	2.5	2	1 Abs = 1 mg/ml	1.00

@@ -1,42 +1,53 @@
 const fs = require('fs');
+
 let tests = fs.readFileSync('tests/suites/20_science.js', 'utf8');
 
 const p5UmolStart = tests.indexOf("/* ================= P5: Manual step correctly rendered in summary table ================= */");
 const p5UmolEnd = tests.indexOf("});", tests.indexOf("T.check('p5.no_nanodrop'")) + 3;
+
+// We redefine p5_umol properly using standard UI tools as requested
+// "Use addConc with a synthetic NanoDrop file to get the nd payload and set basis === 'umol'."
+// "Use setRun from tests/suites/10_data_truth.js to set manual/transfer amounts. This avoids overriding window.__HFB.ndSamples and stays UI-only."
 
 const newP5 = `  /* ================= P5: umol check ================= */
   await T.t('p5_umol', async () => {
     await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
     await h.newProject('Umol manual');
 
-    await p.evaluate(() => { window.__HFB.PROJ.prep = { on: true, eps: { kda: 50, extc: 50000, mw: 50000, form: 'untagged' } }; });
+    // Use opt UI fields to set ext.coeff and Kda
+    await p.evaluate(() => document.querySelectorAll('details').forEach(e => e.open = true));
+    await setField('#o-eps', '1');
+    await setField('#o-protKda', '50');
 
     await p.click('#tl [data-addmenu]'); await h.wait(100);
     await p.click('#tl [data-addstep="man:column"]'); await h.wait(400);
 
-    const setF = async (sel, v) => {
-        await p.evaluate(({sel, val}) => {
-            const el = document.querySelector(sel);
-            if (el) { el.value = val; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
-        }, {sel, val: String(v)});
-        await h.wait(150);
+    const setRunLocal = async (k, v) => {
+        const l = p.locator(\`.trace.run.sel [data-k="\${k}"]\`).first();
+        await l.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } }).catch(()=>{});
+        await l.fill(String(v));
+        await l.dispatchEvent('change');
+        await h.wait(250);
     };
 
-    await setF('#man-name', 'Manual start');
-    await setF('#man-vol', '10');
-    await setF('#man-conc', '2');
+    // The user said: "Use setRun from tests/suites/10_data_truth.js to set manual/transfer amounts."
+    // In hplc-figure-bench, if you click a manual step, it gets the \`.trace.run.sel\` class, and its inputs have \`data-k="vol"\` !!!
+    await setRunLocal('name', 'Manual start');
+    await setRunLocal('vol', '10');
+    await setRunLocal('conc', '2'); // 20 mg
 
     // Run 1
     await h.addRun(F.imac);
-    await setF('.trace.run.sel [data-k=shade]', 'T1-T6');
+    await setRunLocal('shade', 'T1-T6');
     await h.addConc(path.join(DATA, 'nd', 'umol_10mg.tsv'), 1);
 
     // Transfer
+    // h.addConc automatically adds a concentrated step and uploads the file!
     await h.addConc(path.join(DATA, 'nd', 'umol_5mg.tsv'), 1);
 
     // Run 2
-    await h.addRun(path.join(DATA, 'chrom', 'hplc_export.csv'));
-    await setF('.trace.run.sel [data-k=shade]', '11.5-12.0');
+    await h.addRun(path.join(DATA, 'chrom', 'hplc_export.csv')); // different file to ensure upload triggers
+    await setRunLocal('shade', '11.5-12.0');
     await h.addConc(path.join(DATA, 'nd', 'umol_4mg.tsv'), 1);
 
     await p.click('#tl [data-step="figure"]'); await h.wait(450);
@@ -55,8 +66,4 @@ const newP5 = `  /* ================= P5: umol check ================= */
   });`;
 
 tests = tests.substring(0, p5UmolStart) + newP5 + tests.substring(p5UmolEnd);
-
-tests = tests.replace(/await p\.click\('text=All projects', \{timeout: 1000\}\)\.catch\(\(\) => \{\}\);/g, `await p.evaluate(() => { const el = document.querySelector('button, a, div:has-text("All projects")'); if(el) el.click(); }).catch(() => {});`);
-tests = tests.replace(/await p\.click\('text=All projects'\)\.catch\(\(\) => \{\}\);/g, `await p.evaluate(() => { const el = document.querySelector('button, a, div:has-text("All projects")'); if(el) el.click(); }).catch(() => {});`);
-
 fs.writeFileSync('tests/suites/20_science.js', tests);
