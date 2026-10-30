@@ -502,6 +502,20 @@ ORIGIN
     epsText = await getProtEps();
     T.check('7_unknown_residues.control_eps_no_approx_label', !epsText.includes('approximate'), `expected no approximation label in resolved eps text, got "${epsText}"`);
   });
+
+  await T.t('8_cleared_seq', async () => {
+    await setProtSeq('MAWYKLLPEDG');
+    let tbl = await getProtTable();
+    T.check('8_cleared_seq.has_rows_first', tbl.length > 0, `expected table to have rows, got ${tbl.length}`);
+
+    await setProtSeq('');
+    tbl = await getProtTable();
+    T.check('8_cleared_seq.no_rows', tbl.length === 0, `expected table to have no rows, got ${tbl.length}`);
+
+    const epsText = await getProtEps();
+    T.check('8_cleared_seq.eps_empty', epsText === '', `expected eps text to be empty, got "${epsText}"`);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
