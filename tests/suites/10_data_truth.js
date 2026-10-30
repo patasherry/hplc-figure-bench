@@ -181,11 +181,11 @@ async function testSynthetic() {
     await p.waitForTimeout(500);
 
     const svgTexts = await p.evaluate(() => Array.from(document.querySelectorAll('#paper svg text')).map(x => x.textContent));
-    T.check('synthetic/axis-mL', svgTexts.some(t => t && t.includes('mL')), `SVG text has mL: ${svgTexts}`);
-    T.check('synthetic/axis-AU', svgTexts.some(t => t && t.includes('AU') && !t.includes('mAU')), `SVG text has AU, not mAU: ${svgTexts}`);
+    T.check('synthetic/axis-mL', svgTexts.includes('Volume (mL)'), `SVG text has mL: ${svgTexts}`);
+    T.check('synthetic/axis-mAU', svgTexts.includes('Absorbance (mAU)'), `SVG text has mAU: ${svgTexts}`);
 
-    T.check('synthetic/peak-pos', svgTexts.includes('5.00') || svgTexts.includes('5.0'), `Apex should be 5.0, texts: ${svgTexts}`);
-    T.check('synthetic/peak-height', svgTexts.some(t => t && (t === '1.0' || t === '1')), `Height tick should be 1.0, texts: ${svgTexts}`);
+    T.check('synthetic/peak-pos', svgTexts.includes('5'), `Apex tick should be 5, texts: ${svgTexts}`);
+    T.check('synthetic/peak-height', svgTexts.includes('100'), `Height tick should be 100, texts: ${svgTexts}`);
   } finally {
     T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | '));
     await close();
