@@ -5348,7 +5348,7 @@ function parseNDSingle(lines){
     else { const w = ndNum(c[0]); if (w != null && v != null && w >= 190 && w <= 850) { wl.push(w); ab.push(v); } } });
   if (wl.length > 10) { s.spec = {wl, ab}; const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.3); return i < 0 ? null : ab[i]; }; if (s.a280 == null) s.a280 = at(280); s.a230 = at(230); s.a340 = at(340); s.a260 = at(260);
     if (s.r230 == null && s.a230 > 0 && s.a260 != null) s.r230 = s.a260/s.a230; if (s.r280 == null && s.a280 > 0 && s.a260 != null) s.r280 = s.a260/s.a280; }
-  s.hide = CRUDE_RE.test(s.name); return s.a280 != null ? [s] : [];
+  s.hide = CRUDE_RE.test(s.name); return s.a280 != null || s.conc != null ? [s] : [];
 }
 function parseNanoDrop(text){
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim()), one = parseNDSingle(lines); if (one) return one;
@@ -5357,7 +5357,7 @@ function parseNanoDrop(text){
   /* spectra laid out as rows: one column per sample, one row per wavelength */
   if (hd.rows === 'wavelengths') { return H.slice(1).map((nm, k) => { const wl = [], ab = []; data.forEach(r => { const w = ndNum(r[0], d), v = ndNum(r[k + 1], d); if (w != null && v != null) { wl.push(w); ab.push(v); } });
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }, a280 = at(280), a260 = at(260);
-      return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null); }
+      return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null || s.conc != null); }
   const hn = H.map(h => h.toLowerCase().replace(/\s+/g, ' ')), col = f => hn.findIndex(f);
   const cName = col(h => ND_NAME.test(h)), cR280 = col(h => /a?\s?260\s*\/\s*a?\s?280/.test(h)), cR230 = col(h => /a?\s?260\s*\/\s*a?\s?230/.test(h));
   const absCol = w => col(h => new RegExp(`\\ba ?${w}\\b|^${w}$`).test(h) && !/\//.test(h) && !/conc|mg|µg|ug|ng|raw/.test(h));

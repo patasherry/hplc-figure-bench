@@ -44,6 +44,12 @@ await T.t('bad', async () => { const {p, errs, close} = await open(), h = H(p); 
   await accept('decimal-comma', path.join(Q, 'decimal_comma.csv'), 'semicolon-separated HPLC trace with decimal commas');
   const L0 = (await h.timeline()).length; await accept('bom-crlf', path.join(Q, 'bom_crlf_Q.csv'), 'UNICORN CSV with BOM and CRLF');
   T.check('ok.bom-crlf.is-run', (await h.timeline()).length === L0 + 1, 'BOM file should become a column step'); // BOM must not hide the UNICORN header
+
+  await h.step('final');
+  await p.setInputFiles('#ndFile', {name: 'zero-measurement.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(`Sample Name\tNucleic Acid(ng/uL)\tA260/A280\tA230\nBlank\t0.0\t1.8\t1.0\nSample 1\t0.0\t1.8\t1.0\nSample 2\t12.5\t1.8\t1.0`)});
+  await p.waitForTimeout(2000);
+  let ndrLen = await p.evaluate(() => document.querySelectorAll('.ndr').length);
+  T.check('zero-measurement.import', ndrLen >= 2, 'Imported 0.0 concentration');
   const long = fs.readdirSync(Q).find(f => f.startsWith('Prøtein')); await accept('unicode-long-name', path.join(Q, long), '200-char unicode file name');
   T.check('ok.unicode-long-name.no-hscroll', !(await h.hScroll()), 'a long tab or step name must not widen the page'); // layout holds
   /* the same file twice: either refused, or added with a toast saying it is a duplicate */
