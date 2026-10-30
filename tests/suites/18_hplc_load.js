@@ -37,6 +37,23 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
     }
   });
 
+  await T.t('zero_measurement_diagnostics', async () => {
+    await p.reload();
+    await h.wait(500);
+    await h.newProject('zero measurements');
+    const cases = [
+      ['akta', 'empty_akta.csv', 'UV 1_280\tCond\nml\tmAU\tml\tmS/cm\n', /ÄKTA|UNICORN/i, /no usable UV traces/i],
+      ['nanodrop', 'empty_nd.csv', 'Date,Sample Name,Protein (mg/mL),A280,A260/A280,Sample Type\n', /NanoDrop/i, /no usable measurements/i],
+      ['hplc', 'empty_hplc.csv', 'Time (min),UV 280 (mAU)\n', /chromatogram/i, /no data points/i]
+    ];
+    for (const [id, name, content, reFmt, reWhy] of cases) {
+      await p.setInputFiles('#file', {name, mimeType: 'text/csv', buffer: Buffer.from(content)});
+      await p.waitForTimeout(600);
+      const toasts = await h.toasts();
+      T.check(`zero_meas/${id}/diagnosed`, toasts.some(t => reFmt.test(t) && reWhy.test(t) && !/no columns of numbers found/i.test(t)), `toasts: ${toasts.join(' | ') || 'none'}`);
+    }
+  });
+
   T.check('no-page-errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
