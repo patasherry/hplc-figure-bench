@@ -5384,7 +5384,7 @@ function parseNanoDrop(text){
   const cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
   const wcols = H.map((h, i) => ({i, w: parseFloat(h)})).filter(x => isWl(H[x.i]) && x.w >= 190 && x.w <= 850);
   const headAll = hn.join(' '), dyeFile = /dye|degree of label/.test(headAll);
-  return data.filter(r => r.length > 2 && (r[cName] || '').length).map((r, i) => {
+  return data.filter(r => r.length > 2 && (r[cName] || '').length && !/vendor/i.test(r[cName]) && !/:\s*$/.test(r[cName])).map((r, i) => {
     const typ = cType >= 0 ? r[cType] : '', unitTxt = ((cUnit >= 0 ? r[cUnit] : '') + ' ' + (cConc >= 0 ? hn[cConc] : '')).toLowerCase();
     const kind = /ng\s*\/\s*[µu]l|nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
     let conc = cConc >= 0 ? ndNum(r[cConc], d) : null;

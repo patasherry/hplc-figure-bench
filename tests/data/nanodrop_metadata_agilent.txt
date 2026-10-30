@@ -1,0 +1,7 @@
+Sample Name	A280	A260/A280	Protein (mg/mL)
+Vendor: Agilent
+Date: 2023-10-25
+Instrument: NanoDrop One
+User: Patrick
+Pool 1	1.500	0.57	1.500
+Pool 2	1.600	0.58	1.600

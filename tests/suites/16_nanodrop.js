@@ -180,5 +180,27 @@ async function fresh(id, fn){
     await app.close();
   });
 
+  await T.t("nanodrop-metadata-agilent", async () => {
+    const app = await open();
+    const p = app.p, h = H(p);
+    await h.newProject("metadata_agilent_test");
+    await h.addRun("data/chrom/valid_unicorn.zip");
+    await p.waitForTimeout(500);
+    await h.step("final");
+    await p.waitForTimeout(200);
+    await p.evaluate(([id]) => { const el = document.getElementById(id); if (el) el.checked = false; }, ["o-ndCorr"]);
+    await p.evaluate(() => { const el = document.getElementById("o-ndNorm"); if (el) { el.value = "raw"; el.dispatchEvent(new Event("change", {bubbles: true})); } });
+    await p.waitForTimeout(200);
+    await p.setInputFiles("#ndFile", "data/nanodrop_metadata_agilent.txt");
+    await p.waitForTimeout(400);
+    await p.waitForFunction(() => document.querySelectorAll(".ndr").length === 2 || document.querySelector(".toast"), {timeout: 2000}).catch(() => {});
+    T.check("nanodrop-metadata-agilent-count", await p.locator(".ndr").count() === 2, "Expected 2 data rows after skipping agilent metadata");
+    if (await p.locator(".ndr").count() === 2) {
+      T.check("nanodrop-metadata-agilent-row1", await p.evaluate(() => document.querySelectorAll(".ndr")[0].querySelector("input").value) === "Pool 1", "Expected first row to be Pool 1");
+      T.check("nanodrop-metadata-agilent-row2", await p.evaluate(() => document.querySelectorAll(".ndr")[1].querySelector("input").value) === "Pool 2", "Expected second row to be Pool 2");
+    }
+    await app.close();
+  });
+
   T.done();
 })();
