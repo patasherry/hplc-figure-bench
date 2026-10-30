@@ -45,7 +45,7 @@ STATE = Path.home() / '.hfb-manager-state.json'
 LOG = Path(cfg.get('log', str(Path.home() / 'hfb-manager.log')))  # where the Startup loop writes the output
 DRY = '--dry' in sys.argv
 CLOUD = '--cloud' in sys.argv
-LOCAL_ROLE = cfg.get('local_role', 'coder')  # coder: the local model writes code through OpenClaw, and Gemini does the managing. manager: the old way  # running in GitHub Actions while the owner's PC is off: Gemini stands in for the local model
+LOCAL_ROLE = cfg.get('local_role', 'manager')  # manager (default): the local model answers questions, triages, reviews and sits on the board. coder: it writes code through OpenClaw and Gemini manages  # running in GitHub Actions while the owner's PC is off: Gemini stands in for the local model
 SIGN = ('\n\n_From the local manager, running in the cloud on GitHub Actions while Patrick\'s PC is off ({}). Advisory: the lead reviews every app change._' if CLOUD else
         '\n\n_From the local manager on the owner\'s PC ({}). Advisory: the lead reviews every app change._')
 HEARTBEAT = '<!-- pc-heartbeat '  # a comment on the tracking issue the PC manager refreshes, so the cloud copy knows to stand aside
