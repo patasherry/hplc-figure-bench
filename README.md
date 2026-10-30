@@ -12,6 +12,8 @@ Click **"Make a quick figure without a project"** on the home screen. Drop a CSV
 **2. A full purification project**
 From the home screen, enter a project name and click **"Start project"**. Use the **Steps** timeline on the left to record each stage of your prep: construct, transformation, expression, lysis, every chromatography column, concentration/NanoDrop checks, protease cleavage/dialysis, any gravity or batch steps without a chromatogram, and the final sample. For each column run, type fraction names (such as `T3-T6`, `T5#2` for a wrapped rack, or `A1-A6` for 96-well plates) or click **Suggest** to mark the pool. Drop in gel images and NanoDrop exports as you go. The workflow figure, purification summary table, and Methods text update automatically.
 
+In the workflow figure, click a panel to select it, then drag it to fine-tune the layout by hand (a move under 4 px counts as a click). The arrows between panels follow, and the figure grows so nothing is cut off. The move is saved with the project and used in SVG/PNG exports. **Reset position** in the panel's toolbar puts it back.
+
 **3. SEC calibration**
 Open the **Size exclusion (SEC)** section and tick **"Size peaks with calibration standards (apparent MW, Kav, oligomer state)"**. Choose a standard kit (Bio-Rad, Cytiva HMW/LMW, or custom), drop a standards run file, select it under **"Read standard volumes from"**, and click **"Read peaks"** to review and confirm the peak-to-standard matching. The app fits $\log_{10}(\text{MW})$ against $K_{\text{av}}$ (or $V_e$) and labels SEC peaks with apparent molecular weight or oligomer state.
 

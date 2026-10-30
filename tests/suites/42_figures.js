@@ -147,6 +147,46 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
     } finally { await q.close(); }
   });
 
+  // Dragging a selected workflow panel moves it; the offset is saved, Reset position clears it, older projects load unmoved.
+  await T.t('workflow_drag_panel', async () => {
+    const q = await open(), pg = q.p, hq = H(pg), CH = path.join(__dirname, '..', 'data');
+    try {
+      await hq.newProject('Drag panels'); await hq.addRun(src('his')); await hq.addRun(src('q')); await hq.step('figure'); await hq.wait(600);
+      /* the first panel's title: its x and y attributes are in SVG units, so they are exact */
+      const first = () => pg.evaluate(() => { const t = [...document.querySelectorAll('#paper svg text')].find(e => /^A\s/.test(e.textContent)); if (!t) return null;
+        const svg = t.ownerSVGElement, r = t.getBoundingClientRect(); return {x: +t.getAttribute('x'), y: +t.getAttribute('y'), k: svg.getScreenCTM().a, sx: r.left, sy: r.top, n: svg.querySelectorAll('text').length}; });
+      const savedRun = async () => { const [dl] = await Promise.all([pg.waitForEvent('download'), pg.click('#projSave')]); const d = JSON.parse(fs.readFileSync(await dl.path(), 'utf8')); return {d, r: (d.runs || [])[0] || {}}; };
+      const a0 = await first(); if (!T.check('drag/panel-found', !!a0, 'no panel title A')) return;
+      /* select panel A by clicking inside it, then drag 40 px right and 30 px down */
+      const sx = a0.sx + 30, sy = a0.sy + 60;
+      await pg.mouse.click(sx, sy); await hq.wait(400);
+      T.check('drag/toolbar-shows', await pg.isVisible('#wfTool'), 'clicking a panel opens the toolbar');
+      await pg.mouse.move(sx, sy); await pg.mouse.down(); await pg.mouse.move(sx + 20, sy + 15, {steps: 4}); await pg.mouse.move(sx + 40, sy + 30, {steps: 4}); await pg.mouse.up(); await hq.wait(500);
+      const a1 = await first(), ex = 40/a0.k, ey = 30/a0.k;
+      T.check('drag/moved-x', !!a1 && Math.abs((a1.x - a0.x) - ex) <= 3, `moved ${a1 && (a1.x - a0.x).toFixed(1)} svg units, wanted about ${ex.toFixed(1)}`);
+      T.check('drag/moved-y', !!a1 && Math.abs((a1.y - a0.y) - ey) <= 3, `moved ${a1 && (a1.y - a0.y).toFixed(1)} svg units, wanted about ${ey.toFixed(1)}`);
+      /* a click that moves under 4 px does not move the panel */
+      const b0 = await first(); await pg.mouse.move(sx + 40, sy + 30); await pg.mouse.down(); await pg.mouse.move(sx + 41, sy + 31); await pg.mouse.up(); await hq.wait(400);
+      const b1 = await first(); T.check('drag/small-move-is-click', !!b1 && Math.abs(b1.x - b0.x) < 0.01 && Math.abs(b1.y - b0.y) < 0.01, `x ${b0.x} to ${b1 && b1.x}`);
+      /* saved with the project */
+      const sv = await savedRun(); T.check('drag/saved-offset', Math.abs(sv.r.wfDx) > 1 && Math.abs(sv.r.wfDy) > 1, `wfDx ${sv.r.wfDx}, wfDy ${sv.r.wfDy}`);
+      /* an older project (no offset fields) loads at the unmoved position */
+      const old = JSON.parse(JSON.stringify(sv.d)); (old.runs || []).forEach(r => { delete r.wfDx; delete r.wfDy; }); if (old.prep) delete old.prep.wfOff;
+      await pg.setInputFiles('#projFile', {name: 'old_no_offsets.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(old))}); await hq.wait(2500);
+      await hq.step('figure'); await hq.wait(600); const o1 = await first();
+      T.check('drag/old-project-unmoved', !!o1 && Math.abs(o1.x - a0.x) < 0.5 && Math.abs(o1.y - a0.y) < 0.5, `at ${o1 && o1.x},${o1 && o1.y}, was ${a0.x},${a0.y}`);
+      /* reload the moved project, select the panel and reset it */
+      await pg.setInputFiles('#projFile', {name: 'moved.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(sv.d))}); await hq.wait(2500);
+      await hq.step('figure'); await hq.wait(600); const m1 = await first();
+      T.check('drag/reload-keeps-offset', !!m1 && Math.abs((m1.x - a0.x) - ex) <= 3, `x ${m1 && m1.x}, unmoved ${a0.x}`);
+      await pg.mouse.click(m1.sx + 30, m1.sy + 60); await hq.wait(400);
+      await pg.click('#wfTool [data-wf=reset]'); await hq.wait(500);
+      const r1 = await first(); T.check('drag/reset-position', !!r1 && Math.abs(r1.x - a0.x) < 0.5 && Math.abs(r1.y - a0.y) < 0.5, `at ${r1 && r1.x},${r1 && r1.y}, was ${a0.x},${a0.y}`);
+      const sv2 = await savedRun(); T.check('drag/reset-saved', !sv2.r.wfDx && !sv2.r.wfDy, `wfDx ${sv2.r.wfDx}, wfDy ${sv2.r.wfDy}`);
+      T.check('drag/no_page_errors', !q.errs.length, q.errs.join(' | '));
+    } finally { await q.close(); }
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
