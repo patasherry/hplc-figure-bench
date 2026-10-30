@@ -465,4 +465,18 @@ await T.t('malformed-id', async () => { const {p, errs, close} = await open(), h
   await close();
 });
 
+await T.t('prep-name-manual-id', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  await h.newProject('m900');
+  await p.waitForTimeout(500);
+  await p.locator('#tl [data-addmenu]').click();
+  await p.waitForTimeout(300);
+  await p.locator('#tl [data-addstep="man:column"]').click();
+  await p.waitForTimeout(500);
+
+  const steps = await p.$$eval('#tl button[data-step^="man:"]', els => els.map(e => e.getAttribute('data-step')));
+  T.check('prep-name-manual-id.allocates-m1', steps.includes('man:m1'), `Expected man:m1, got: ${steps.join(', ')}`);
+  await close();
+});
+
 T.done(); })();
