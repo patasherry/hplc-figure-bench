@@ -1,5 +1,5 @@
 const {open, H, suite, path, fs, DATA, src} = require('../lib/harness');
-const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), nd: path.join(DATA, 'science/nd3.csv')};
+const F = {gb: src('gb'), imac: src('his'), grad: path.join(DATA, 'chrom/imac_HisTrap_HP_5mL_gradient_u7_tab_utf16.csv'), sec: path.join(DATA, 'science/sec_inject2.csv'), nd: path.join(DATA, 'science/nd3.csv')};
 
 (async () => {
   const T = suite('23_provenance');
@@ -74,6 +74,28 @@ const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_in
     await p.waitForTimeout(500);
     const mMiss = await methods();
     T.check('missing_provenance', mMiss.includes('not entered'), 'Methods text should mention missing provenance');
+  });
+
+  /* typed flow, temperature and %B gradient are checked against the curves in the file (5 mL/min, 4 °C, 0 to 100% B from 30 to 80 mL) */
+  await T.t('cond_schema', async () => {
+    const setRun = async (k, v) => { const l = p.locator(`.trace.run.sel [data-k=${k}]`).first(); await l.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } }); await l.fill(String(v)); await l.dispatchEvent('change'); await h.wait(250); };
+    const chk = m => (m.match(/\[[^\]]*in the file:[^\]]*\]/g) || []);
+    await p.click('text=All projects').catch(() => {}); await h.wait(600);
+    await h.newProject('Condition schema');
+    await h.addRun(F.grad);
+    const m0 = await methods();
+    T.check('cond_schema.auto_no_check', chk(m0).length === 0, `values read from the file need no check: ${chk(m0).join(' ')}`); /* guards: no false positive on the file's own values */
+    await h.step((await h.timeline()).find(x => /^run:/.test(x.k)).k);
+    for (const [k, v] of Object.entries({mFlow: '5', mTemp: '6 °C', mGrad: 'linear 0–100% B over 10 CV'})) await setRun(k, v);
+    const m1 = await methods();
+    T.check('cond_schema.match_no_check', chk(m1).length === 0, `typed values that agree with the file within tolerance: ${chk(m1).join(' ')} | ${m1}`); /* guards: tolerances for rounding and sensor drift */
+    await h.step((await h.timeline()).find(x => /^run:/.test(x.k)).k);
+    for (const [k, v] of Object.entries({mFlow: '2.5', mTemp: '20', mGrad: 'linear 0–50% B over 10 CV'})) await setRun(k, v);
+    const m2 = await methods();
+    T.check('cond_schema.flow_check', /flow rate in the file: 5\.0 mL\/min, check/.test(m2), `typed 2.5 mL/min, file 5.0: ${m2}`);
+    T.check('cond_schema.temp_check', /temperature in the file: 4\.0 °C, check/.test(m2), `typed 20 °C, file 4.0: ${m2}`);
+    T.check('cond_schema.grad_check', /gradient in the file: 0% to 100% B[^\]]*, check/.test(m2), `typed 0–50% B, file 0–100%: ${m2}`);
+    T.check('cond_schema.typed_kept', /2\.5 mL\/min/.test(m2) && /0–50% B/.test(m2), `the typed values are still what Methods states: ${m2}`); /* guards: the check flags, it does not overwrite */
   });
 
   await close();
