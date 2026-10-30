@@ -1423,7 +1423,9 @@ function decode(buf){
 }
 const clean = f => f.trim().replace(/^"(.*)"$/,'$1').trim();
 function splitLine(L, d){ return d === 'ws' ? L.trim().split(/\s+/) : L.split(d); }
-function toNum(f, dc){ f = clean(f); if (dc) f = f.replace(/^-?\d+,\d+(?:[eE][-+]?\d+)?$/, m => m.replace(',', '.')); return NUM.test(f) ? parseFloat(f) : NaN; }
+/* Generic chromatogram and ÄKTA CSV values use this directly; NanoDrop first applies its delimiter-specific decimal normalization. Zero is a measurement, while blank and malformed fields are not. */
+function measurementNumber(v){ const s = clean(String(v ?? '')); return NUM.test(s) ? Number(s) : null; }
+function toNum(f, dc){ f = clean(f); if (dc) f = f.replace(/^-?\d+,\d+(?:[eE][-+]?\d+)?$/, m => m.replace(',', '.')); const v = measurementNumber(f); return v == null ? NaN : v; }
 function parseText(text){
   const lines = text.split(/\r\n|\n|\r/);
   const sample = lines.length > 6000 ? lines.slice(0,3000).concat(lines.slice(-3000)) : lines;
@@ -5356,19 +5358,19 @@ function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) {
     if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) {
         for (let j = i + 1; j < lines.length; j++) {
             const row = splitRow(lines[j], d);
-            if (row.some(v => v !== '' && !isNaN(parseFloat(v.replace(',', '.'))))) return {i, d, H, rows: 'samples'};
+            if (row.some(v => ndNum(v, d) != null)) return {i, d, H, rows: 'samples'};
         }
     }
     if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1) {
         for (let j = i + 1; j < lines.length; j++) {
             const row = splitRow(lines[j], d);
-            if (row.some(v => v !== '' && !isNaN(parseFloat(v.replace(',', '.'))))) return {i, d, H, rows: 'wavelengths'};
+            if (row.some(v => ndNum(v, d) != null)) return {i, d, H, rows: 'wavelengths'};
         }
     }
 } return null; }
 function looksNanoDrop(text){ const L = text.split(/\r?\n/).filter(l => l.trim()); return !!ndHeader(L) || (L.slice(0, 80).some(l => /^wavelength/i.test(l.trim()) && /absorbance/i.test(l)) && L.some(l => /^a?\s?260\s*\/\s*a?280\b/i.test(l.trim()))); }
 function isNanoDropHead(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i], d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d); if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) return true; if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1 && H.some(h => isWl(h) || /\b(abs|absorbance|a280)\b/i.test(h))) return true; } return false; }
-const ndNum = (v, d) => { const s = String(v ?? '').replace(/\s/g, ''); if (d === ';') { const m = s.match(/^[+-]?(\d*)(?:\.(\d{3}))*,(\d+)(?:[eE][+-]?\d+)?$/); const x = parseFloat(m ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '.')); return isFinite(x) ? x : null; } const m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/), x = parseFloat(m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, '')); return isFinite(x) ? x : null; };
+const ndNum = (v, d) => { let s = String(v ?? '').replace(/\s/g, ''); if (d === ';') { const m = s.match(/^[+-]?(\d*)(?:\.(\d{3}))*,(\d+)(?:[eE][+-]?\d+)?$/); s = m ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '.'); } else { const m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/); s = m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, ''); } return measurementNumber(s); };
 const CRUDE_RE = /lys|load|flow|\bft\b|supernat|pellet|crude|input|clarif/i;
 function ndNew(o){ return Object.assign({id: 'nd' + (ndUid++), name: '', kind: 'protein', a280: null, a260: null, a230: null, a340: null, r280: null, r230: null, conc: null, unit: 'mg/mL', runId: '', stage: 'pool', dil: 1, hide: false}, o); }
 /* NanoDrop One per-sample file: name, date, a "Wavelength (nm) / 10mm Absorbance" header, calibration comments, A260/A280 and A280 lines, then the spectrum */
