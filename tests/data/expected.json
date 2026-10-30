@@ -498,6 +498,19 @@
    "forbid": [],
    "pool": null,
    "time": "2026-10-23T16:00:00.000Z"
+  },
+  {
+   "file": "generic_zeros.csv",
+   "format": "Generic generic_zeros CSV",
+   "kind": "sec",
+   "step": "Size exclusion",
+   "unit": "min",
+   "column": "Superdex 200 Increase 10/300 GL",
+   "cv": 24,
+   "flow": 0.5,
+   "path_mm": 10,
+   "true_mg": null,
+   "checks": []
   }
  ],
  "chrom_note": "ve        apex (isolated peak) or Gaussian centre (overlapped) in the unit the app should show:\n            SEC: counted from the injection. Others: the file's own volume axis.\n  must      the app has to report a peak within tol. must=false: allowed but not required (tiny, shoulder, outside the fraction window)\n  pool      fractions you would pool, its span, its A280 area (mAU*unit) on a zero baseline, and the mg the app should show\n            with eps (A280 of 1 mg/mL, 1 cm) = POOL_EPS and the stated UV path: mg = area/1000/(eps*path_mm/10)",
@@ -723,6 +736,52 @@
    "mean_abs1": 1.75,
    "sd_abs1": 0.3536,
    "mean_eps": 2.0349,
+   "eps": 0.86,
+   "nucleic": 0,
+   "warn_high_ratio": false,
+   "note": ""
+  },
+  {
+   "file": "nd_zeros.tsv",
+   "format": "Valid zero readings",
+   "n": 1,
+   "names": [
+    "Zero"
+   ],
+   "r280": [
+    0.0
+   ],
+   "mean_abs1": 0.0,
+   "sd_abs1": null,
+   "mean_eps": 0.0,
+   "eps": 0.86,
+   "nucleic": 0,
+   "warn_high_ratio": false,
+   "note": ""
+  },
+  {
+   "file": "nd_empty.tsv",
+   "format": "Empty readings (should be skipped)",
+   "n": 0,
+   "names": [],
+   "r280": [],
+   "mean_abs1": null,
+   "sd_abs1": null,
+   "mean_eps": null,
+   "eps": 0.86,
+   "nucleic": 0,
+   "warn_high_ratio": false,
+   "note": ""
+  },
+  {
+   "file": "nd_malformed.tsv",
+   "format": "Malformed readings (should be skipped)",
+   "n": 0,
+   "names": [],
+   "r280": [],
+   "mean_abs1": null,
+   "sd_abs1": null,
+   "mean_eps": null,
    "eps": 0.86,
    "nucleic": 0,
    "warn_high_ratio": false,

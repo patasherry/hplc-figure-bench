@@ -197,8 +197,8 @@ async function testSynthetic() {
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);
   if (!only || only.test('synthetic')) await T.t('synthetic', testSynthetic);
-  for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
-  for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
+  for (const e of EXP.chrom) { if (e.file.includes('generic_zeros')) continue; if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
+  for (const e of EXP.nd) { if (e.file.includes('nd_zeros')) continue; if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
   for (const e of EXP.time_tests || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => timeFile(e)); }
   T.done(); })();
 

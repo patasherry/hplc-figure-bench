@@ -1431,27 +1431,27 @@ function parseText(text){
   for (const d of ['\t', ',', ';', 'ws']) for (const dc of (d === ',' ? [false] : [false, true])) {
     /* score each delimiter by numeric fields minus leftover text fields on data lines, so 0,5;1,2 (decimal commas) splits on ; not , */
     let cnt = 0, sc = 0;
-    for (const L of sample) { if (!L.trim()) continue; let k = 0, bad = 0; for (const f of splitLine(L,d)) { if (!isNaN(toNum(f,dc))) k++; else if (f.trim()) bad++; } if (k >= 2) { cnt++; sc += k - bad; } }
+    for (const L of sample) { if (!L.trim()) continue; let k = 0, bad = 0; for (const f of splitLine(L,d)) { if (Number.isFinite(toNum(f,dc))) k++; else if (f.trim()) bad++; } if (k >= 2) { cnt++; sc += k - bad; } }
     if (!best || sc > best.sc) best = {d, dc, cnt, sc};
   }
   if (!best || best.cnt < 3) {
     /* a single column of signal values (some detectors export only that): plot against point number */
-    const vals = []; let head = null; for (const L of lines) { const t = L.trim(); if (!t) continue; const v = toNum(t, false), v2 = toNum(t, true); const x = !isNaN(v) ? v : v2; if (!isNaN(x)) vals.push(x); else if (!vals.length) head = clean(t); }
+    const vals = []; let head = null; for (const L of lines) { const t = L.trim(); if (!t) continue; const v = toNum(t, false), v2 = toNum(t, true); const x = Number.isFinite(v) ? v : v2; if (Number.isFinite(x)) vals.push(x); else if (!vals.length) head = clean(t); }
     if (vals.length >= 20) return {rows: vals.map((v, i) => [i + 1, v]), cols: ['Point number', head || 'Signal'], xc: 0, yc: 1};
     throw new Error('No numeric columns found');
   }
   const {d, dc} = best; const runsN = []; let cr = null;
   lines.forEach((L, i) => {
     if (!L.trim()) return;
-    const nums = splitLine(L, d).map(f => toNum(f, dc)); let k = 0; for (const v of nums) if (!isNaN(v)) k++;
+    const nums = splitLine(L, d).map(f => toNum(f, dc)); let k = 0; for (const v of nums) if (Number.isFinite(v)) k++;
     if (k >= 2) { if (!cr) { cr = {start:i, rows:[]}; runsN.push(cr); } cr.rows.push(nums); } else cr = null;
   });
   const run = runsN.reduce((a,b) => b.rows.length > a.rows.length ? b : a);
   let ncol = 0; for (const r of run.rows) if (r.length > ncol) ncol = r.length;
-  const isHeader = fs => fs.length >= 2 && fs.filter(f => f && isNaN(toNum(f,dc))).length >= Math.min(2, fs.length);
+  const isHeader = fs => fs.length >= 2 && fs.filter(f => f && !Number.isFinite(toNum(f,dc))).length >= Math.min(2, fs.length);
   let names = null, above = null, j = run.start - 1;
   for (; j >= Math.max(0, run.start-4); j--) { if (!lines[j].trim()) continue; const fs = splitLine(lines[j], d).map(clean); if (isHeader(fs)) { names = fs; break; } }
-  if (names) for (let k = j-1; k >= Math.max(0, j-2); k--) { if (!lines[k].trim()) continue; const fs = splitLine(lines[k], d).map(clean); if (fs.length === names.length && fs.some(f => f && isNaN(toNum(f,dc)))) above = fs; break; }
+  if (names) for (let k = j-1; k >= Math.max(0, j-2); k--) { if (!lines[k].trim()) continue; const fs = splitLine(lines[k], d).map(clean); if (fs.length === names.length && fs.some(f => f && !Number.isFinite(toNum(f,dc)))) above = fs; break; }
   if (above) { let carry = ''; names = names.map((n,c) => { if (above[c]) carry = above[c]; return carry && carry !== n ? carry + ' ' + n : n; }); }
   const cols = []; for (let c=0;c<ncol;c++) cols.push((names && names[c]) || ('Column ' + (c+1)));
   let xc = 0, yc = 1;
@@ -5336,7 +5336,7 @@ function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) {
     }
 } return null; }
 function looksNanoDrop(text){ const L = text.split(/\r?\n/).filter(l => l.trim()); return !!ndHeader(L) || (L.slice(0, 80).some(l => /^wavelength/i.test(l.trim()) && /absorbance/i.test(l)) && L.some(l => /^a?\s?260\s*\/\s*a?280\b/i.test(l.trim()))); }
-const ndNum = (v, d) => { const s = String(v ?? '').replace(/\s/g, ''); if (d === ';') { const m = s.match(/^[+-]?(\d*)(?:\.(\d{3}))*,(\d+)(?:[eE][+-]?\d+)?$/); const x = parseFloat(m ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '.')); return isFinite(x) ? x : null; } const m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/), x = parseFloat(m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, '')); return isFinite(x) ? x : null; };
+const ndNum = (v, d) => { const s = String(v ?? '').replace(/\s/g, ''); if (s === '') return null; if (d === ';') { const m = s.match(/^[+-]?(\d*)(?:\.(\d{3}))*,(\d+)(?:[eE][+-]?\d+)?$/); const x = parseFloat(m ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '.')); return isFinite(x) ? x : null; } const m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/), x = parseFloat(m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, '')); return isFinite(x) ? x : null; };
 const CRUDE_RE = /lys|load|flow|\bft\b|supernat|pellet|crude|input|clarif/i;
 function ndNew(o){ return Object.assign({id: 'nd' + (ndUid++), name: '', kind: 'protein', a280: null, a260: null, a230: null, a340: null, r280: null, r230: null, conc: null, unit: 'mg/mL', runId: '', stage: 'pool', dil: 1, hide: false}, o); }
 /* NanoDrop One per-sample file: name, date, a "Wavelength (nm) / 10mm Absorbance" header, calibration comments, A260/A280 and A280 lines, then the spectrum */

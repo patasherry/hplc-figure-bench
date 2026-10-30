@@ -159,6 +159,24 @@ lines = [';'.join(ONE_HEAD)] + [';'.join(['10/22/2026 9:58:00 AM', n, f'{a:.3f}'
 w('nd_comma_decimal.csv', '\r\n'.join(lines) + '\r\n')
 rec('nd_comma_decimal.csv', 'NanoDrop One, semicolon CSV, comma decimals, sample names with commas', r11)
 
+# 12. Valid zeros
+r12 = [('Zero', 0.0, 0.0)]
+lines = ['\t'.join(ONE_HEAD)] + ['\t'.join(['10/22/2026 9:58:00 AM', n, f'{a:.3f}', f'{a:.3f}', f'{r:.2f}', '1 Abs = 1 mg / mL', '', '', '', '340', '0.011']) for n, a, r in r12]
+w('nd_zeros.tsv', '\r\n'.join(lines) + '\r\n', 'utf-16-le')
+rec('nd_zeros.tsv', 'Valid zero readings', r12)
+
+# 13. Empty values
+r13 = []
+lines = ['\t'.join(ONE_HEAD)] + ['\t'.join(['10/22/2026 9:58:00 AM', 'Empty A280', '', '', '0.00', '1 Abs = 1 mg / mL', '', '', '', '340', '0.011'])]
+w('nd_empty.tsv', '\r\n'.join(lines) + '\r\n', 'utf-16-le')
+rec('nd_empty.tsv', 'Empty readings (should be skipped)', r13)
+
+# 14. Malformed row
+r14 = []
+lines = ['\t'.join(ONE_HEAD)] + ['\t'.join(['10/22/2026 9:58:00 AM', 'Malformed', 'foo', 'bar', 'baz', '1 Abs = 1 mg / mL', '', '', '', '340', '0.011'])]
+w('nd_malformed.tsv', '\r\n'.join(lines) + '\r\n', 'utf-16-le')
+rec('nd_malformed.tsv', 'Malformed readings (should be skipped)', r14)
+
 if __name__ == '__main__':
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else {}
     doc['nd'] = EXP; doc['nd_note'] = __doc__.split('Ground truth per file')[1].strip()

@@ -411,9 +411,25 @@ def time_formats():
              peaks=[], forbid=[], pool=None, time='2026-10-23T16:00:00.000Z'))
 
 
+def zero_formats():
+    fn = 'generic_zeros.csv'; t = np.round(np.arange(0, 10.0, 0.5), 4)
+    y = np.zeros_like(t)
+    with open(os.path.join(OUT, fn), 'w') as f:
+        f.write('Point number,Signal\n' + '\n'.join([f'{x},{y[i]}' for i, x in enumerate(t)]) + '\n')
+    add(dict(file=fn, format='Generic generic_zeros CSV', kind='sec', step='Size exclusion', unit='min', column='Superdex 200 Increase 10/300 GL', cv=24, flow=0.5, path_mm=10, true_mg=None, checks=[]))
+
+    fn = 'generic_empty.csv'; t = np.round(np.arange(0, 10.0, 0.5), 4)
+    with open(os.path.join(OUT, fn), 'w') as f:
+        f.write('Point number,Signal\n' + '\n'.join([f'{x},' for x in t]) + '\n')
+
+    fn = 'generic_malformed.csv'; t = np.round(np.arange(0, 10.0, 0.5), 4)
+    with open(os.path.join(OUT, fn), 'w') as f:
+        f.write('Point number,Signal\n' + '\n'.join([f'{x},foo' for x in t]) + '\n')
+
+
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, hplc_export, cross_format_files, time_formats): f()
-    p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, hplc_export, cross_format_files, time_formats, zero_formats): f()
+    p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()
-    json.dump(doc, open(p, 'w'), indent=1); print(f'{len(EXP)} chromatograms -> {OUT}')
+    json.dump(doc, open(p, 'w', encoding='utf-8'), indent=1, ensure_ascii=False); print(f'{len(EXP)} chromatograms -> {OUT}')
