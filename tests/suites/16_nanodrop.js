@@ -1,6 +1,10 @@
 const {open, H, suite, fs} = require('../lib/harness');
+const F = require('../data/gen_import_sec');
 const T = suite('16_nanodrop');
-const SEL = {quick: '#homeQuick', project: '#projFile', save: '#projSave', file: '#file', nd: '#ndFile'};
+const SEL = {quick: '#homeQuick', project: '#projFile', save: '#projSave', file: '#file', nd: '#ndFile',
+  row: '.ndr', edit: '.nd-edit summary', run: '[data-ndk="runId"]', stage: '[data-ndk="stage"]',
+  dilution: '[data-ndk="dil"]', concentration: '.nd-v', poolStats: '.ndg-s', finalStats: '.ndg-lab', mass: '.ndg-mg',
+  poolVolume: '[data-ndr="ndVol"]', finalVolume: '[data-ndr="ndFinalVol"]'};
 const click = (p, sel) => p.locator(sel).evaluate(e => e.click());
 
 async function saved(p){
@@ -16,6 +20,41 @@ async function fresh(id, fn){
 }
 
 (async () => {
+  // Two 1 mg/mL readings become 3 and 1 while editing: mean 2, sample SD sqrt(2), mass 4 mg in 2 mL.
+  for (const stage of ['pool', 'final']) await fresh('live-dilution-' + stage, async (p, h) => {
+    const id = 'nd/live-dilution/' + stage;
+    await h.newProject('Live dilution ' + stage);
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    await p.setInputFiles(SEL.nd, F.nd('live-dilution.tsv', [['Replicate 1', 1, 1], ['Replicate 2', 1, 1]], false));
+    await p.locator(SEL.row).nth(1).waitFor();
+    for (let i = 0; i < 2; i++) {
+      const row = p.locator(SEL.row).nth(i);
+      await row.locator(SEL.edit).click();
+      await row.locator(SEL.run).selectOption({index: 1});
+      if (stage === 'final') {
+        await row.locator(SEL.edit).click();
+        await row.locator(SEL.stage).selectOption('final');
+      }
+    }
+    const stats = p.locator(stage === 'pool' ? SEL.poolStats : SEL.finalStats);
+    const mass = p.locator(SEL.mass).nth(stage === 'pool' ? 0 : 1);
+    await p.locator(stage === 'pool' ? SEL.poolVolume : SEL.finalVolume).fill('2');
+    const initial = await stats.textContent();
+    T.check(id + '/initial', initial === (stage === 'final' ? 'Final ' : '') + '1.00 ± 0.00 mg/mL, n 2' && await mass.textContent() === '2.00 mg', initial);
+    await p.locator(SEL.row).first().locator(SEL.edit).click();
+    const input = await p.locator(SEL.dilution).first().elementHandle();
+    await input.fill('3');
+    // Inspect the original node, not a locator that could resolve to a replacement after a panel rebuild.
+    const editing = await input.evaluate(e => ({connected: e.isConnected, active: document.activeElement === e, value: e.value}));
+    T.check(id + '/input-preserved', editing.connected && editing.active && editing.value === '3', JSON.stringify(editing));
+    const values = await p.locator(SEL.concentration).allTextContents();
+    T.check(id + '/individuals', JSON.stringify(values) === JSON.stringify(['3.00 mg/mL', '1.00 mg/mL']), JSON.stringify(values));
+    const current = await stats.textContent();
+    T.check(id + '/statistics', current === (stage === 'final' ? 'Final ' : '') + '2.00 ± 1.41 mg/mL, n 2', current);
+    T.check(id + '/mass', await mass.textContent() === '4.00 mg', await mass.textContent());
+  });
+
   const expected = JSON.parse(fs.readFileSync('data/expected.json', 'utf8')).nd;
   for (const exp of expected) {
     if (exp.file === 'nd_acclaro_ug_ml.csv') continue; // Do not test the Acclaro corrected value, which is being fixed in #96.
