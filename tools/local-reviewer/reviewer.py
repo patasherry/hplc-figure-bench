@@ -49,7 +49,7 @@ def gh(path, method='GET', body=None, accept='application/vnd.github+json'):
 
 
 def ask_model(system, user):
-    body = {'model': MODEL, 'stream': False, 'options': {'temperature': 0.2, 'num_ctx': 32768},
+    body = {'model': MODEL, 'stream': False, 'options': {'temperature': 0.2, 'num_ctx': int(cfg.get('num_ctx', 65536))},
             'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}]}
     req = urllib.request.Request(OLLAMA + '/api/chat', data=json.dumps(body).encode(),
                                  headers={'Content-Type': 'application/json'})
