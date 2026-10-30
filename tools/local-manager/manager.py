@@ -36,7 +36,7 @@ BOARD_LOW_QUEUE = cfg.get('board_low_queue', 5)  # and when fewer jobs than this
 AUTO_MAX, AUTO_QUEUE, AUTO_AVG = 3, 10, 3.5  # adopt at most 3 a round, while fewer than 10 jobs wait, with an average of 3.5+ and nobody below 3
 BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
-CAP = {'antigravity': cfg.get('max_antigravity_jobs', 6), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
+CAP = {'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 6), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
 TRACK = cfg.get('tracking_issue', 17)
 CLOUD_STANDBY = cfg.get('cloud_standby_minutes', 20)  # the cloud copy works only when the PC manager has been quiet this long
 DIGEST_HOUR = cfg.get('digest_hour', 7)
@@ -44,7 +44,8 @@ GEMINI_KEY = cfg.get('gemini_key') or os.environ.get('GEMINI_API_KEY', '')
 STATE = Path.home() / '.hfb-manager-state.json'
 LOG = Path(cfg.get('log', str(Path.home() / 'hfb-manager.log')))  # where the Startup loop writes the output
 DRY = '--dry' in sys.argv
-CLOUD = '--cloud' in sys.argv  # running in GitHub Actions while the owner's PC is off: Gemini stands in for the local model
+CLOUD = '--cloud' in sys.argv
+LOCAL_ROLE = cfg.get('local_role', 'coder')  # coder: the local model writes code through OpenClaw, and Gemini does the managing. manager: the old way  # running in GitHub Actions while the owner's PC is off: Gemini stands in for the local model
 SIGN = ('\n\n_From the local manager, running in the cloud on GitHub Actions while Patrick\'s PC is off ({}). Advisory: the lead reviews every app change._' if CLOUD else
         '\n\n_From the local manager on the owner\'s PC ({}). Advisory: the lead reviews every app change._')
 HEARTBEAT = '<!-- pc-heartbeat '  # a comment on the tracking issue the PC manager refreshes, so the cloud copy knows to stand aside
@@ -647,7 +648,7 @@ def gate(s):
                  ['GitHub waits for a person to approve the tests on this Copilot PR, so the manager rebuilds it on its own branch, where they run.'] if waits_approval else gate_problems(full, files, diff, report_of(n)))
         m = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
         issue = int(m.group(1)) if m else linked_issue(n)
-        cop = 'copilot' in pr['user']['login'].lower() or COPILOT_CLI_MARK in (pr.get('body') or '') or AG_MARK in (pr.get('body') or '')
+        cop = 'copilot' in pr['user']['login'].lower() or COPILOT_CLI_MARK in (pr.get('body') or '') or AG_MARK in (pr.get('body') or '') or OC_MARK in (pr.get('body') or '')
         mine = bool(re.search(r'Generated (?:with|by) \[Claude Code\]|claude\.ai/code/session_', pr.get('body') or '')) or CC_MARK in (pr.get('body') or '')  # the lead's rebuilds and Claude Code jobs are not sent back to Jules
         if probs and issue and all(p.startswith(JUNK_ONLY) for p in probs) and CLEAN_MARK not in (pr.get('body') or ''):
             new = clean_rebuild(full, files, issue)  # only stray files or a conflict: fix it here instead of a Jules retry
@@ -1010,6 +1011,92 @@ def apply_agent_diff(n, title, diff, body, branch, who):
             pass
 
 
+# ---------- OpenClaw on the owner's PC: the local model as a coding worker ----------
+OC_MARK = '<!-- openclaw-job -->'
+OC_HOURS = cfg.get('openclaw_hours', 1.5)  # a job running longer than this is stopped
+_oc = {}  # issue -> running job; kept in memory, since the process belongs to this manager
+
+
+def ship_worktree(wt, n, title, desc, branch, who, mark):
+    """Check a job's worktree changed only allowed files, commit, push the branch and open the PR. Returns the PR number."""
+    changed = sorted(set(git('diff', '--name-only', 'HEAD', cwd=wt).splitlines() + git('ls-files', '--others', '--exclude-standard', cwd=wt).splitlines()) - {''})
+    bad = [f for f in changed if not ALLOWED.match(f.strip('"'))]
+    if not changed or bad:
+        raise RuntimeError('no changes' if not changed else 'changed files outside the app and tests: ' + ', '.join(bad[:5]))
+    git('add', '-A', cwd=wt)
+    git('-c', 'user.name=HFB local manager', '-c', 'user.email=hfb-manager@users.noreply.github.com', 'commit', '-q', '-m', f'{title} (#{n})\n\nMade by {who}, started by the local manager.', cwd=wt)
+    auth = __import__('base64').b64encode(f'x-access-token:{rv.TOKEN}'.encode()).decode()
+    git('-c', f'http.https://github.com/.extraheader=AUTHORIZATION: basic {auth}', 'push', '-q', '-f', 'origin', f'HEAD:refs/heads/{branch}', cwd=wt, timeout=600)
+    return gh(f'repos/{REPO}/pulls', 'POST', {'title': f'{title} (#{n})', 'head': branch, 'base': 'main', 'body': f'{mark}\nCloses #{n}. Made by **{who}**, started by the local manager.\n\n{desc}'})['number']
+
+
+def openclaw(s):
+    """Run OpenClaw (the local model) on one job at a time, in the background, so the manager's passes keep going while it codes."""
+    exe = shutil.which('openclaw')
+    if CLOUD or not exe or not cfg.get('openclaw', True):
+        return
+    for n, j in list(_oc.items()):  # finished, or over time
+        if j['proc'].poll() is None and time.time() - j['t'] < OC_HOURS * 3600:
+            continue
+        if j['proc'].poll() is None:
+            j['proc'].kill()
+        _oc.pop(n); j['log'].close()
+        wt = j['wt']
+        try:
+            (wt / TASK_FILE).unlink(missing_ok=True)
+            body_f = wt / 'PR_BODY.md'
+            desc = body_f.read_text(encoding='utf-8', errors='replace') if body_f.exists() else '(OpenClaw wrote no description.)'
+            body_f.unlink(missing_ok=True)
+            pr = ship_worktree(wt, n, j['title'], desc, f'openclaw/issue-{n}', f'OpenClaw with the local model ({rv.MODEL_LOCAL})', OC_MARK)
+            label(n, add=['openclaw-done'], remove=['openclaw-running'])
+            post(n, f'OpenClaw opened #{pr}. It goes through the Test suite and the automatic review like any PR.' + SIGN.format(rv.MODEL))
+            log(f'#{n}: OpenClaw opened PR #{pr} after {int((time.time() - j["t"]) / 60)} min')
+        except Exception as e:
+            s.setdefault('oc_tried', {})[str(n)] = time.time()
+            label(n, add=[j['src']], remove=['openclaw-running'])
+            post(n, f'The OpenClaw job did not produce a usable change ({str(e)[:300]}), so the job goes back to `{j["src"]}`.' + SIGN.format(rv.MODEL))
+            log(f'#{n}: OpenClaw job failed: {e}')
+        finally:
+            try:
+                unlink_deps(wt)
+                git('worktree', 'remove', '--force', str(wt))
+            except Exception:
+                pass
+    for i in issues('openclaw-running'):  # left over from before a restart: the process is gone
+        if i['number'] not in _oc:
+            label(i['number'], add=['jules-queue'], remove=['openclaw-running'])
+            log(f'#{i["number"]}: OpenClaw job lost in a restart, back to Jules')
+    if _oc or DRY:
+        return
+    ok = lambda i: str(i['number']) not in s.get('oc_tried', {}) and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
+    cop_off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
+    waiting = ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
+              [(i, 'jules-queue') for i in sorted(issues('jules-queue'), key=lambda x: -x['number']) if ok(i) and 'from-patrick' not in {l['name'] for l in i['labels']}]
+    if not waiting or not use(s, 'openclaw'):
+        return
+    i, src = waiting[0]
+    n, wt = i['number'], WORK / f'openclaw-{i["number"]}'
+    try:
+        git('fetch', '-q', 'origin')
+        if wt.exists():
+            unlink_deps(wt)
+            git('worktree', 'remove', '--force', str(wt))
+        WORK.mkdir(parents=True, exist_ok=True)
+        git('worktree', 'add', '-B', f'openclaw/issue-{n}', str(wt), 'origin/main')
+        link_deps(wt)
+        why = 'Jules (another agent) could not finish it.' if src != 'jules-queue' else 'You are taking it so Jules (another agent) can work on other jobs.'
+        (wt / TASK_FILE).write_text(CC_JOB.format(who='OpenClaw, running a local model on Patrick\'s PC', why=why, n=n, title=i['title'], body=(i.get('body') or '')[:12000]), encoding='utf-8')
+        logf = open(WORK / f'openclaw-{n}.log', 'w', encoding='utf-8')
+        proc = subprocess.Popen([exe, 'agent', 'exec', '--message-file', str(wt / TASK_FILE), '--cwd', str(wt)], cwd=wt, stdout=logf, stderr=subprocess.STDOUT)
+    except Exception as e:
+        s['count']['openclaw'] -= 1
+        return log(f'#{n}: OpenClaw could not start: {e}')
+    _oc[n] = {'proc': proc, 'wt': wt, 't': time.time(), 'src': src, 'title': i['title'], 'log': logf}
+    label(n, add=['openclaw-running'], remove=[src])
+    post(n, f'Handed to **OpenClaw** on Patrick\'s PC (the local model writing code). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
+    log(f'#{n}: handed to OpenClaw')
+
+
 def jules_failed(s):
     """Issues the leader gave up on after 3 failed Jules sessions go to Claude Code before the lead."""
     s.setdefault('ccfail', {})
@@ -1086,6 +1173,8 @@ def board_round(s, topic=''):
     ctx, tp = board_context(), (f' (topic: "{topic}")' if topic else '')
     who = [('the local AI', lambda q: rv.ask_model('You are a careful, critical adviser.', q), None), ('Gemini', ask_gemini, 'gemini'), ('ChatGPT', ask_codex, 'codex')]
     who = [w for w in who if w[2] is None or ((w[2] != 'gemini' or GEMINI_KEY) and use(s, w[2]))]
+    if LOCAL_ROLE == 'coder' and rv.MODEL == 'Gemini':  # the local model only writes code now; its seat would just be Gemini twice
+        who = [w for w in who if w[0] != 'the local AI']
     props, talk, notes = [], [], []
     def ask(name, f, q):
         try:
@@ -1157,7 +1246,7 @@ def board_round(s, topic=''):
         p = ranked[r - 1]
         args = '\n'.join(f'- {t}' for t in debate_of(p)) or '- (no arguments recorded)'
         votes = '\n'.join(f'- {n}: {sc}/5, {why}' for n, sc, why in scores[p['id']])
-        strong = len(scores[p['id']]) >= 3 and min(x[1] for x in scores[p['id']]) >= BOARD_GO  # all three advisers back it strongly: no need to wait for Patrick
+        strong = len(scores[p['id']]) >= max(2, len(who)) and min(x[1] for x in scores[p['id']]) >= BOARD_GO  # all three advisers back it strongly: no need to wait for Patrick
         if not DRY:
             i = gh(f'repos/{REPO}/issues', 'POST', {'title': p['title'], 'labels': (['jules-queue', 'board-approved'] if strong else ['needs-triage']) + ['from-board'],
                    'body': f'{p["why"]}\n\n**Change:** {p["change"]}\n\n**Evidence:** {p["evidence"]}\n\n**Risk to avoid:** {p["risk"]}\n\n'
@@ -1437,9 +1526,11 @@ def one_pass():
         log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
     else:
         heartbeat(s)
-    for name, duty in (('review', lambda s: None if DRY else rv.one_pass()), ('questions', jules_questions), ('owner', owner_replies), ('gate', gate), ('jules failed', jules_failed), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    for name, duty in (('review', lambda s: None if DRY else rv.one_pass()), ('questions', jules_questions), ('owner', owner_replies), ('gate', gate), ('jules failed', jules_failed), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
+        if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
+            continue  # first-pass notes from the local model: off, its time goes to writing code
         s['busy'] = {'duty': name, 'since': time.time()}
         save(s)
         try:
@@ -1500,7 +1591,8 @@ if __name__ == '__main__':
         save(st)
         print(f"\n=== Decided by: {who}\n=== Path: {' -> '.join(trail)}\n\n{ans}", flush=True)
         sys.exit()
-    if CLOUD:  # no Ollama in the cloud: Gemini answers what the local model would
+    rv.MODEL_LOCAL = rv.MODEL
+    if CLOUD or (LOCAL_ROLE == 'coder' and GEMINI_KEY):  # no Ollama in the cloud, and in the coder role the local model only writes code: Gemini manages
         rv.ask_model = lambda system, user: ask_gemini(system + '\n\n' + user)
         rv.MODEL = 'Gemini'
     log(f'manager started ({rv.MODEL}; caps {CAP}){" DRY RUN" if DRY else ""}{" IN THE CLOUD" if CLOUD else ""}')
