@@ -180,5 +180,16 @@ async function fresh(id, fn){
     await app.close();
   });
 
+  // A measured zero is valid, but a malformed token beginning with zero is not a measurement.
+  await fresh('zero-measurement-validation', async (p, h) => {
+    await h.newProject('Zero measurement validation');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    await p.setInputFiles(SEL.nd, F.nd('zero-measurements.tsv', [['Measured zero', '0', '0'], ['Malformed zero', '0bad', '0bad']], false));
+    await p.locator(SEL.row).first().waitFor();
+    const rows = await p.$$eval(SEL.row, els => els.map(el => ({name: el.querySelector('input[data-ndk="name"]')?.value, value: el.querySelector('.nd-v')?.textContent.trim()})));
+    T.check('nd/zero-measurement-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Measured zero', value: '0.00 mg/mL'}]), JSON.stringify(rows));
+  });
+
   T.done();
 })();
