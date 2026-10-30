@@ -381,6 +381,27 @@ def cross_format_files():
     write_unicorn_csv(os.path.join(OUT, 'cross_format_comma.csv'), [('UV', 'ml', 'mAU', x, y)], delim=';', decimal_comma=True)
 
 
+
+def empty_zeros():
+    x_zeros = np.arange(0, 10, 0.1)
+    y_zeros = np.zeros_like(x_zeros)
+    x_empty = np.array([])
+    y_empty = np.array([])
+
+    with open(os.path.join(OUT, 'empty_text.txt'), 'w') as f:
+        f.write('X,Y\n')
+
+    with open(os.path.join(OUT, 'zeros_text.txt'), 'w') as f:
+        f.write('X,Y\n')
+        for x, y in zip(x_zeros, y_zeros):
+            f.write(f'{x},{y}\n')
+
+    write_unicorn_csv(os.path.join(OUT, 'empty_akta.txt'), [('UV', 'ml', 'mAU', x_empty, y_empty)])
+    write_unicorn_csv(os.path.join(OUT, 'zeros_akta.txt'), [('UV', 'ml', 'mAU', x_zeros, y_zeros)])
+
+    write_unicorn_zip(os.path.join(OUT, 'empty_unicorn.zip'), 24.0, [dict(name='UV', type='UV', yu='mAU', xs=x_empty, ys=y_empty, num=1)], {}, 1.0)
+    write_unicorn_zip(os.path.join(OUT, 'zeros_unicorn.zip'), 24.0, [dict(name='UV', type='UV', yu='mAU', xs=x_zeros, ys=y_zeros, num=1)], {}, 1.0)
+
 def time_formats():
     x = np.round(np.arange(0, 10.0001, 0.01), 4)
     y = np.zeros_like(x)
@@ -412,7 +433,7 @@ def time_formats():
 
 
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, hplc_export, cross_format_files, time_formats): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, hplc_export, cross_format_files, time_formats, empty_zeros): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()

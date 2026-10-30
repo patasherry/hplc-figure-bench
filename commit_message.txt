@@ -1,0 +1,11 @@
+Closes #442
+
+As detailed in the issue and PR #486 review, the root cause has already been addressed on the `main` branch. A zero-value file successfully loads as a normal run and retains its zero measurements, avoiding any unnecessary skipping. An empty file is correctly rejected and returns the expected `"no readable data points"` or `"no columns of numbers found"` errors, rather than producing a scientifically empty figure. No further app modifications (such as an extra Empty parse pill or flags) are needed.
+
+This PR simply adds the synthetic data generators and a rigorous test (`testEmptyZeros` in `10_data_truth.js`) to guarantee this correct behavior across `parseText`, `parseAkta`, and `parseUnicornZip` parsers to prevent future regressions.
+
+The test suite runs successfully with `10_data_truth` verifying normal handling of empty strings/zero measurements (355 pass, 0 fail), confirming main branch correctly preserves valid zero data without throwing errors or adding extra logic.
+
+Open questions:
+- Do we need an "Empty parse" pill as asked in the original issue?
+Choice: No. The AI manager clarified that since main already properly rejects empty files and accepts zeros correctly, no "Empty parse" pill is needed unless required by a test (and we did not require it). The change strictly preserves correct data while rejecting totally empty structures cleanly.

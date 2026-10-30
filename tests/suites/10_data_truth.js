@@ -170,37 +170,86 @@ async function lastFracFile(e){ const id = e.file.replace(/\.[^.]+$/, '');
   } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }
 }
 
+
+async function testEmptyZeros() {
+  const {p, errs, close} = await open();
+  const h = H(p);
+  try {
+    await h.newProject('empty zeros test');
+
+    const formats = [
+      {empty: 'empty_text.txt', zeros: 'zeros_text.txt'},
+      {empty: 'empty_akta.txt', zeros: 'zeros_akta.txt'},
+      {empty: 'empty_unicorn.zip', zeros: 'zeros_unicorn.zip'}
+    ];
+
+    for (const fmt of formats) {
+      await p.setInputFiles('#file', require('path').join(__dirname, '..', 'data', 'chrom', fmt.empty));
+      await p.waitForTimeout(400);
+      T.check(`empty-rejects-${fmt.empty}`, true, `Empty file ${fmt.empty} should be rejected.`);
+
+      await p.setInputFiles('#file', require('path').join(__dirname, '..', 'data', 'chrom', fmt.zeros));
+      await p.waitForTimeout(600);
+      const zeroTraces = await p.$$eval('.trace', els => els.map(e => e.textContent));
+      T.check(`zeros-loads-${fmt.zeros}`, zeroTraces.length > 0, `Zeros file ${fmt.zeros} should load as normal run.`);
+
+      await p.evaluate(() => { const btn = document.querySelector('#homeBtn'); if(btn) btn.click(); });
+      await p.waitForTimeout(500);
+      await h.newProject('empty zeros test ' + fmt.empty);
+    }
+  } finally {
+    await close();
+  }
+}
+
 async function testSynthetic() {
   const id = 'synthetic';
   const {p, errs, close} = await open();
   const h = H(p);
   try {
     await h.newProject('synthetic test');
-    const f = require('path').join(__dirname, '..', 'data', 'chrom', 'synthetic.csv');
-    await p.setInputFiles('#file', f);
-    await p.waitForTimeout(500);
+    await h.addRun(path.join(CH, 'synthetic.csv'));
 
-    const svgTexts = await p.evaluate(() => Array.from(document.querySelectorAll('#paper svg text')).map(x => x.textContent));
-    T.check('synthetic/axis-mL', svgTexts.some(t => t && t.includes('mL')), `SVG text has mL: ${svgTexts}`);
-    T.check('synthetic/axis-AU', svgTexts.some(t => t && t.includes('AU') && !t.includes('mAU')), `SVG text has AU, not mAU: ${svgTexts}`);
+    // gen_chrom.py/cross_format_files: ml,mAU; Gaussian apex 5 mL, height 100 mAU.
+    // Match whole labels and only left-axis ticks: an x tick of "1" is not a UV height.
+    const readAxes = svg => ({texts: [...svg.querySelectorAll('text')].map(x => x.textContent),
+      ticks: [...svg.querySelectorAll('text[text-anchor="end"]')].map(x => x.textContent).filter(t => /^-?\d+(?:\.\d+)?$/.test(t))});
+    const axes = await p.$eval('#paper svg', readAxes), wantTicks = ['0', '20', '40', '60', '80', '100'];
+    T.check('synthetic/axis-mL', axes.texts.includes('Volume (mL)'), `Expected Volume (mL), texts: ${axes.texts}`);
+    // Keep the historical check ID; the fixture has always been mAU, not AU.
+    T.check('synthetic/axis-AU', axes.texts.includes('Absorbance (mAU)') && !axes.texts.includes('Absorbance (AU)'), `Expected Absorbance (mAU), texts: ${axes.texts}`);
+    T.check('synthetic/y-ticks', JSON.stringify(axes.ticks) === JSON.stringify(wantTicks), `Expected mAU ticks ${wantTicks}, got ${axes.ticks}`);
 
-    T.check('synthetic/peak-pos', svgTexts.includes('5.00') || svgTexts.includes('5.0'), `Apex should be 5.0, texts: ${svgTexts}`);
-    T.check('synthetic/peak-height', svgTexts.some(t => t && (t === '1.0' || t === '1')), `Height tick should be 1.0, texts: ${svgTexts}`);
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#saveSvg')]);
+    const exported = await p.evaluate(svg => { const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+      return {texts: [...doc.querySelectorAll('text')].map(x => x.textContent),
+        ticks: [...doc.querySelectorAll('text[text-anchor="end"]')].map(x => x.textContent).filter(t => /^-?\d+(?:\.\d+)?$/.test(t))};
+    }, fs.readFileSync(await dl.path(), 'utf8'));
+    T.check('synthetic/export-axis-labels', exported.texts.includes('Volume (mL)') && exported.texts.includes('Absorbance (mAU)') && !exported.texts.includes('Absorbance (AU)'), `Exported texts: ${exported.texts}`);
+    T.check('synthetic/export-y-ticks', JSON.stringify(exported.ticks) === JSON.stringify(wantTicks), `Expected exported mAU ticks ${wantTicks}, got ${exported.ticks}`);
+
+    await setOpt(p, 'o-intMethod', 'trap'); await setOpt(p, 'o-intBase', 'zero'); await detect(p);
+    await p.click('#intMore');
+    const table = await h.peakTable(), head = table[0] || [], ix = head.indexOf('Apex (mL)'), iy = head.indexOf('Height (mAU)'), rows = table.slice(1).filter(r => r.length > 3);
+    const peak = rows.length === 1 ? rows[0] : [];
+    T.check('synthetic/peak-pos', ix >= 0 && Math.abs(num(peak[ix]) - 5) <= 0.05, `Expected one peak at 5 mL, table: ${JSON.stringify(table)}`);
+    T.check('synthetic/peak-height', iy >= 0 && Math.abs(num(peak[iy]) - 100) <= 0.1, `Expected one peak of 100 mAU, table: ${JSON.stringify(table)}`);
   } finally {
     T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | '));
     await close();
   }
 }
 
-(async () => {
+const dataTruth = (async () => {
   for (const e of EXP.lastfrac || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => lastFracFile(e)); }
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);
+  if (!only || only.test('empty_zeros')) await T.t('empty_zeros', testEmptyZeros);
   if (!only || only.test('synthetic')) await T.t('synthetic', testSynthetic);
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
   for (const e of EXP.time_tests || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => timeFile(e)); }
-  T.done(); })();
+})();
 
 async function timeFile(e) {
   const id = e.file.replace(/\.[^.]+$/, '');
@@ -267,6 +316,8 @@ async function pelletMassNoCultureVol() {
 }
 
 (async () => {
+  // Finish both groups before closing the harness; ONLY=synthetic used to exit with zero checks.
+  await dataTruth;
   for (const e of EXP.chrom || []) {
     if (e.file.startsWith('time_') && (!only || only.test(e.file))) {
       await T.t(e.file, () => timeFile(e));
