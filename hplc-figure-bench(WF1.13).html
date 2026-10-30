@@ -4120,6 +4120,21 @@ function guessFrac(r){ const segs = fracSegments(r, uvOf(r).xs[uvOf(r).xs.length
 function runCond(r){
   const v = k => String(r[k] == null ? '' : r[k]).trim(), au = {mCol: guessColumn(r), mCV: (c => c ? String(+(+c).toPrecision(3)) : '')(guessCV(r)), mFlow: r.flowAuto ? fmt(r.flowAuto, r.flowAuto < 1 ? 2 : 1) : '', mTemp: '', mGrad: guessGradient(r), mFrac: guessFrac(r)};
   const o = {}; COND_KEYS.forEach(k => { o[k] = v(k) || au[k] || ''; o[k + 'Auto'] = !v(k) && !!au[k]; }); o.auto = au; return o; }
+/* measurable conditions typed by hand, checked against what the file logged. Only a plain number, or a single linear %B range, is compared;
+   words, ranges and other units are left alone, and the tolerances allow for sensor drift and rounding, so a check means a real disagreement */
+const numTyped = (s, u) => { const m = new RegExp(`^\\s*(\\d+(?:\\.\\d+)?)\\s*(?:${u})?\\s*$`, 'i').exec(String(s == null ? '' : s)); return m ? +m[1] : null; };
+function gradRange(s, auto){ s = String(s || ''); let ms;
+  if (auto) { const lin = s.split(/,\s*then\s+/i).filter(t => /^linear/i.test(t)); if (lin.length !== 1) return null; s = lin[0]; }
+  if ((ms = [...s.matchAll(/(\d+(?:\.\d+)?)\s*%?\s*(?:B\s*)?(?:to|–|-)\s*(\d+(?:\.\d+)?)\s*%\s*B\b/gi)]).length !== 1) return null;
+  const o = {a: +ms[0][1], b: +ms[0][2]}, L = /\bover\s+(\d+(?:\.\d+)?)\s*(mL|CV)\b(?:\s*[,(]\s*(\d+(?:\.\d+)?)\s*(mL|CV)\b)?/i.exec(s);
+  if (L) { o[L[2].toLowerCase()] = +L[1]; if (L[4] && !(L[4].toLowerCase() in o)) o[L[4].toLowerCase()] = +L[3]; } return o; }
+const COND_SCHEMA = {
+  mFlow: {name: 'flow rate', file: r => +r.flowAuto > 0 ? +r.flowAuto : null, typed: s => numTyped(s, 'mL\\s*/\\s*min'), same: (t, f) => Math.abs(t - f) <= Math.max(0.02, f*0.1), say: f => `${fmt(f, f < 1 ? 2 : 1)} mL/min`},
+  mTemp: {name: 'temperature', file: r => +r.tempAuto > 0 ? +r.tempAuto : null, typed: s => numTyped(s, '°\\s*C|C'), same: (t, f) => Math.abs(t - f) <= 5, say: f => `${fmt(f, 1)} °C`},
+  mGrad: {name: 'gradient', file: r => isSec(r) ? null : gradRange(guessGradient(r), true), typed: s => gradRange(s), say: f => `${fmt(f.a, 0)}% to ${fmt(f.b, 0)}% B${f.ml ? ` over ${fmtAuto(f.ml)} mL` : ''}`,
+    same: (t, f) => Math.abs(t.a - f.a) <= 2 && Math.abs(t.b - f.b) <= 2 && ['ml', 'cv'].every(u => !(t[u] > 0 && f[u] > 0) || Math.abs(t[u] - f[u]) <= f[u]*0.1)}};
+function condCheck(r, k){ const s = COND_SCHEMA[k], tv = String(r[k] == null ? '' : r[k]).trim(); if (!tv) return '';
+  const t = s.typed(tv); if (t == null) return ''; const f = s.file(r); return f == null || s.same(t, f) ? '' : ` [${s.name} in the file: ${s.say(f)}, check]`; }
 const steps0 = r => runs.filter(x => x.inWf)[0] === r;
 const unitIf = (t, u) => /^\-?\d+(\.\d+)?$/.test(String(t).trim()) ? `${t} ${u}` : t;
 /* the lines printed under a chromatogram: short is column, flow and temperature, full adds buffers, gradient and load */
@@ -4168,13 +4183,13 @@ function methodsText(){
     /* a column name read from the file name is marked for checking; one typed by hand or logged by UNICORN is not */
     const colChk = '';
     const col = c.mCol ? `${art(c.mCol)} ${c.mCol}${c.mCV && !/\d\s*mL|\/\d+/.test(c.mCol) ? ` (${c.mCV} mL)` : ''}${/column$/i.test(c.mCol) ? '' : ' column'}${colChk}` : `the column ${need('column')}`;
-    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
+    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')}${condCheck(r, 'mFlow')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
     t += c.mBufA ? (sec ? ` in ${c.mBufA}` : ` equilibrated in buffer A (${c.mBufA})`) : ` ${need('buffer')}`;
     if (hasTxt(r.mWash) && !sec) t += `, washed with ${lc(v(r.mWash))}`;
-    let grad = c.mGrad ? (c.mGradAuto ? lc(c.mGrad).replace(/^linear /, 'a linear gradient from ').replace(/^step to /, 'a step to ') : lc(c.mGrad)) : '';
+    let grad = c.mGrad ? (c.mGradAuto ? lc(c.mGrad).replace(/^linear /, 'a linear gradient from ').replace(/^step to /, 'a step to ') : lc(c.mGrad)) + condCheck(r, 'mGrad') : '';
     if (!sec) t += ft ? `. The protein was collected in the flow-through${grad ? `, and bound material was eluted with ${grad}` : c.mBufB ? ', and bound material was eluted with buffer B' : ''}` : grad ? ` and eluted with ${grad}` : c.mBufB ? ' and eluted with buffer B' : ` and eluted ${need('elution')}`;
     const T = c.mTemp && !tempAll ? deg(c.mTemp) : '';
-    t += T ? ` at ${T}` : '';
+    t += (T ? ` at ${T}` : '') + condCheck(r, 'mTemp');
     t += c.mFrac ? `, collecting ${unitIf(c.mFrac, 'mL')} fractions` : ''; t += '.';
     if (c.mBufB && !sec) { const bm = bufMismatch(r, c); t += ` Buffer B was ${lc(c.mBufB)}${bm ? ` [differs from buffer A in ${bm}, check]` : ''}.`; }
     if (hasTxt(r.mOther)) t += ` ${v(r.mOther).replace(/^./, x => x.toUpperCase()).replace(/\.?$/, '.')}`;
