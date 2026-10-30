@@ -1816,8 +1816,8 @@ const SEC_COLUMNS = {
   hl26s200: {name: 'HiLoad 26/600 Superdex 200 pg', vt: 320, re: /26[\/_\s-]*600.*200|200.*26[\/_\s-]*600/i},
   hl26s75: {name: 'HiLoad 26/600 Superdex 75 pg', vt: 320, re: /26[\/_\s-]*600.*75|75.*26[\/_\s-]*600/i},
   s6i: {name: 'Superose 6 Increase 10/300 GL', vt: 24, re: /superose\s*6|s6\s*i\b|\bs6\b/i},
-  s75i: {name: 'Superdex 75 Increase 10/300 GL', vt: 24, re: /(?:75\s*inc|s75\s*i\b|s75|sd ?75|superdex ?75)(?!.*(16|26|3\.2|5)[\/_\s-]*(600|300|150)|.*600)/i},
-  s200i: {name: 'Superdex 200 Increase 10/300 GL', vt: 24, re: /(?:200\s*inc|s200\s*i\b|sd200\s*i|200i|s200|sd ?200|superdex ?200)(?!.*(16|26|3\.2|5)[\/_\s-]*(600|300|150)|.*600)/i},
+  s75i: {name: 'Superdex 75 Increase 10/300 GL', vt: 24, re: /(?:75\s*inc|s75\s*i\b|s75|sd ?75|superdex ?75)(?!.*(?<![\d.])(16|26|3\.2|5)[\/_\s-]*(600|300|150)(?!\d))/i},
+  s200i: {name: 'Superdex 200 Increase 10/300 GL', vt: 24, re: /(?:200\s*inc|s200\s*i\b|sd200\s*i|200i|s200|sd ?200|superdex ?200)(?!.*(?<![\d.])(16|26|3\.2|5)[\/_\s-]*(600|300|150)(?!\d))/i},
   custom: {name: 'Other column', vt: '', re: null}};
 const SEC_ORDER = ['s200i3', 's75i3', 's200i5', 's75i5', 'hl26s75', 'hl26s200', 'hl16s75', 'hl16s200', 's6i', 's75i', 's200i'];
 function secColumnGuess(r){ const t = (r.colLog || '') + ' ' + (r.file || '') + ' ' + (r.method || '') + ' ' + (r.name || ''); return SEC_ORDER.find(k => SEC_COLUMNS[k].re.test(t)) || 'custom'; }
