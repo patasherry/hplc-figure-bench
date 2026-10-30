@@ -3554,6 +3554,10 @@ function composeRuns(list, cfg){
   panels.forEach((p, i) => { if (row) { pos.push({x: xAcc, y: 0}); xAcc += pw[i] + gap; Ht = Math.max(Ht, p.h); }
     else if (grid) { const k = i >> 1, y = rowH.slice(0, k).reduce((a, b) => a + b + vgap, 0); pos.push({x: i === n - 1 && n % 2 ? (Wt - pw[i])/2 : (i % 2)*(pw[0] + gap), y}); Ht = Math.max(Ht, y + rowH[k]); }
     else { pos.push({x: 0, y: yAcc}); yAcc += p.h + (i < n-1 ? gap : 0); Ht = yAcc; } });
+  /* panels the user dragged: add the offset (never left of or above the figure) and grow the figure to hold them */
+  const W0 = Wt, H0 = Ht + fs*0.4;
+  panels.forEach((p, i) => { const dx = numOr(list[i].wfDx, 0), dy = numOr(list[i].wfDy, 0); if (!dx && !dy) return;
+    pos[i].x = Math.max(0, pos[i].x + dx); pos[i].y = Math.max(0, pos[i].y + dy); Wt = Math.max(Wt, pos[i].x + pw[i]); Ht = Math.max(Ht, pos[i].y + p.h); });
   Ht += fs*0.4;
   const defs = new Map(), body = [], links = [], gelBoxes = [];
   panels.forEach((p, i) => {
@@ -3591,6 +3595,9 @@ function composeRuns(list, cfg){
   });
   if (n > 1 && cfg.arrows) {
     const pc = poolDark();
+    /* an arrow between panels that are not level (one was dragged): a straight line with its head turned to match */
+    const slantArrow = (xa, ya, xb, yb) => { const a = Math.atan2(yb - ya, xb - xa), c = Math.cos(a), s = Math.sin(a), bx = xb - 5*c, by = yb - 5*s;
+      return `<line x1="${r2(xa)}" y1="${r2(ya)}" x2="${r2(xb - 4*c)}" y2="${r2(yb - 4*s)}" stroke-width="1"/><path d="M${r2(xb)} ${r2(yb)}L${r2(bx - 2.6*s)} ${r2(by + 2.6*c)}L${r2(bx + 2.6*s)} ${r2(by - 2.6*c)}Z" stroke="none"/>`; };
     body.push(`<g fill="#000000" stroke="#000000">`);
     for (let i=0;i<n-1;i++){
       const lab = poolLabel(list[i]), note = arrowNote(list[i]), nf = fs*0.8;
@@ -3604,27 +3611,31 @@ function composeRuns(list, cfg){
         body.push(`<path d="M${r2(xb)} ${r2(y2)}L${r2(xb - 2.6)} ${r2(y2 - 5)}L${r2(xb + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
         if (lab || note) body.push(`<text x="${r2((xa + xb)/2)}" y="${r2(ym - 3)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       } else if (row || grid) {
-        const x1 = pos[i].x + pw[i] + 3, x2 = pos[i+1].x - 3, ay = pos[i].y + titleH + (cfg.bandH ? Math.min(fs*2.9, cfg.bandH*0.45) : Math.min(panels[i].ch, panels[i+1].ch)*0.45), words = lab ? lab.split(' ') : [];
-        body.push(`<line x1="${r2(x1)}" y1="${r2(ay)}" x2="${r2(x2 - 4)}" y2="${r2(ay)}" stroke-width="1"/>`);
-        body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
+        const x1 = pos[i].x + pw[i] + 3, x2 = pos[i+1].x - 3, ay1 = pos[i].y + titleH + (cfg.bandH ? Math.min(fs*2.9, cfg.bandH*0.45) : Math.min(panels[i].ch, panels[i+1].ch)*0.45), ay2 = ay1 - pos[i].y + pos[i+1].y, ay = (ay1 + ay2)/2, words = lab ? lab.split(' ') : [];
+        if (ay1 === ay2) {
+          body.push(`<line x1="${r2(x1)}" y1="${r2(ay)}" x2="${r2(x2 - 4)}" y2="${r2(ay)}" stroke-width="1"/>`);
+          body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
+        } else body.push(slantArrow(x1, ay1, x2, ay2));
         words.forEach((w, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay - 4 - (words.length - 1 - k)*fs*1.1)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(w)}</text>`));
         if (note) wrapN(note, x2 - x1).forEach((t, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay + nf*1.25 + k*nf*1.1)}" text-anchor="middle" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(t)}</text>`));
       } else {
-        const ax = fs*1.2, y1 = pos[i].y + panels[i].h + 3, y2 = pos[i+1].y - 3;
-        body.push(`<line x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
-        body.push(`<path d="M${r2(ax)} ${r2(y2)}L${r2(ax - 2.6)} ${r2(y2 - 5)}L${r2(ax + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
+        const ax = fs*1.2 + pos[i].x, ax2 = fs*1.2 + pos[i+1].x, y1 = pos[i].y + panels[i].h + 3, y2 = pos[i+1].y - 3;
+        if (ax === ax2) {
+          body.push(`<line x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
+          body.push(`<path d="M${r2(ax)} ${r2(y2)}L${r2(ax - 2.6)} ${r2(y2 - 5)}L${r2(ax + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
+        } else body.push(slantArrow(ax, y1, ax2, y2));
         if (lab || note) body.push(`<text x="${r2(ax + fs*0.8)}" y="${r2((y1 + y2)/2 + fs*0.35)}" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       }
     }
     body.push('</g>');
   }
-  if (cfg.raw) return {body: links.join('') + body.join(''), defs, geo: {W: Wt, H: Ht, comp: true, gelBoxes, widened: widened ? cfg.W : 0, taller: taller ? cfg.chromH : 0, pos: pos.map((q, i) => ({x: q.x, y: q.y, w: pw[i], h: panels[i].h, id: list[i].id, th: titleH}))}};
+  if (cfg.raw) return {body: links.join('') + body.join(''), defs, geo: {W: Wt, H: Ht, W0, H0, comp: true, gelBoxes, widened: widened ? cfg.W : 0, taller: taller ? cfg.chromH : 0, pos: pos.map((q, i) => ({x: q.x, y: q.y, w: pw[i], h: panels[i].h, id: list[i].id, th: titleH}))}};
   const s = [svgHead(Wt, Ht)];
   if (defs.size) s.push(`<defs>${[...defs.values()].join('')}</defs>`);
   if (opt.bg) s.push(`<rect width="${r2(Wt)}" height="${r2(Ht)}" fill="#ffffff"/>`);
   s.push(links.join(''), body.join(''), '</svg>');
   const chart = cfg.single && panels[0].chart.geo ? {g: panels[0].chart.geo, ox: pos[0].x, oy: pos[0].y + titleH, run: list[0]} : null;
-  return {svg: s.join(''), geo: {W: Wt, H: Ht, comp: true, chart, gelBoxes, widened: widened ? cfg.W : 0, taller: taller ? cfg.chromH : 0, pos: pos.map((q, i) => ({x: q.x, y: q.y, w: pw[i], h: panels[i].h, id: list[i].id, th: titleH}))}};
+  return {svg: s.join(''), geo: {W: Wt, H: Ht, W0, H0, comp: true, chart, gelBoxes, widened: widened ? cfg.W : 0, taller: taller ? cfg.chromH : 0, pos: pos.map((q, i) => ({x: q.x, y: q.y, w: pw[i], h: panels[i].h, id: list[i].id, th: titleH}))}};
 }
 function buildRunFig(run){
   if (!opt.runGel || !gelsFor(run).length) return buildRunSVG(run);
@@ -3658,13 +3669,13 @@ function buildWorkflow(){
   const cfg = {layout: opt.wfLayout, W: numOr(opt.wfW,7.2)*72, chromH: numOr(opt.wfH,2.2)*72, titles: true, letters: opt.wfLetters, showGels: opt.wfGels, connectors: opt.connectors, arrows: opt.wfArrows, gelMaxH: numOr(opt.wfGelH,1.8)*72};
   /* Fit to page: a grid or stacked figure taller than the page gets shorter traces and gels (never below 60%) until it fits */
   const fit = (L, c, maxH) => { let res = composeRuns(L, c);
-    if (opt.wfFit !== false && opt.wfLayout !== 'row' && res.geo && res.geo.H > maxH) { let k = 1;
-      for (let t = 0; t < 4 && res.geo.H > maxH && k > 0.6; t++) { k = Math.max(0.6, k*(maxH - 0.1*72)/res.geo.H); res = composeRuns(L, Object.assign({}, c, {chromH: c.chromH*k, gelK: k})); }
+    if (opt.wfFit !== false && opt.wfLayout !== 'row' && res.geo && (res.geo.H0 || res.geo.H) > maxH) { let k = 1;
+      for (let t = 0; t < 4 && (res.geo.H0 || res.geo.H) > maxH && k > 0.6; t++) { k = Math.max(0.6, k*(maxH - 0.1*72)/(res.geo.H0 || res.geo.H)); res = composeRuns(L, Object.assign({}, c, {chromH: c.chromH*k, gelK: k})); }
       if (res.geo) res.geo.fitted = k; }
     return res; };
   if (!pre.length) return yieldLine(fit(list, cfg, PAGE));
   /* side by side, the upstream steps stay in the same row when it still fits the width */
-  if (opt.wfLayout === 'row') { const one = composeRuns(pre.concat(list), cfg); if (one.geo && one.geo.W <= cfg.W*1.08) return yieldLine(one); }
+  if (opt.wfLayout === 'row') { const one = composeRuns(pre.concat(list), cfg); if (one.geo && (one.geo.W0 || one.geo.W) <= cfg.W*1.08) return yieldLine(one); }
   /* otherwise construct, expression and lysis form a band across the top, with an elbow arrow down into the first column */
   const fs = fontSize(), bandH = fs*5;
   const top = composeRuns(pre, Object.assign({}, cfg, {layout: 'row', raw: true, bandH}));
@@ -3687,13 +3698,15 @@ function buildWorkflow(){
 /* ---------- upstream steps: construct, expression and lysis, drawn before the first column ---------- */
 const PREP_DEF = {on: true, construct: true, expr: true, lysis: true, name: '', backbone: '', promoter: 'T7', resist: '', strain: '', medium: '', cultureL: '', od: '', inducer: '', temp: '', time: '', pellet: '', lysMethod: '', lysBuffer: '', clarify: '', lysVol: '', lysLanes: false, indKind: 'IPTG', gb: null,
   cleave: false, cleaveAfter: '', protease: '', ratio: '', clvTemp: '', clvTime: '', dialBuffer: '', mwco: '', dialVol: '', dialChanges: '', store: '',
-  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}};
+  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {}};
 let prep = JSON.parse(JSON.stringify(PREP_DEF));
 const PREP_LANE = ['expr', 'lysis', 'cleave'], PREP_NAME = {construct: 'Construct', expr: 'Expression', lysis: 'Lysis', cleave: 'Dialysis and cleavage'}, prepObj = {};
 const hasTxt = v => String(v == null ? '' : v).trim() !== '';
 const EXPR_KEYS = ['strain', 'medium', 'cultureL', 'od', 'inducer', 'temp', 'time', 'pellet', 'exStarter', 'exHarvest', 'exStore'], LYS_KEYS = ['lysMethod', 'lysBuffer', 'clarify', 'lysVol', 'lysAdd', 'lysSet'], FIN_KEYS = ['finConc', 'finVol', 'finRatio', 'finBuffer', 'store', 'qcPurity', 'qcMass', 'qcActivity'];
 /* the steps before the first column, as stand-ins for runs so the workflow lays them out the same way */
 const skipped = k => !!(prep.skip && prep.skip[k]);
+/* a dragged upstream panel's offset (SVG units), kept in prep.wfOff[k] */
+const wfPos = k => { const o = (prep.wfOff || {})[k] || {}; return {wfDx: numOr(o.dx, 0), wfDy: numOr(o.dy, 0)}; };
 function prepSteps(){
   if (!prep.on) return [];
   const lanes = id => gels.some(g => lanesFor(g, id).length), ks = [];
@@ -3706,7 +3719,7 @@ function prepSteps(){
     const st = String(prep.strain || '').trim(), cells = numOr(prep.pellet, 0), vol = numOr(prep.lysVol, 0);
     const note = k === 'construct' ? (nx === 'expr' ? 'Transform' : '') : k === 'expr' ? (nx === 'lysis' ? 'Harvest' : 'Harvest and lyse') : 'Lysate';
     const nm = hasTxt((prep.titles || {})[k]) ? prep.titles[k].trim() : k === 'expr' && exprQuant().solLanes ? 'Expression and solubility' : PREP_NAME[k];
-    return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note, wfW: k === 'construct' ? 1.1 : k === 'expr' ? 1 : 0.85, gelZ: 1}); });
+    return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note, wfW: k === 'construct' ? 1.1 : k === 'expr' ? 1 : 0.85, gelZ: 1}, wfPos(k)); });
 }
 /* the dialysis and protease step sits between two columns: after the run it follows (the tagged IMAC by default) */
 function cleaveRunId(){ const wf = runs.filter(r => r.inWf); if (wf.some(r => r.id === prep.cleaveAfter)) return prep.cleaveAfter;
@@ -3714,7 +3727,7 @@ function cleaveRunId(){ const wf = runs.filter(r => r.inWf); if (wf.some(r => r.
 function cleaveStep(){
   if (!prep.cleave) return null; const o = prepObj.cleave || (prepObj.cleave = {id: 'cleave', prep: 'cleave', gelOff: {}, fracs: [], integ: []}); prep.offs = prep.offs || {}; o.gelOff = prep.offs.cleave || (prep.offs.cleave = {});
   const pr = cleaveProtease(), nm = pr ? `${pr} cleavage` : 'Protease cleavage';
-  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: 'Dialysate', wfW: 1.2, gelZ: 1});
+  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: 'Dialysate', wfW: 1.2, gelZ: 1}, wfPos('cleave'));
 }
 function cleaveProtease(){ const t = String(prep.protease || '').trim(); if (t) return t; const m = (prep.gb || cleanSeq(opt.protSeq)) ? constructModel() : null, k = m && m.cut ? m.cut.k : (/sumo/i.test(opt.tagPreset || '') ? 'sumo' : '');
   return ({sumo: 'Ulp1', tev: 'TEV', '3c': '3C', thrombin: 'thrombin', ek: 'enterokinase', xa: 'factor Xa'})[k] || ''; }
@@ -3732,7 +3745,7 @@ function wfFigList(){ const L = wfList(); if (!prep.on || !prep.btw) return L; c
   L.forEach(x => { out.push(x); if (!x.prep && prep.btw[x.id]) out.push(ncObj(x)); }); return out; }
 function ncObj(r){ const id = 'nc:' + r.id, o = prepObj[id] || (prepObj[id] = {id, prep: 'ndconc', gelOff: {}, fracs: [], integ: []}), b = prep.btw[r.id] || {};
   const nm = hasTxt(b.title) ? b.title.trim() : ({dil: 'Diluted', exch: 'Buffer exchanged', filt: 'Filtered', hold: 'Held overnight'})[b.how] || 'Concentrated';
-  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(b.arrow || '').trim(), wfW: numOr(b.wfW, 0.85), gelZ: 1, run: r}); }
+  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(b.arrow || '').trim(), wfW: numOr(b.wfW, 0.85), gelZ: 1, run: r, wfDx: numOr(b.wfDx, 0), wfDy: numOr(b.wfDy, 0)}); }
 /* what a Concentrated panel says: the NanoDrop mean, the volume and the mg */
 function ncLines(r){ const p = poolRows(r), ms = poolMeas(r), b = (prep.btw || {})[r.id] || {}, out = [], v = numOr(b.vOut, 0);
   if (ms.src === 'btw' || ms.nd) out.push(`${fmt(ms.c || (ms.nd && ms.nd.m), 2)}${ms.nd && ms.nd.sd != null ? ` ± ${fmt(ms.nd.sd, 2)}` : ''} mg/mL`);
@@ -3746,7 +3759,7 @@ const manSteps = () => prep.on && Array.isArray(prep.manual) ? prep.manual.filte
 const isManId = id => typeof id === 'string' && /^m\d+$/.test(id) && manSteps().some(m => m.id === id);
 function manObj(m){ const o = prepObj[m.id] || (prepObj[m.id] = {id: m.id, prep: 'manual', gelOff: {}, fracs: [], integ: []}); prep.offs = prep.offs || {}; o.gelOff = prep.offs[m.id] || (prep.offs[m.id] = {});
   const nm = String(m.name || '').trim() || MAN_NAME[m.kind] || 'Other step';
-  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(m.arrow || '').trim(), wfW: numOr(m.wfW, 1), gelZ: numOr(m.gelZ, 1), man: m}); }
+  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(m.arrow || '').trim(), wfW: numOr(m.wfW, 1), gelZ: numOr(m.gelZ, 1), man: m, wfDx: numOr(m.wfDx, 0), wfDy: numOr(m.wfDy, 0)}); }
 function manMg(m){ const c = numOr(m.conc, 0), v = numOr(m.vol, 0); return c > 0 && v > 0 ? c*v : null; }
 function manLines(m){ const t = x => String(x == null ? '' : x).trim(), out = [], c = numOr(m.conc, 0), v = numOr(m.vol, 0);
   if (t(m.resin)) out.push(t(m.resin)); if (t(m.buffer)) out.push(t(m.buffer)); if (t(m.wash) && (m.kind === 'column' || m.kind === 'batch')) out.push('Wash: ' + t(m.wash)); if (t(m.elution)) out.push(t(m.elution));
@@ -4726,12 +4739,14 @@ paper.addEventListener('mousemove', e => {
   ro.textContent = `x ${xv.toFixed(g.run ? 2 : 3)}` + (g.run || opt.mode === 'overlay' ? `   y ${fmtAuto(yv)}` : '') + (c.run ? '   drag to integrate' : '');
 });
 /* ---------- editing the workflow figure in place: click a panel for its title, arrow note, width and gel size ---------- */
-function wfItem(id){ if (!id) return null; const r = runs.find(x => x.id === id); if (r) return {kind: 'run', r, step: 'run:' + id, title: r.stepName || '', auto: guessStep(r) || r.name, arrow: r.note || '', w: numOr(r.wfW, 1), gz: numOr(r.gelZ, 1), gel: gelsFor(r).length > 0, obj: r};
-  if (String(id).startsWith('nc:')) { const rid = id.slice(3), b = (prep.btw || {})[rid]; if (!b) return null; return {kind: 'nc', b, step: 'btw:' + rid, title: b.title || '', auto: 'Concentrated', arrow: b.arrow || '', w: numOr(b.wfW, 0.85), gel: false}; }
-  const m = manSteps().find(x => x.id === id); if (m) { const o = manObj(m); return {kind: 'man', m, step: 'man:' + id, title: m.name || '', auto: MAN_NAME[m.kind] || 'Other step', arrow: m.arrow || '', w: numOr(m.wfW, 1), gz: numOr(m.gelZ, 1), gel: gelsFor(o).length > 0, obj: o}; }
-  if (['construct', 'transform', 'expr', 'lysis', 'cleave'].includes(id)) return {kind: 'prep', k: id, step: id, title: (prep.titles || {})[id] || '', auto: PREP_NAME[id] || id, gel: false, noArrow: true, noW: true};
+function wfItem(id){ if (!id) return null; const r = runs.find(x => x.id === id); if (r) return {kind: 'run', r, step: 'run:' + id, title: r.stepName || '', auto: guessStep(r) || r.name, arrow: r.note || '', w: numOr(r.wfW, 1), gz: numOr(r.gelZ, 1), gel: gelsFor(r).length > 0, obj: r, ox: numOr(r.wfDx, 0), oy: numOr(r.wfDy, 0)};
+  if (String(id).startsWith('nc:')) { const rid = id.slice(3), b = (prep.btw || {})[rid]; if (!b) return null; return {kind: 'nc', b, step: 'btw:' + rid, title: b.title || '', auto: 'Concentrated', arrow: b.arrow || '', w: numOr(b.wfW, 0.85), gel: false, ox: numOr(b.wfDx, 0), oy: numOr(b.wfDy, 0)}; }
+  const m = manSteps().find(x => x.id === id); if (m) { const o = manObj(m); return {kind: 'man', m, step: 'man:' + id, title: m.name || '', auto: MAN_NAME[m.kind] || 'Other step', arrow: m.arrow || '', w: numOr(m.wfW, 1), gz: numOr(m.gelZ, 1), gel: gelsFor(o).length > 0, obj: o, ox: numOr(m.wfDx, 0), oy: numOr(m.wfDy, 0)}; }
+  if (['construct', 'transform', 'expr', 'lysis', 'cleave'].includes(id)) return {kind: 'prep', k: id, step: id, title: (prep.titles || {})[id] || '', auto: PREP_NAME[id] || id, gel: false, noArrow: true, noW: true, ox: wfPos(id).wfDx, oy: wfPos(id).wfDy};
   return null; }
-function wfSet(it, f, v){ if (it.kind === 'run') { const r = it.r; if (f === 'title') r.stepName = v; else if (f === 'arrow') r.note = v; else if (f === 'w') r.wfW = v; else if (f === 'gz') r.gelZ = v; }
+function wfSet(it, f, v){ if (f === 'off') { const dx = Math.round(v.dx*100)/100, dy = Math.round(v.dy*100)/100, o = it.kind === 'nc' ? it.b : it.kind === 'man' ? it.m : it.kind === 'run' ? it.r : null;
+    if (!o) { prep.wfOff = Object.assign({}, prep.wfOff); if (dx || dy) prep.wfOff[it.k] = {dx, dy}; else delete prep.wfOff[it.k]; } else if (dx || dy) { o.wfDx = dx; o.wfDy = dy; } else { delete o.wfDx; delete o.wfDy; } }
+  else if (it.kind === 'run') { const r = it.r; if (f === 'title') r.stepName = v; else if (f === 'arrow') r.note = v; else if (f === 'w') r.wfW = v; else if (f === 'gz') r.gelZ = v; }
   else if (it.kind === 'nc') { const b = it.b; if (f === 'title') b.title = v; else if (f === 'arrow') b.arrow = v; else if (f === 'w') b.wfW = v; }
   else if (it.kind === 'man') { const m = it.m; if (f === 'title') m.name = v; else if (f === 'arrow') m.arrow = v; else if (f === 'w') m.wfW = v; else if (f === 'gz') m.gelZ = v; }
   else if (it.kind === 'prep' && f === 'title') { prep.titles = Object.assign({}, prep.titles, {[it.k]: v}); }
@@ -4749,7 +4764,8 @@ function renderWfTool(){
       + (!it.noArrow && !last ? `<label class="wfl" for="wfA">Arrow note</label><input type="text" id="wfA" value="${esc(it.arrow)}" placeholder="e.g. SUMO protease, 4 °C overnight">` : '')
       + (!it.noW && row ? `<span class="wfg"><span class="wfl">Width</span><button type="button" class="mini" data-wf="w:-1" aria-label="Narrower">−</button><button type="button" class="mini" data-wf="w:1" aria-label="Wider">+</button></span>` : '')
       + (it.gel ? `<span class="wfg"><span class="wfl">Gel</span><button type="button" class="mini" data-wf="gz:-1" aria-label="Smaller gel">−</button><button type="button" class="mini" data-wf="gz:1" aria-label="Larger gel">+</button></span>` : '')
-      + `<button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button>`; }
+      + `<button type="button" class="mini" data-wf="reset">Reset position</button><button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button>`; }
+  const rb = tool.querySelector('[data-wf=reset]'); if (rb) rb.disabled = !(it.ox || it.oy);
   tool.hidden = false; const th = tool.offsetHeight, tw = tool.offsetWidth, ww = wrap.clientWidth;
   let top = a.y - wr.top - th - 8; if (top < 4) top = b.y - wr.top + 8; let left = Math.min(Math.max(4, a.x - wr.left - 4), Math.max(4, ww - tw - 4));
   Object.assign(tool.style, {left: left + 'px', top: top + 'px'}); }
@@ -4757,6 +4773,7 @@ $('#wfTool').addEventListener('input', e => { const it = wfItem(wfSel); if (!it)
 $('#wfTool').addEventListener('keydown', e => { if (e.key === 'Escape' || (e.key === 'Enter' && e.target.tagName === 'INPUT')) { wfSel = null; renderWfTool(); } });
 $('#wfTool').addEventListener('click', e => { const b = e.target.closest('[data-wf]'); if (!b) return; const it = wfItem(wfSel); if (!it) return; const [f, d] = b.dataset.wf.split(':');
   if (f === 'close') { wfSel = null; renderWfTool(); return; }
+  if (f === 'reset') { wfSet(it, 'off', {dx: 0, dy: 0}); return; }
   if (f === 'edit') { const k = it.step; wfSel = null; renderWfTool(); selectStep(k); return; }
   const cur0 = f === 'w' ? it.w : it.gz; wfSet(it, f, Math.round(Math.min(f === 'w' ? 3 : 3, Math.max(f === 'w' ? 0.4 : 0.3, cur0 + 0.15*(+d)))*100)/100); });
 paper.addEventListener('click', e => { if (!PROJ || !G || !G.pos || Date.now() - gelMovedAt < 350) return; const f = curFig(); if (!f || f.kind !== 'workflow') return;
@@ -4779,6 +4796,19 @@ window.addEventListener('pointermove', e => {
   cancelAnimationFrame(gelRaf2); gelRaf2 = requestAnimationFrame(render);
 });
 ['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (gelDrag) { gelDrag = null; render(); } }));
+/* drag the selected workflow panel (inside its selection box) to move it; under 4 px it stays a click */
+let wfDrag = null, wfRaf = 0;
+paper.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || !wfSel || !PROJ || !G || !G.pos) return; const f = curFig(), svg = paper.querySelector('svg'); if (!f || f.kind !== 'workflow' || !svg) return;
+  const p = svgPoint(e), q = p && G.pos.find(x => x.id === wfSel), it = q && wfItem(wfSel), m = svg.getScreenCTM(); if (!it || !m || !(p.x >= q.x && p.x <= q.x + q.w && p.y >= q.y && p.y <= q.y + q.h)) return;
+  wfDrag = {it, cx: e.clientX, cy: e.clientY, k: 1/m.a, ox: it.ox, oy: it.oy, minX: it.ox - q.x, minY: it.oy - q.y, on: false};
+}, true);
+window.addEventListener('pointermove', e => {
+  const d = wfDrag; if (!d) return; if (!d.on) { if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) return; d.on = true; }
+  const o = {dx: Math.max(d.minX, d.ox + (e.clientX - d.cx)*d.k), dy: Math.max(d.minY, d.oy + (e.clientY - d.cy)*d.k)}; gelMovedAt = Date.now();
+  cancelAnimationFrame(wfRaf); wfRaf = requestAnimationFrame(() => { const it = wfItem(wfSel); if (it) wfSet(it, 'off', o); });
+});
+['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; }));
 $('#gelOffReset').addEventListener('click', () => { runs.forEach(r => { r.gelOff = {}; }); prep.offs = {}; render(); });
 paper.addEventListener('pointerdown', e => {
   const c = chartAt(); if (!c || !c.run || e.button !== 0) return;
