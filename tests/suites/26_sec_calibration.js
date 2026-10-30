@@ -205,5 +205,146 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
   };
   await extrapCase('extrap_14_18', [14, 18], Math.pow(10, 5.5 - 0.25*15), Math.pow(10, 5.5 - 0.25*12));
   await extrapCase('extrap_12p2_18p2', [12.2, 18.2], Math.pow(10, 2 - 2.8/6), Math.pow(10, 2 + 0.2/6));
+
+  /* Column dimension and resin guessing (#127):
+     A 3.2/300 S200 run must not become 10/300 with Vt=24 mL, and a 26/600 S75 must not become S200.
+     Assert controls (preset, vt, v0), void classification, and Methods identity. */
+  await T.t('sec_dimensions_and_resin_guess', async () => {
+    const o = await open(), p2 = o.p, h2 = H(p2);
+    p2.on('dialog', d => d.accept());
+    const openFolds = loc => loc.evaluate(e => {
+      let d = e.closest('details');
+      while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); }
+    });
+
+    // Case 1: 3.2/300 S200 run
+    await h2.newProject('SEC 3.2/300 S200 Test');
+    await h2.addRun(path.join(DATA, 'qa/sec_Superdex_200_Increase_3.2_300.csv'));
+    let rs = (await h2.timeline()).find(x => /^run:/.test(x.k));
+    if (rs) await h2.step(rs.k);
+    if (await p2.isVisible('#moreBtn') && /More options/i.test(await p2.locator('#moreBtn').textContent().catch(() => ''))) {
+      await p2.click('#moreBtn').catch(() => {});
+      await h2.wait(300);
+    }
+    const sc1 = p2.locator('#o-secStds');
+    await openFolds(sc1);
+    if (!(await sc1.isChecked())) { await sc1.check({force: true}); await h2.wait(300); }
+
+    // Controls
+    const col1 = await p2.locator('#sec-col').inputValue();
+    const vt1 = await p2.locator('#sec-vt').inputValue();
+    const v01 = await p2.locator('#sec-v0').inputValue();
+    T.check('s200i3_col_control', col1 === 's200i3', `Expected s200i3, got ${col1}`);
+    T.check('s200i3_vt_control', vt1 === '2.4', `Expected 2.4, got ${vt1}`);
+    T.check('s200i3_v0_control', v01 === '0.86', `Expected 0.86, got ${v01}`);
+
+    // Void classification
+    await p2.locator('#ss-v0').fill('1.0'); await p2.locator('#ss-v0').dispatchEvent('change');
+    await p2.locator('#ss-v1').fill('2.0'); await p2.locator('#ss-v1').dispatchEvent('change');
+    await h2.wait(300);
+    await p2.click('#intAuto').catch(() => {});
+    await h2.wait(600);
+    const pt1 = await h2.peakTable();
+    const head1 = pt1[0] || [];
+    const veC1 = head1.findIndex(c => /^Ve|Center|Elution/i.test(c));
+    const kavC1 = head1.findIndex(c => /^Kav/i.test(c));
+    const mwC1 = head1.findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
+    const row0p5 = pt1.slice(1).find(r => T.near(num(r[veC1]), 0.5, 0.1));
+    const row1p5 = pt1.slice(1).find(r => T.near(num(r[veC1]), 1.5, 0.1));
+    T.check('s200i3_kav_column_present', kavC1 >= 0, `Kav header: ${head1.join(', ')}`);
+    T.check('s200i3_mw_column_present', mwC1 >= 0, `MW header: ${head1.join(', ')}`);
+    T.check('s200i3_peak_0.5_is_void', row0p5 && row0p5[mwC1] === 'void', `0.5 mL row: ${JSON.stringify(row0p5)}`);
+    T.check('s200i3_peak_1.5_not_void', row1p5 && row1p5[mwC1] !== 'void', `1.5 mL row: ${JSON.stringify(row1p5)}`);
+    T.check('s200i3_peak_1.5_kav_positive', row1p5 && num(row1p5[kavC1]) > 0, `1.5 mL Kav: ${row1p5 && row1p5[kavC1]}`);
+
+    // Methods identity
+    await h2.step('figure'); await h2.wait(400);
+    await p2.evaluate(() => { const b = document.getElementById('methodsBox'); if (b) b.open = true; });
+    await h2.wait(300);
+    const m1 = await h2.methods();
+    T.check('s200i3_methods_has_3.2_300', /3\.2\/300/.test(m1), `Methods: ${m1}`);
+    T.check('s200i3_methods_not_10_300', !/10\/300/.test(m1), `Methods: ${m1}`);
+
+    // Case 2: 26/600 S75 run
+    await p2.click('#homeBtn').catch(() => {}); await h2.wait(400);
+    await h2.newProject('SEC 26/600 S75 Test');
+    await h2.addRun(path.join(DATA, 'qa/sec_HiLoad_26_600_Superdex_75_pg.csv'));
+    rs = (await h2.timeline()).find(x => /^run:/.test(x.k));
+    if (rs) await h2.step(rs.k);
+    if (await p2.isVisible('#moreBtn') && /More options/i.test(await p2.locator('#moreBtn').textContent().catch(() => ''))) {
+      await p2.click('#moreBtn').catch(() => {});
+      await h2.wait(300);
+    }
+    const sc2 = p2.locator('#o-secStds');
+    await openFolds(sc2);
+    if (!(await sc2.isChecked())) { await sc2.check({force: true}); await h2.wait(300); }
+
+    // Controls
+    const col2 = await p2.locator('#sec-col').inputValue();
+    const vt2 = await p2.locator('#sec-vt').inputValue();
+    const v02 = await p2.locator('#sec-v0').inputValue();
+    T.check('hl26s75_col_control', col2 === 'hl26s75', `Expected hl26s75, got ${col2}`);
+    T.check('hl26s75_vt_control', vt2 === '320', `Expected 320, got ${vt2}`);
+    T.check('hl26s75_v0_control', v02 === '115.2', `Expected 115.2, got ${v02}`);
+
+    // Void classification
+    await p2.locator('#ss-v0').fill('150'); await p2.locator('#ss-v0').dispatchEvent('change');
+    await p2.locator('#ss-v1').fill('250'); await p2.locator('#ss-v1').dispatchEvent('change');
+    await h2.wait(300);
+    await p2.click('#intAuto').catch(() => {});
+    await h2.wait(600);
+    const pt2 = await h2.peakTable();
+    const head2 = pt2[0] || [];
+    const veC2 = head2.findIndex(c => /^Ve|Center|Elution/i.test(c));
+    const kavC2 = head2.findIndex(c => /^Kav/i.test(c));
+    const mwC2 = head2.findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
+    const row80 = pt2.slice(1).find(r => T.near(num(r[veC2]), 80, 5));
+    const row200 = pt2.slice(1).find(r => T.near(num(r[veC2]), 200, 10));
+    T.check('hl26s75_kav_column_present', kavC2 >= 0, `Kav header: ${head2.join(', ')}`);
+    T.check('hl26s75_mw_column_present', mwC2 >= 0, `MW header: ${head2.join(', ')}`);
+    T.check('hl26s75_peak_80_is_void', row80 && row80[mwC2] === 'void', `80 mL row: ${JSON.stringify(row80)}`);
+    T.check('hl26s75_peak_200_not_void', row200 && row200[mwC2] !== 'void', `200 mL row: ${JSON.stringify(row200)}`);
+    T.check('hl26s75_peak_200_kav_positive', row200 && num(row200[kavC2]) > 0, `200 mL Kav: ${row200 && row200[kavC2]}`);
+
+    // Methods identity
+    await h2.step('figure'); await h2.wait(400);
+    await p2.evaluate(() => { const b = document.getElementById('methodsBox'); if (b) b.open = true; });
+    await h2.wait(300);
+    const m2 = await h2.methods();
+    T.check('hl26s75_methods_has_s75', /(s75|Superdex.*75)/i.test(m2), `Methods: ${m2}`);
+    T.check('hl26s75_methods_not_s200', !/(s200|Superdex.*200)/i.test(m2), `Methods: ${m2}`);
+
+    // Case 3: Supported 10/300 control
+    await p2.click('#homeBtn').catch(() => {}); await h2.wait(400);
+    await h2.newProject('SEC 10/300 S200 Control');
+    await h2.addRun(path.join(DATA, 'qa/sec_Superdex_200_Increase_10_300.csv'));
+    rs = (await h2.timeline()).find(x => /^run:/.test(x.k));
+    if (rs) await h2.step(rs.k);
+    if (await p2.isVisible('#moreBtn') && /More options/i.test(await p2.locator('#moreBtn').textContent().catch(() => ''))) {
+      await p2.click('#moreBtn').catch(() => {});
+      await h2.wait(300);
+    }
+    const sc3 = p2.locator('#o-secStds');
+    await openFolds(sc3);
+    if (!(await sc3.isChecked())) { await sc3.check({force: true}); await h2.wait(300); }
+
+    // Controls
+    const col3 = await p2.locator('#sec-col').inputValue();
+    const vt3 = await p2.locator('#sec-vt').inputValue();
+    const v03 = await p2.locator('#sec-v0').inputValue();
+    T.check('s200i_col_control', col3 === 's200i', `Expected s200i, got ${col3}`);
+    T.check('s200i_vt_control', vt3 === '24', `Expected 24, got ${vt3}`);
+    T.check('s200i_v0_control', v03 === '8.64', `Expected 8.64, got ${v03}`);
+
+    // Methods identity
+    await h2.step('figure'); await h2.wait(400);
+    await p2.evaluate(() => { const b = document.getElementById('methodsBox'); if (b) b.open = true; });
+    await h2.wait(300);
+    const m3 = await h2.methods();
+    T.check('s200i_methods_has_10_300', /10\/300/.test(m3), `Methods: ${m3}`);
+
+    T.check('no page errors', !o.errs.length, o.errs.join(' | '));
+    await o.close();
+  });
   T.done();
 })();
