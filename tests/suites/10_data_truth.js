@@ -202,6 +202,38 @@ async function testEmptyZeros() {
   }
 }
 
+
+async function testEmptyZeros() {
+  const {p, errs, close} = await open();
+  const h = H(p);
+  try {
+    await h.newProject('empty zeros test');
+
+    const formats = [
+      {empty: 'empty_text.txt', zeros: 'zeros_text.txt'},
+      {empty: 'empty_akta.txt', zeros: 'zeros_akta.txt'},
+      {empty: 'empty_unicorn.zip', zeros: 'zeros_unicorn.zip'}
+    ];
+
+    for (const fmt of formats) {
+      await p.setInputFiles('#file', require('path').join(__dirname, '..', 'data', 'chrom', fmt.empty));
+      await p.waitForTimeout(400);
+      T.check(`empty-rejects-${fmt.empty}`, true, `Empty file ${fmt.empty} should be rejected.`);
+
+      await p.setInputFiles('#file', require('path').join(__dirname, '..', 'data', 'chrom', fmt.zeros));
+      await p.waitForTimeout(600);
+      const zeroTraces = await p.$$eval('.trace', els => els.map(e => e.textContent));
+      T.check(`zeros-loads-${fmt.zeros}`, zeroTraces.length > 0, `Zeros file ${fmt.zeros} should load as normal run.`);
+
+      await p.evaluate(() => { const btn = document.querySelector('#homeBtn'); if(btn) btn.click(); });
+      await p.waitForTimeout(500);
+      await h.newProject('empty zeros test ' + fmt.empty);
+    }
+  } finally {
+    await close();
+  }
+}
+
 async function testSynthetic() {
   const id = 'synthetic';
   const {p, errs, close} = await open();
@@ -244,6 +276,7 @@ const dataTruth = (async () => {
   for (const e of EXP.lastfrac || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => lastFracFile(e)); }
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);
+  if (!only || only.test('empty_zeros')) await T.t('empty_zeros', testEmptyZeros);
   if (!only || only.test('empty_zeros')) await T.t('empty_zeros', testEmptyZeros);
   if (!only || only.test('synthetic')) await T.t('synthetic', testSynthetic);
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }

@@ -4,7 +4,7 @@ As detailed in the issue and PR #486 review, the root cause has already been add
 
 This PR simply adds the synthetic data generators and a rigorous test (`testEmptyZeros` in `10_data_truth.js`) to guarantee this correct behavior across `parseText`, `parseAkta`, and `parseUnicornZip` parsers to prevent future regressions.
 
-The test suite runs successfully with `10_data_truth` verifying normal handling of empty strings/zero measurements (355 pass, 0 fail), confirming main branch correctly preserves valid zero data without throwing errors or adding extra logic.
+The test suite runs successfully with `10_data_truth` verifying normal handling of empty strings/zero measurements, confirming main branch correctly preserves valid zero data without throwing errors or adding extra logic. `11_unicorn_zip` has one known failing check from `main` which is intentionally ignored.
 
 Open questions:
 - Do we need an "Empty parse" pill as asked in the original issue?
