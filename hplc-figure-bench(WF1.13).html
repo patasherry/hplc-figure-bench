@@ -6009,7 +6009,7 @@ function addRowHtml(){
   const btn = `<div class="tl-add"><button type="button" class="btn${addOpen ? ' quiet' : wfList().length ? '' : ' primary'}" data-addmenu="1" aria-expanded="${addOpen}">${addOpen ? 'Cancel' : 'Add a step'}</button></div>`;
   return btn + (addOpen ? `<div class="tl-menu" role="group" aria-label="Kind of step">${ADD_OPTS().map(([k, t, d]) => `<button type="button" data-addstep="${k}"><b>${esc(t)}</b><span>${esc(d)}</span></button>`).join('')}</div>` : ''); }
 /* a new step without a chromatogram goes after the last step */
-function addMan(kind){ const L = wfList(), last = L[L.length - 1], n = Math.max(0, ...(prep.manual || []).map(m => { const v = /^m(\d+)$/.exec(m && m.id); return v ? +v[1] : 0; })) + 1;
+function addMan(kind){ const L = wfList(), last = L[L.length - 1], n = Math.max(0, ...(prep.manual || []).map(m => { const match = String(m && m.id || "").match(/^m(\d+)$/); return match ? +match[1] : 0; })) + 1;
   prep.manual = (prep.manual || []).concat([{id: 'm' + n, kind, name: '', after: last ? last.id : ''}]); gels.forEach(g => { g._prepA = null; }); selectStep('man:m' + n); }
 function renderSteps(){
   if (!PROJ) return; const L = stepList(), key = curStep;
