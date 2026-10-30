@@ -424,6 +424,23 @@ ORIGIN
     T.check('6_large_protein.eps_text_84800', epsText.includes('84,800') || epsText.includes('84800'), `expected ε280 = 84,800, got "${epsText}"`);
   });
 
+  /* ================= 7. No Trp or Tyr ================= */
+  await T.t('7_no_trp_tyr', async () => {
+    await clearTagSeq();
+    await setProtSeq('MAGSKLLPEDGHHGSS');
+
+    const tbl = await getProtTable();
+    T.check('7_no_trp_tyr.has_row', tbl.length >= 1, JSON.stringify(tbl));
+
+    if (tbl.length) {
+      const a280 = getA280Cell(tbl[0]).trim();
+      T.check('7_no_trp_tyr.a280_none', a280.toLowerCase() === 'none', `expected 'none' for A280, got "${a280}"`);
+    }
+
+    const epsText = await getProtEps();
+    T.check('7_no_trp_tyr.no_eps', !epsText.includes('ε'), `expected no ε value, got "${epsText}"`);
+  });
+
   /* ================= 7. Thrombin cleavage product ================= */
   await T.t('7_thrombin_cleavage', async () => {
     const seq = 'M' + 'AWY'.repeat(10); // 31 aa
