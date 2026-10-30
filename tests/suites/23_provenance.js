@@ -1,5 +1,5 @@
 const {open, H, suite, path, fs, DATA, src} = require('../lib/harness');
-const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), nd: path.join(DATA, 'science/nd3.csv')};
+const F = {gb: src('gb'), imac: src('his'), grad: path.join(DATA, 'chrom/imac_HisTrap_HP_5mL_gradient_u7_tab_utf16.csv'), sec: path.join(DATA, 'science/sec_inject2.csv'), nd: path.join(DATA, 'science/nd3.csv')};
 
 (async () => {
   const T = suite('23_provenance');
@@ -74,6 +74,25 @@ const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_in
     await p.waitForTimeout(500);
     const mMiss = await methods();
     T.check('missing_provenance', mMiss.includes('not entered'), 'Methods text should mention missing provenance');
+  });
+
+  await T.t('measurable_parameters', async () => {
+    const setRun = async (k, v) => { const l = p.locator(`.trace.run.sel [data-k=${k}]`).first(); await l.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } }); await l.fill(String(v)); await l.dispatchEvent('change'); await h.wait(250); };
+    await p.click('text=All projects').catch(() => {}); await h.wait(600);
+    await h.newProject('Measured parameters');
+    await h.addRun(F.grad);
+    const source = await methods();
+    T.check('parameter_schema.imported_values', /5(?:\.0)? mL\/min/.test(source) && /4(?:\.0)? °C/.test(source) && /linear gradient from 0% to 100% B/i.test(source), `Methods did not retain imported values: ${source}`);
+    T.check('parameter_schema.no_false_warning', !/differs from run data/.test(source), `Automatic values should not warn: ${source}`);
+
+    await h.step((await h.timeline()).find(x => /^run:/.test(x.k)).k);
+    await setRun('mFlow', '2.5');
+    await setRun('mTemp', '20');
+    await setRun('mGrad', 'linear 0 to 80% B over 20 mL');
+    const checked = await methods();
+    T.check('parameter_schema.flow_mismatch', /flow rate differs from run data \(5(?:\.0)? mL\/min\), check/.test(checked), `Missing flow provenance check: ${checked}`);
+    T.check('parameter_schema.temperature_mismatch', /temperature differs from run data \(4\.0 °C\), check/.test(checked), `Missing temperature provenance check: ${checked}`);
+    T.check('parameter_schema.gradient_mismatch', /gradient differs from run data \(0% to 100% B over 49 mL, 10 CV\), check/.test(checked), `Missing gradient provenance check: ${checked}`);
   });
 
   await close();

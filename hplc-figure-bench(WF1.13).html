@@ -4117,8 +4117,23 @@ const guessCV = r => { if (r.cvLog > 0) return r.cvLog; const m = (guessColumn(r
 function guessFrac(r){ const segs = fracSegments(r, uvOf(r).xs[uvOf(r).xs.length - 1]).filter(sg => !sg.waste).map(sg => sg.b - sg.a).filter(w => w > 0).sort((p, q) => p - q);
   return segs.length >= 3 ? `${fmtAuto(segs[segs.length >> 1])} ${xUnit(r)}` : ''; }
 /* each field: what the user typed, else what the file says */
+/* Measurable values in Methods have a deliberately narrow schema. Free-text conditions are left alone: a warning is shown only when both the typed value and the run data can be compared unambiguously. */
+const METHOD_PARAM_SCHEMA = {
+  mFlow: {label: 'flow rate', source: r => r.flowAuto > 0 ? +r.flowAuto : null, read: s => { const m = /^\s*(-?\d+(?:\.\d+)?)\s*(?:mL\s*\/\s*min)?\s*$/i.exec(s); return m ? +m[1] : null; }, same: (a, b) => Math.abs(a-b) <= Math.max(0.01, Math.abs(b)*0.02), show: v => `${fmt(v, v < 1 ? 2 : 1)} mL/min`},
+  mTemp: {label: 'temperature', source: r => numOr(r.tempAuto, NaN), read: s => { const m = /^\s*(-?\d+(?:\.\d+)?)\s*(?:°?C)?\s*$/i.exec(s); return m ? +m[1] : null; }, same: (a, b) => Math.abs(a-b) <= 0.5, show: v => `${fmt(v, 1)} °C`},
+  mGrad: {label: 'gradient', source: r => gradientParams(guessGradient(r)), read: gradientParams, same: (a, b) => a.kind === b.kind && a.values.length === b.values.length && a.values.every((v, i) => Math.abs(v-b.values[i]) <= 1) && Object.keys(a.spans).every(u => !(u in b.spans) || Math.abs(a.spans[u]-b.spans[u]) <= Math.max(0.1, Math.abs(b.spans[u])*0.02)), show: v => v.kind === 'linear' ? `${fmt(v.values[0], 0)}% to ${fmt(v.values[1], 0)}% B${Object.keys(v.spans).length ? ' over ' + Object.entries(v.spans).map(([u, n]) => `${fmtAuto(n)} ${u === 'ml' ? 'mL' : u === 'cv' ? 'CV' : u}`).join(', ') : ''}` : v.kind === 'steps' ? `steps to ${v.values.map(n => fmt(n, 0) + '% B').join(', ')}` : v.kind === 'flat' ? `${fmt(v.values[0], 0)}% B throughout` : ''}
+};
+function gradientParams(s){
+  s = String(s || '').trim(); let m;
+  if ((m = /^(?:isocratic|(-?\d+(?:\.\d+)?)\s*%\s*B\s+throughout)$/i.exec(s))) return {kind: 'flat', values: [m[1] == null ? 0 : +m[1]], spans: {}};
+  if ((m = /^(?:a\s+)?linear(?:\s+gradient\s+from|\s+from)?\s*(-?\d+(?:\.\d+)?)\s*%?\s*B?\s+to\s+(-?\d+(?:\.\d+)?)\s*%\s*B\s+over\s+(.+?)(?:,\s*then\b|$)/i.exec(s))) { const spans = {}, re = /(-?\d+(?:\.\d+)?)\s*(mL|min|CV)\b/ig; let q; while ((q = re.exec(m[3]))) spans[q[2].toLowerCase()] = +q[1]; return Object.keys(spans).length ? {kind: 'linear', values: [+m[1], +m[2]], spans} : null; }
+  if (/^steps?\s+to\s+/i.test(s)) { const values = [...s.matchAll(/(-?\d+(?:\.\d+)?)\s*%\s*B/ig)].map(q => +q[1]); return values.length ? {kind: 'steps', values, spans: {}} : null; }
+  return null;
+}
+function methodParamWarning(r, k){ const s = METHOD_PARAM_SCHEMA[k], typed = String(r[k] == null ? '' : r[k]).trim(), actual = typed && s.read(typed), source = s.source(r);
+  return !typed || actual == null || source == null || (typeof source === 'number' && !isFinite(source)) || s.same(actual, source) ? '' : ` [${s.label} differs from run data (${s.show(source)}), check]`; }
 function runCond(r){
-  const v = k => String(r[k] == null ? '' : r[k]).trim(), au = {mCol: guessColumn(r), mCV: (c => c ? String(+(+c).toPrecision(3)) : '')(guessCV(r)), mFlow: r.flowAuto ? fmt(r.flowAuto, r.flowAuto < 1 ? 2 : 1) : '', mTemp: '', mGrad: guessGradient(r), mFrac: guessFrac(r)};
+  const v = k => String(r[k] == null ? '' : r[k]).trim(), au = {mCol: guessColumn(r), mCV: (c => c ? String(+(+c).toPrecision(3)) : '')(guessCV(r)), mFlow: r.flowAuto ? fmt(r.flowAuto, r.flowAuto < 1 ? 2 : 1) : '', mTemp: isFinite(+r.tempAuto) ? fmt(+r.tempAuto, 1) : '', mGrad: guessGradient(r), mFrac: guessFrac(r)};
   const o = {}; COND_KEYS.forEach(k => { o[k] = v(k) || au[k] || ''; o[k + 'Auto'] = !v(k) && !!au[k]; }); o.auto = au; return o; }
 const steps0 = r => runs.filter(x => x.inWf)[0] === r;
 const unitIf = (t, u) => /^\-?\d+(\.\d+)?$/.test(String(t).trim()) ? `${t} ${u}` : t;
@@ -4156,7 +4171,7 @@ function methodsText(){
     const ad = v(prep.lysAdd), se2 = v(prep.lysSet);
     P.push(`Cells were lysed${m ? ` by ${lc(m)}` : ''}${se2 ? ` (${se2.replace(/\.$/, '')})` : ''}${b ? ` in ${b}` : ''}${ad ? `${b ? ' with' : ' with'} ${ad.replace(/\.$/, '')}` : ''}${c ? ` and clarified by centrifugation (${c})` : ''}${vol > 0 ? `, giving ${fmtAuto(vol)} mL of clarified lysate` : ''}.`); }
   /* an instrument or temperature shared by every column is said once, before the steps */
-  const conds = steps.map(runCond), one = k => { const vs = [...new Set(conds.map(c => c[k]).filter(Boolean))]; return vs.length === 1 && conds.every(c => c[k]) ? vs[0] : ''; }, instAll = one('mInst'), tempAll = one('mTemp');
+  const conds = steps.map(runCond), one = k => { const vs = [...new Set(conds.map(c => c[k]).filter(Boolean))]; return vs.length === 1 && conds.every(c => c[k]) ? vs[0] : ''; }, instAll = steps.length > 1 ? one('mInst') : '', tempAll = steps.length > 1 ? one('mTemp') : '';
   if (steps.length > 1 && (instAll || tempAll)) P.push(`All chromatography was run${instAll ? ` on ${art(instAll)} ${instAll}` : ''}${tempAll ? ` at ${deg(tempAll)}` : ''}.`);
   const need = t => `[${t} not entered]`;
   wf.forEach((r, i) => { const ttl = stepTitle(r), Lt = letterOf(r);
@@ -4168,13 +4183,13 @@ function methodsText(){
     /* a column name read from the file name is marked for checking; one typed by hand or logged by UNICORN is not */
     const colChk = '';
     const col = c.mCol ? `${art(c.mCol)} ${c.mCol}${c.mCV && !/\d\s*mL|\/\d+/.test(c.mCol) ? ` (${c.mCV} mL)` : ''}${/column$/i.test(c.mCol) ? '' : ' column'}${colChk}` : `the column ${need('column')}`;
-    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
+    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')}${methodParamWarning(r, 'mFlow')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
     t += c.mBufA ? (sec ? ` in ${c.mBufA}` : ` equilibrated in buffer A (${c.mBufA})`) : ` ${need('buffer')}`;
     if (hasTxt(r.mWash) && !sec) t += `, washed with ${lc(v(r.mWash))}`;
-    let grad = c.mGrad ? (c.mGradAuto ? lc(c.mGrad).replace(/^linear /, 'a linear gradient from ').replace(/^step to /, 'a step to ') : lc(c.mGrad)) : '';
+    let grad = c.mGrad ? (c.mGradAuto ? lc(c.mGrad).replace(/^linear /, 'a linear gradient from ').replace(/^step to /, 'a step to ') : lc(c.mGrad)) + methodParamWarning(r, 'mGrad') : '';
     if (!sec) t += ft ? `. The protein was collected in the flow-through${grad ? `, and bound material was eluted with ${grad}` : c.mBufB ? ', and bound material was eluted with buffer B' : ''}` : grad ? ` and eluted with ${grad}` : c.mBufB ? ' and eluted with buffer B' : ` and eluted ${need('elution')}`;
     const T = c.mTemp && !tempAll ? deg(c.mTemp) : '';
-    t += T ? ` at ${T}` : '';
+    t += T ? ` at ${T}${methodParamWarning(r, 'mTemp')}` : methodParamWarning(r, 'mTemp');
     t += c.mFrac ? `, collecting ${unitIf(c.mFrac, 'mL')} fractions` : ''; t += '.';
     if (c.mBufB && !sec) { const bm = bufMismatch(r, c); t += ` Buffer B was ${lc(c.mBufB)}${bm ? ` [differs from buffer A in ${bm}, check]` : ''}.`; }
     if (hasTxt(r.mOther)) t += ` ${v(r.mOther).replace(/^./, x => x.toUpperCase()).replace(/\.?$/, '.')}`;
