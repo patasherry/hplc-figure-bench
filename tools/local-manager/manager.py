@@ -1082,7 +1082,7 @@ def bg_worker(s, key):
     """Run one local coding worker (OpenClaw or Codex) on one job at a time, in the background, so the manager's passes keep going while it codes."""
     W, jobs = BG[key], _bg[key]
     exe = shutil.which(W['exe'])
-    if CLOUD or not exe or not cfg.get(key + '_jobs_on', True):
+    if CLOUD or not exe or not cfg.get(key + '_jobs_on', key != 'openclaw'):  # OpenClaw is off unless openclaw_jobs_on is true: it failed every job (#500, #514, #515)
         return
     tried = s.setdefault(f'{key}_tried', {})
     for n, j in list(jobs.items()):  # finished, or over time
