@@ -1522,6 +1522,8 @@ def heartbeat(s):
 
 def one_pass():
     s = load()
+    if not s.get('oc_reset1'):  # one-time: OpenClaw's first jobs failed only because its context was 32k (fixed on the PC), so let them be tried again
+        s.pop('oc_tried', None); s['oc_reset1'] = 1
     if not s.get('ag_reset1'):  # one-time: two good Antigravity jobs failed only at the push (fixed), so let them be tried again
         s.pop('ag_tried', None); s['ag_reset1'] = 1
     if CLOUD:
