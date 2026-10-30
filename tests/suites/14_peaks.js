@@ -134,5 +134,25 @@ async function peakFile(e) {
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }
+
+  await T.t('215_peaks_not_detected', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await h.newProject('test 215');
+      await h.addRun(path.join(CH, 'sec_semicolon_unicorn7.csv'));
+      await p.waitForTimeout(300);
+      const runStep = (await h.timeline()).find(x => x.k.startsWith('run:'));
+      if (runStep) await h.step(runStep.k);
+      await setOpt(p, 'o-xmin', '11');
+      await setOpt(p, 'o-xmax', '15');
+      await detect(p);
+      const t = await h.peakTable();
+      T.check('peak1.area', t[1] ? Math.round(parseFloat(t[1][4])) : 0, 196);
+      T.check('peak2.area', t[2] ? Math.round(parseFloat(t[2][4])) : 0, 30);
+    } finally {
+      await close();
+    }
+  });
+
   T.done();
 })();
