@@ -153,9 +153,11 @@ def ask_claude(q):
     return run(['claude', '-p', '--permission-mode', 'plan'], q)
 
 
-CODEX_MODEL = cfg.get('codex_model')  # e.g. a smaller model, to use less of the ChatGPT plan's 5-hour allowance; unset = Codex's own default
+CODEX_LIGHT = cfg.get('codex_model', 'gpt-5.6-terra')  # routine work: questions, board, advice, ordinary coding jobs (the owner's choice)
+CODEX_HEAVY = cfg.get('codex_model_heavy', 'gpt-6-astra')  # hard work only: jobs other agents failed (for-claude-code) and jobs labelled for-codex
 CODEX_EFFORT = cfg.get('codex_effort')  # reasoning effort: low, medium or high; unset = Codex's own default
-CODEX_OPTS = (['-m', CODEX_MODEL] if CODEX_MODEL else []) + (['-c', f'model_reasoning_effort="{CODEX_EFFORT}"'] if CODEX_EFFORT else [])
+codex_opts = lambda heavy=False: ['-m', CODEX_HEAVY if heavy else CODEX_LIGHT] + (['-c', f'model_reasoning_effort="{CODEX_EFFORT}"'] if CODEX_EFFORT else [])
+CODEX_OPTS = codex_opts()
 
 
 def ask_codex(q):
@@ -1040,10 +1042,10 @@ BG_HOURS = {'openclaw': cfg.get('openclaw_hours', 1.5), 'codex': cfg.get('codex_
 _bg = {'openclaw': {}, 'codex': {}}  # issue -> running job, per worker; kept in memory, since the processes belong to this manager
 BG = {  # how each local coding worker is started and labelled
     'openclaw': {'name': 'OpenClaw', 'who': lambda: f'OpenClaw with the local model ({rv.MODEL_LOCAL})', 'mark': '<!-- openclaw-job -->', 'exe': 'openclaw',
-                 'args': lambda wt: ['agent', 'exec', '--message-file', str(wt / TASK_FILE), '--cwd', str(wt)],
+                 'args': lambda wt, src='': ['agent', 'exec', '--message-file', str(wt / TASK_FILE), '--cwd', str(wt)],
                  'own': 'for-openclaw', 'takes_claude': False, 'cap': 'openclaw', 'desc': "the local model writing code"},
     'codex': {'name': 'Codex', 'who': lambda: 'ChatGPT Codex on the owner\'s PC', 'mark': '<!-- codex-job -->', 'exe': 'codex',
-              'args': lambda wt: ['exec', '--sandbox', 'workspace-write'] + CODEX_OPTS + ['-C', str(wt), f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE}.'],
+              'args': lambda wt, src='': ['exec', '--sandbox', 'workspace-write'] + codex_opts(src in ('for-claude-code', 'for-codex')) + ['-C', str(wt), f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE}.'],
               'own': 'for-codex', 'takes_claude': True, 'cap': 'codex_jobs', 'desc': 'ChatGPT Codex writing code'},
 }
 OC_MARK = BG['openclaw']['mark']
@@ -1113,11 +1115,13 @@ def bg_worker(s, key):
         why = 'Jules (another agent) could not finish it.' if src not in ('jules-queue', W['own']) else 'You are taking it so Jules (another agent) can work on other jobs.'
         (wt / TASK_FILE).write_text(CC_JOB.format(who=W['who'](), why=why, n=n, title=i['title'], body=(i.get('body') or '')[:12000]), encoding='utf-8')
         logf = open(WORK / f'{key}-{n}.log', 'w', encoding='utf-8')
-        proc = subprocess.Popen([exe] + W['args'](wt), cwd=wt, stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+        proc = subprocess.Popen([exe] + W['args'](wt, src), cwd=wt, stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
     except Exception as e:
         s['count'][W['cap']] -= 1
         return log(f'#{n}: {W["name"]} could not start: {e}')
     jobs[n] = {'proc': proc, 'wt': wt, 't': time.time(), 'src': src, 'title': i['title'], 'log': logf}
+    if key == 'codex':
+        log(f'#{n}: Codex uses {CODEX_HEAVY if src in ("for-claude-code", "for-codex") else CODEX_LIGHT}')
     label(n, add=[f'{key}-running'], remove=[src])
     post(n, f'Handed to **{W["name"]}** on Patrick\'s PC ({W["desc"]}). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
     log(f'#{n}: handed to {W["name"]}')
