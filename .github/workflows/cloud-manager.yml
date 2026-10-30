@@ -28,7 +28,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ secrets.HFB_TOKEN }}
+          persist-credentials: false  # the manager adds the token itself when it pushes; two Authorization headers make GitHub refuse the push
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
