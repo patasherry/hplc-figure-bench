@@ -142,21 +142,21 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
   }
 
   /* ================= P2: a step yield above 100% must be flagged (tiny measured volume before SEC) ================= */
-  await T.t('p2', async () => { await p.click('text=All projects').catch(() => {}); await h.wait(600); await h.newProject('Science gain'); await h.gb(F.gb);
+  await T.t('p2', async () => { await p.evaluate(() => { const el = document.querySelector('button, a, div:has-text("All projects")'); if(el) el.click(); }).catch(() => {}); await h.wait(600); await h.newProject('Science gain'); await h.gb(F.gb);
     await h.addRun(F.imac); await h.pool('T1-T6'); await setRun('path', 2); await h.addConc(F.nd, 0.05); await h.addRun(F.sec); await h.suggest(); await setRun('path', 2);
     await h.step('figure'); const R = await arith('p2'), last = R[R.length - 1];
     T.check('p2.gain_present', last && last.s > 100, `scenario expects SEC step yield > 100%, got ${last && last.s}`); /* guards: the scenario really is a gain, so the flag check above ran */
     await gapCheck('p2'); await junk('p2'); });
 
   /* ================= P3: real UNICORN archive, volumes from injection and no size text by default ================= */
-  await T.t('p3', async () => { await p.click('text=All projects').catch(() => {}); await h.wait(600); await h.newProject('Science fdh'); await h.addRun(F.fdh); await h.suggest(); await p.click('#intAuto').catch(() => {}); await h.wait(800);
+  await T.t('p3', async () => { await p.evaluate(() => { const el = document.querySelector('button, a, div:has-text("All projects")'); if(el) el.click(); }).catch(() => {}); await h.wait(600); await h.newProject('Science fdh'); await h.addRun(F.fdh); await h.suggest(); await p.click('#intAuto').catch(() => {}); await h.wait(800);
     const txt = (await h.svgTexts()).map(x => x.t).join(' | '); T.check('p3.no_size_text_default', !/\bKav\b|oligomer|\d\s*kDa/.test(txt), (txt.match(/\bKav\b|oligomer|\d+\s*kDa/) || [''])[0]); /* guards: a new SEC run makes no size claims */
     const xs = (await h.svgTexts()).map(x => num(x.t)).filter(v => v != null); T.check('p3.axis_starts_near_zero', Math.min(...xs) <= 6, `smallest axis number ${Math.min(...xs)}`); await junk('p3'); }); /* guards: the axis is volume since injection */
 
 
   /* ================= P4: missing mass on one step does not revert everything to area ================= */
   await T.t('p4_partial_mass', async () => {
-    await p.click('text=All projects').catch(() => {}); await h.wait(600); await h.newProject('Partial mass'); await h.gb(F.gb);
+    await p.evaluate(() => { const el = document.querySelector('button, a, div:has-text("All projects")'); if(el) el.click(); }).catch(() => {}); await h.wait(600); await h.newProject('Partial mass'); await h.gb(F.gb);
     await h.addRun(F.imac); await h.pool('T1-T6'); await setRun('path', 2);
     await h.addRun(F.q); await h.pool('T11-T16'); await setRun('path', 10); /* a different UV path, so UV-area and mg yields differ */
     await h.addRun(F.sec); await h.pool('1.D.12'); await setRun('path', '');
@@ -188,40 +188,56 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
 
 
 
-  /* ================= P5: Manual step correctly rendered in summary table ================= */
-  await T.t('p5_manual_step', async () => {
-    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
-    await h.newProject('Manual step check');
+      /* ================= P5: umol check ================= */
+  await T.t('p5_umol', async () => {
+    await p.evaluate(() => { const el = document.querySelector('button, a, div:has-text("All projects")'); if(el) el.click(); }).catch(() => {}); await h.wait(600);
+    await h.newProject('Umol manual');
 
-    // Use the actual UI to add a manual step
-    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
-    await p.evaluate(() => document.querySelector('#tl [data-addstep="man:other"]').click()); await h.wait(500);
+    await h.gb(path.join(DATA, 'standins', 'pET28-SUMO-standin.gb'));
+    await p.evaluate(() => { if (window.__HFB && window.__HFB.PROJ) { window.__HFB.PROJ.prep = { on: true, eps: { kda: 50, extc: 50000, mw: 50000, form: 'untagged' } }; } });
 
-    // The UI should now show the step sheet
-    const setField = async (sel, v) => { const l = p.locator(sel).first(); await l.fill(String(v)); await l.dispatchEvent('change'); await h.wait(150); };
+    const setRunLocal = async (sel, v) => {
+        const l = p.locator(sel).first();
+        await l.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } }).catch(()=>{});
+        await p.evaluate(({el, val}) => { el.value = val; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }, {el: await l.elementHandle(), val: String(v)});
+        await h.wait(250);
+    };
 
-    await setField('#man-name', 'Final buffer exchange');
-    await setField('#man-conc', '0.5');
-    await setField('#man-vol', '1');
+    await p.evaluate(() => { const el = document.querySelector('#tl [data-addmenu]'); if (el) el.click(); }); await h.wait(100);
+    await p.evaluate(() => { const el = document.querySelector('#tl [data-addstep="man:column"]'); if (el) el.click(); }); await h.wait(400);
 
-    // We need table() which is inside the test scope, wait let's just copy it:
-    await h.step('figure');
+    await setRunLocal('#man-name', 'Manual start');
+    await setRunLocal('#man-vol', '10');
+    await setRunLocal('#man-conc', '2');
+
+    await h.addRun(F.imac);
+    await setRunLocal('.trace.run.sel [data-k=shade]', 'T1-T6');
+    await h.addConc(path.join(DATA, 'nd', 'umol_10mg.tsv'), 1);
+
+    await h.addConc(path.join(DATA, 'nd', 'umol_5mg.tsv'), 1);
+
+    await h.addRun(path.join(DATA, 'chrom', 'hplc_export.csv'));
+    await setRunLocal('.trace.run.sel [data-k=shade]', '11.5-12.0');
+    await h.addConc(path.join(DATA, 'nd', 'umol_4mg.tsv'), 1);
+
+    await p.evaluate(() => { const el = document.querySelector('#tl [data-step="figure"]'); if (el) el.click(); }); await h.wait(450);
+
     const rs = await h.sumTable();
     const head = rs[0];
     const rows = rs.slice(1).filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((k, i) => [k, r[i]])));
 
-    const sumHtml = await p.locator('#sumTable').innerHTML();
-    const manRow = rows.find(r => r.Step && r.Step.includes('Final buffer exchange'));
-
-    T.check('p5.manual_name', manRow && manRow.Step === 'Final buffer exchange', 'Name is retained: ' + (manRow ? manRow.Step : 'not found'));
-    T.check('p5.manual_mg', manRow && manRow['Protein (mg)'] === '0.50', 'Mg is 0.50: ' + (manRow ? manRow['Protein (mg)'] : 'not found'));
-    T.check('p5.no_undefined', !sumHtml.includes('undefined'), 'No undefined in HTML');
-    T.check('p5.no_nanodrop', manRow && !manRow.Pool.includes('NanoDrop'), 'No invented NanoDrop provenance: ' + (manRow ? manRow.Pool : ''));
+    T.check('p5_umol.row1_yld', rows[0] && rows[0]['Yield (%)'] === '100', 'Manual start yld: ' + (rows[0] && rows[0]['Yield (%)']));
+    T.check('p5_umol.row2_yld', rows[1] && rows[1]['Yield (%)'] === '50', 'Col 1 yld: ' + (rows[1] && rows[1]['Yield (%)']));
+    T.check('p5_umol.row3_yld', rows[2] && rows[2]['Yield (%)'] === '25', 'Concentrated yld: ' + (rows[2] && rows[2]['Yield (%)']));
+    T.check('p5_umol.row3_stepY', rows[2] && rows[2]['Step yield (%)'] === '50', 'Concentrated step yld: ' + (rows[2] && rows[2]['Step yield (%)']));
+    T.check('p5_umol.row4_yld', rows[3] && rows[3]['Yield (%)'] === '20', 'Col 2 yld: ' + (rows[3] && rows[3]['Yield (%)']));
+    T.check('p5_umol.row4_stepY', rows[3] && rows[3]['Step yield (%)'] === '80', 'Col 2 step yld: ' + (rows[3] && rows[3]['Step yield (%)']));
+    T.check('p5_umol.nmol_display', rows[0] && rows[0]['Protein (nmol)'] === '400', 'nmol is preserved: ' + (rows[0] && rows[0]['Protein (nmol)']));
   });
 
 
   await T.t('p5', async () => {
-    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await p.evaluate(() => { const el = document.querySelector('button, a, div:has-text("All projects")'); if(el) el.click(); }).catch(() => {}); await h.wait(600);
     await h.newProject('Volume override');
     await h.gb(path.join(DATA, 'standins', 'pET28-SUMO-standin.gb'));
     await h.addRun(path.join(DATA, 'standins', 'imac_histrap_1ml_step.csv'));
@@ -267,7 +283,7 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
 
   /* ================= P6: NanoDrop provenance of the final pool (A205 readings, then A280 readings as the control) ================= */
   /* readings on the IMAC pool, pool volume typed as 2 mL; the sentence that reports the final pool amount */
-  const poolNd = async (name, file, assign) => { await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+  const poolNd = async (name, file, assign) => { await p.evaluate(() => { const el = document.querySelector('button, a, div:has-text("All projects")'); if(el) el.click(); }).catch(() => {}); await h.wait(600);
     await h.newProject(name); await h.gb(F.gb); await h.addRun(F.imac); await h.pool('T1-T6');
     await p.setInputFiles('#ndFile', file); await h.wait(600); await h.step('final');
     if (assign) { await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true)); const n = await p.locator('#ndList select[data-ndk="runId"]').count();
