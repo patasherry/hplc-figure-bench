@@ -438,4 +438,22 @@ await T.t('legacy-project', async () => { const {p, errs, close} = await open(),
   await close();
 });
 
+await T.t('prep-name-manual-id', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  const fixture = require('fs').readFileSync(require('path').join(__dirname, '..', 'data', 'legacy_project.json'), 'utf8');
+  const pData = JSON.parse(fixture);
+  pData.prep = pData.prep || {};
+  pData.prep.name = 'm900';
+  await p.setInputFiles('#projFile', {name: 'legacy_project.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(pData))});
+  await p.waitForTimeout(1000);
+  await p.locator('#tl [data-addmenu]' ).click();
+  await p.waitForTimeout(300);
+  await p.locator('#tl [data-addstep="man:column"]').click();
+  await p.waitForTimeout(500);
+  const steps = await p.$$eval('#tl button[data-step^="man:"]', els => els.map(e => e.getAttribute('data-step')));
+  T.check('prep-name-manual-id.allocates-m1', steps.includes('man:m1'), `Expected man:m1, got: ${steps.join(' , ')}`);
+  await close();
+});
+
 T.done(); })();
