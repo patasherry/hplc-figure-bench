@@ -1069,8 +1069,9 @@ def bg_worker(s, key):
             log(f'#{n}: {W["name"]} opened PR #{pr} after {int((time.time() - j["t"]) / 60)} min')
         except Exception as e:
             tried[str(n)] = time.time()
-            label(n, add=[j['src']], remove=[f'{key}-running'])
-            post(n, f'The {W["name"]} job did not produce a usable change ({str(e)[:300]}), so the job goes back to `{j["src"]}`.' + SIGN.format(rv.MODEL))
+            back = 'jules-queue' if j['src'] == W['own'] else j['src']  # a job labelled for this worker gets one try per label, then Jules takes it
+            label(n, add=[back], remove=[f'{key}-running'])
+            post(n, f'The {W["name"]} job did not produce a usable change ({str(e)[:300]}), so the job goes to `{back}`.' + SIGN.format(rv.MODEL))
             log(f'#{n}: {W["name"]} job failed: {e}')
         finally:
             try:
@@ -1087,7 +1088,8 @@ def bg_worker(s, key):
     busy = {n for k in _bg for n in _bg[k]}
     ok = lambda i: str(i['number']) not in tried and i['number'] not in busy and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
     cop_off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
-    waiting = [(i, W['own']) for i in issues(W['own']) if ok(i)] + \
+    fresh = lambda i: i['number'] not in busy and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
+    waiting = [(i, W['own']) for i in issues(W['own']) if fresh(i)] + \
               ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] if W['takes_claude'] else []) + \
               ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
               [(i, 'jules-queue') for i in sorted(issues('jules-queue'), key=lambda x: -x['number']) if ok(i) and 'from-patrick' not in {l['name'] for l in i['labels']}]
