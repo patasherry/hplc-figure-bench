@@ -1179,8 +1179,8 @@ def codex_jobs(s):
 
 # ---------- AI lead review: PRs that change a reported number, reviewed by the AI the owner picks ----------
 REVIEW_MARK = '<!-- ai-lead-review '
-REVIEW_MODELS = cfg.get('review_models', ['gemini-4-argon', 'gemini-pro-latest', 'gemini-2.5-pro', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest'])  # strongest first; a model the key can't use is skipped for a day
-REVIEW_AG_MODEL = cfg.get('review_antigravity_model', 'gemini-4-argon')  # the strongest model the Antigravity agent offers
+REVIEW_MODELS = cfg.get('review_models', ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest'])  # strongest first; the free tier allows no Pro or Argon calls (0/0), so list them in the settings file only on a paid key
+REVIEW_AG_MODEL = cfg.get('review_antigravity_model', '')  # empty: the agent's own model, which its quota covers (Argon is 0/0 on the free tier)
 LEAD_REVIEW = """You are the lead reviewer of HPLC Figure Bench, a single-file HTML app a biochemistry graduate student (Patrick) uses for real protein purification data.
 This pull request changes a number the app reports. It has passed the tests and the automatic gate, and the change was approved by {approval}.
 Decide whether it is scientifically correct and safe to merge. Check, in order:
@@ -1301,7 +1301,7 @@ def lead_review(s):
             checks = LEAD_REVIEW.split('Check, in order:', 1)[1].split('Return ONE JSON', 1)[0].strip()
             try:
                 it = gem_api('interactions', 'POST', {'agent': AG_AGENT, 'environment': 'remote', 'background': True,
-                                                      'agent_config': {'type': 'antigravity', 'max_total_tokens': AG_TOKENS, 'model': REVIEW_AG_MODEL},
+                                                      'agent_config': {'type': 'antigravity', 'max_total_tokens': AG_TOKENS, **({'model': REVIEW_AG_MODEL} if REVIEW_AG_MODEL else {})},
                                                       'input': AG_REVIEW.format(repo=REPO, name=REPO.split('/')[1], n=n, issue=issue, checks=checks, ititle=iss.get('title', ''),
                                                                                 ibody=(iss.get('body') or '')[:6000], title=pr['title'], body=(pr.get('body') or '')[:6000])})
                 jobs[str(n)] = {'id': it['id'], 'at': time.time(), 'sha': sha, 'issue': issue}
