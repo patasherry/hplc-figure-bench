@@ -5042,7 +5042,7 @@ async function loadFiles(files){
   const gbf = files.filter(f => /\.(gb|gbk|genbank|ape|dna)$/i.test(f.name)); for (const f of gbf) await loadGenBank(f); files = files.filter(f => !gbf.includes(f)); if (!files.length) return;
   const sf = files.filter(f => /\.(cif|mmcif|pdb|ent)$/i.test(f.name)); for (const f of sf) await loadStructFile(f); files = files.filter(f => !sf.includes(f)); if (!files.length) return;
   const imgs = files.filter(isImage), data = files.filter(f => !isImage(f));
-  const added = [], newRuns = [], bad = [], lost = [];
+  const added = [], newRuns = [], bad = [], lost = [], noMeasurements = (f, kind) => `${f.name} (${kind} file, but has no usable measurements: check that data was exported)`;
   for (const f of data) {
     try {
       if (/\.(heic|heif|pdf|svg|dng|raw|cr2|nef)$/i.test(f.name)) { bad.push(`${f.name} (a picture format this tool cannot open: export the gel as PNG, JPEG or TIFF)`); continue; }
@@ -5054,13 +5054,13 @@ async function loadFiles(files){
       const text = decode(await f.arrayBuffer()), nm = f.name.replace(/\.[^.]+$/, '');
       if (looksNanoDrop(text) || isNanoDropHead(text.split(/\r?\n/).filter(l => l.trim()))) {
         const nd = parseNanoDrop(text);
-        if (!nd.length) { bad.push(`${f.name} (a NanoDrop file, but has no usable measurements: check that samples were recorded and exported)`); continue; }
+        if (!nd.length) { bad.push(noMeasurements(f, 'a NanoDrop')); continue; }
         addNanoDrop(nd, f.name); continue;
       }
       const ak = parseAkta(text, nm);
-      if (ak && ak.bad) { bad.push(`${f.name} (${ak.bad})`); continue; }
+      if (ak && ak.bad) { bad.push(/no usable UV traces/i.test(ak.bad) ? noMeasurements(f, 'an ÄKTA/UNICORN') : `${f.name} (${ak.bad})`); continue; }
       if (ak) newRuns.push(makeRun(ak)); else added.push({name: nm, parsed: parseText(text)});
-    } catch (err) { bad.push(f.size === 0 ? `${f.name} (the file is empty)` : err.message === 'has no data points' ? `${f.name} (a chromatogram file, but has no data points: check that data was exported)` : `${f.name} (no columns of numbers found)`); }
+    } catch (err) { bad.push(f.size === 0 ? `${f.name} (the file is empty)` : err.message === 'has no data points' ? noMeasurements(f, 'a chromatogram') : `${f.name} (no columns of numbers found)`); }
   }
   if ((added.length || newRuns.length) && traces.length && traces.every(t => t.ex)) { traces = []; opt.xmin = opt.xmax = opt.ymin = opt.ymax = ''; }
   /* a run already loaded (same file and points) is added again, but left out of the workflow until it is ticked in */

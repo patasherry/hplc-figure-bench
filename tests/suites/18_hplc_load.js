@@ -42,16 +42,35 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
     await h.wait(500);
     await h.newProject('zero measurements');
     const cases = [
-      ['akta', 'empty_akta.csv', 'UV 1_280\tCond\nml\tmAU\tml\tmS/cm\n', /ÄKTA|UNICORN/i, /no usable UV traces/i],
-      ['nanodrop', 'empty_nd.csv', 'Date,Sample Name,Protein (mg/mL),A280,A260/A280,Sample Type\n', /NanoDrop/i, /no usable measurements/i],
-      ['hplc', 'empty_hplc.csv', 'Time (min),UV 280 (mAU)\n', /chromatogram/i, /no data points/i]
+      ['akta', 'empty_akta.csv', 'UV 1_280\tCond\nml\tmAU\tml\tmS/cm\n', /ÄKTA|UNICORN/i],
+      ['nanodrop', 'empty_nd.csv', 'Date,Sample Name,Protein (mg/mL),A280,A260/A280,Sample Type\n', /NanoDrop/i],
+      ['hplc', 'empty_hplc.csv', 'Time (min),UV 280 (mAU)\n', /chromatogram/i]
     ];
-    for (const [id, name, content, reFmt, reWhy] of cases) {
+    for (const [id, name, content, reFmt] of cases) {
       await p.setInputFiles('#file', {name, mimeType: 'text/csv', buffer: Buffer.from(content)});
-      await p.waitForTimeout(600);
-      const toasts = await h.toasts();
-      T.check(`zero_meas/${id}/diagnosed`, toasts.some(t => reFmt.test(t) && reWhy.test(t) && !/no columns of numbers found/i.test(t)), `toasts: ${toasts.join(' | ') || 'none'}`);
+      const toast = p.locator('#toast .pill', {hasText: name}).last();
+      await toast.waitFor({state: 'attached'});
+      const message = await toast.textContent();
+      T.check(`zero_meas/${id}/diagnosed`, reFmt.test(message) && /no usable measurements/i.test(message) && !/no columns of numbers found/i.test(message), `toast: ${message || 'none'}`);
     }
+  });
+
+  await T.t('zero_valued_measurements_load', async () => {
+    await p.reload();
+    await h.wait(500);
+    await h.newProject('zero-valued measurements');
+    await p.setInputFiles('#file', {name: 'zero_akta.csv', mimeType: 'text/csv', buffer: Buffer.from('UV 1_280\nml\tmAU\n0\t0\n1\t0\n2\t0\n')});
+    await p.locator('.trace.run').waitFor();
+    T.check('zero_values/akta/loads', await p.locator('.trace.run').count() === 1, 'All-zero ÄKTA UV records load as a run');
+
+    await p.setInputFiles('#file', {name: 'zero_hplc.csv', mimeType: 'text/csv', buffer: Buffer.from('Time (min),UV 280 (mAU)\n0,0\n1,0\n2,0\n')});
+    await p.waitForFunction(() => document.querySelectorAll('.trace').length === 2);
+    T.check('zero_values/hplc/loads', await p.locator('.trace').count() === 2, 'All-zero HPLC records load as a trace');
+
+    await p.setInputFiles('#file', {name: 'zero_nd.csv', mimeType: 'text/csv', buffer: Buffer.from('Date,Sample Name,Protein (mg/mL),A280,A260/A280,Sample Type\n2026-01-01,Zero sample,0,0,0,Protein\n')});
+    const zeroReading = p.locator('#ndList .ndr').first();
+    await zeroReading.waitFor({state: 'attached'});
+    T.check('zero_values/nanodrop/loads', await zeroReading.locator('[data-ndk=name]').inputValue() === 'Zero sample' && await zeroReading.locator('.nd-v').textContent() === '0.00 mg/mL', `reading: ${await zeroReading.textContent()}`);
   });
 
   T.check('no-page-errors', !errs.length, errs.join(' | '));
