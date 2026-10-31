@@ -537,6 +537,40 @@ ORIGIN
     T.check('8_cleared_seq.eps_empty', epsText === '', `expected eps text to be empty after clearing, got "${epsText}"`);
   });
 
+
+  /* ================= 9. Tag preset without a sequence (GST) must not use the untagged coefficient ================= */
+  await T.t('9_gst_empty_tag', async () => {
+    const protSeq = 'M' + 'AWY'.repeat(10);
+    await setProtSeq(protSeq);
+    await clearTagSeq();
+    await p.selectOption('#o-tagPreset2', 'gst'); await h.wait(400);
+    T.check('9_gst_empty_tag.preset_has_no_tagged_row', (await getProtTable()).length === 1, 'GST has no built-in sequence, so only the Untagged row should show');
+    await setOpt(p, 'eps', ''); await h.wait(200);
+    await h.addRun(path.join(DATA, 'chrom', 'imac_HisTrap_FF_1mL_step_u7.csv')); await h.pool('T1-T3');
+    await h.addConc(path.join(DATA, 'nd', 'nd_one_protein_a280.csv'), 0.5); await h.wait(400);
+    const col = async () => {
+      await h.step('figure'); const dp = p.waitForEvent('download', {timeout: 8000}).catch(() => null); await p.click('#sumCsv'); const dl = await dp; if (!dl) throw new Error('no download; toasts: ' + (await h.toasts()).join('/') + ' sumTable rows ' + (await h.sumTable()).length);
+      const txt = fs.readFileSync(await dl.path(), 'utf8').replace(/^\uFEFF/, '');
+      const rows = txt.trim().split(/\r?\n/).map(l => { const o = []; let c = '', q = false; for (const ch of l) { if (ch === '"') q = !q; else if (ch === ',' && !q) { o.push(c); c = ''; } else c += ch; } o.push(c); return o; });
+      const i = rows[0].indexOf('A280 of 1 mg/mL used'), j = rows[0].indexOf('NanoDrop mg/mL');
+      const r = rows.slice(1).find(x => x[j] !== '' && x[j] != null);
+      return i < 0 || !r ? null : r[i];
+    };
+    const untagged = calcExtinction(protSeq).a280;
+    T.check('9_gst_empty_tag.untagged_value', Math.abs(untagged - 16.0546) < 0.001, `independent untagged A280 ${untagged}`);
+    const v0 = await col();
+    T.check('9_gst_empty_tag.withheld', v0 === '', `expected the A280 column empty (withheld), got "${v0}" (main gives 16.05, the untagged target)`);
+    await setOpt(p, 'eps', '40'); await h.wait(400);
+    const v1 = await col();
+    T.check('9_gst_empty_tag.manual_value', v1 !== null && Math.abs(num(v1) - 40) < 0.001, `expected 40 with a typed coefficient, got "${v1}"`);
+    await setOpt(p, 'eps', '');
+    const tag = 'AWYAWY';
+    await p.evaluate(t => { const e = document.querySelector('#tagSeq'); e.value = t; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); }, tag); await h.wait(500);
+    const fus = calcExtinction(tag + protSeq).a280;
+    const v2 = await col();
+    T.check('9_gst_empty_tag.fusion_value', v2 !== null && v2 !== '' && Math.abs(num(v2) - fus) < 0.002 && Math.abs(num(v2) - 16.0546) > 0.01, `expected fusion ${fus.toFixed(4)}, got "${v2}"`);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
