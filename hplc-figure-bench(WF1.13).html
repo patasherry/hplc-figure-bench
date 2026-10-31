@@ -1473,7 +1473,7 @@ function decode(buf){
 const clean = f => f.trim().replace(/^"(.*)"$/,'$1').trim();
 function splitLine(L, d){ return d === 'ws' ? L.trim().split(/\s+/) : L.split(d); }
 /* Generic chromatogram and ÄKTA CSV values use this directly; NanoDrop first applies its delimiter-specific decimal normalization. Zero is a measurement, while blank and malformed fields are not. */
-function measurementNumber(v){ const s = clean(String(v ?? '')); return NUM.test(s) ? parseFloat(s) : null; }
+function measurementNumber(v){ const s = clean(String(v ?? '')); return NUM.test(s) && isFinite(parseFloat(s)) ? parseFloat(s) : null; }
 function toNum(f, dc){ f = clean(f); if (dc) f = f.replace(/^-?\d+,\d+(?:[eE][-+]?\d+)?$/, m => m.replace(',', '.')); const v = measurementNumber(f); return v == null ? NaN : v; }
 function parseText(text){
   const lines = text.split(/\r\n|\n|\r/);
@@ -1608,20 +1608,31 @@ function netFloats(u8){ if (!u8 || u8.length < 27 || u8[17] !== 0x0f) return [];
   if (t === 0x0b) { for (let k = 0; k < n; k++) out[k] = dv.getFloat32(27 + 4*k, true); } else if (t === 0x06) { for (let k = 0; k < n; k++) out[k] = dv.getFloat64(27 + 8*k, true); } else return []; return out; }
 async function isUnicornZip(f){ if (!/\.zip$/i.test(f.name)) return false; try { const m = zipList(new Uint8Array(await f.arrayBuffer())); return [...m.keys()].some(k => /^Chrom\.\d+\.xml$/i.test(k)); } catch (e) { return false; } }
 async function parseUnicornZip(buf, fname){
-  const m = zipList(new Uint8Array(buf)), cx = [...m.keys()].filter(k => /^Chrom\.\d+\.xml$/i.test(k)).sort()[0]; if (!cx) return null;
-  const doc = new DOMParser().parseFromString(new TextDecoder().decode(await zipGet(m, cx)), 'text/xml'), kid = (el, t) => { const c = [...el.children].find(x => x.tagName === t); return c ? c.textContent : ''; };
+  let m;
+  try { m = zipList(new Uint8Array(buf)); } catch (e) { return null; }
+  const cx = [...m.keys()].filter(k => /^Chrom\.\d+\.xml$/i.test(k)).sort()[0]; if (!cx) return null;
+  let text;
+  try {
+    const raw = await zipGet(m, cx);
+    if (!raw) return null;
+    text = new TextDecoder().decode(raw);
+  } catch (e) { return null; }
+  const doc = new DOMParser().parseFromString(text, 'text/xml'), kid = (el, t) => { const c = [...el.children].find(x => x.tagName === t); return c ? c.textContent : ''; };
   const curves = [], lost = []; let path = null;
   for (const c of doc.querySelectorAll('Curves > Curve')) { const nm = kid(c, 'Name'), yu = kid(c, 'AmplitudeUnit'), kind = curveKind(nm, yu); if (!['uv', 'cond', 'grad', 'flow', 'temp'].includes(kind)) continue;
     const pts = [...c.querySelectorAll('CurvePoints > CurvePoint')], cp = pts.find(p => kid(p, 'IsFullResolution') === 'true') || pts[0], fn = cp ? kid(cp, 'BinaryCurvePointsFileName') : '';
     /* a curve the archive lists but whose points are absent or unreadable is reported, not dropped silently */
-    const inner = fn ? await zipGet(m, fn) : null; if (!inner) { lost.push({nm, kind}); continue; } const im = zipList(inner), xs = netFloats(await zipGet(im, 'CoordinateData.Volumes')), ys = netFloats(await zipGet(im, 'CoordinateData.Amplitudes'));
-    const n = Math.min(xs.length, ys.length); if (n < 2) { lost.push({nm, kind}); continue; }
-    if (kind === 'uv' && path == null) { const ui = c.querySelector('CurveUVInfo'); const pl = ui ? parseFloat(kid(ui, 'UVPathLength')) : NaN; if (pl > 0) path = pl; }
-    curves.push({name: nm, xu: kid(c, 'VolumeUnit') || 'ml', yu, kind, xs: xs.slice(0, n).map(v => Math.round(v*1e5)/1e5), ys: ys.slice(0, n), ev: []}); }
+    try {
+      const inner = fn ? await zipGet(m, fn) : null; if (!inner) { lost.push({nm, kind}); continue; } const im = zipList(inner), xs = netFloats(await zipGet(im, 'CoordinateData.Volumes')), ys = netFloats(await zipGet(im, 'CoordinateData.Amplitudes'));
+      const n = Math.min(xs.length, ys.length); if (n < 2) { lost.push({nm, kind}); continue; }
+      if (kind === 'uv' && path == null) { const ui = c.querySelector('CurveUVInfo'); const pl = ui ? parseFloat(kid(ui, 'UVPathLength')) : NaN; if (pl > 0) path = pl; }
+      curves.push({name: nm, xu: kid(c, 'VolumeUnit') || 'ml', yu, kind, xs: xs.slice(0, n).map(v => Math.round(v*1e5)/1e5), ys: ys.slice(0, n), ev: []});
+    } catch(e) { lost.push({nm, kind}); continue; }
+  }
   for (const ec of doc.querySelectorAll('EventCurves > EventCurve')) { const t = ec.getAttribute('EventCurveType') || '', kind = /^frac/i.test(t) ? 'frac' : /^inject/i.test(t) ? 'inj' : /log/i.test(t) ? 'log' : ''; if (!kind) continue;
     curves.push({name: t, xu: 'ml', yu: '', kind, xs: [], ys: [], ev: [...ec.querySelectorAll('Event')].map(e => ({x: parseFloat(kid(e, 'EventVolume')), label: kid(e, 'EventText')})).filter(e => isFinite(e.x))}); }
   const ak = aktaFromCurves(curves, fname, path != null ? {path: String(path), pathFromFile: true} : null), uvLost = lost.find(c => c.kind === 'uv');
-  if (!ak) return uvLost ? {bad: `its UV curve (${uvLost.nm}) has no readable data points`} : {bad: 'has no usable UV traces'};
+  if (!ak) return null;
   if (lost.length) ak.lost = lost.map(c => c.nm);
   return ak; }
 
