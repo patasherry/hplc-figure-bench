@@ -20,7 +20,7 @@ Run:  python tools\\local-manager\\manager.py          (keeps running)
       python tools\\local-manager\\manager.py --once   (one pass)
       python tools\\local-manager\\manager.py --dry    (one pass, prints what it would do, changes nothing)
 """
-import datetime as dt, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.request
+import base64, datetime as dt, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -36,7 +36,8 @@ BOARD_LOW_QUEUE = cfg.get('board_low_queue', 5)  # and when fewer jobs than this
 AUTO_MAX, AUTO_QUEUE, AUTO_AVG = 3, 10, 3.5  # adopt at most 3 a round, while fewer than 10 jobs wait, with an average of 3.5+ and nobody below 3
 BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
-CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 6), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
+COPILOT_MODE = cfg.get('copilot_mode', 'off')  # off (Patrick has no Copilot credits): no Copilot jobs at all, and its turn goes to Claude Code. auto: the cloud agent, and the Copilot CLI while it is paused. cloud or cli: only that one
+CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 15), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
 TRACK = cfg.get('tracking_issue', 17)
 CLOUD_STANDBY = cfg.get('cloud_standby_minutes', 20)  # the cloud copy works only when the PC manager has been quiet this long
 DIGEST_HOUR = cfg.get('digest_hour', 7)
@@ -460,6 +461,14 @@ def jules_questions(s):
             log(f'#{i["number"]} question failed: {e}')
             continue
         path = ' → '.join(trail)
+        late = [c for c in comments(i['number']) if c['id'] > q['id'] and (c['body'].lstrip().lower().startswith('answer for jules') or c['body'].startswith('No answer came within'))]
+        if late and who not in ('owner', 'lead'):  # the other manager (PC or cloud), a person, or the leader's rule reply got there first: one reply per question
+            s['answered'][key] = 'someone else'
+            log(f'#{i["number"]}: question already answered while the ladder worked, so this answer is not posted')
+            continue
+        if heartbeat_check_cloud_yield():
+            log(f'#{i["number"]}: the PC manager is back, so the cloud copy leaves this question to it')
+            continue
         if who == 'owner':
             label(i['number'], add=['needs-owner'])
             post(i['number'], f"**Needs your OK, Patrick:** {ans} Reply **OK** to approve or **No** to decline.\n\nJules asked:\n> {text[:600]}\n\n_Path: {path}._" + SIGN.format(rv.MODEL))
@@ -690,7 +699,7 @@ def gate(s):
                 gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n### Automatic review of PR #{n} (Jules out of tries)\n\n{notes}'})
                 post(n, ('**Handed to Claude Code** on the owner\'s PC: Copilot\'s attempt did not pass either.' if cop else f'**Handed to Copilot**, then Claude Code if needed: Jules was sent back {MAX_SENDBACKS} times.') + f' Problems:\n\n{notes}' + SIGN.format(rv.MODEL))
                 gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
-            nxt = 'for-claude-code' if cop else 'for-copilot'
+            nxt = 'for-claude-code' if cop or COPILOT_MODE == 'off' else 'for-copilot'
             label(issue, add=[nxt], remove=['jules-queue', 'jules-done', 'jules-running', 'needs-coordinator', 'copilot-done'])
             log(f'PR #{n}: #{issue} handed to {"Claude Code" if nxt == "for-claude-code" else "Copilot"}')
         elif probs:
@@ -977,7 +986,7 @@ def antigravity(s):
             log(f'#{i["number"]}: Antigravity job not tracked any more, back to Jules')
     # hand out: first jobs that wait for a worker that isn't there (Copilot while it is paused, Claude Code while the PC is off), then Jules' backlog
     ok = lambda i: str(i['number']) not in s.get('ag_tried', {}) and str(i['number']) not in a and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
-    cop_off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
+    cop_off = COPILOT_MODE == 'off' or max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
     waiting = ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
               ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] if CLOUD else [])
     queue = [i for i in issues('jules-queue') if ok(i) and not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
@@ -1127,7 +1136,7 @@ def bg_worker(s, key):
         return
     busy = {n for k in _bg for n in _bg[k]}
     ok = lambda i: str(i['number']) not in tried and i['number'] not in busy and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
-    cop_off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
+    cop_off = COPILOT_MODE == 'off' or max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
     fresh = lambda i: i['number'] not in busy and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
     seen = s.setdefault('q_seen', {}); now = time.time()
     queue = sorted(issues('jules-queue'), key=lambda x: -x['number'])
@@ -1179,8 +1188,8 @@ def codex_jobs(s):
 
 # ---------- AI lead review: PRs that change a reported number, reviewed by the AI the owner picks ----------
 REVIEW_MARK = '<!-- ai-lead-review '
-REVIEW_MODELS = cfg.get('review_models', ['gemini-4-argon', 'gemini-pro-latest', 'gemini-2.5-pro', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest'])  # strongest first; a model the key can't use is skipped for a day
-REVIEW_AG_MODEL = cfg.get('review_antigravity_model', 'gemini-4-argon')  # the strongest model the Antigravity agent offers
+REVIEW_MODELS = cfg.get('review_models', ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest'])  # strongest first; the free tier allows no Pro or Argon calls (0/0), so list them in the settings file only on a paid key
+REVIEW_AG_MODEL = cfg.get('review_antigravity_model', '')  # empty: the agent's own model, which its quota covers (Argon is 0/0 on the free tier)
 LEAD_REVIEW = """You are the lead reviewer of HPLC Figure Bench, a single-file HTML app a biochemistry graduate student (Patrick) uses for real protein purification data.
 This pull request changes a number the app reports. It has passed the tests and the automatic gate, and the change was approved by {approval}.
 Decide whether it is scientifically correct and safe to merge. Check, in order:
@@ -1301,7 +1310,7 @@ def lead_review(s):
             checks = LEAD_REVIEW.split('Check, in order:', 1)[1].split('Return ONE JSON', 1)[0].strip()
             try:
                 it = gem_api('interactions', 'POST', {'agent': AG_AGENT, 'environment': 'remote', 'background': True,
-                                                      'agent_config': {'type': 'antigravity', 'max_total_tokens': AG_TOKENS, 'model': REVIEW_AG_MODEL},
+                                                      'agent_config': {'type': 'antigravity', 'max_total_tokens': AG_TOKENS, **({'model': REVIEW_AG_MODEL} if REVIEW_AG_MODEL else {})},
                                                       'input': AG_REVIEW.format(repo=REPO, name=REPO.split('/')[1], n=n, issue=issue, checks=checks, ititle=iss.get('title', ''),
                                                                                 ibody=(iss.get('body') or '')[:6000], title=pr['title'], body=(pr.get('body') or '')[:6000])})
                 jobs[str(n)] = {'id': it['id'], 'at': time.time(), 'sha': sha, 'issue': issue}
@@ -1335,9 +1344,96 @@ def jules_failed(s):
         if 'pull_request' in i or str(i['number']) in s['ccfail']:
             continue
         if any('attempts ended without a PR' in c['body'] for c in comments(i['number'])[-3:]):
-            label(i['number'], add=['for-copilot'], remove=['needs-coordinator'])
+            label(i['number'], add=['for-claude-code' if COPILOT_MODE == 'off' else 'for-copilot'], remove=['needs-coordinator'])
             s['ccfail'][str(i['number'])] = 1
             log(f'#{i["number"]}: Jules failed 3 times, handed to Copilot (then Claude Code)')
+
+
+# ---------- usability scopes: the PC walks one use case through the app, the local model takes notes, the board proposes fixes ----------
+UX_MARK = '<!-- ux-scope-report -->'
+UX_EVERY = cfg.get('ux_every_hours', 6)  # one scope per this many hours while the PC is on; 0 turns it off
+UX_LABEL = 'ux-report'
+UX_NOTES = """You are a biochemistry graduate student using HPLC Figure Bench, an app for protein purification figures, for the first time.
+Your goal: {goal}
+You just did this step: {step}{err}
+Look at the screenshot of the app after that step. Note at most 3 concrete problems a real user would hit here: a label or message that is unclear,
+jargon with no explanation, a control that is hard to find or hidden, text that is cut off or overlapping, anything that looks broken.
+Don't note taste, and don't judge whether a scientific number is right. If nothing stands out, return an empty list.
+Return ONE JSON object: {{"notes": [{{"problem": "one sentence", "where": "which part of the screen", "severity": "high|medium|low"}}]}}"""
+
+
+def look(prompt, png):
+    """The local model reads a screenshot (Ollama vision). Returns its notes, or None when the model can't take images."""
+    body = {'model': rv.MODEL, 'stream': False, 'format': 'json', 'options': {'temperature': 0.2, 'num_ctx': int(cfg.get('num_ctx', 65536))},
+            'messages': [{'role': 'user', 'content': prompt, 'images': [base64.b64encode(Path(png).read_bytes()).decode()]}]}
+    req = urllib.request.Request(rv.OLLAMA + '/api/chat', data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=600) as r:
+            out = re.sub(r'<think>.*?</think>', '', json.loads(r.read())['message']['content'], flags=re.S)
+        return [n for n in (json.loads(out[out.find('{'):out.rfind('}') + 1]).get('notes') or []) if isinstance(n, dict) and n.get('problem')][:3]
+    except urllib.error.HTTPError as e:
+        log(f'ux: the local model would not read the screenshot ({e.code}); notes from plain checks only')
+        return None
+    except Exception as e:
+        log(f'ux: no notes for one screenshot ({str(e)[:120]})')
+        return []
+
+
+def ux_scope(s):
+    """Walk one test scope (tests/ux/scopes.js) through the app, add the local model's notes on each screenshot,
+    file the report as an issue, and put it on the Direction board's agenda so the advisers propose fixes."""
+    u = s.setdefault('ux', {})
+    if not UX_EVERY or DRY or time.time() - u.get('at', 0) < UX_EVERY * 3600:
+        return
+    node = shutil.which('node')
+    if not node or not (ROOT / 'tests' / 'node_modules').exists():
+        return log('ux: node or the test libraries are missing on this PC, so no usability scope this time')
+    ids = subprocess.run([node, 'tests/ux/scope.js'], cwd=ROOT, capture_output=True, text=True, timeout=120).stdout.split('scopes:', 1)[-1].strip().split(', ')
+    ids = [x for x in ids if x]
+    if not ids:
+        return log('ux: no scopes found')
+    sc = ids[u.get('next', 0) % len(ids)]
+    u['at'], u['next'] = time.time(), u.get('next', 0) + 1
+    out = WORK / 'ux' / sc
+    shutil.rmtree(out, ignore_errors=True)
+    env = {k: v for k, v in os.environ.items() if k != 'HFB_PRIVATE_DATA'}  # synthetic data only: screenshots must never show real lab files
+    log(f'ux: walking the "{sc}" scope')
+    try:
+        subprocess.run([node, 'tests/ux/scope.js', sc, str(out)], cwd=ROOT, env=env, capture_output=True, text=True, timeout=1800)
+        rep_ = json.loads((out / 'report.json').read_text(encoding='utf-8'))
+    except Exception as e:
+        return log(f'ux: the "{sc}" scope did not finish ({str(e)[:200]})')
+    vision = True
+    for st in rep_['steps']:
+        st['notes'] = []
+        if vision and st.get('shot') and Path(st['shot']).exists():
+            n = look(UX_NOTES.format(goal=rep_['goal'], step=st['name'], err=f"\nThat step did not work: {st['error']}" if st['error'] else ''), st['shot'])
+            if n is None:
+                vision = False
+            else:
+                st['notes'] = n
+    failed = [st for st in rep_['steps'] if not st['ok']]
+    found = list(dict.fromkeys(f for st in rep_['steps'] for f in st['findings']))
+    notes = list({n['problem'].strip().lower(): (st['name'], n) for st in reversed(rep_['steps']) for n in st['notes']}.values())[::-1]  # one line per problem, at the first step it showed up
+    if not failed and not found and not notes:
+        return log(f'ux: "{sc}" went through cleanly, nothing to report')
+    rows = '\n'.join(f"| {k + 1} | {st['name']} | {'✅' if st['ok'] else '❌ ' + st['error'][:120].replace('|', '/')} | {st['ms']/1000:.1f} s |" for k, st in enumerate(rep_['steps']))
+    body = (f"{UX_MARK}\n**Usability scope: {rep_['title']}**\n\nGoal: {rep_['goal']}\n\n"
+            f"| # | Step | Result | Time |\n|---|---|---|---|\n{rows}\n\n"
+            + ("### Steps a user could not complete\n" + '\n'.join(f"- **{st['name']}:** {st['error']}" for st in failed) + '\n\n' if failed else '')
+            + ("### Found by plain checks\n" + '\n'.join(f'- {f}' for f in found[:20]) + '\n\n' if found else '')
+            + ("### The local model's notes on the screenshots\n" + '\n'.join(f"- [{n.get('severity', '?')}] **{w}:** {n['problem']}" + (f" ({n['where']})" if n.get('where') else '') for w, n in notes[:15]) + '\n\n' if notes else
+               '' if vision else '_The local model could not read screenshots, so there are no notes from it._\n\n')
+            + f"Reproduce: `node tests/ux/scope.js {sc} <folder>` (synthetic data; the screenshots stay on the PC).\n\n"
+            f"The Direction board (#{BOARD}) takes this report as its next topic and proposes fixes. Some of these may be false alarms from a scripted walk: the board should check each one before proposing a fix.")
+    old = next((i for i in issues(UX_LABEL) if i['title'].startswith(f"UX scope: {rep_['title']}")), None)
+    if old:
+        post(old['number'], '**A newer walk of this scope:**\n\n' + body + SIGN.format(rv.MODEL)); n = old['number']
+    else:
+        n = gh(f'repos/{REPO}/issues', 'POST', {'title': f"UX scope: {rep_['title']}", 'labels': [UX_LABEL, 'from-ux-test'], 'body': body + SIGN.format(rv.MODEL)})['number']
+    s.setdefault('board', {})['ux_topic'] = (f"Usability report #{n} ({rep_['title']}). For each real problem in it, propose one small fix (one PR each); "
+        "say which findings look like false alarms of the scripted walk.\n" + '\n'.join([f"- could not: {st['name']}: {st['error']}" for st in failed] + [f'- {f}' for f in found[:10]] + [f"- {n_['problem']}" for _, n_ in notes[:10]])[:3000])
+    log(f'ux: "{sc}" reported in #{n}, on the board\'s agenda')
 
 
 # ---------- direction board: the local model, Gemini and ChatGPT discuss where to go, Patrick decides ----------
@@ -1537,6 +1633,10 @@ def board(s):
     if ask and str(ask['id']) != b.get('asked'):
         b['asked'] = str(ask['id']); b['at'] = time.time()
         board_round(s, re.sub(r'^\W*discuss\s*:\s*', '', ask['body'], flags=re.I).strip()[:4000])  # Patrick's whole request, which may be a plan of several paragraphs
+    elif b.get('ux_topic'):  # a usability scope report waits for the advisers' fixes
+        topic = b.pop('ux_topic'); b['at'] = time.time()
+        log('board: meeting on a usability report')
+        board_round(s, topic)
     else:
         since = b.setdefault('since', dt.datetime.now(dt.timezone.utc).isoformat())
         merged = [p for p in gh(f'repos/{REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=50') if p.get('merged_at') and p['merged_at'] > since]
@@ -1553,7 +1653,6 @@ def board(s):
 # ---------- GitHub Copilot coding agent: overflow worker beside Jules (needs a paid Copilot plan) ----------
 COPILOT = 'copilot-swe-agent[bot]'
 COPILOT_AT_ONCE = cfg.get('copilot_at_once', 4)
-COPILOT_MODE = cfg.get('copilot_mode', 'auto')  # auto: the cloud agent, and the Copilot CLI on this PC while the cloud agent is paused. cloud or cli: only that one
 COPILOT_WHEN_QUEUE = cfg.get('copilot_when_queue', 1)  # hand jobs to Copilot while at least this many wait for Jules
 _copilot = {'off_until': 0}  # kept in memory, so a restart (for example after a plan change) retries at once
 COPILOT_RULES = ('Follow AGENTS.md exactly (read docs/CODEMAP.md first). Change only hplc-figure-bench(WF1.13).html and files under tests/suites, tests/data and tests/lib. '
@@ -1592,8 +1691,8 @@ def copilot(s):
     # hand out overflow: only while Jules has a backlog, at most COPILOT_AT_ONCE at a time
     queue = [i for i in issues('jules-queue') if 'pull_request' not in i and not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
     retry = [i for i in issues('for-copilot') if 'pull_request' not in i]  # Jules is out of tries on these: Copilot goes first, before Claude Code
-    off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
-    cli = bool(shutil.which('copilot')) and s.get('copilot_cli_off_until', 0) < time.time() and (COPILOT_MODE == 'cli' or (COPILOT_MODE == 'auto' and off))
+    off = COPILOT_MODE == 'off' or max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
+    cli = COPILOT_MODE != 'off' and bool(shutil.which('copilot')) and s.get('copilot_cli_off_until', 0) < time.time() and (COPILOT_MODE == 'cli' or (COPILOT_MODE == 'auto' and off))
     off = off and not cli  # the CLI covers for the paused cloud agent
     if off or len(issues('copilot-running')) >= COPILOT_AT_ONCE or not (retry or len(queue) >= COPILOT_WHEN_QUEUE):
         if retry and off:
@@ -1719,7 +1818,19 @@ def self_update(s):
             sys.exit(0)
 
 
-PC_ONLY = {'review', 'claude jobs', 'board', 'advise', 'digest', 'update'}  # need the local model, Claude Code, Codex or this PC's checkout
+PC_ONLY = {'review', 'claude jobs', 'board', 'ux', 'advise', 'digest', 'update'}  # need the local model, Claude Code, Codex or this PC's checkout
+
+
+def heartbeat_check_cloud_yield():
+    """Cloud only: True when the PC manager has come back during this pass, so the cloud copy should not post."""
+    if not CLOUD:
+        return False
+    try:
+        c = next((c for c in reversed(comments(TRACK)) if c['body'].startswith(HEARTBEAT)), None)
+        m = c and re.search(r'pc-heartbeat (\d+)', c['body'])
+        return bool(m) and (time.time() - int(m.group(1))) / 60 < CLOUD_STANDBY
+    except Exception:
+        return False
 
 
 def heartbeat(s):
@@ -1761,12 +1872,14 @@ def one_pass():
         log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
     else:
         heartbeat(s)
-    for name, duty in (('review', lambda s: None if DRY else rv.one_pass()), ('questions', jules_questions), ('owner', owner_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
             continue  # first-pass notes from the local model: off, its time goes to writing code
         s['busy'] = {'duty': name, 'since': time.time()}
+        if not CLOUD:
+            heartbeat(s)  # a long pass (a hard question, a board meeting) must not look like the PC is off
         save(s)
         try:
             duty(s)
@@ -1788,7 +1901,7 @@ def agent_checks():
               ('Gemini (REST API)', lambda: ask_gemini(q)),
               ('Claude Code (read-only)', lambda: ask_claude(q)),
               ('ChatGPT (Codex, read-only)', lambda: ask_codex(q)),
-              ('Copilot CLI', lambda: run(['copilot', '-s', '-p'], q, timeout=300)))
+              ('Copilot CLI', lambda: run(['copilot', '-s', '-p'], q, timeout=300)))[:None if COPILOT_MODE != 'off' else -1]
     res = []
     for name, f in checks:
         t0 = time.time()

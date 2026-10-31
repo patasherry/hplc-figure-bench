@@ -159,6 +159,10 @@ lines = [';'.join(ONE_HEAD)] + [';'.join(['10/22/2026 9:58:00 AM', n, f'{a:.3f}'
 w('nd_comma_decimal.csv', '\r\n'.join(lines) + '\r\n')
 rec('nd_comma_decimal.csv', 'NanoDrop One, semicolon CSV, comma decimals, sample names with commas', r11)
 
+# 12. Malformed header (no numeric data following it)
+w('nd_malformed_header.csv', '\r\n'.join([','.join(ONE_HEAD)] + ['10/22/2026,Bad Name,Not a number,Not a number']) + '\r\n')
+rec('nd_malformed_header.csv', 'Malformed header', [], 'should trigger no usable measurements toast')
+
 if __name__ == '__main__':
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else {}
     doc['nd'] = EXP; doc['nd_note'] = __doc__.split('Ground truth per file')[1].strip()

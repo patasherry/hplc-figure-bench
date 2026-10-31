@@ -195,6 +195,14 @@ details.tip[open]{display:grid;gap:6px;background:var(--well);border:1px solid v
 body:not(.secstds) .secstd{display:none!important}
 /* in a project the panel shows the step; settings wait behind More options */
 body.proj:not(.moreopen) #panel > .optsec{display:none!important}
+body.proj.searching #panel > .optsec:not([hidden]):not(.srchmiss){display:grid!important}
+.psearch{padding:10px 16px 0;order:-2}.psearch input{width:100%;box-sizing:border-box}
+.srchmiss{display:none!important}
+details.more{border-top:1px dashed var(--line);padding-top:8px}
+details.more > summary{cursor:pointer;font-size:12px;color:var(--muted)}
+details.more > summary:hover{color:var(--ink)}
+details.more > .morebody{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 10px;margin-top:10px}
+details.more > .morebody > *{min-width:0}
 body.proj #panel .grp:not(#stepSheet) details.tip{display:none}
 body.proj .noproj, body.proj label:has(#o-runCond2){display:none!important}
 body.proj #panel[data-sec="1"] > #secPanel{order:0}
@@ -460,7 +468,30 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
   .paper > svg{width:auto;max-width:none;max-height:none;flex:none;margin-inline:auto}
   header.top p{font-size:12.5px}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* iOS-inspired look (UI only, the figures are untouched): tokens, inset grouped sections, switches, segmented control, rounded buttons.
+   --ios-blue is the iOS blue for non-text marks; --accent is the same hue darkened to pass WCAG AA for text and button fills. */
+:root{--ios-blue:#007aff;--accent:#0066d6;--accent-ink:#ffffff;--accent-soft:#dbe9fb;--bg:#e9e9ef;--panel:#f2f2f7;--card:#ffffff;--sep:rgba(60,60,67,.18);--label:#1c1c1e;--label2:#5f5f66;--ink:var(--label);--muted:var(--label2);--line:var(--sep);--r:10px;--r-s:8px;--ease:150ms ease}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--ios-blue:#0a84ff;--accent:#409cff;--accent-ink:#0d1020;--accent-soft:#16304f;--bg:#000000;--panel:#121214;--card:#1c1c1e;--sep:rgba(235,235,245,.18);--label:#f2f2f7;--label2:#a1a1a8;--ink:var(--label);--muted:var(--label2);--line:var(--sep)}}
+:root[data-theme="dark"]{--ios-blue:#0a84ff;--accent:#409cff;--accent-ink:#0d1020;--accent-soft:#16304f;--bg:#000000;--panel:#121214;--card:#1c1c1e;--sep:rgba(235,235,245,.18);--label:#f2f2f7;--label2:#a1a1a8;--ink:var(--label);--muted:var(--label2);--line:var(--sep)}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Instrument Sans",system-ui,sans-serif}
+button,input,select,textarea{font-family:inherit}
+#panel > .grp{background:var(--card);border:0;border-radius:12px;margin:10px 10px 0}
+#panel > .grp:last-child{margin-bottom:10px}
+#panel > .grp > h2{font-size:13px;font-weight:600;font-variant-caps:all-small-caps;letter-spacing:.06em;color:var(--muted)}
+#panel .grp details.sub{border-top:.5px solid var(--sep)}
+.btn{border-radius:10px;border-color:var(--sep);min-height:32px;transition:background-color var(--ease),border-color var(--ease),filter var(--ease),transform var(--ease)}
+.btn:active:not(:disabled){transform:scale(.98)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.seg{border-radius:10px;background:var(--soft);padding:2px}
+.seg label{border-radius:8px;min-height:28px;display:grid;place-items:center;transition:background-color var(--ease),color var(--ease),box-shadow var(--ease)}
+#panel .check input[type=checkbox],#panel input[type=checkbox]{-webkit-appearance:none;appearance:none;position:relative;flex:none;width:38px;height:22px;margin:0;border-radius:11px;background:var(--line2);border:0;cursor:pointer;transition:background-color var(--ease)}
+#panel input[type=checkbox]::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform var(--ease)}
+#panel input[type=checkbox]:checked{background:var(--ios-blue)}
+#panel input[type=checkbox]:checked::after{transform:translateX(16px)}
+#panel input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#panel input[type=checkbox]:disabled{opacity:.45;cursor:default}
+#panel .check{min-height:32px;gap:10px}
+@media (prefers-reduced-motion:reduce){*,*::after{transition:none!important}}
 </style>
 
 <header class="top">
@@ -499,6 +530,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
 
 <div class="app">
   <aside class="panel" id="panel">
+    <div class="psearch"><input type="search" id="panelSearch" placeholder="Search settings" aria-label="Search settings" autocomplete="off"></div>
     <section class="grp steps" id="stepsPanel" hidden>
       <h2>Steps</h2>
       <ol class="tl" id="tl"></ol>
@@ -508,6 +540,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
       <p class="hint ss-what" id="ssWhat"></p>
       <div class="ss-quick" id="ssQuick" hidden></div>
       <div class="ss-gels" id="ssGels"></div>
+      <div class="ss-from" id="ssFromBox" hidden><label class="f">Comes from<select id="ssFrom"></select></label><label class="f">Which fraction or pool<input type="text" id="ssFromNote" placeholder="For example Fractions B5–B8"></label></div>
     </section>
     <section class="grp stepfoot" id="stepFoot" hidden>
       <label class="f">Notebook notes<textarea id="ssNotes" rows="2" placeholder="Anything to remember about this step"></textarea></label>
@@ -579,6 +612,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
       <div class="checks">
         <label class="check"><input type="checkbox" id="o-wfLetters" data-opt="wfLetters">Panel letters</label>
         <label class="check"><input type="checkbox" id="o-wfGels" data-opt="wfGels">Gels under each step</label>
+        <label class="check" title="Draw each chromatogram over its whole run instead of the cropped window. The crop of the run itself is kept for the single-run figure"><input type="checkbox" id="o-wfFull" data-opt="wfFull">Full chromatogram in the workflow</label>
         <label class="check"><input type="checkbox" id="o-wfArrows" data-opt="wfArrows">Arrows between steps</label>
         <label class="check"><input type="checkbox" id="o-noGelSlot" data-opt="noGelSlot">Mark steps without a gel (on screen only)</label>
         <label class="check" title="Grid and stacked figures taller than 9.5 in get shorter traces and gels"><input type="checkbox" id="o-wfFit" data-opt="wfFit">Fit to page height</label>
@@ -592,8 +626,9 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
       <h2>Construct, expression and cleavage</h2>
       <label class="check" id="prOnWrap"><input type="checkbox" id="pr-on" data-prep="on">Show construct, expression and lysis panels</label>
       <details class="sub" data-sub="pcon" open><summary>Construct</summary>
-        <div class="btns"><button type="button" class="btn" id="gbPick">Load GenBank file</button><button type="button" class="btn quiet" id="gbClear" hidden>Draw from the Protein section</button>
+        <div class="btns"><button type="button" class="btn" id="gbPick">Load GenBank file</button><button type="button" class="btn" id="gbPaste">Paste GenBank text</button><button type="button" class="btn quiet" id="gbClear" hidden>Draw from the Protein section</button>
           <input type="file" id="gbFile" accept=".gb,.gbk,.genbank,.ape,.dna,.txt" hidden></div>
+        <div id="gbPasteBox" hidden><textarea id="gbText" rows="6" spellcheck="false" placeholder="Paste GenBank text here (LOCUS … ORIGIN … //)" style="width:100%"></textarea><div class="btns"><button type="button" class="btn" id="gbPasteGo">Use pasted text</button></div></div>
         <p class="hint" id="gbStatus"></p>
         <div class="row">
           <label class="f">Plasmid name<input type="text" id="pr-name" data-prep="name" placeholder="e.g. pET28-SUMO-NADK" spellcheck="false"></label>
@@ -1084,6 +1119,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
 
     <section class="grp optsec" data-for="overlay run">
       <h2>Window</h2>
+      <label class="check"><input type="checkbox" id="o-zoomMode" data-opt="zoomMode">Zoom mode: drag on figure to select window</label>
       <div class="row">
         <label class="f">X from<input type="number" step="any" id="o-xmin" data-opt="xmin" placeholder="auto"></label>
         <label class="f">X to<input type="number" step="any" id="o-xmax" data-opt="xmax" placeholder="auto"></label>
@@ -1174,6 +1210,18 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
           <option value="none">None</option>
         </select>
       </label>
+      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Zoom inset: whole run, with the X window magnified</label>
+      <div class="row">
+        <label class="f">Inset position
+          <select id="o-zoomInsetPos" data-opt="zoomInsetPos">
+            <option value="tr">Upper right</option>
+            <option value="tl">Upper left</option>
+            <option value="br">Lower right</option>
+            <option value="beside">Beside (second panel)</option>
+          </select>
+        </label>
+        <label class="f">Inset size (fraction of width)<input type="number" step="0.05" min="0.15" max="0.6" id="o-zoomInsetSize" data-opt="zoomInsetSize"></label>
+      </div>
     </section>
 
     <section class="grp optsec">
@@ -1285,7 +1333,8 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   rxlabel:'Volume (mL)', rylabel:'Absorbance (mAU)', y2grad:'Buffer B (%)', y2cond:'Conductivity (mS/cm)',
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
   intMethod:'gauss', poolStyle:'band', poolColor:'#E69F00', poolAlpha:0.3, intBase:'line', intLabel:'num', intProm:5, intFill:true, eps:'', path:2,
-  wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfArrows:true, gelFrame:true, ladder:'biorad',
+  wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfFull:false, wfArrows:true, gelFrame:true, ladder:'biorad',
+  zoomMode:false, zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4,
   preset:'single', w:3.5, h:2.6, fs:8, lw:0.75, font:'Arial', palette:'okabe', bg:true, dpi:600};
 const RANGE = ['xmin','xmax','ymin','ymax'];
 /* Native E. coli proteins commonly co-purified by IMAC (Bolanos-Garcia & Davies 2006, Table 1), DnaK, and common purification additives.
@@ -1411,7 +1460,7 @@ function svgHead(Wpt, Hpt){
 }
 
 /* ---------- parsing: generic ---------- */
-const NUM = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
+const NUM = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?([A-Za-z*])?$/;
 function decode(buf){
   const b = new Uint8Array(buf);
   if (b[0]===0xFF && b[1]===0xFE) return new TextDecoder('utf-16le').decode(b.subarray(2));
@@ -1424,7 +1473,7 @@ function decode(buf){
 const clean = f => f.trim().replace(/^"(.*)"$/,'$1').trim();
 function splitLine(L, d){ return d === 'ws' ? L.trim().split(/\s+/) : L.split(d); }
 /* Generic chromatogram and ÄKTA CSV values use this directly; NanoDrop first applies its delimiter-specific decimal normalization. Zero is a measurement, while blank and malformed fields are not. */
-function measurementNumber(v){ const s = clean(String(v ?? '')); return NUM.test(s) ? Number(s) : null; }
+function measurementNumber(v){ const s = clean(String(v ?? '')); return NUM.test(s) ? parseFloat(s) : null; }
 function toNum(f, dc){ f = clean(f); if (dc) f = f.replace(/^-?\d+,\d+(?:[eE][-+]?\d+)?$/, m => m.replace(',', '.')); const v = measurementNumber(f); return v == null ? NaN : v; }
 function parseText(text){
   const lines = text.split(/\r\n|\n|\r/);
@@ -1512,7 +1561,7 @@ function parseAkta(text, fname){
       const v = (f[cv.col+1] || '').trim().replace(/^"|"$/g, '');
       if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
       else { const y = toNum(v, d !== ','); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
-  const ak = aktaFromCurves(curves, fname);
+  const ak = aktaFromCurves(curves, fname, {delimiter: d});
   if (!ak) return {bad: 'an ÄKTA/UNICORN file, but has no usable UV traces: export the UV curve from UNICORN'};
   return ak;
 }
@@ -2112,9 +2161,44 @@ function style(ov){
   return {W, H, fs, lw, aw: Math.max(0.5, Math.min(lw, 1.5*fs/8)), cw: fs*0.56, tl: fs*0.45, tOut: o.ticksOut ? fs*0.45 : 0, head};
 }
 
+/* ---------- figure: zoom inset ---------- */
+/* Presentation only: the main plot shows the whole run and a small second plot shows the x-window. Nothing that is calculated reads these. */
+function withOpt(patch, fn){ const old = {}; Object.keys(patch).forEach(k => { old[k] = opt[k]; opt[k] = patch[k]; }); try { return fn(); } finally { Object.keys(old).forEach(k => { opt[k] = old[k]; }); } }
+const zoomSize = () => Math.max(0.15, Math.min(0.6, numOr(opt.zoomInsetSize, 0.4)));
+const zoomPos = () => ['tr', 'tl', 'br', 'beside'].includes(opt.zoomInsetPos) ? opt.zoomInsetPos : 'tr';
+/* the region zoomed into: the x-window; with none set, the middle third of the run */
+function zoomWindow(lo, hi, a, b){
+  const hasA = numOr(a, null) !== null, hasB = numOr(b, null) !== null;
+  const za = Math.max(lo, hasA ? +a : hasB ? lo : lo + (hi - lo)/3), zb = Math.min(hi, hasB ? +b : hasA ? hi : lo + (hi - lo)*2/3);
+  return zb > za ? {a: za, b: zb} : null;
+}
+function zoomCompose(S, m, win, buildIn){
+  const o = opt, pos = zoomPos(), beside = pos === 'beside', g = m.geo, {L, R, T, B} = g;
+  const iw = beside ? S.W*zoomSize() : (R - L)*zoomSize(), ih = beside ? S.H : Math.min((B - T)*0.8, iw*S.H/S.W*1.15);
+  const ins = buildIn(iw, ih); if (!ins || !ins.svg) return null;
+  const pad = 3, ix = beside ? S.W - iw : pos === 'tl' ? L + pad : R - iw - pad, iy = beside ? 0 : pos === 'br' ? B - ih - pad : T + pad;
+  const src = g.uv ? [{xs: g.uv.xs, yp: g.uv.ys}] : g.P; let mx = -Infinity;
+  src.forEach(p => { for (let i = Math.max(0, lowerBound(p.xs, win.a)); i < p.xs.length && p.xs[i] <= win.b; i++) if (p.yp[i] > mx) mx = p.yp[i]; });
+  const rTop = isFinite(mx) ? Math.max(T, Math.min(B - 4, g.py(mx) - 3)) : T, xa = g.px(win.a), xb = g.px(win.b);
+  const tg = beside ? {x0: ix + ins.geo.L, x1: ix + ins.geo.R, y0: ins.geo.T, y1: ins.geo.B} : {x0: ix, x1: ix + iw, y0: iy, y1: iy + ih};
+  const ln = (x1, y1, x2, y2) => `<line x1="${r2(x1)}" y1="${r2(y1)}" x2="${r2(x2)}" y2="${r2(y2)}"/>`;
+  let con = '';
+  if (tg.y1 < rTop - 2) con = ln(xa, rTop, tg.x0, tg.y1) + ln(xb, rTop, tg.x1, tg.y1);
+  else if (xb <= tg.x0) con = ln(xb, rTop, tg.x0, tg.y0) + ln(xb, B, tg.x0, tg.y1);
+  else if (xa >= tg.x1) con = ln(xa, rTop, tg.x1, tg.y0) + ln(xa, B, tg.x1, tg.y1);
+  const inner = beside ? m.svg : m.svg.slice(S.head.length, m.svg.length - 6);
+  const out = [S.head];
+  if (beside && o.bg) out.push(`<rect width="${r2(S.W)}" height="${r2(S.H)}" fill="#ffffff"/>`);
+  out.push(`<g data-plot="main">${inner}</g>`);
+  out.push(`<g id="zoom-region" stroke="#777777" stroke-width="${r2(Math.max(0.3, S.aw*0.6))}" fill="none"><rect x="${r2(xa)}" y="${r2(rTop)}" width="${r2(xb - xa)}" height="${r2(B - rTop)}" fill="#000000" fill-opacity="0.05"/>${con}</g>`);
+  out.push(`<g id="zoom-inset" data-plot="inset" transform="translate(${r2(ix)} ${r2(iy)})">${beside ? '' : `<rect width="${r2(iw)}" height="${r2(ih)}" fill="#ffffff" stroke="#999999" stroke-width="0.4"/>`}${ins.svg}</g></svg>`);
+  return {svg: out.join(''), geo: g};
+}
+
 /* ---------- figure: HPLC overlay ---------- */
-function buildSVG(){
-  const o = opt, S = style(), {W, H, fs, lw, aw, cw, tl, tOut} = S;
+function buildOverlaySVG(ov){
+  ov = ov || {};
+  const o = opt, S = style(ov), {W, H, fs, lw, aw, cw, tl, tOut} = S, idp = ov.idp || '';
   const vis = traces.filter(t => t.visible); const order = o.flip ? vis.slice().reverse() : vis;
   const P = order.map(t => Object.assign({t}, processTrace(t))).filter(p => p.xs.length > 1);
   if (!P.length) return {svg: null, geo: null};
@@ -2149,8 +2233,8 @@ function buildSVG(){
   const px = x => L + (x-xlo)/(xhi-xlo)*(R-L), py = y => B - (y-y0)/(y1-y0)*(B-T), invX = X => xlo + (X-L)/(R-L)*(xhi-xlo);
   const s = [S.head];
   if (o.bg) s.push(`<rect width="${r2(W)}" height="${r2(H)}" fill="#ffffff"/>`);
-  s.push(`<defs><clipPath id="plot-area"><rect x="${r2(L)}" y="${r2(T)}" width="${r2(R-L)}" height="${r2(B-T)}"/></clipPath></defs>`);
-  s.push(`<g clip-path="url(#plot-area)" fill="none" stroke-width="${lw}" stroke-linejoin="round" stroke-linecap="round">`);
+  s.push(`<defs><clipPath id="${idp}plot-area"><rect x="${r2(L)}" y="${r2(T)}" width="${r2(R-L)}" height="${r2(B-T)}"/></clipPath></defs>`);
+  s.push(`<g clip-path="url(#${idp}plot-area)" fill="none" stroke-width="${lw}" stroke-linejoin="round" stroke-linecap="round">`);
   const nb = Math.max(200, Math.round((R-L)*4));
   P.forEach(p => s.push(`<path d="${pathD(p.xs, p.yp, xlo, xhi, nb, px, py)}" stroke="${p.t.color}"/>`));
   s.push('</g>');
@@ -2240,16 +2324,38 @@ function buildSVG(){
   return {svg: s.join(''), geo: {L,R,T,B,xlo,xhi,y0,y1,P,px,py,W,H,lblLeft}};
 }
 
+function buildSVG(ov){
+  ov = ov || {};
+  if (!opt.zoomInset || ov.noZoom || ov.nest) return buildOverlaySVG(ov);
+  const S = style(), wa = opt.xmin, wb = opt.xmax, beside = zoomPos() === 'beside';
+  const m = withOpt({xmin: '', xmax: ''}, () => buildOverlaySVG(beside ? {noZoom: true, nest: true, wPt: S.W*(1 - zoomSize()), hPt: S.H} : {noZoom: true}));
+  if (!m.svg) return m;
+  const win = zoomWindow(m.geo.xlo, m.geo.xhi, wa, wb);
+  const z = win && zoomCompose(S, m, win, (w, h) => withOpt({xmin: win.a, xmax: win.b, legend: 'none', scalebar: false, xlabel: '', ylabel: '', ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildOverlaySVG({noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})));
+  return z || buildOverlaySVG({noZoom: true});
+}
+
 /* ---------- figure: ÄKTA run chart ---------- */
 /* x axis title: your own text, else elution volume for SEC runs and time for runs exported against minutes */
 function runXLabel(run){ const o = opt; if (o.rxlabel !== DEF.rxlabel) return o.rxlabel; const u = xUnit(run);
   return u === 'min' ? (isSec(run) ? 'Elution time (min)' : 'Time (min)') : isSec(run) ? 'Elution volume (mL)' : o.rxlabel; }
 function buildRunSVG(run, ov){
   ov = ov || {};
+  if (!opt.zoomInset || run.prep || ov.noZoom || ov.nest) return buildRunPlainSVG(run, ov);
+  const S = style(), wa = run.xmin, wb = run.xmax, beside = zoomPos() === 'beside', put = (a, b) => { run.xmin = a; run.xmax = b; };
+  let m; try { put('', ''); m = buildRunPlainSVG(run, beside ? {noZoom: true, nest: true, wPt: S.W*(1 - zoomSize()), hPt: S.H} : {noZoom: true}); } finally { put(wa, wb); }
+  if (!m.svg) return m;
+  const win = zoomWindow(m.geo.xlo, m.geo.xhi, wa, wb);
+  const z = win && zoomCompose(S, m, win, (w, h) => { try { put(win.a, win.b);
+    return withOpt({rxlabel: '', rylabel: '', runCond: 'none', ndFig: 'none', runTitle: false, ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildRunPlainSVG(run, {noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})); } finally { put(wa, wb); } });
+  return z || buildRunPlainSVG(run, {noZoom: true});
+}
+function buildRunPlainSVG(run, ov){
+  ov = ov || {};
   if (run.prep) return buildPrepSVG(run, ov);
   const o = opt, S = style(ov), {W, H, fs, lw, aw, cw, tl, tOut} = S, idp = ov.idp || '';
   const uvC = uvOf(run), dEnd = uvC.xs[uvC.xs.length-1];
-  const auto = runAuto(run), xlo = numOr(run.xmin, auto.lo); let xhi = numOr(run.xmax, auto.hi); if (!(xhi > xlo)) xhi = xlo + 1;
+  const auto = runAuto(run), wfF = opt.wfFull && ov.nest, xlo = wfF ? uvC.xs[0] : numOr(run.xmin, auto.lo); let xhi = wfF ? dEnd : numOr(run.xmax, auto.hi); if (!(xhi > xlo)) xhi = xlo + 1;
   const uv = windowXY(procFull(run), xlo, xhi);
   if (uv.xs.length < 2) return {svg: null, geo: null};
   const secC = o.sec === 'grad' ? run.grad : o.sec === 'cond' ? run.cond : null;
@@ -2503,7 +2609,7 @@ function buildRunSVG(run, ov){
   }
   s.push('</svg>');
   const fracC = nonW.map(sg => ({label: sg.label, x: px((Math.max(sg.a, xlo) + Math.min(sg.b, xhi))/2)}));
-  return {svg: s.join(''), geo: {L,R,T,B,xlo,xhi,y0,y1,P:[],px,py,W,H,run:true, fracC, nFr: nonW.length, frA: nonW[0] && nonW[0].label, frB: nonW.length && nonW[nonW.length-1].label}};
+  return {svg: s.join(''), geo: {L,R,T,B,xlo,xhi,y0,y1,P:[],uv,px,py,W,H,run:true, fracC, nFr: nonW.length, frA: nonW[0] && nonW[0].label, frB: nonW.length && nonW[nonW.length-1].label}};
 }
 
 /* SEC calibration figure: standards and the fitted line on log(MW) against Kav (or Ve), with sample peaks sized on it */
@@ -3460,8 +3566,13 @@ function composeRuns(list, cfg){
   /* grid: two panels per row, read left to right then down (for 3 or more steps) */
   const grid = cfg.layout === 'grid' && n > 2, row = (cfg.layout === 'row' || (cfg.layout === 'grid' && n === 2)) && n > 1, side = opt.gelPos === 'right', vgap = fs*2.8;
   let gap = fs*1.4;
+  /* branches: par[i] is the panel panel i comes from; a panel that does not follow its predecessor skips ahead */
+  const par = wfParents(list), fromN = i => wfFromNoteOf(list[i]), edgeNote = i => fromN(i + 1) || arrowNote(list[i]);
+  const skips = []; for (let i = 1; i < n; i++) if (par[i] !== i - 1 && cfg.arrows) skips.push(i);
+  /* a grid row holds two panels; a branch starts a new row */
+  const gcell = []; if (grid) { let rw = 0, cl = 0; list.forEach((r, i) => { if (i > 0 && (cl === 2 || par[i] !== i - 1)) { rw++; cl = 0; } gcell.push({row: rw, col: cl}); cl++; }); }
   if (n > 1 && cfg.arrows) {
-    if (row || grid) { const words = list.slice(0, -1).flatMap(r => poolLabel(r).split(' ')), nw = list.slice(0, -1).flatMap(r => arrowNote(r).split(/\s+/)).reduce((m, w) => Math.max(m, w.length), 0);
+    if (row || grid) { const words = list.slice(0, -1).flatMap(r => poolLabel(r).split(' ')), nw = list.slice(0, -1).flatMap((r, i) => edgeNote(i).split(/\s+/)).reduce((m, w) => Math.max(m, w.length), 0);
       gap = Math.max(fs*3.4, words.reduce((m,w) => Math.max(m, w.length), 0)*cw + 10, nw ? Math.min(fs*7, Math.max(nw*fs*0.8*0.52 + 8, fs*5.5)) : 0); }
     else gap = fs*3;
   }
@@ -3554,7 +3665,7 @@ function composeRuns(list, cfg){
       let gx, gw;
       if (sideHere) { const x0 = chartW + fs*2.8 + extraGap, avail = Math.max(fs*4, pw[i] - x0); gw = avail; gx = x0; }
       else { const avail = R - L; const sh0 = shared.get(r.id + ':' + g.id) || {}; gw = gz > 1 ? pw[i] - fs*2.5 : Math.min(pw[i] - fs*2.5, (sh0.wide ? Math.max(gelW(i), pw[i] - fs*2.5) : gelW(i))*gz); gx = r.prep || opt.gelAlign === 'left' ? L : opt.gelAlign === 'right' ? R - gw : L + (avail - gw)/2; gx = Math.max(r.prep ? fs*0.3 : fs*2.5, Math.min(pw[i] - gw, gx)); }
-      const sh = shared.get(r.id + ':' + g.id) || {}, view = {fit: true, win: sh.win, fixedH: sideHere ? 0 : sh.fixedH*gz, labH: sh.labH, labMode: sideHere ? null : sh.labMode, vf: sideHere ? 0 : sh.vf, taMode: sideHere ? null : sh.taMode, align: sideHere ? 'left' : opt.gelAlign, minH: sideHere ? chromH*0.75 : 0, spill: (row && i < n - 1) || (grid && i % 2 === 0 && i < n - 1) ? gap*0.8 : 0};
+      const sh = shared.get(r.id + ':' + g.id) || {}, view = {fit: true, win: sh.win, fixedH: sideHere ? 0 : sh.fixedH*gz, labH: sh.labH, labMode: sideHere ? null : sh.labMode, vf: sideHere ? 0 : sh.vf, taMode: sideHere ? null : sh.taMode, align: sideHere ? 'left' : opt.gelAlign, minH: sideHere ? chromH*0.75 : 0, spill: (row && i < n - 1) || (grid && gcell[i].col === 0 && i < n - 1 && gcell[i + 1].row === gcell[i].row) ? gap*0.8 : 0};
       const dry = gelPart(g, 0, 0, gw, gH, idx, false, view), o = off[g.id] || {dx: 0, dy: 0};
       const item = {g, idx, gx: gx + o.dx, gy: gy + o.dy, gw, h: dry.h, view};
       gy += dry.h + fs*0.8; bottom = Math.max(bottom, item.gy + dry.h);
@@ -3566,11 +3677,19 @@ function composeRuns(list, cfg){
   });
   WF_WL = undefined; COND_N = 0;
   const pos = []; let Ht = 0, yAcc = 0, xAcc = 0;
-  const rowH = grid ? [] : null; if (grid) panels.forEach((p, i) => { const k = i >> 1; rowH[k] = Math.max(rowH[k] || 0, p.h); });
+  const rowH = grid ? [] : null; if (grid) panels.forEach((p, i) => { const k = gcell[i].row; rowH[k] = Math.max(rowH[k] || 0, p.h); });
   panels.forEach((p, i) => { if (row) { pos.push({x: xAcc, y: 0}); xAcc += pw[i] + gap; Ht = Math.max(Ht, p.h); }
-    else if (grid) { const k = i >> 1, y = rowH.slice(0, k).reduce((a, b) => a + b + vgap, 0); pos.push({x: i === n - 1 && n % 2 ? (Wt - pw[i])/2 : (i % 2)*(pw[0] + gap), y}); Ht = Math.max(Ht, y + rowH[k]); }
+    else if (grid) { const k = gcell[i].row, y = rowH.slice(0, k).reduce((a, b) => a + b + vgap, 0); pos.push({x: i === n - 1 && gcell[i].col === 0 && par[i] === i - 1 ? (Wt - pw[i])/2 : gcell[i].col*(pw[0] + gap), y}); Ht = Math.max(Ht, y + rowH[k]); }
     else { pos.push({x: 0, y: yAcc}); yAcc += p.h + (i < n-1 ? gap : 0); Ht = yAcc; } });
+  /* panels the user dragged: add the offset (never left of or above the figure) and grow the figure to hold them */
+  const W0 = Wt, H0 = Ht + fs*0.4;
+  panels.forEach((p, i) => { const dx = numOr(list[i].wfDx, 0), dy = numOr(list[i].wfDy, 0); if (!dx && !dy) return;
+    pos[i].x = Math.max(0, pos[i].x + dx); pos[i].y = Math.max(0, pos[i].y + dy); Wt = Math.max(Wt, pos[i].x + pw[i]); Ht = Math.max(Ht, pos[i].y + p.h); });
   Ht += fs*0.4;
+  /* a branch that skips panels is routed round them: over the top in a row, down a rail on the left in a stack or a grid */
+  const railBase = fs*1.3, topPad = row && skips.length ? railBase + skips.length*fs : 0, leftPad = !row && skips.length ? fs*0.8 + skips.length*fs*0.6 : 0;
+  if (topPad) { pos.forEach(q => { q.y += topPad; }); Ht += topPad; }
+  if (leftPad) { pos.forEach(q => { q.x += leftPad; }); Wt += leftPad; }
   const defs = new Map(), body = [], links = [], gelBoxes = [];
   panels.forEach((p, i) => {
     const {x, y} = pos[i];
@@ -3580,7 +3699,7 @@ function composeRuns(list, cfg){
       body.push(`<text x="${r2(x)}" y="${r2(y + fs*1.1)}" fill="#000000">${letter}${esc(tl[0])}</text>`);
       if (tl[1]) body.push(`<text x="${r2(x + ind)}" y="${r2(y + fs*2.25)}" fill="#000000">${esc(tl[1])}</text>`);
     }
-    if (p.chart.svg) body.push(`<g transform="translate(${r2(x)} ${r2(y + titleH)})">${p.chart.svg}</g>`);
+    if (p.chart.svg) body.push(`<g data-wfp="${esc(p.r.id)}" transform="translate(${r2(x)} ${r2(y + titleH)})">${p.chart.svg}</g>`);
     if (p.slot) { const q = p.slot; body.push(`<rect x="${r2(x + q.x)}" y="${r2(y + q.y)}" width="${r2(q.w)}" height="${r2(q.h)}" fill="none" stroke="#999999" stroke-width="0.6" stroke-dasharray="2 2"/><text x="${r2(x + q.x + q.w/2)}" y="${r2(y + q.y + q.h/2 + fs*0.3)}" text-anchor="middle" font-size="${r2(fs*0.8)}" fill="#777777">no gel for this step</text><text x="${r2(x + q.x + q.w/2)}" y="${r2(y + q.y + q.h/2 + fs*1.2)}" text-anchor="middle" font-size="${r2(fs*0.65)}" fill="#999999">(not in exports)</text>`); }
     p.gi.forEach((gg, k) => {
       const gy = y + gg.gy, part = gelPart(gg.g, x + gg.gx, gy, gg.gw, gH, gg.idx, false, gg.view); defs.set(part.id, part.defs);
@@ -3607,40 +3726,62 @@ function composeRuns(list, cfg){
   });
   if (n > 1 && cfg.arrows) {
     const pc = poolDark();
+    /* an arrow between panels that are not level (one was dragged): a straight line with its head turned to match */
+    const slantArrow = (xa, ya, xb, yb) => { const a = Math.atan2(yb - ya, xb - xa), c = Math.cos(a), s = Math.sin(a), bx = xb - 5*c, by = yb - 5*s;
+      return `<line x1="${r2(xa)}" y1="${r2(ya)}" x2="${r2(xb - 4*c)}" y2="${r2(yb - 4*s)}" stroke-width="1"/><path d="M${r2(xb)} ${r2(yb)}L${r2(bx - 2.6*s)} ${r2(by + 2.6*c)}L${r2(bx + 2.6*s)} ${r2(by - 2.6*c)}Z" stroke="none"/>`; };
     body.push(`<g fill="#000000" stroke="#000000">`);
     for (let i=0;i<n-1;i++){
-      const lab = poolLabel(list[i]), note = arrowNote(list[i]), nf = fs*0.8;
+      if (par[i + 1] !== i) continue;
+      const lab = poolLabel(list[i]), note = edgeNote(i), nf = fs*0.8, eid = ` data-wfe="${esc(list[i].id)}>${esc(list[i + 1].id)}"`;
       /* the note wraps to the gap's width and sits under the arrow */
       const wrapN = (t, w) => { const room = Math.max(6, Math.floor(w/(nf*0.52))), out = []; let ln = ''; t.replace(/(\d) (°C|°|mM|µM|M|h|min|mL|µL|kDa|%)(?=\s|,|$)/g, '$1\u00a0$2').split(/ +/).forEach(x => { if (ln && (ln + ' ' + x).length > room) { out.push(ln); ln = x; } else ln = ln ? ln + ' ' + x : x; }); if (ln) out.push(ln); return out; };
-      if (grid && i % 2 === 1) {
+      if (grid && gcell[i + 1].row !== gcell[i].row) {
         /* end of a grid row: an elbow from under this panel to the top of the first panel on the next row */
         /* from below the row, down onto the next panel's letter, so it never lands on a title */
-        const xa = pos[i].x + pw[i]/2, xb = pos[i+1].x + fs*0.4, y1 = pos[i].y + rowH[i >> 1] + fs*0.5, y2 = pos[i+1].y + fs*0.1, ym = Math.max(y1 + fs*0.4, y2 - vgap*0.45);
-        body.push(`<path d="M${r2(xa)} ${r2(y1)}V${r2(ym)}H${r2(xb)}V${r2(y2 - 5)}" fill="none" stroke-width="1"/>`);
+        const xa = pos[i].x + pw[i]/2, xb = pos[i+1].x + fs*0.4, y1 = pos[i].y + rowH[gcell[i].row] + fs*0.5, y2 = pos[i+1].y + fs*0.1, ym = Math.max(y1 + fs*0.4, y2 - vgap*0.45);
+        body.push(`<path${eid} d="M${r2(xa)} ${r2(y1)}V${r2(ym)}H${r2(xb)}V${r2(y2 - 5)}" fill="none" stroke-width="1"/>`);
         body.push(`<path d="M${r2(xb)} ${r2(y2)}L${r2(xb - 2.6)} ${r2(y2 - 5)}L${r2(xb + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
         if (lab || note) body.push(`<text x="${r2((xa + xb)/2)}" y="${r2(ym - 3)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       } else if (row || grid) {
-        const x1 = pos[i].x + pw[i] + 3, x2 = pos[i+1].x - 3, ay = pos[i].y + titleH + (cfg.bandH ? Math.min(fs*2.9, cfg.bandH*0.45) : Math.min(panels[i].ch, panels[i+1].ch)*0.45), words = lab ? lab.split(' ') : [];
-        body.push(`<line x1="${r2(x1)}" y1="${r2(ay)}" x2="${r2(x2 - 4)}" y2="${r2(ay)}" stroke-width="1"/>`);
-        body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
+        const x1 = pos[i].x + pw[i] + 3, x2 = pos[i+1].x - 3, ay1 = pos[i].y + titleH + (cfg.bandH ? Math.min(fs*2.9, cfg.bandH*0.45) : Math.min(panels[i].ch, panels[i+1].ch)*0.45), ay2 = ay1 - pos[i].y + pos[i+1].y, ay = (ay1 + ay2)/2, words = lab ? lab.split(' ') : [];
+        if (ay1 === ay2) {
+          body.push(`<line${eid} x1="${r2(x1)}" y1="${r2(ay)}" x2="${r2(x2 - 4)}" y2="${r2(ay)}" stroke-width="1"/>`);
+          body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
+        } else body.push(slantArrow(x1, ay1, x2, ay2).replace('<line', '<line' + eid));
         words.forEach((w, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay - 4 - (words.length - 1 - k)*fs*1.1)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(w)}</text>`));
         if (note) wrapN(note, x2 - x1).forEach((t, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay + nf*1.25 + k*nf*1.1)}" text-anchor="middle" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(t)}</text>`));
       } else {
-        const ax = fs*1.2, y1 = pos[i].y + panels[i].h + 3, y2 = pos[i+1].y - 3;
-        body.push(`<line x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
-        body.push(`<path d="M${r2(ax)} ${r2(y2)}L${r2(ax - 2.6)} ${r2(y2 - 5)}L${r2(ax + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
+        const ax = fs*1.2 + pos[i].x, ax2 = fs*1.2 + pos[i+1].x, y1 = pos[i].y + panels[i].h + 3, y2 = pos[i+1].y - 3;
+        if (ax === ax2) {
+          body.push(`<line${eid} x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
+          body.push(`<path d="M${r2(ax)} ${r2(y2)}L${r2(ax - 2.6)} ${r2(y2 - 5)}L${r2(ax + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
+        } else body.push(slantArrow(ax, y1, ax2, y2).replace('<line', '<line' + eid));
         if (lab || note) body.push(`<text x="${r2(ax + fs*0.8)}" y="${r2((y1 + y2)/2 + fs*0.35)}" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       }
     }
+    /* the extra branches: from the end of the parent's arrow, round the panels in between, onto the branch */
+    skips.forEach((c, k) => { const q = par[c], nf = fs*0.8, txt = [poolLabel(list[q]), fromN(c)].filter(Boolean).join(', '), eid = `data-wfe="${esc(list[q].id)}>${esc(list[c].id)}"`;
+      if (row) {
+        const x1 = pos[q].x + pw[q] + 3, x2 = pos[c].x - 3, xt = x1 + 4, xd = x2 - gap*0.4, yT = railBase + k*fs, ay = pos[q].y + titleH + (cfg.bandH ? Math.min(fs*2.9, cfg.bandH*0.45) : Math.min(panels[q].ch, panels[Math.min(n - 1, q + 1)].ch)*0.45);
+        body.push(`<path ${eid} d="M${r2(xt)} ${r2(ay)}V${r2(yT)}H${r2(xd)}V${r2(ay)}H${r2(x2 - 4)}" fill="none" stroke-width="1"/>`);
+        body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
+        if (txt) body.push(`<text x="${r2((xt + xd)/2)}" y="${r2(yT - 2)}" text-anchor="middle" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(txt)}</text>`);
+      } else {
+        const railX = fs*0.5 + k*fs*0.6, xs = grid ? pos[q].x + pw[q]/2 : leftPad + fs*1.2, xe = grid ? pos[c].x + fs*0.4 : xs,
+          y1 = grid ? pos[q].y + rowH[gcell[q].row] + fs*0.5 : pos[q].y + panels[q].h + 3, y2 = grid ? pos[c].y + fs*0.1 : pos[c].y - 3, yA = y1 + fs*0.5, yB = Math.max(yA + fs*0.5, y2 - 5 - fs*0.5);
+        body.push(`<path ${eid} d="M${r2(xs)} ${r2(y1)}V${r2(yA)}H${r2(railX)}V${r2(yB)}H${r2(xe)}V${r2(y2 - 5)}" fill="none" stroke-width="1"/>`);
+        body.push(`<path d="M${r2(xe)} ${r2(y2)}L${r2(xe - 2.6)} ${r2(y2 - 5)}L${r2(xe + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
+        if (txt) body.push(`<text x="${r2(xe + fs*0.6)}" y="${r2(yB - 3)}" text-anchor="start" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(txt)}</text>`);
+      } });
     body.push('</g>');
   }
-  if (cfg.raw) return {body: links.join('') + body.join(''), defs, geo: {W: Wt, H: Ht, comp: true, gelBoxes, widened: widened ? cfg.W : 0, taller: taller ? cfg.chromH : 0, pos: pos.map((q, i) => ({x: q.x, y: q.y, w: pw[i], h: panels[i].h, id: list[i].id, th: titleH}))}};
+  if (cfg.raw) return {body: links.join('') + body.join(''), defs, geo: {W: Wt, H: Ht, W0, H0, comp: true, gelBoxes, widened: widened ? cfg.W : 0, taller: taller ? cfg.chromH : 0, pos: pos.map((q, i) => ({x: q.x, y: q.y, w: pw[i], h: panels[i].h, id: list[i].id, th: titleH}))}};
   const s = [svgHead(Wt, Ht)];
   if (defs.size) s.push(`<defs>${[...defs.values()].join('')}</defs>`);
   if (opt.bg) s.push(`<rect width="${r2(Wt)}" height="${r2(Ht)}" fill="#ffffff"/>`);
   s.push(links.join(''), body.join(''), '</svg>');
   const chart = cfg.single && panels[0].chart.geo ? {g: panels[0].chart.geo, ox: pos[0].x, oy: pos[0].y + titleH, run: list[0]} : null;
-  return {svg: s.join(''), geo: {W: Wt, H: Ht, comp: true, chart, gelBoxes, widened: widened ? cfg.W : 0, taller: taller ? cfg.chromH : 0, pos: pos.map((q, i) => ({x: q.x, y: q.y, w: pw[i], h: panels[i].h, id: list[i].id, th: titleH}))}};
+  return {svg: s.join(''), geo: {W: Wt, H: Ht, W0, H0, comp: true, chart, gelBoxes, widened: widened ? cfg.W : 0, taller: taller ? cfg.chromH : 0, pos: pos.map((q, i) => ({x: q.x, y: q.y, w: pw[i], h: panels[i].h, id: list[i].id, th: titleH}))}};
 }
 function buildRunFig(run){
   if (!opt.runGel || !gelsFor(run).length) return buildRunSVG(run);
@@ -3651,12 +3792,16 @@ const sig2 = v => v >= 100 ? fmt(v, 0) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2
 function finalYield(){
   const rows = sumRows(), fin = rows.slice().reverse().find(x => rows.mgOf(x) > 0); if (!fin) return null;
   /* the final sample's own concentration and volume, when entered, give the amount kept; the last pool stays the chromatography figure */
-  const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc > 0 ? kc : rows.mgOf(fin), fc = prep.on ? numOr(prep.finConc, 0) : 0, fv = prep.on ? numOr(prep.finVol, 0) : 0, meas = fc > 0 && fv > 0, mg = meas ? fc*fv : pm;
+  const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc > 0 ? kc : rows.mgOf(fin);
+  let fc = prep.on ? numOr(prep.finConc, 0) : 0, fv = prep.on ? numOr(prep.finVol, 0) : 0, meas = fc > 0 && fv > 0, manLoad = null;
+  /* no final sample entered: a measured step without a chromatogram after the last pool (a concentration, a buffer exchange) is what was kept */
+  if (!meas && prep.on) { const wf = wfList(); for (let j = wf.indexOf(fin.r) + 1; j > 0 && j < wf.length; j++) if (wf[j].prep === 'manual' && manMg(wf[j].man)) { const m = wf[j].man; fc = numOr(m.conc, 0); fv = numOr(m.vol, 0); meas = true; manLoad = rows.mgOf(fin); } }
+  const mg = meas ? fc*fv : pm;
   const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, perG = cG > 0 ? mg/cG : null;
   const poolVol = fin.nd && fin.nd.mg != null ? fin.nd.vol : fin.p && fin.p.measured ? fin.p.measVol : fin.p && fin.p.vol > 0 ? fin.p.vol : null;
   return {fin, k: rows.indexOf(fin), mg, poolMg: pm, poolVol, poolPerL: cL > 0 ? pm/cL : null, meas, fc, fv, perL: cL > 0 ? mg/cL : null, perG, cL, basis: meas ? 'final' : rows.basis, poolBasis: rows.basis, pur: fin.pur, purEst: fin.purEst,
     perGTxt: perG == null ? '' : `${sig2(perG)} mg per g of wet cells`, odd: rows.some(x => x.yld > 100 || x.stepY > 105),
-    loaded: (() => { const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r) : null; return k ? {mg: k, kept: true, r: fin.r} : rows.mgOf(pr) > 0 ? {mg: rows.mgOf(pr), kept: false, r: fin.r} : null; })(),
+    loaded: (() => { if (manLoad > 0) return {mg: manLoad, kept: false, r: fin.r}; const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r) : null; return k ? {mg: k, kept: true, r: fin.r} : rows.mgOf(pr) > 0 ? {mg: rows.mgOf(pr), kept: false, r: fin.r} : null; })(),
     purTyped: prep.on && hasTxt(prep.qcPurity) && fin.pur == null}; }
 function yieldLine(res){
   if (opt.wfYield === false || !res || !res.svg || !res.geo) return res; const y = finalYield(); if (!y) return res;
@@ -3674,13 +3819,13 @@ function buildWorkflow(){
   const cfg = {layout: opt.wfLayout, W: numOr(opt.wfW,7.2)*72, chromH: numOr(opt.wfH,2.2)*72, titles: true, letters: opt.wfLetters, showGels: opt.wfGels, connectors: opt.connectors, arrows: opt.wfArrows, gelMaxH: numOr(opt.wfGelH,1.8)*72};
   /* Fit to page: a grid or stacked figure taller than the page gets shorter traces and gels (never below 60%) until it fits */
   const fit = (L, c, maxH) => { let res = composeRuns(L, c);
-    if (opt.wfFit !== false && opt.wfLayout !== 'row' && res.geo && res.geo.H > maxH) { let k = 1;
-      for (let t = 0; t < 4 && res.geo.H > maxH && k > 0.6; t++) { k = Math.max(0.6, k*(maxH - 0.1*72)/res.geo.H); res = composeRuns(L, Object.assign({}, c, {chromH: c.chromH*k, gelK: k})); }
+    if (opt.wfFit !== false && opt.wfLayout !== 'row' && res.geo && (res.geo.H0 || res.geo.H) > maxH) { let k = 1;
+      for (let t = 0; t < 4 && (res.geo.H0 || res.geo.H) > maxH && k > 0.6; t++) { k = Math.max(0.6, k*(maxH - 0.1*72)/(res.geo.H0 || res.geo.H)); res = composeRuns(L, Object.assign({}, c, {chromH: c.chromH*k, gelK: k})); }
       if (res.geo) res.geo.fitted = k; }
     return res; };
   if (!pre.length) return yieldLine(fit(list, cfg, PAGE));
   /* side by side, the upstream steps stay in the same row when it still fits the width */
-  if (opt.wfLayout === 'row') { const one = composeRuns(pre.concat(list), cfg); if (one.geo && one.geo.W <= cfg.W*1.08) return yieldLine(one); }
+  if (opt.wfLayout === 'row') { const one = composeRuns(pre.concat(list), cfg); if (one.geo && (one.geo.W0 || one.geo.W) <= cfg.W*1.08) return yieldLine(one); }
   /* otherwise construct, expression and lysis form a band across the top, with an elbow arrow down into the first column */
   const fs = fontSize(), bandH = fs*5;
   const top = composeRuns(pre, Object.assign({}, cfg, {layout: 'row', raw: true, bandH}));
@@ -3703,13 +3848,15 @@ function buildWorkflow(){
 /* ---------- upstream steps: construct, expression and lysis, drawn before the first column ---------- */
 const PREP_DEF = {on: true, construct: true, expr: true, lysis: true, name: '', backbone: '', promoter: 'T7', resist: '', strain: '', medium: '', cultureL: '', od: '', inducer: '', temp: '', time: '', pellet: '', lysMethod: '', lysBuffer: '', clarify: '', lysVol: '', lysLanes: false, indKind: 'IPTG', gb: null,
   cleave: false, cleaveAfter: '', protease: '', ratio: '', clvTemp: '', clvTime: '', dialBuffer: '', mwco: '', dialVol: '', dialChanges: '', store: '',
-  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}};
+  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {}};
 let prep = JSON.parse(JSON.stringify(PREP_DEF));
 const PREP_LANE = ['expr', 'lysis', 'cleave'], PREP_NAME = {construct: 'Construct', expr: 'Expression', lysis: 'Lysis', cleave: 'Dialysis and cleavage'}, prepObj = {};
 const hasTxt = v => String(v == null ? '' : v).trim() !== '';
 const EXPR_KEYS = ['strain', 'medium', 'cultureL', 'od', 'inducer', 'temp', 'time', 'pellet', 'exStarter', 'exHarvest', 'exStore'], LYS_KEYS = ['lysMethod', 'lysBuffer', 'clarify', 'lysVol', 'lysAdd', 'lysSet'], FIN_KEYS = ['finConc', 'finVol', 'finRatio', 'finBuffer', 'store', 'qcPurity', 'qcMass', 'qcActivity'];
 /* the steps before the first column, as stand-ins for runs so the workflow lays them out the same way */
 const skipped = k => !!(prep.skip && prep.skip[k]);
+/* a dragged upstream panel's offset (SVG units), kept in prep.wfOff[k] */
+const wfPos = k => { const o = (prep.wfOff || {})[k] || {}; return {wfDx: numOr(o.dx, 0), wfDy: numOr(o.dy, 0)}; };
 function prepSteps(){
   if (!prep.on) return [];
   const lanes = id => gels.some(g => lanesFor(g, id).length), ks = [];
@@ -3722,7 +3869,7 @@ function prepSteps(){
     const st = String(prep.strain || '').trim(), cells = numOr(prep.pellet, 0), vol = numOr(prep.lysVol, 0);
     const note = k === 'construct' ? (nx === 'expr' ? 'Transform' : '') : k === 'expr' ? (nx === 'lysis' ? 'Harvest' : 'Harvest and lyse') : 'Lysate';
     const nm = hasTxt((prep.titles || {})[k]) ? prep.titles[k].trim() : k === 'expr' && exprQuant().solLanes ? 'Expression and solubility' : PREP_NAME[k];
-    return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note, wfW: k === 'construct' ? 1.1 : k === 'expr' ? 1 : 0.85, gelZ: 1}); });
+    return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note, wfW: k === 'construct' ? 1.1 : k === 'expr' ? 1 : 0.85, gelZ: 1}, wfPos(k)); });
 }
 /* the dialysis and protease step sits between two columns: after the run it follows (the tagged IMAC by default) */
 function cleaveRunId(){ const wf = runs.filter(r => r.inWf); if (wf.some(r => r.id === prep.cleaveAfter)) return prep.cleaveAfter;
@@ -3730,7 +3877,7 @@ function cleaveRunId(){ const wf = runs.filter(r => r.inWf); if (wf.some(r => r.
 function cleaveStep(){
   if (!prep.cleave) return null; const o = prepObj.cleave || (prepObj.cleave = {id: 'cleave', prep: 'cleave', gelOff: {}, fracs: [], integ: []}); prep.offs = prep.offs || {}; o.gelOff = prep.offs.cleave || (prep.offs.cleave = {});
   const pr = cleaveProtease(), nm = pr ? `${pr} cleavage` : 'Protease cleavage';
-  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: 'Dialysate', wfW: 1.2, gelZ: 1});
+  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: 'Dialysate', wfW: 1.2, gelZ: 1}, wfPos('cleave'));
 }
 function cleaveProtease(){ const t = String(prep.protease || '').trim(); if (t) return t; const m = (prep.gb || cleanSeq(opt.protSeq)) ? constructModel() : null, k = m && m.cut ? m.cut.k : (/sumo/i.test(opt.tagPreset || '') ? 'sumo' : '');
   return ({sumo: 'Ulp1', tev: 'TEV', '3c': '3C', thrombin: 'thrombin', ek: 'enterokinase', xa: 'factor Xa'})[k] || ''; }
@@ -3744,11 +3891,20 @@ function wfList(){ let list = runs.filter(r => r.inWf); const c = cleaveStep();
     if (next.length === pend.length) { next.forEach(m => list.push(manObj(m))); break; } pend = next; }
   return list; }
 /* the workflow figure's panels: the steps, plus a Concentrated and NanoDrop panel after each column that has one */
-function wfFigList(){ const L = wfList(); if (!prep.on || !prep.btw) return L; const out = [];
+function wfFigListRaw(){ const L = wfList(); if (!prep.on || !prep.btw) return L; const out = [];
   L.forEach(x => { out.push(x); if (!x.prep && prep.btw[x.id]) out.push(ncObj(x)); }); return out; }
+/* branches: a step may come from an earlier step (wfFrom, with a note wfFromNote); with none set, each step follows the one before, as always */
+const wfFromOf = r => !r ? '' : r.prep === 'manual' ? String((r.man || {}).wfFrom || '') : r.prep === 'ndconc' ? String(((prep.btw || {})[r.run && r.run.id] || {}).wfFrom || '') : r.prep ? '' : String(r.wfFrom || '');
+const wfFromNoteOf = r => !r ? '' : String((r.prep === 'manual' ? (r.man || {}).wfFromNote : r.prep === 'ndconc' ? ((prep.btw || {})[r.run && r.run.id] || {}).wfFromNote : r.prep ? '' : r.wfFromNote) || '').trim();
+/* the index each step comes from: its wfFrom when that step is earlier in the list, otherwise the step before */
+function wfParents(L){ return L.map((r, i) => { const f = wfFromOf(r), j = f ? L.findIndex(x => x.id === f) : -1; return j >= 0 && j < i ? j : i - 1; }); }
+/* with branches, each step is followed by its own branch, so a branch is drawn in one piece */
+function wfFigList(){ const L = wfFigListRaw(); if (!L.some(r => wfFromOf(r))) return L;
+  const par = wfParents(L), kids = L.map(() => []); par.forEach((q, i) => { if (q >= 0) kids[q].push(i); });
+  const out = [], walk = i => { out.push(L[i]); kids[i].forEach(walk); }; walk(0); return out; }
 function ncObj(r){ const id = 'nc:' + r.id, o = prepObj[id] || (prepObj[id] = {id, prep: 'ndconc', gelOff: {}, fracs: [], integ: []}), b = prep.btw[r.id] || {};
   const nm = hasTxt(b.title) ? b.title.trim() : ({dil: 'Diluted', exch: 'Buffer exchanged', filt: 'Filtered', hold: 'Held overnight'})[b.how] || 'Concentrated';
-  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(b.arrow || '').trim(), wfW: numOr(b.wfW, 0.85), gelZ: 1, run: r}); }
+  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(b.arrow || '').trim(), wfW: numOr(b.wfW, 0.85), gelZ: 1, run: r, wfDx: numOr(b.wfDx, 0), wfDy: numOr(b.wfDy, 0)}); }
 /* what a Concentrated panel says: the NanoDrop mean, the volume and the mg */
 function ncLines(r){ const p = poolRows(r), ms = poolMeas(r), b = (prep.btw || {})[r.id] || {}, out = [], v = numOr(b.vOut, 0);
   if (ms.src === 'btw' || ms.nd) out.push(`${fmt(ms.c || (ms.nd && ms.nd.m), 2)}${ms.nd && ms.nd.sd != null ? ` ± ${fmt(ms.nd.sd, 2)}` : ''} mg/mL`);
@@ -3762,7 +3918,7 @@ const manSteps = () => prep.on && Array.isArray(prep.manual) ? prep.manual.filte
 const isManId = id => typeof id === 'string' && /^m\d+$/.test(id) && manSteps().some(m => m.id === id);
 function manObj(m){ const o = prepObj[m.id] || (prepObj[m.id] = {id: m.id, prep: 'manual', gelOff: {}, fracs: [], integ: []}); prep.offs = prep.offs || {}; o.gelOff = prep.offs[m.id] || (prep.offs[m.id] = {});
   const nm = String(m.name || '').trim() || MAN_NAME[m.kind] || 'Other step';
-  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(m.arrow || '').trim(), wfW: numOr(m.wfW, 1), gelZ: numOr(m.gelZ, 1), man: m}); }
+  return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(m.arrow || '').trim(), wfW: numOr(m.wfW, 1), gelZ: numOr(m.gelZ, 1), man: m, wfDx: numOr(m.wfDx, 0), wfDy: numOr(m.wfDy, 0)}); }
 function manMg(m){ const c = numOr(m.conc, 0), v = numOr(m.vol, 0); return c > 0 && v > 0 ? c*v : null; }
 function manLines(m){ const t = x => String(x == null ? '' : x).trim(), out = [], c = numOr(m.conc, 0), v = numOr(m.vol, 0);
   if (t(m.resin)) out.push(t(m.resin)); if (t(m.buffer)) out.push(t(m.buffer)); if (t(m.wash) && (m.kind === 'column' || m.kind === 'batch')) out.push('Wash: ' + t(m.wash)); if (t(m.elution)) out.push(t(m.elution));
@@ -3825,8 +3981,9 @@ const CODON = 'FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG'
 const revComp = s => s.split('').reverse().map(c => ({A: 'T', T: 'A', G: 'C', C: 'G'})[c] || 'N').join('');
 function translateNt(nt, codonStart, table, isPartial5){ if (table && table !== 1 && table !== 11) return ''; let p = ''; const startIdx = (codonStart - 1) || 0; for (let i = startIdx; i + 2 < nt.length; i += 3) { const a = NT[nt[i]], b = NT[nt[i+1]], c = NT[nt[i+2]]; let aa = a == null || b == null || c == null ? 'X' : CODON[a*16 + b*4 + c]; if (i === startIdx && !isPartial5) { const codon = nt.slice(i, i+3).toUpperCase(); if (table === 11 && ['TTG', 'CTG', 'ATT', 'ATC', 'ATA', 'ATG', 'GTG'].includes(codon)) aa = 'M'; else if ((table === 1 || !table) && ['ATG', 'TTG', 'CTG'].includes(codon)) aa = 'M'; } p += aa; } return p; }
 function parseGenBank(text){
-  const L = text.replace(/\r/g, '').split('\n'), loc = L.find(l => /^LOCUS/.test(l)) || '', lm = loc.match(/^LOCUS\s+(\S+)\s+(\d+)\s*bp/i);
+  const L0 = text.replace(/\r/g, '').split('\n'), ei = L0.findIndex(l => /^\/\//.test(l)), L = ei < 0 ? L0 : L0.slice(0, ei), recs = Math.max(1, L0.filter(l => /^LOCUS/.test(l)).length), loc = L.find(l => /^LOCUS/.test(l)) || '', lm = loc.match(/^LOCUS\s+(\S+)\s+(\d+)\s*bp/i);
   if (!lm && !L.some(l => /^FEATURES/.test(l))) throw new Error('not GenBank');
+  if (/^LOCUS\s+\S+\s+\d+\s*aa\b/i.test(loc)) throw new Error('protein record');
   const def = (() => { const i = L.findIndex(l => /^DEFINITION/.test(l)); if (i < 0) return ''; let t = L[i].slice(12).trim(); for (let k = i + 1; k < L.length && /^ {12}/.test(L[k]); k++) t += ' ' + L[k].trim(); return t.replace(/\.$/, ''); })();
   const feats = []; let inF = false, cur = null, qk = null;
   for (const l of L) {
@@ -3844,7 +4001,7 @@ function parseGenBank(text){
     const wrap = /join/.test(f.loc) && nums[0] > nums[nums.length - 1];
     const codonStart = parseInt(f.q.codon_start) || 1, translTable = parseInt(f.q.transl_table) || 1, partial5 = f.rev ? />/.test(f.loc) : /</.test(f.loc);
     return {type: f.type, a: wrap ? nums[0] : Math.min(...nums), b: wrap ? nums[nums.length - 1] : Math.max(...nums), rev: /complement/.test(f.loc), label: lab, tx: (f.q.translation || '').replace(/[^A-Z*]/gi, '').toUpperCase(), wrap, loc: f.loc, codonStart, translTable, partial5}; }).filter(Boolean);
-  return {name: lm ? lm[1] : 'plasmid', len, circ: /circular/i.test(loc), def, feats: out, seq};
+  return {name: lm ? lm[1] : 'plasmid', len, circ: /circular/i.test(loc), def, feats: out, seq, recs, lenBad: !!lm && seq.length >= 100 && seq.length !== +lm[2]};
 }
 const RES_RE = /\bkan|neo|aph\(|nptii|\bbla\b|amp|beta-lactamase|\bcat\b|chloramph|\bcmr?\b|\btet|spec|aad|strep|gent|zeo|\bble\b|hyg|\bbsd/i, REG_RE = /laci|\brop\b|arac|tetr|lacz|lac ?y|\bori\b/i;
 const resName = t => /kan|neo|aph|nptii/i.test(t) ? 'kanamycin' : /bla|amp|lactamase/i.test(t) ? 'ampicillin' : /\bcat\b|chloramph|\bcm/i.test(t) ? 'chloramphenicol' : /tet/i.test(t) ? 'tetracycline' : /spec|aad/i.test(t) ? 'spectinomycin' : /strep/i.test(t) ? 'streptomycin' : /gent/i.test(t) ? 'gentamicin' : /zeo|ble/i.test(t) ? 'zeocin' : /hyg/i.test(t) ? 'hygromycin' : t;
@@ -4190,8 +4347,10 @@ function methodsText(){
   const conds = steps.map(runCond), one = k => { const vs = [...new Set(conds.map(c => c[k]).filter(Boolean))]; return vs.length === 1 && conds.every(c => c[k]) ? vs[0] : ''; }, instAll = one('mInst'), tempAll = one('mTemp');
   if (steps.length > 1 && (instAll || tempAll)) P.push(`All chromatography was run${instAll ? ` on ${art(instAll)} ${instAll}` : ''}${tempAll ? ` at ${deg(tempAll)}` : ''}.`);
   const need = t => `[${t} not entered]`;
+  /* a step that comes from an earlier step other than the one before says so; the full branch wording is for later */
+  const brTxt = r => { const f = wfFromOf(r), q = f && wfFigListRaw().find(x => x.id === f); return q ? ` (from ${stepTitle(q)})` : ''; };
   wf.forEach((r, i) => { const ttl = stepTitle(r), Lt = letterOf(r);
-    if (r.prep === 'manual') { P.push(manSentence(r, Lt, wf)); return; }
+    if (r.prep === 'manual') { P.push(manSentence(r, Lt, wf) + brTxt(r)); return; }
     if (r.prep === 'cleave') { const pr = cleaveProtease(), ra = v(prep.ratio), bf = v(prep.dialBuffer), T = v(prep.clvTemp), h = v(prep.clvTime), mw = v(prep.mwco);
       P.push(`Tag removal${Lt ? ` (panel ${Lt})` : ''}: the pool was ${bf ? `dialyzed${mw ? ` (${unitIf(mw, 'kDa')} MWCO)` : ''} against ${bf}` : 'dialyzed'}${pr ? ` with ${pr}${ra ? ` at ${/^\d/.test(ra) && !/:/.test(ra) ? '1:' + ra : ra}${/w\/w|mol/i.test(ra) ? '' : ' (w/w)'}` : ''}` : ''}${T ? ` at ${deg(T)}` : ''}${h ? ` for ${hrs(h)}` : ''}.`); return; }
     const k = steps.indexOf(r) + 1, c = runCond(r), sec = isSec(r), first = !wf.slice(0, wf.indexOf(r)).some(x => !x.prep || x.prep === 'manual'), cap = poolCaption(r), ft = /flow/i.test(cap);
@@ -4199,7 +4358,7 @@ function methodsText(){
     /* a column name read from the file name is marked for checking; one typed by hand or logged by UNICORN is not */
     const colChk = '';
     const col = c.mCol ? `${art(c.mCol)} ${c.mCol}${c.mCV && !/\d\s*mL|\/\d+/.test(c.mCol) ? ` (${c.mCV} mL)` : ''}${/column$/i.test(c.mCol) ? '' : ' column'}${colChk}` : `the column ${need('column')}`;
-    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')}${condCheck(r, 'mFlow')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
+    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}${brTxt(r)}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')}${condCheck(r, 'mFlow')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
     t += c.mBufA ? (sec ? ` in ${c.mBufA}` : ` equilibrated in buffer A (${c.mBufA})`) : ` ${need('buffer')}`;
     if (hasTxt(r.mWash) && !sec) t += `, washed with ${lc(v(r.mWash))}`;
     let grad = c.mGrad ? (c.mGradAuto ? lc(c.mGrad).replace(/^linear /, 'a linear gradient from ').replace(/^step to /, 'a step to ') : lc(c.mGrad)) + condCheck(r, 'mGrad') : '';
@@ -4321,7 +4480,7 @@ function render(){
   else { document.querySelectorAll('#panel > [data-step]:not([data-for])').forEach(el => { el.hidden = false; }); document.querySelectorAll('#prepPanel details.sub').forEach(d => { d.hidden = d.dataset.sub === 'ptr' || d.dataset.sub === 'pbtw' || d.dataset.sub === 'pman'; }); }
   /* More options shows when this step has settings to offer */
   { const mo = $('#moreOpts'), any = PROJ && [...document.querySelectorAll('#panel > .optsec')].some(x => !x.hidden); mo.hidden = !any; $('#moreBtn').textContent = document.body.classList.contains('moreopen') ? 'Fewer options' : 'More options'; $('#moreBtn').setAttribute('aria-expanded', document.body.classList.contains('moreopen')); $('#moreWhat').hidden = document.body.classList.contains('moreopen'); }
-  renderSec(); renderProt(); renderPrep(); renderND(); grpStatus(); renderNext(); renderWfTool();
+  renderSec(); renderProt(); renderPrep(); renderND(); grpStatus(); moreSync(); renderNext(); renderWfTool();
   { const lab = id => { const e = $(id); return e && e.closest('label'); }, side = opt.gelPos === 'right', full = opt.gelView === 'full';
     [['#o-gelAlign', side], ['#o-gelSide', !side], ['#o-gelFocusKda', full], ['#o-gelSpan', full]].forEach(([id, hide]) => { const l = lab(id); if (l) l.hidden = hide; }); }
   { const fi = $('#gelFocusInfo'), r0 = kind === 'run' && f ? f.run : null, gl = r0 ? gelsFor(r0) : kind === 'workflow' ? gels : [], g0 = gl.find(x => x._focus);
@@ -4757,12 +4916,14 @@ paper.addEventListener('mousemove', e => {
   ro.textContent = `x ${xv.toFixed(g.run ? 2 : 3)}` + (g.run || opt.mode === 'overlay' ? `   y ${fmtAuto(yv)}` : '') + (c.run ? '   drag to integrate' : '');
 });
 /* ---------- editing the workflow figure in place: click a panel for its title, arrow note, width and gel size ---------- */
-function wfItem(id){ if (!id) return null; const r = runs.find(x => x.id === id); if (r) return {kind: 'run', r, step: 'run:' + id, title: r.stepName || '', auto: guessStep(r) || r.name, arrow: r.note || '', w: numOr(r.wfW, 1), gz: numOr(r.gelZ, 1), gel: gelsFor(r).length > 0, obj: r};
-  if (String(id).startsWith('nc:')) { const rid = id.slice(3), b = (prep.btw || {})[rid]; if (!b) return null; return {kind: 'nc', b, step: 'btw:' + rid, title: b.title || '', auto: 'Concentrated', arrow: b.arrow || '', w: numOr(b.wfW, 0.85), gel: false}; }
-  const m = manSteps().find(x => x.id === id); if (m) { const o = manObj(m); return {kind: 'man', m, step: 'man:' + id, title: m.name || '', auto: MAN_NAME[m.kind] || 'Other step', arrow: m.arrow || '', w: numOr(m.wfW, 1), gz: numOr(m.gelZ, 1), gel: gelsFor(o).length > 0, obj: o}; }
-  if (['construct', 'transform', 'expr', 'lysis', 'cleave'].includes(id)) return {kind: 'prep', k: id, step: id, title: (prep.titles || {})[id] || '', auto: PREP_NAME[id] || id, gel: false, noArrow: true, noW: true};
+function wfItem(id){ if (!id) return null; const r = runs.find(x => x.id === id); if (r) return {kind: 'run', r, step: 'run:' + id, title: r.stepName || '', auto: guessStep(r) || r.name, arrow: r.note || '', w: numOr(r.wfW, 1), gz: numOr(r.gelZ, 1), gel: gelsFor(r).length > 0, obj: r, ox: numOr(r.wfDx, 0), oy: numOr(r.wfDy, 0)};
+  if (String(id).startsWith('nc:')) { const rid = id.slice(3), b = (prep.btw || {})[rid]; if (!b) return null; return {kind: 'nc', b, step: 'btw:' + rid, title: b.title || '', auto: 'Concentrated', arrow: b.arrow || '', w: numOr(b.wfW, 0.85), gel: false, ox: numOr(b.wfDx, 0), oy: numOr(b.wfDy, 0)}; }
+  const m = manSteps().find(x => x.id === id); if (m) { const o = manObj(m); return {kind: 'man', m, step: 'man:' + id, title: m.name || '', auto: MAN_NAME[m.kind] || 'Other step', arrow: m.arrow || '', w: numOr(m.wfW, 1), gz: numOr(m.gelZ, 1), gel: gelsFor(o).length > 0, obj: o, ox: numOr(m.wfDx, 0), oy: numOr(m.wfDy, 0)}; }
+  if (['construct', 'transform', 'expr', 'lysis', 'cleave'].includes(id)) return {kind: 'prep', k: id, step: id, title: (prep.titles || {})[id] || '', auto: PREP_NAME[id] || id, gel: false, noArrow: true, noW: true, ox: wfPos(id).wfDx, oy: wfPos(id).wfDy};
   return null; }
-function wfSet(it, f, v){ if (it.kind === 'run') { const r = it.r; if (f === 'title') r.stepName = v; else if (f === 'arrow') r.note = v; else if (f === 'w') r.wfW = v; else if (f === 'gz') r.gelZ = v; }
+function wfSet(it, f, v){ if (f === 'off') { const dx = Math.round(v.dx*100)/100, dy = Math.round(v.dy*100)/100, o = it.kind === 'nc' ? it.b : it.kind === 'man' ? it.m : it.kind === 'run' ? it.r : null;
+    if (!o) { prep.wfOff = Object.assign({}, prep.wfOff); if (dx || dy) prep.wfOff[it.k] = {dx, dy}; else delete prep.wfOff[it.k]; } else if (dx || dy) { o.wfDx = dx; o.wfDy = dy; } else { delete o.wfDx; delete o.wfDy; } }
+  else if (it.kind === 'run') { const r = it.r; if (f === 'title') r.stepName = v; else if (f === 'arrow') r.note = v; else if (f === 'w') r.wfW = v; else if (f === 'gz') r.gelZ = v; }
   else if (it.kind === 'nc') { const b = it.b; if (f === 'title') b.title = v; else if (f === 'arrow') b.arrow = v; else if (f === 'w') b.wfW = v; }
   else if (it.kind === 'man') { const m = it.m; if (f === 'title') m.name = v; else if (f === 'arrow') m.arrow = v; else if (f === 'w') m.wfW = v; else if (f === 'gz') m.gelZ = v; }
   else if (it.kind === 'prep' && f === 'title') { prep.titles = Object.assign({}, prep.titles, {[it.k]: v}); }
@@ -4780,7 +4941,8 @@ function renderWfTool(){
       + (!it.noArrow && !last ? `<label class="wfl" for="wfA">Arrow note</label><input type="text" id="wfA" value="${esc(it.arrow)}" placeholder="e.g. SUMO protease, 4 °C overnight">` : '')
       + (!it.noW && row ? `<span class="wfg"><span class="wfl">Width</span><button type="button" class="mini" data-wf="w:-1" aria-label="Narrower">−</button><button type="button" class="mini" data-wf="w:1" aria-label="Wider">+</button></span>` : '')
       + (it.gel ? `<span class="wfg"><span class="wfl">Gel</span><button type="button" class="mini" data-wf="gz:-1" aria-label="Smaller gel">−</button><button type="button" class="mini" data-wf="gz:1" aria-label="Larger gel">+</button></span>` : '')
-      + `<button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button>`; }
+      + `<button type="button" class="mini" data-wf="reset">Reset position</button><button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button>`; }
+  const rb = tool.querySelector('[data-wf=reset]'); if (rb) rb.disabled = !(it.ox || it.oy);
   tool.hidden = false; const th = tool.offsetHeight, tw = tool.offsetWidth, ww = wrap.clientWidth;
   let top = a.y - wr.top - th - 8; if (top < 4) top = b.y - wr.top + 8; let left = Math.min(Math.max(4, a.x - wr.left - 4), Math.max(4, ww - tw - 4));
   Object.assign(tool.style, {left: left + 'px', top: top + 'px'}); }
@@ -4788,6 +4950,7 @@ $('#wfTool').addEventListener('input', e => { const it = wfItem(wfSel); if (!it)
 $('#wfTool').addEventListener('keydown', e => { if (e.key === 'Escape' || (e.key === 'Enter' && e.target.tagName === 'INPUT')) { wfSel = null; renderWfTool(); } });
 $('#wfTool').addEventListener('click', e => { const b = e.target.closest('[data-wf]'); if (!b) return; const it = wfItem(wfSel); if (!it) return; const [f, d] = b.dataset.wf.split(':');
   if (f === 'close') { wfSel = null; renderWfTool(); return; }
+  if (f === 'reset') { wfSet(it, 'off', {dx: 0, dy: 0}); return; }
   if (f === 'edit') { const k = it.step; wfSel = null; renderWfTool(); selectStep(k); return; }
   const cur0 = f === 'w' ? it.w : it.gz; wfSet(it, f, Math.round(Math.min(f === 'w' ? 3 : 3, Math.max(f === 'w' ? 0.4 : 0.3, cur0 + 0.15*(+d)))*100)/100); });
 paper.addEventListener('click', e => { if (!PROJ || !G || !G.pos || Date.now() - gelMovedAt < 350) return; const f = curFig(); if (!f || f.kind !== 'workflow') return;
@@ -4810,9 +4973,22 @@ window.addEventListener('pointermove', e => {
   cancelAnimationFrame(gelRaf2); gelRaf2 = requestAnimationFrame(render);
 });
 ['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (gelDrag) { gelDrag = null; render(); } }));
+/* drag the selected workflow panel (inside its selection box) to move it; under 4 px it stays a click */
+let wfDrag = null, wfRaf = 0;
+paper.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || !wfSel || !PROJ || !G || !G.pos) return; const f = curFig(), svg = paper.querySelector('svg'); if (!f || f.kind !== 'workflow' || !svg) return;
+  const p = svgPoint(e), q = p && G.pos.find(x => x.id === wfSel), it = q && wfItem(wfSel), m = svg.getScreenCTM(); if (!it || !m || !(p.x >= q.x && p.x <= q.x + q.w && p.y >= q.y && p.y <= q.y + q.h)) return;
+  wfDrag = {it, cx: e.clientX, cy: e.clientY, k: 1/m.a, ox: it.ox, oy: it.oy, minX: it.ox - q.x, minY: it.oy - q.y, on: false};
+}, true);
+window.addEventListener('pointermove', e => {
+  const d = wfDrag; if (!d) return; if (!d.on) { if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) return; d.on = true; }
+  const o = {dx: Math.max(d.minX, d.ox + (e.clientX - d.cx)*d.k), dy: Math.max(d.minY, d.oy + (e.clientY - d.cy)*d.k)}; gelMovedAt = Date.now();
+  cancelAnimationFrame(wfRaf); wfRaf = requestAnimationFrame(() => { const it = wfItem(wfSel); if (it) wfSet(it, 'off', o); });
+});
+['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; }));
 $('#gelOffReset').addEventListener('click', () => { runs.forEach(r => { r.gelOff = {}; }); prep.offs = {}; render(); });
 paper.addEventListener('pointerdown', e => {
-  const c = chartAt(); if (!c || !c.run || e.button !== 0) return;
+  const c = chartAt(); if (!c || (!c.run && !opt.zoomMode) || e.button !== 0) return;
   const p = svgPoint(e); if (!p) return; const lx = p.x - c.ox, ly = p.y - c.oy, g = c.g;
   if (lx < g.L || lx > g.R || ly < g.T || ly > g.B) return;
   e.preventDefault(); drag = {c, x0: lx};
@@ -4829,7 +5005,13 @@ window.addEventListener('pointerup', () => {
   if (!drag) return; const d = drag; drag = null; dragBox.hidden = true;
   if (d.x1 === undefined || Math.abs(d.x1 - d.x0) < 3) return;
   const g = d.c.g, inv = X => g.xlo + (X - g.L)/(g.R - g.L)*(g.xhi - g.xlo);
-  d.c.run.integ = (d.c.run.integ || []).concat([{a: inv(Math.min(d.x0, d.x1)), b: inv(Math.max(d.x0, d.x1))}]); render();
+  const a = inv(Math.min(d.x0, d.x1)), b = inv(Math.max(d.x0, d.x1));
+  if (opt.zoomMode) {
+    const ro = d.c.run || opt; ro.xmin = a; ro.xmax = b; syncControls();
+  } else if (d.c.run) {
+    d.c.run.integ = (d.c.run.integ || []).concat([{a, b}]);
+  }
+  render();
 });
 
 /* purification summary: one row per workflow step with its pool */
@@ -4862,14 +5044,14 @@ function sumRows(){
   const first = out.length ? amt(out[0]) : null; let prev = null, prevKept = false;
   /* a measured step without a chromatogram before the first column is what that column was loaded with */
   if (out.length && prep.on) { const wf = wfList(), i = wf.indexOf(out[0].r); let mg = null; for (let j = 0; j < i; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a) mg = a; }
-    if (mg > 0) { const x = out[0], v = ['mg', 'nd'].includes(basis) ? mg : ['mgmol', 'ndmol'].includes(basis) && kd(x) ? mg/kd(x) : null; if (v > 0) { prev = v; prevKept = true; } } }
+    if (mg > 0) { const x = out[0], v = ['mg', 'nd'].includes(basis) ? mg : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? mg/kd(x) : null; if (v > 0) { prev = v; prevKept = true; } } }
   /* yield counts from the first measured amount in the workflow, which can be a step without a chromatogram */
-  out.toAmt = (mg, x) => !(mg > 0) || !x ? null : ['mg', 'nd'].includes(basis) ? mg : ['mgmol', 'ndmol'].includes(basis) && kd(x) ? mg/kd(x) : null;
+  out.toAmt = (mg, x) => !(mg > 0) || !x ? null : ['mg', 'nd'].includes(basis) ? mg : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? mg/kd(x) : null;
   let base = first; out.baseMan = null;
   if (out.length && prep.on) { const wf = wfList(), i = wf.indexOf(out[0].r); for (let j = 0; j < i; j++) if (wf[j].prep === 'manual') { const v = out.toAmt(manMg(wf[j].man), out[0]); if (v > 0) { base = v; out.baseMan = wf[j]; break; } } }
   out.base = base; out.amtOf = amt; out.kept = x => kept(x);
   /* a measured concentration or exchange between columns is what the next column was loaded with */
-  const kept = x => { const k = prep.on ? loadedAfter(x.r) : null; if (!(k > 0)) return null; return ['mg', 'nd'].includes(basis) ? k : ['mgmol', 'ndmol'].includes(basis) && kd(x) ? k/kd(x) : null; };
+  const kept = x => { const k = prep.on ? loadedAfter(x.r) : null; if (!(k > 0)) return null; return ['mg', 'nd'].includes(basis) ? k : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? k/kd(x) : null; };
   out.forEach(x => { const a = amt(x); x.yld = base > 0 && a > 0 ? 100*a/base : null; x.stepY = prev > 0 && a > 0 ? 100*a/prev : null; x.fromKept = !!x.stepY && prevKept; x.loadedAmt = prevKept ? prev : null; if (a > 0) { const k = kept(x); prev = k > 0 ? k : a; prevKept = k > 0; } }); out.basis = basis;
   return out;
 }
@@ -5274,14 +5456,19 @@ function useOrf(m, quiet){ if (!m || !m.tagSeq) { if (m) { opt.protSeq = m.protS
   applyProt(quiet); }
 async function loadGenBank(f){
   if (/\.dna$/i.test(f.name)) { toast(`${f.name} is a SnapGene file. In SnapGene choose Export, then GenBank (.gb), and drop that file here.`); return; }
-  try { const gb = parseGenBank(await f.text()); if (!gb.feats.length) throw new Error('no features');
+  loadGenBankText(await f.text(), f.name);
+}
+/* a file and pasted text take the same path; a bad input leaves the construct untouched */
+function loadGenBankText(text, fname){
+  if (/^\s*>/.test(text)) { toast(`${fname} looks like FASTA, not GenBank. In Benchling choose Export, then GenBank (.gb), or paste the GenBank text.`); return; }
+  try { const gb = parseGenBank(text); if (!gb.feats.length) throw new Error('no features');
     prep.gb = gb; prep.on = true; prep.construct = true; const m = constructModel();
     /* the plasmid is what was expressed: its ORF becomes the Protein section's sequence, with a way back */
     if (m && m.src === 'gb' && !cleanSeq(opt.protSeq)) useOrf(m, true);
     else if (m && m.src === 'gb' && ((m.match && !m.match.ok) || (m.tagSeq && m.tagSeq !== (cleanSeq(opt.tagSeq) || TAG_SEQ[opt.tagPreset] || '')))) { prep.prevProt = {protSeq: opt.protSeq, tagSeq: opt.tagSeq, tagPreset: opt.tagPreset, tagPos: opt.tagPos, protSrc: opt.protSrc}; useOrf(m, true); }
     if (!cur || cur === 'overlay') { if (runs.filter(r => r.inWf).length >= 2) cur = 'workflow'; }
-    render(); toast(m && m.src === 'gb' ? `Loaded ${gb.name}: ORF of ${m.tx.length} residues${m.cut ? `, cut by ${m.cut.name}` : ''}.${prep.prevProt ? ' The Protein section now uses this ORF.' : ''}` : `Loaded ${gb.name}, but found no ORF to draw.`); }
-  catch (e) { toast(`Could not read ${f.name} as GenBank. Export it from SnapGene or Benchling as GenBank (.gb).`); }
+    render(); toast((m && m.src === 'gb' ? `Loaded ${gb.name}: ORF of ${m.tx.length} residues${m.cut ? `, cut by ${m.cut.name}` : ''}.${prep.prevProt ? ' The Protein section now uses this ORF.' : ''}` : `Loaded ${gb.name}, but found no ORF to draw.`) + (gb.recs > 1 ? ` Only the first of ${gb.recs} records was read.` : '') + (gb.lenBad ? ` Warning: the sequence has ${gb.seq.length} bases but LOCUS says ${gb.len}.` : '')); }
+  catch (e) { toast(e.message === 'protein record' ? `${fname} is a protein GenBank record. The Construct section needs a DNA record (plasmid).` : `Could not read ${fname} as GenBank. Export it from SnapGene or Benchling as GenBank (.gb).`); }
 }
 function renderPrep(){
   const pn = $('#prepPanel'); if (!pn) return;
@@ -5315,6 +5502,8 @@ $('#prepPanel').addEventListener('input', e => { const el = e.target, k = el.dat
   if (el.type === 'text') { clearTimeout(prepT); prepT = setTimeout(render, 260); return; } if (['on', 'lysLanes', 'lysis', 'cleave'].includes(k)) gels.forEach(g => { g._prepA = null; }); render(); });
 $('#gbPick').addEventListener('click', () => $('#gbFile').click());
 $('#gbFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) loadGenBank(f); });
+$('#gbPaste').addEventListener('click', () => { const b = $('#gbPasteBox'); b.hidden = !b.hidden; if (!b.hidden) $('#gbText').focus(); });
+$('#gbPasteGo').addEventListener('click', () => { const t = $('#gbText').value; if (!t.trim()) { toast('Paste the GenBank text first.'); return; } loadGenBankText(t, 'Pasted text'); });
 $('#gbClear').addEventListener('click', () => { prep.gb = null; prep.prevProt = null; render(); });
 $('#gbStatus').addEventListener('click', e => { if (e.target.id === 'gbUse') { prep.prevProt = null; useOrf(constructModel()); }
   else if (e.target.id === 'gbBack' && prep.prevProt) { Object.assign(opt, prep.prevProt); prep.prevProt = null; applyProt(); } });
@@ -5369,14 +5558,15 @@ const splitRow = (line, d) => { const out = []; let cur = '', q = false; for (le
 const ND_HEAD = /(a?\s?260\s*\/\s*a?\s?280|\ba\s?280\b|\ba\s?205\b|mg\s*\/\s*ml|ng\s*\/\s*[µu]l|conc)/i, ND_NAME = /sample\s*(name|id)|^"?sample"?\s*$/i;
 const isWl = h => /^\d{3}(\.\d+)?\s*(nm)?$/i.test(String(h).trim());
 function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
+    if (/^\s*vendor|:\s*$/i.test(H[0] || '')) continue; /* metadata rows ("Vendor: Agilent", "Sample Name:") are not the table header */
     if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) {
-        for (let j = i + 1; j < lines.length; j++) {
+        for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
             const row = splitRow(lines[j], d);
             if (row.some(v => ndNum(v, d) != null)) return {i, d, H, rows: 'samples'};
         }
     }
     if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1) {
-        for (let j = i + 1; j < lines.length; j++) {
+        for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
             const row = splitRow(lines[j], d);
             if (row.some(v => ndNum(v, d) != null)) return {i, d, H, rows: 'wavelengths'};
         }
@@ -5405,7 +5595,7 @@ function parseNanoDrop(text){
   /* spectra laid out as rows: one column per sample, one row per wavelength */
   if (hd.rows === 'wavelengths') { return H.slice(1).map((nm, k) => { const wl = [], ab = []; data.forEach(r => { const w = ndNum(r[0], d), v = ndNum(r[k + 1], d); if (w != null && v != null) { wl.push(w); ab.push(v); } });
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }, a280 = at(280), a260 = at(260);
-      return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null); }
+      return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null && !s.name.trim().endsWith(':') && !/^vendor/i.test(s.name.trim())); }
   const hn = H.map(h => h.toLowerCase().replace(/\s+/g, ' ')), col = f => hn.findIndex(f);
   const cName = col(h => ND_NAME.test(h)), cR280 = col(h => /a?\s?260\s*\/\s*a?\s?280/.test(h)), cR230 = col(h => /a?\s?260\s*\/\s*a?\s?230/.test(h));
   const absCol = w => col(h => new RegExp(`\\ba ?${w}\\b|^${w}$`).test(h) && !/\//.test(h) && !/conc|mg|µg|ug|ng|raw/.test(h));
@@ -5415,7 +5605,10 @@ function parseNanoDrop(text){
   const cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
   const wcols = H.map((h, i) => ({i, w: parseFloat(h)})).filter(x => isWl(H[x.i]) && x.w >= 190 && x.w <= 850);
   const headAll = hn.join(' '), dyeFile = /dye|degree of label/.test(headAll);
-  return data.filter(r => r.length > 2 && (r[cName] || '').length).map((r, i) => {
+  return data.filter(r => {
+    const nm = (r[cName] || '').trim();
+    return r.length > 2 && nm.length > 0 && !nm.endsWith(':') && !/^vendor/i.test(nm);
+  }).map((r, i) => {
     const typ = cType >= 0 ? r[cType] : '', unitTxt = ((cUnit >= 0 ? r[cUnit] : '') + ' ' + (cConc >= 0 ? hn[cConc] : '')).toLowerCase();
     const kind = /ng\s*\/\s*[µu]l|nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
     let conc = cConc >= 0 ? ndNum(r[cConc], d) : null;
@@ -5459,7 +5652,9 @@ function cutAfterIndex(){ const wf = runs.filter(r => r.inWf); if (prep.cleave) 
   const rv = wf.findIndex(r => (String(r.stepName || '').trim() || guessStep(r)) === 'Reverse IMAC'); return rv > 0 ? rv - 1 : -1; }
 const ndForm = r => { if (!r) return 'untagged'; if (r.ndForm) return r.ndForm; const wf = runs.filter(x => x.inWf), i = wf.indexOf(r), c = cutAfterIndex(); if (i < 0) return 'untagged'; return c < 0 || i <= c ? 'tagged' : 'untagged'; };
 function ndEpsFor(runId){ const r = runs.find(x => x.id === runId), F = protForms(), form = ndForm(r);
-  if (F.length) { const f = form === 'tagged' && F[1] ? F[1] : F[0]; if (f.a280) return {e: f.a280, kda: f.mass/1000, src: form === 'tagged' && F[1] ? 'tagged' : 'untagged'}; /* true product MW */ }
+  /* a tagged sample whose tag preset (GST, MBP…) has no sequence yet: the untagged mass would be wrong, so use the typed A280 or none */
+  const noTag = form === 'tagged' && F.length === 1 && opt.tagPreset && opt.tagPreset !== 'custom' && TAG_PRESETS[opt.tagPreset];
+  if (F.length && !noTag) { const f = form === 'tagged' && F[1] ? F[1] : F[0]; if (f.a280) return {e: f.a280, kda: f.mass/1000, src: form === 'tagged' && F[1] ? 'tagged' : 'untagged'}; /* true product MW */ }
   return numOr(opt.eps, 0) > 0 ? {e: +opt.eps, kda: numOr(opt.protKda, 0) || null, src: 'set'} : null; }
 /* the methods phrase for the A280 coefficient, said only when a reading of this run was actually converted with it (not for instrument, A205 or typed concentrations) */
 const epPhrase = E => E ? `, A280 of ${fmt(E.e, 2)} for 1 mg/mL of the ${E.src === 'set' ? 'protein' : E.src + ' form'}` : '';
@@ -5640,6 +5835,41 @@ document.querySelectorAll('#panel > .grp').forEach(sec => { const h = sec.queryS
   set(closed);
   const tog = () => { const c = !sec.classList.contains('collapsed'); set(c); try { localStorage.setItem(key, c ? '1' : '0'); } catch (e) {} };
   h.addEventListener('click', tog); h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tog(); } }); });
+/* ---------- More options inside each section (open or closed remembered), and the settings search ---------- */
+/* rarely changed settings: moved, never removed, so every id and label stays. A setting changed from its default opens its More options. */
+const ADV = {'sub:rwin': ['o-fracEvery', 'o-runPad'], 'sub:rgel': ['o-gelAlign', 'o-gelGap', 'o-gelSide', 'o-linkFrom', 'o-laneMark', 'o-laneAlpha', 'gelSizeReset', 'gelOffReset'], 'sub:rpool': ['o-poolColor'],
+  'Peak integration': ['o-intProm', 'o-path', 'o-eps', 'o-intFill'], 'Processing': ['o-baseline', 'o-smooth'], 'Peak labels': ['o-peakRot', 'o-peakDec', 'o-prom', 'o-peakColor', 'o-peakMax'],
+  'Axes': ['o-ticksOut', 'o-y2grad', 'o-y2cond', 'o-sbValue', 'o-sbUnit', 'o-zoomInsetPos', 'o-zoomInsetSize'], 'Figure style': ['o-lw', 'o-font', 'o-bg'], 'Layout': ['o-stack'],
+  'sub:gcrop': ['o-gelAutoCrop', 'o-gelFrame'], 'sub:gbands': ['o-tagTol', 'o-bandSens', 'o-purBase', 'o-tagCounts'], 'sub:gknown': ['o-knownTol', 'o-knownMin', 'o-knownCount']};
+const moreBoxes = [];
+Object.entries(ADV).forEach(([key, ids]) => {
+  const host = key.startsWith('sub:') ? document.querySelector(`#panel details.sub[data-sub="${key.slice(4)}"]`) : [...document.querySelectorAll('#panel > .grp')].find(g => { const h = g.querySelector(':scope > h2'); return h && h.firstChild && h.firstChild.textContent.trim() === key; });
+  if (!host) return;
+  const d = document.createElement('details'), body = document.createElement('div'); d.className = 'more'; d.dataset.more = key; body.className = 'morebody';
+  const sm = document.createElement('summary'); sm.textContent = 'More options'; d.append(sm, body);
+  ids.forEach(id => { const e = document.getElementById(id), w = e && (e.tagName === 'BUTTON' ? e : e.closest('label')); if (w && host.contains(w)) body.appendChild(w); });
+  if (!body.children.length) return;
+  host.appendChild(d); moreBoxes.push(d);
+  try { if (localStorage.getItem('hfb-more-' + key) === '1') d.open = true; } catch (e) {}
+  d.addEventListener('toggle', () => { if (document.body.classList.contains('searching')) return; try { localStorage.setItem('hfb-more-' + key, d.open ? '1' : '0'); } catch (e) {} }); });
+/* a setting changed from its default is never hidden: its More options opens (once, so closing it by hand sticks) */
+function moreSync(){
+  moreBoxes.forEach(d => { const nd = [...d.querySelectorAll('[data-opt]')].some(e => { const k = e.dataset.opt; return k in DEF && JSON.stringify(opt[k]) !== JSON.stringify(DEF[k]); });
+    if (nd && !d._nd) d.open = true; d._nd = nd; }); }
+{ const inp = $('#panelSearch'); let saved = null;
+  const run = () => { const q = inp.value.trim().toLowerCase(), pn = $('#panel');
+    if (!q) { if (saved) { saved.forEach(([el, st]) => { if (el.matches('.grp')) { el.classList.toggle('collapsed', st); const h = el.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', String(!st)); } else el.open = st; }); saved = null; }
+      document.body.classList.remove('searching'); pn.querySelectorAll('.srchmiss').forEach(x => x.classList.remove('srchmiss')); return; }
+    if (!saved) saved = [...pn.querySelectorAll(':scope > .grp'), ...pn.querySelectorAll('details.sub, details.more')].map(el => [el, el.matches('.grp') ? el.classList.contains('collapsed') : el.open]);
+    document.body.classList.add('searching');
+    pn.querySelectorAll('.srchmiss').forEach(x => x.classList.remove('srchmiss'));
+    const labs = [...pn.querySelectorAll('label')].filter(l => !l.closest('#stepsPanel, #stepSheet, .psearch'));
+    labs.forEach(l => { if (!(l.textContent + ' ' + (l.title || '')).toLowerCase().includes(q)) l.classList.add('srchmiss'); });
+    const hits = labs.filter(l => !l.classList.contains('srchmiss') && !l.hidden);
+    hits.forEach(l => { for (let a = l.parentElement; a && a !== pn; a = a.parentElement) { if (a.matches('details')) a.open = true; if (a.matches('.grp')) { a.classList.remove('collapsed'); const h = a.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', 'true'); } } });
+    pn.querySelectorAll('details.more, details.sub').forEach(d => { if (!d.querySelector('label:not(.srchmiss)')) d.classList.add('srchmiss'); });
+    pn.querySelectorAll(':scope > .grp').forEach(g => { if (!g.closest('#stepsPanel, #stepSheet') && !g.querySelector('label:not(.srchmiss)')) g.classList.add('srchmiss'); }); };
+  inp.addEventListener('input', run); }
 function grpStatus(){
   const set = (name, t) => { document.querySelectorAll('#panel > .grp > h2').forEach(h => { if (h.firstChild.textContent.trim() === name) { const st = h.querySelector('.st'); if (st) st.textContent = t; } }); };
   set('Processing', [opt.baseline === 'none' ? 'as recorded' : opt.baseline === 'min' ? 'zeroed' : 'drift removed', +opt.smooth ? `smoothed ${opt.smooth} pt` : 'no smoothing'].join(', '));
@@ -6070,8 +6300,29 @@ function renderStepSheet(L){
     + (rmT ? `<span class="sp"></span><button type="button" class="btn danger${rmArm === k ? ' armed' : ''}" data-remove="1">${rmArm === k ? 'Remove? Click again' : rmT}</button>` : '');
   const ae = $('#ssActs'); if (ae._h !== ah) { ae._h = ah; ae.innerHTML = ah; } ae.hidden = !ah;
   renderQuick(onGel || kind === 'btw' ? '' : kind);
+  syncFrom(onGel ? '' : k);
   placeFoot();
 }
+/* Comes from: a step can follow any earlier step, so a fraction can go to one next step and another fraction to a second (a branch) */
+const wfStepObj = k => { const kind = k.split(':')[0], id = k.slice(kind.length + 1); return kind === 'run' ? runs.find(r => r.id === id) : kind === 'man' ? (prep.manual || []).find(m => m.id === id) : kind === 'btw' ? (prep.btw || {})[id] : null; };
+const wfStepId = k => k.startsWith('btw:') ? 'nc:' + k.slice(4) : k.slice(k.indexOf(':') + 1);
+/* true when candId already comes (directly or through the steps before it) from selfId */
+function wfFromCycle(selfId, candId){ if (!candId) return false; const L = wfFigListRaw(), seen = new Set(); let cur = candId;
+  while (cur && !seen.has(cur)) { if (cur === selfId) return true; seen.add(cur); const i = L.findIndex(x => x.id === cur); if (i < 0) break; const f = wfFromOf(L[i]); cur = f && L.some(x => x.id === f) ? f : i > 0 ? L[i - 1].id : ''; }
+  return false; }
+function syncFrom(k){ const box = $('#ssFromBox'), o = k && ['run', 'man', 'btw'].includes(k.split(':')[0]) ? wfStepObj(k) : null; if (!o) { box.hidden = true; return; }
+  const id = wfStepId(k), raw = wfFigListRaw(), i = raw.findIndex(x => x.id === id); box.hidden = i < 1; if (box.hidden) return;
+  const sel = $('#ssFrom'), oh = '<option value="">The step before (default)</option>' + raw.slice(0, i).map(x => `<option value="${esc(x.id)}">${esc(stepTitle(x))}</option>`).join('');
+  if (sel._h !== oh) { sel._h = oh; sel.innerHTML = oh; }
+  const cur = wfFromOf(raw[i]); sel.value = raw.slice(0, i).some(x => x.id === cur) ? cur : '';
+  const ni = $('#ssFromNote'); if (ni !== document.activeElement) ni.value = o.wfFromNote || ''; }
+$('#ssFrom').addEventListener('change', e => { const k = curStep, o = wfStepObj(k); if (!o) return; const v = e.target.value;
+  if (wfFromCycle(wfStepId(k), v)) { toast('A step cannot come from itself or from a step that comes from it'); syncFrom(k); return; }
+  if (v) o.wfFrom = v; else delete o.wfFrom; gels.forEach(g => { g._prepA = null; }); render(); });
+$('#ssFromNote').addEventListener('input', e => { const o = wfStepObj(curStep); if (!o) return; const v = e.target.value; if (v.trim()) o.wfFromNote = v; else delete o.wfFromNote; render(); });
+/* a removed step hands its branches on to the step it came from */
+function wfUnlink(id){ const up = wfFromOf(wfFigListRaw().find(x => x.id === id)); const fix = o => { if (o && o.wfFrom === id) { if (up) o.wfFrom = up; else delete o.wfFrom; } };
+  runs.forEach(fix); (prep.manual || []).forEach(fix); Object.keys(prep.btw || {}).forEach(q => fix(prep.btw[q])); }
 /* notes and the move and remove buttons close the step: they sit after the step's own fields */
 function placeFoot(){ const foot = $('#stepFoot'); if (!PROJ) { foot.hidden = true; return; }
   foot.hidden = $('#ssNotes').parentNode.hidden && $('#ssActs').hidden; if (foot.hidden) return;
@@ -6173,7 +6424,7 @@ $('#ssQuick').addEventListener('click', e => { const b = e.target.closest('butto
     opt.myQuick = (Array.isArray(opt.myQuick) ? opt.myQuick : []).concat([{id: 'q' + Date.now().toString(36), k: kind, n: nm, set}]); saveOpt(); render(); toast(`Saved "${nm}" as a quick fill`); } });
 /* a step that others follow hands them on to the step before it */
 function relinkAfter(id){ const L = wfList(), i = L.findIndex(x => x.id === id), prev = i > 0 ? L[i - 1].id : ''; (prep.manual || []).forEach(m => { if (m.after === id) m.after = prev; }); return prev; }
-function removeStep(k){ const kind = k.split(':')[0], id = k.slice(kind.length + 1);
+function removeStep(k){ const kind = k.split(':')[0], id = k.slice(kind.length + 1); if (['run', 'man', 'btw'].includes(kind)) wfUnlink(kind === 'btw' ? 'nc:' + id : id);
   if (kind === 'run') { const prev = relinkAfter(id), b = document.querySelector(`.trace.run[data-id="${id}"] [data-act="del"]`); if (b) b.click(); selectStep(prev ? (runs.some(r => r.id === prev) ? 'run:' + prev : isManId(prev) ? 'man:' + prev : prev === 'cleave' && prep.cleave ? 'cleave' : 'lysis') : 'lysis'); return; }
   if (kind === 'man') { const prev = relinkAfter(id); prep.manual = (prep.manual || []).filter(m => m.id !== id); if (prep.offs) delete prep.offs[id]; delete prepObj[id]; gels.forEach(g => { if (g.assign) g.assign = g.assign.map(a => a === id ? '' : a); if (g.runId === id) g.runId = ''; g._prepA = null; });
     if (prep.stepMeta) delete prep.stepMeta[k]; selectStep(prev ? (runs.some(r => r.id === prev) ? 'run:' + prev : isManId(prev) ? 'man:' + prev : prev === 'cleave' ? 'cleave' : 'lysis') : 'lysis'); return; }

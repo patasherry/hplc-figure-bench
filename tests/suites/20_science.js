@@ -220,6 +220,19 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
   });
 
 
+  /* ================= #437: the final yield follows a measured step without a chromatogram placed after the last pool ================= */
+  await T.t('p5_final_manual', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Final manual yield'); await h.gb(F.gb);
+    await h.addRun(F.imac); await h.pool('T1-T6'); await setRun('path', 2);
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="man:other"]').click()); await h.wait(500);
+    await setField('#man-name', 'Final buffer exchange'); await setField('#man-conc', '0.5'); await setField('#man-vol', '1');
+    const m = await methods(), res = (m.match(/Results:[^]*/) || [''])[0];
+    T.check('p5m.manual_amount_reported', /After the Final buffer exchange step, the sample held 0\.50 mg \(0\.50 mg\/mL in 1(\.0)? mL\)/.test(res), `Results: ${res.slice(0, 600) || 'none'}`);
+    T.check('p5m.final_is_manual_step', !/final pool held/i.test(res), `Results still names the earlier pool as the final amount: ${(res.match(/[^.]*final pool held[^.]*\./i) || [''])[0]}`); /* guards: 0.50 mg/mL x 1 mL kept is the final amount, not the earlier pool's mg */
+  });
+
   await T.t('p5', async () => {
     await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
     await h.newProject('Volume override');
@@ -286,6 +299,95 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     /* guards: readings converted with the coefficient still say A280 and quote it once, inside well-formed brackets */
     T.check('p6.a280_coefficient', /by NanoDrop A280 \(A280 of \d+\.\d\d for 1 mg\/mL of the (tagged|untagged) form\)/.test(s), s);
     T.check('p6.a280_no_junk', !!s && !/\(, |\(\)/.test(s), s); });
+
+  /* ================= P7: Micromole yield balance with manual start and transfer amounts (#125) ================= */
+  const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, String(v)]);
+  await T.t('p7_umol_yield_balance', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Umol yield balance');
+
+    // 50 kDa protein, eps 1.0 (so 1 Abs = 1 mg/mL and MW is 50 kDa)
+    await setOpt(p, 'o-protKda', '50');
+    await setOpt(p, 'o-eps', '1');
+    await h.wait(200);
+
+    // 20 mg manual start step
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="man:other"]').click()); await h.wait(500);
+    await setField('#man-name', 'Cell lysate');
+    await setField('#man-conc', '2');
+    await setField('#man-vol', '10');
+
+    // Column 1 (IMAC)
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+    await setRun('path', 2);
+
+    // 5 mg measured transfer between columns (concentration step)
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="conc"]').click()); await h.wait(500);
+    await setField('#btw-conc', '5');
+    await setField('#btw-vOut', '1');
+
+    // Column 2 (Q)
+    await h.addRun(F.q);
+    await h.pool('T11-T16');
+    await setRun('path', 2);
+
+    // NanoDrop pools of 10 and 4 mg
+    const ndTsv = 'Sample ID\tUser name\tDate\tTime\tmg/ml\tA280 10 mm\tA260 10 mm\t260/280\n' +
+      'Run1_Pool\tPS\t10/22/2026\t15:00\t10.000\t10.000\t5.70\t0.57\n' +
+      'Run2_Pool\tPS\t10/22/2026\t15:30\t4.000\t4.000\t2.28\t0.57';
+    await p.setInputFiles('#ndFile', { name: 'mock_nd_pools.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(ndTsv) });
+    await h.wait(500);
+
+    // Assign NanoDrop samples to runs in Final step
+    await h.step('final');
+    await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true));
+    await h.wait(200);
+    await p.locator('#ndList select[data-ndk="runId"]').nth(0).selectOption({ index: 1 });
+    await h.wait(400);
+
+    await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true));
+    await h.wait(200);
+    await p.locator('#ndList select[data-ndk="runId"]').nth(1).selectOption({ index: 2 });
+    await h.wait(400);
+
+    const volInputs = p.locator('#ndList [data-ndr="ndVol"]');
+    const nVol = await volInputs.count();
+    for (let i = 0; i < nVol; i++) {
+      await volInputs.nth(i).fill('1');
+      await volInputs.nth(i).dispatchEvent('input');
+      await h.wait(150);
+    }
+    await h.wait(300);
+
+    // Go to Figure and verify summary table
+    await h.step('figure');
+    const t = await table();
+    const yK = col(t, /^Yield/);
+    const sK = col(t, /^Step yield/);
+
+    T.check('p7.rows_count', t.rows.length === 4, `expected 4 rows, got ${t.rows.length}: ${JSON.stringify(t.rows.map(r => r.Step))}`);
+    if (t.rows.length === 4) {
+      const y0 = num(t.rows[0][yK]), y1 = num(t.rows[1][yK]), y2 = num(t.rows[2][yK]), y3 = num(t.rows[3][yK]);
+      const s1 = num(t.rows[1][sK]), s2 = num(t.rows[2][sK]), s3 = num(t.rows[3][sK]);
+
+      // Cumulative: 100 / 50 / 25 / 20 %
+      T.check('p7.cumulative_manual_start', y0 === 100, `manual start yield ${y0}%`);
+      T.check('p7.cumulative_col1', y1 === 50, `col1 yield ${y1}%`);
+      T.check('p7.cumulative_transfer', y2 === 25, `transfer yield ${y2}%`);
+      T.check('p7.cumulative_col2', y3 === 20, `col2 yield ${y3}%`);
+
+      // Step yields: 50% concentration recovery, 80% second column recovery
+      T.check('p7.step_yield_col1', s1 === 50, `col1 step yield ${s1}%`);
+      T.check('p7.concentration_recovery', s2 === 50, `transfer conc recovery ${s2}%`);
+      T.check('p7.second_column_recovery', s3 === 80, `col2 step recovery ${s3}%`);
+    }
+
+    const basisTxt = await sumNotes();
+    T.check('p7.basis_umol', /µmol|umol/i.test(basisTxt), `basis text: ${basisTxt.slice(0, 150)}`);
+  });
 
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */

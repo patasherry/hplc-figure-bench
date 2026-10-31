@@ -1,6 +1,6 @@
 // Synthetic regression checks for SEC matching, UNICORN numbers, column names and NanoDrop imports.
 // Controls and downloaded project files are the only interface to the app.
-const {open, H, suite, fs} = require('../lib/harness');
+const {open, H, suite, fs, path, DATA} = require('../lib/harness');
 const F = require('../data/gen_import_sec');
 const T = suite('15_import_sec');
 const SEL = {quick: '#homeQuick', project: '#projFile', save: '#projSave', file: '#file', nd: '#ndFile',
@@ -77,23 +77,32 @@ async function fresh(id, fn){
     T.check('sec/unmatched-listed', /Small \(30 kDa\)/.test(proposal.split('cleared')[1] || ''), proposal);
     T.check('sec/unmatched-cleared', stds[0].ve === '' && stds[1].ve === 2, JSON.stringify(stds.map(q => q.ve)));
   });
-  await fresh('unicorn-comma', async (p, h) => {
-    await h.newProject('Synthetic comma numbers');
-    await h.addRun(F.unicorn('sec_comma.tsv', true)); const data = await saved(p), r = data.runs[0];
-    // Guards: fractional x positions are preserved, rather than truncated at the comma.
-    T.check('unicorn/decimal-x', r.uvs[0].xs[1] === 0.25 && r.uvs[0].xs[18] === 4.5, r.uvs[0].xs.slice(0, 5));
-    // Guards: decimal UV and conductivity values retain their fractional parts.
-    T.check('unicorn/decimal-y', r.uvs[0].ys[0] === 2.5 && r.cond.ys[0] === 12.5, JSON.stringify([r.uvs[0].ys[0], r.cond.ys[0]]));
-    // Guards: the other UNICORN separator/number convention still loads.
-    await h.addRun(F.unicorn('sec_dot.tsv')); const dot = (await saved(p)).runs.find(x => x.file === 'sec_dot');
-    T.check('unicorn/dot-unchanged', dot && dot.uvs[0].xs[1] === 0.25 && dot.uvs[0].ys[0] === 2.5);
-  });
-  await fresh('unicorn-semicolon', async (p, h) => {
-    await h.newProject('Synthetic comma numbers');
-    await h.addRun(F.unicorn('sec_semicolon_unicorn7.csv'));
+  const secMatrix = [
+    // Note: The unicorn-semicolon fixture addresses issues #215, #248, #398, #551, #576, and #593
+    // It acts as the single canonical acceptance matrix for semicolon-separated SEC parsing.
+    { id: 'synth-comma', synth: true, file: 'sec_comma.tsv', comma: true, peaks: [4.5], check: r => r.uvs[0].xs[1] === 0.25 && r.uvs[0].ys[0] === 2.5 && r.cond.ys[0] === 12.5 },
+    { id: 'synth-dot', synth: true, file: 'sec_dot.tsv', comma: false, peaks: [4.5], check: r => r.uvs[0].xs[1] === 0.25 && r.uvs[0].ys[0] === 2.5 },
+    { id: 'unicorn-semicolon', file: 'sec_semicolon_unicorn7.csv', flow: '0.5', peaks: [12, 14], check: r => r.uvs[0].xs.includes(0.02) || r.uvs[0].xs.includes(0.25) || r.uvs[0].xs.includes(14.48) },
+    { id: 'unicorn-tab', file: 'sec_Superose6_plates_u7_tab.csv', peaks: [9, 15.6, 18.4], check: r => r.uvs[0].xs.length > 1000 && r.uvs[0].xs.includes(4.01) }
+  ];
+  for (const tc of secMatrix) await fresh('sec-matrix-' + tc.id, async (p, h) => {
+    await h.newProject('Matrix ' + tc.id);
+    if (tc.synth) await h.addRun(F.unicorn(tc.file, tc.comma));
+    else await h.addRun(path.join(DATA, 'chrom', tc.file));
     await p.waitForTimeout(500);
-    const data2 = await saved(p), r2 = data2.runs.find(x => x.file === 'sec_semicolon_unicorn7');
-    T.check('decimal-comma-sec', r2 && (r2.uvs[0].xs.includes(0.02) || r2.uvs[0].xs.includes(0.25) || r2.uvs[0].xs.includes(14.48)), 'Comma decimal in SEC trace parsed correctly');
+    const data = await saved(p);
+    const run = tc.synth ? data.runs.find(x => x.file === tc.file.replace('.tsv', '')) || data.runs[0] : data.runs.find(x => x.file === tc.file.replace('.csv', ''));
+
+    T.check(`matrix/${tc.id}/parsed`, run && tc.check(run), 'Format parsed correctly with decimal precision');
+
+    const step = (await h.timeline()).find(x => x.k.startsWith('run:')); if (step) await h.step(step.k);
+    if (tc.flow) {
+      const flow = p.locator('.trace.run.sel [data-k=mFlow]'); await flow.fill(tc.flow); await flow.dispatchEvent('change');
+    }
+    await click(p, '#intAuto'); await p.waitForTimeout(900);
+    const table = await h.peakTable(), ve = table[0].findIndex(c => /^(Ve|Center|Apex|Elution time)\b/.test(c));
+    const vals = table.slice(1).filter(r => r.length > 3).map(r => +String(r[ve]).replace(/[^0-9.-]/g, ''));
+    T.check(`matrix/${tc.id}/peaks`, ve >= 0 && tc.peaks.every(x => vals.some(v => Math.abs(v - x) <= 0.3)), `expected ${tc.peaks.join(', ')}, peak table has ${vals.join(', ') || 'none'}`);
   });
   for (const size of [75, 200]) await fresh('column-' + size, async (p, h) => {
     await h.newProject('Synthetic column ' + size);
