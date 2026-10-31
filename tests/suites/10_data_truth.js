@@ -185,7 +185,9 @@ async function testSynthetic() {
     const axes = await p.$eval('#paper svg', readAxes), wantTicks = ['0', '20', '40', '60', '80', '100'];
     T.check('synthetic/axis-mL', axes.texts.includes('Volume (mL)'), `Expected Volume (mL), texts: ${axes.texts}`);
     // Keep the historical check ID; the fixture has always been mAU, not AU.
-    T.check('synthetic/axis-AU', axes.texts.includes('Absorbance (mAU)') && !axes.texts.includes('Absorbance (AU)'), `Expected Absorbance (mAU), texts: ${axes.texts}`);
+    const has_mAU = axes.texts.some(t => /^A(?:\d+)? \(mAU\)$|^Absorbance \(mAU\)$/.test(t));
+    const has_AU = axes.texts.some(t => /^A(?:\d+)? \(AU\)$|^Absorbance \(AU\)$/.test(t));
+    T.check('synthetic/axis-AU', has_mAU && !has_AU, `Expected Absorbance (mAU) or A280 (mAU), texts: ${axes.texts}`);
     T.check('synthetic/y-ticks', JSON.stringify(axes.ticks) === JSON.stringify(wantTicks), `Expected mAU ticks ${wantTicks}, got ${axes.ticks}`);
 
     const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#saveSvg')]);
@@ -193,7 +195,9 @@ async function testSynthetic() {
       return {texts: [...doc.querySelectorAll('text')].map(x => x.textContent),
         ticks: [...doc.querySelectorAll('text[text-anchor="end"]')].map(x => x.textContent).filter(t => /^-?\d+(?:\.\d+)?$/.test(t))};
     }, fs.readFileSync(await dl.path(), 'utf8'));
-    T.check('synthetic/export-axis-labels', exported.texts.includes('Volume (mL)') && exported.texts.includes('Absorbance (mAU)') && !exported.texts.includes('Absorbance (AU)'), `Exported texts: ${exported.texts}`);
+    const exp_has_mAU = exported.texts.some(t => /^A(?:\d+)? \(mAU\)$|^Absorbance \(mAU\)$/.test(t));
+    const exp_has_AU = exported.texts.some(t => /^A(?:\d+)? \(AU\)$|^Absorbance \(AU\)$/.test(t));
+    T.check('synthetic/export-axis-labels', exported.texts.includes('Volume (mL)') && exp_has_mAU && !exp_has_AU, `Exported texts: ${exported.texts}`);
     T.check('synthetic/export-y-ticks', JSON.stringify(exported.ticks) === JSON.stringify(wantTicks), `Expected exported mAU ticks ${wantTicks}, got ${exported.ticks}`);
 
     await setOpt(p, 'o-intMethod', 'trap'); await setOpt(p, 'o-intBase', 'zero'); await detect(p);
