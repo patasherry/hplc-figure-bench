@@ -371,7 +371,7 @@ await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p);
   { await p.waitForTimeout(800); const r = (await h.timeline()).find(x => x.k.startsWith('run:')); if (r) await h.step(r.k);
     const ms = await p.evaluate(async () => { const e = document.querySelector('.trace.run.sel [data-k=shade]'); if (!e) return -1; const t = performance.now(); e.value = 'A3-A12'; e.dispatchEvent(new Event('input', {bubbles: true})); await new Promise(r => requestAnimationFrame(() => r())); return Math.round(performance.now() - t); });
     T.check('perf.pool-typing-under-400ms', ms >= 0 && ms < 400, ms + ' ms on the 200k run'); } // typing in the pool box stays responsive
-  { for (const f of [F.his, F.ortho, F.q, F.s200, F.zip, F.his]) await h.dropFiles(f); await h.addConc(F.nd, 0.3); const n = purif(await h.timeline()).length;
+  { for (const f of [F.his, F.ortho, F.q, F.s200, F.zip]) await h.dropFiles(f); await h.addConc(F.nd, 0.3); await h.addConc(null, 0.2); await h.addConc(null, 0.1); const n = purif(await h.timeline()).length;
     const ms = await p.evaluate(async () => { const b = document.querySelector('#tl [data-step="figure"]'); const t = performance.now(); b.click(); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); return Math.round(performance.now() - t); });
     T.check('perf.workflow-8-steps-under-1.5s', n >= 8 && ms < 1500, `${n} steps, ${ms} ms`); } // the full figure renders in time
   T.check('perf.no-error', !errs.length, errs.join(' | ')); await close(); });
