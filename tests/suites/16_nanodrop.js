@@ -180,6 +180,17 @@ async function fresh(id, fn){
     await app.close();
   });
 
+  // Agilent-style preamble: a metadata row naming "Sample Name:" and "Conc (mg/mL)" must not be taken for the table header.
+  await fresh('nanodrop-metadata-agilent', async (p, h) => {
+    await h.newProject('Agilent metadata');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    await p.setInputFiles(SEL.nd, 'data/nanodrop_metadata_agilent.txt');
+    await p.locator(SEL.row).first().waitFor();
+    const rows = await p.$$eval(SEL.row, els => els.map(el => ({name: el.querySelector('input[data-ndk="name"]')?.value, value: el.querySelector('.nd-v')?.textContent.trim()})));
+    T.check('nd/metadata-agilent', JSON.stringify(rows) === JSON.stringify([{name: 'Pool A', value: '1.25 mg/mL'}, {name: 'Pool B', value: '2.50 mg/mL'}, {name: 'Pool C', value: '0.75 mg/mL'}]), JSON.stringify(rows));
+  });
+
   // A measured zero is valid, but a malformed token beginning with zero is not a measurement.
   await fresh('zero-measurement-validation', async (p, h) => {
     await h.newProject('Zero measurement validation');

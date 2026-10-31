@@ -1,0 +1,8 @@
+Vendor: Agilent
+Instrument:	Cary 60	Serial	12345
+Sample Name:	Batch 7	Conc (mg/mL) method	1.0
+Date	2026-01-05
+Sample Name	A280	A260/A280	Protein (mg/mL)
+Pool A	1.250	0.57	1.250
+Pool B	2.500	0.58	2.500
+Pool C	0.750	0.56	0.750
