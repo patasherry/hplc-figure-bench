@@ -3894,6 +3894,7 @@ function ncObj(r){ const id = 'nc:' + r.id, o = prepObj[id] || (prepObj[id] = {i
   return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(b.arrow || '').trim(), wfW: numOr(b.wfW, 0.85), gelZ: 1, run: r, wfDx: numOr(b.wfDx, 0), wfDy: numOr(b.wfDy, 0)}); }
 /* what a Concentrated panel says: the NanoDrop mean, the volume and the mg */
 function ncLines(r){ const p = poolRows(r), ms = poolMeas(r), b = (prep.btw || {})[r.id] || {}, out = [], v = numOr(b.vOut, 0);
+  if (ndFinalOf(r).some(s => s.unitReview)) out.push('Review Required: concentration units');
   if (ms.src === 'btw' || ms.nd) out.push(`${fmt(ms.c || (ms.nd && ms.nd.m), 2)}${ms.nd && ms.nd.sd != null ? ` ± ${fmt(ms.nd.sd, 2)}` : ''} mg/mL`);
   if (v > 0) out.push(`${fmtAuto(v)} mL${p && p.measured && p.src === 'btw' ? `, ${sig2(p.mg)} mg` : ''}`);
   const dv = [String(b.device || '').trim(), String(b.mwco || '').trim() ? `${String(b.mwco).trim()} kDa` : ''].filter(Boolean).join(', '); if (dv) out.push({t: dv, c: '#555555'});
@@ -4379,6 +4380,7 @@ function methodsText(){
     else if (ra) R.push(`The final sample had an A260/A280 of ${ra}.`);
     const yy = finalYield(); if (yy && yy.meas && yy.loaded && yy.mg > yy.loaded.mg*1.05) R.push(`The final sample (${sig2(yy.mg)} mg) is more than the ${sig2(yy.loaded.mg)} mg loaded onto ${lc(stepTitle(yy.loaded.r))} [check the UV path and the concentration readings].`);
     [['qcPurity', 'Purity'], ['qcMass', 'Intact mass'], ['qcActivity', 'Activity and other checks']].forEach(([k, l]) => { if (hasTxt(prep[k])) R.push(`${l}: ${v(prep[k]).replace(/\.$/, '')}${k === 'qcPurity' && yy && yy.purTyped ? ' [no gel of the last pool attached, check]' : ''}.`); }); }
+  R.push(...ndReviewNotes());
   return (P.join('\n\n') + (R.length ? '\n\nResults: ' + R.join(' ') : '')).replace(/\(, /g, '(').replace(/[ \t]+/g, ' ').replace(/\.\./g, '.').replace(/ /g, ' ');
 }
 
@@ -5084,6 +5086,7 @@ function renderSumTable(){
     const extra = hd.map(t => /A₂₈₀ area|NanoDrop|^Form|nmol|mg per|^Purity/.test(t) && !(/^Purity/.test(t) && !allNd));
     [...tb.rows].forEach(r => [...r.cells].forEach((c, i) => c.classList.toggle('xc', !!extra[i])));
     const mb = $('#sumMore'); mb.hidden = !extra.some(Boolean); mb.textContent = tb.classList.contains('all') ? 'Fewer columns' : `${extra.filter(Boolean).length} more columns`; }
+  notes.push(...ndReviewNotes());
   const nEl = $('#sumNotes'); if (nEl) { nEl.innerHTML = notes.map(t => `<li>${esc(t)}</li>`).join(''); nEl.hidden = !notes.length; }
 }
 $('#methodsBox').addEventListener('toggle', () => { if ($('#methodsBox').open) $('#methodsText').value = methodsText(); });
@@ -5095,7 +5098,7 @@ $('#sumCsv').addEventListener('click', () => { const q = csvQuote, rows = sumRow
   saveFile('purification_summary.csv', ['Step,Run,Pool,Pool volume from fractions (mL),A280 area (mAU*mL),Protein from area (mg),NanoDrop mg/mL,NanoDrop SD,NanoDrop n,NanoDrop volume used (mL),NanoDrop mg,A280 of 1 mg/mL used,Yield (%),Step yield (%),Yield basis,Purity (%),mg per L culture,mg per g cells,Column,Buffer A,Buffer B,Flow (mL/min),Temperature (C),Gradient,Sample loaded'].concat(sumDisplay(rows).map(d => { if (!d.man && d.conc) { const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, E = ndEpsFor(d.conc.r.id); return ['', q(d.name), q('NanoDrop'), '', '', '', d.mgml ? d.mgml.toFixed(3) : '', d.sd != null ? d.sd.toFixed(3) : '', '', d.vol ? d.vol.toFixed(2) : '', d.mg > 0 ? d.mg.toFixed(3) : '', E ? E.e.toFixed(3) : '', d.yld == null ? '' : d.yld.toFixed(1), d.stepY == null ? '' : d.stepY.toFixed(1), rows.basis, '', cL > 0 && d.mg > 0 ? (d.mg/cL).toFixed(2) : '', cG > 0 && d.mg > 0 ? (d.mg/cG).toFixed(3) : '', '', '', '', '', '', '', ''].join(','); } if (d.man) { const m = d.man.man, cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0;
       return ['', q(d.man.name), q('no chromatogram'), d.vol ? d.vol.toFixed(2) : '', '', d.mg > 0 ? d.mg.toFixed(3) : '', '', '', '', '', '', '', d.yld == null ? '' : d.yld.toFixed(1), d.stepY == null ? '' : d.stepY.toFixed(1), rows.basis, '', cL > 0 && d.mg > 0 ? (d.mg/cL).toFixed(2) : '', cG > 0 && d.mg > 0 ? (d.mg/cG).toFixed(3) : '', q(m.resin || ''), q(m.buffer || ''), '', '', '', q(m.elution || ''), ''].join(','); }
     const x = d.run, k = d.k, n = x.nd, st = n && (n.F || n.P), E = ndEpsFor(x.r.id);
-    return [k + 1, q(x.r.name), q(x.p.label), x.vol == null ? '' : x.vol.toFixed(2), x.p.area == null ? '' : x.p.area.toFixed(2), x.p.mg == null ? '' : x.p.mg.toFixed(3), st ? st.m.toFixed(3) : '', st && st.sd != null ? st.sd.toFixed(3) : '', st ? st.n : '', n ? ((n.F ? n.fv : n.pv) || '') : '', n && n.mg != null ? n.mg.toFixed(3) : '', E ? E.e.toFixed(3) : '', x.yld == null ? '' : x.yld.toFixed(1), x.stepY == null ? '' : x.stepY.toFixed(1), rows.basis, x.pur == null ? '' : x.pur.toFixed(1), (cL => cL > 0 && rows.mgOf(x) > 0 ? (rows.mgOf(x)/cL).toFixed(2) : '')(prep.on ? numOr(prep.cultureL, 0) : 0), (cG => cG > 0 && rows.mgOf(x) > 0 ? (rows.mgOf(x)/cG).toFixed(3) : '')(prep.on ? numOr(prep.pellet, 0) : 0), ...(c => [c.mCol, c.mBufA, c.mBufB, c.mFlow, c.mTemp, c.mGrad, c.mLoad].map(q))(runCond(x.r))].join(','); })).join('\r\n')); });
+    return [k + 1, q(x.r.name), q(x.p.label), x.vol == null ? '' : x.vol.toFixed(2), x.p.area == null ? '' : x.p.area.toFixed(2), x.p.mg == null ? '' : x.p.mg.toFixed(3), st ? st.m.toFixed(3) : '', st && st.sd != null ? st.sd.toFixed(3) : '', st ? st.n : '', n ? ((n.F ? n.fv : n.pv) || '') : '', n && n.mg != null ? n.mg.toFixed(3) : '', E ? E.e.toFixed(3) : '', x.yld == null ? '' : x.yld.toFixed(1), x.stepY == null ? '' : x.stepY.toFixed(1), rows.basis, x.pur == null ? '' : x.pur.toFixed(1), (cL => cL > 0 && rows.mgOf(x) > 0 ? (rows.mgOf(x)/cL).toFixed(2) : '')(prep.on ? numOr(prep.cultureL, 0) : 0), (cG => cG > 0 && rows.mgOf(x) > 0 ? (rows.mgOf(x)/cG).toFixed(3) : '')(prep.on ? numOr(prep.pellet, 0) : 0), ...(c => [c.mCol, c.mBufA, c.mBufB, c.mFlow, c.mTemp, c.mGrad, c.mLoad].map(q))(runCond(x.r))].join(','); })).concat(ndReviewNotes().map(t => [q('Review Required'), q(t)].concat(Array(23).fill('')).join(','))).join('\r\n')); });
 /* integration table */
 function renderIntTable(run){
   const rows = integRows(run), pool = poolRows(run), hasMg = numOr(opt.eps, 0) > 0, gs = opt.intMethod === 'gauss', u = xUnit(run);
@@ -5564,6 +5567,17 @@ function isNanoDropHead(lines){ for (let i = 0; i < Math.min(lines.length, 80); 
 const ndNum = (v, d) => { let s = String(v ?? '').replace(/\s/g, ''); if (d === ';') { const m = s.match(/^[+-]?(\d*)(?:\.(\d{3}))*,(\d+)(?:[eE][+-]?\d+)?$/); s = m ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '.'); } else { const m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/); s = m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, ''); } return measurementNumber(s); };
 const CRUDE_RE = /lys|load|flow|\bft\b|supernat|pellet|crude|input|clarif/i;
 function ndNew(o){ return Object.assign({id: 'nd' + (ndUid++), name: '', kind: 'protein', a280: null, a260: null, a230: null, a340: null, r280: null, r230: null, conc: null, unit: 'mg/mL', runId: '', stage: 'pool', dil: 1, hide: false}, o); }
+/* Validate explicit units without guessing from vendor names or unrelated metadata. Unitless legacy tables retain their existing convention. */
+const ndUnitKey = u => String(u || '').replace(/[µμ]/g, 'u').replace(/\s/g, '').toLowerCase();
+const ND_UNITS = ['mg/ml', 'ug/ml', 'ng/ul'];
+function ndHeadUnit(h){ const m = String(h || '').match(/[([]([^()[\]]+)[)\]]/); return m ? m[1].trim() : String(h || '').replace(/^(?:a\s*280\s*)?(?:protein|concentration|conc\.?)\s*:?\s*/i, '').trim(); }
+function ndUnitCheck(header, row, metadata){
+  const units = [row, header, ...metadata].filter(Boolean), keys = units.map(ndUnitKey), bad = units.filter((u, i) => !ND_UNITS.includes(keys[i]));
+  const why = bad.length ? `unrecognized or unsupported concentration unit: ${bad.join(', ')}` : new Set(keys).size > 1 ? `conflicting concentration units: ${units.join(', ')}` : '';
+  return {unit: units[0] || '', review: why ? `Review Required: ${why}. Imported value retained; excluded from concentration and yield calculations. Check the source export.` : ''};
+}
+const ndReviewNotes = (ss = ndSamples) => ss.filter(s => s.unitReview).map(s => `${s.name}: ${s.conc} ${s.sourceUnit || s.unit}. ${s.unitReview}`);
+const ndValueText = s => s.unitReview ? `${s.conc} ${s.sourceUnit || s.unit}` : (c => c.v == null ? '' : `${fmt(c.v, c.unit === 'ng/µL' ? 1 : 2)} ${c.unit}`)(ndConc(s));
 /* NanoDrop One per-sample file: name, date, a "Wavelength (nm) / 10mm Absorbance" header, calibration comments, A260/A280 and A280 lines, then the spectrum */
 function parseNDSingle(lines){
   const hi = lines.findIndex(l => /^wavelength/i.test(l.trim()) && /absorbance/i.test(l)); if (hi < 0) return null;
@@ -5592,6 +5606,7 @@ function parseNanoDrop(text){
   const cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
   const wcols = H.map((h, i) => ({i, w: parseFloat(h)})).filter(x => isWl(H[x.i]) && x.w >= 190 && x.w <= 850);
   const headAll = hn.join(' '), dyeFile = /dye|degree of label/.test(headAll);
+  const headerUnit = cConc >= 0 ? ndHeadUnit(H[cConc]) : '', metaUnits = lines.slice(0, hd.i).map(l => l.match(/^\s*(?:concentration\s+units?|units?)\s*[:\t,;]\s*(.+?)\s*$/i)).filter(Boolean).map(m => m[1]);
   return data.filter(r => {
     const nm = (r[cName] || '').trim();
     return r.length > 2 && nm.length > 0 && !nm.endsWith(':') && !/^vendor/i.test(nm);
@@ -5599,10 +5614,12 @@ function parseNanoDrop(text){
     const typ = cType >= 0 ? r[cType] : '', unitTxt = ((cUnit >= 0 ? r[cUnit] : '') + ' ' + (cConc >= 0 ? hn[cConc] : '')).toLowerCase();
     const kind = /ng\s*\/\s*[µu]l|nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
     let conc = cConc >= 0 ? ndNum(r[cConc], d) : null;
+    const validation = ndUnitCheck(headerUnit, cUnit >= 0 ? r[cUnit] : '', metaUnits);
     const g = c => c >= 0 ? ndNum(r[c], d) : null, a280 = g(cA280), a260 = g(cA260); let corr = g(cCorr);
-    if (/[µu]g\s*\/\s*ml/.test(unitTxt)) { if (conc != null) conc /= 1000; if (corr != null) corr /= 1000; }
+    if (!validation.review && ndUnitKey(validation.unit) === 'ug/ml') { if (conc != null) conc /= 1000; if (corr != null) corr /= 1000; }
     const s = ndNew({name: r[cName], row: i, when: [cDate >= 0 ? r[cDate] : '', cTime >= 0 ? r[cTime] : ''].filter(Boolean).join(' '), type: typ, kind, a280, a260, a230: g(cA230), a340: g(cA340), r280: g(cR280), r230: g(cR230),
       conc, unit: kind === 'nucleic' ? 'ng/µL' : 'mg/mL', base: cBase >= 0 ? r[cBase] : '', baseA: g(cBaseA), corr, imp: cImp >= 0 && r[cImp] ? {name: r[cImp], a280: g(cImpA)} : null, hide: CRUDE_RE.test(r[cName])});
+    if (conc != null && validation.review) { s.sourceUnit = validation.unit; s.unit = validation.unit; s.unitReview = validation.review; }
     if (s.r280 == null && a260 != null && a280 > 0) s.r280 = a260/a280; if (s.r230 == null && a260 != null && s.a230 > 0) s.r230 = a260/s.a230;
     if (wcols.length > 10) { const wl = [], ab = []; wcols.forEach(x => { const v = ndNum(r[x.i], d); if (v != null) { wl.push(x.w); ab.push(v); } }); if (wl.length > 10) s.spec = {wl, ab};
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }; if (s.a280 == null) s.a280 = at(280); if (s.a230 == null) s.a230 = at(230); if (s.a340 == null) s.a340 = at(340);
@@ -5651,6 +5668,7 @@ const ndA205 = ss => ss.length > 0 && ss.every(s => s.kind === 'a205' && s.conc 
 /* concentration of one reading. A205, labels and nucleic acid readings keep the instrument's value */
 function ndConc(s){ const c0 = ndConcRaw(s); if (opt.ndCorr !== false && s.corr != null && s.conc > 0 && c0.unit === 'mg/mL' && c0.v != null) return Object.assign({}, c0, {v: c0.v*s.corr/s.conc, raw: c0.v, src: c0.src + ', nucleic acid corrected'}); return c0; }
 function ndConcRaw(s){ const dil = numOr(s.dil, 1) || 1;
+  if (s.unitReview) return {v: null, unit: s.sourceUnit || s.unit, src: s.unitReview};
   if (s.kind === 'nucleic') return {v: s.conc != null ? s.conc*dil : null, unit: 'ng/µL', src: 'instrument'};
   if (s.kind !== 'protein' && s.conc != null) return {v: s.conc*dil, unit: 'mg/mL', src: s.kind === 'a205' ? 'A205, instrument' : 'instrument'};
   const E = ndEpsFor(s.runId);
@@ -5678,7 +5696,7 @@ function renderND(){
   $('#ndWrap').hidden = !NDS.length; if (!hasSpec) $('#ndSpecOpts').hidden = true;
   if (!NDS.length) { el.innerHTML = ''; return; }
   const meta = s => { const c = ndConc(s), crude = CRUDE_RE.test(s.name) && s.kind !== 'nucleic', f = r280Flag(s.r280);
-    const val = c.v == null ? '' : crude ? `A₂₈₀ ${fmt(s.a280, 2)}` : `${fmt(c.v, c.unit === 'ng/µL' ? 1 : 2)} ${c.unit}`;
+    const val = s.unitReview ? ndValueText(s) : c.v == null ? '' : crude ? `A₂₈₀ ${fmt(s.a280, 2)}` : `${fmt(c.v, c.unit === 'ng/µL' ? 1 : 2)} ${c.unit}`;
     const r = s.r280 == null ? '' : `<span class="nd-r ${f}" title="A260/A280. About 0.57 for pure protein. NAD(P)-binding proteins can read 0.6 to 0.9 from bound nucleotide alone. Above 0.8 points to nucleic acid">${f ? '▲ ' : ''}260/280 ${fmt(s.r280, 2)}</span>`;
     const cb = c.raw != null ? `<span class="nd-r" title="Corrected for nucleic acid by the NanoDrop. Uncorrected: ${fmt(c.raw, 2)} mg/mL${s.imp && s.imp.a280 != null ? `. ${esc(s.imp.name)} adds A280 ${fmt(s.imp.a280, 3)}` : ''}">corrected</span>` : '';
     return {val, src: crude ? 'crude sample, not converted' : c.src, r: r + cb, r230: s.kind !== 'nucleic' ? ((sc => sc != null && sc > 0.05 ? `<span class="nd-r mid" title="A340 is ${fmt(100*sc, 0)}% of A280, so light scattering from aggregates or particles adds to A280">scatter ${fmt(sc, 2)}</span>` : '')(s.a280 > 0 && (s.baseA ?? s.a340) != null ? (s.baseA ?? s.a340)/s.a280 : null)) : s.r230 != null && s.r230 < 1.8 ? `<span class="nd-r mid" title="A260/A230. Low values point to imidazole, DTT, Tris or a mismatched blank">260/230 ${fmt(s.r230, 2)}</span>` : ''}; };
@@ -5695,8 +5713,8 @@ function renderND(){
     groups.forEach(g => { if (!g.r) return; const h = el.querySelector(`[data-ndrun="${g.r.id}"]`), st = ndForRun(g.r); if (!h || !st) return; const ps = h.querySelector('.ndg-s'), fs = h.querySelector('.ndg-lab'); if (ps) ps.textContent = stat(st.P); if (fs) fs.textContent = `Final ${stat(st.F)}`; const mg = h.querySelectorAll('.ndg-mg'); if (mg[0]) mg[0].textContent = st.pmg != null ? `${fmt(st.pmg, 2)} mg` : ''; if (mg[1]) mg[1].innerHTML = st.fmg != null ? `${fmt(st.fmg, 2)} mg` : '<span class="warnc">needs volume</span>'; }); return; }
   el._n = NDS.length;
   el.innerHTML = groups.map(g => `<div class="ndg">${head(g)}${g.ss.map(s => { const m = meta(s); return `<div class="ndr" data-nd="${s.id}">
-      <input type="text" data-ndk="name" value="${esc(s.name)}" aria-label="Sample name"><span class="nd-v" title="${esc(m.src)}">${m.val}</span><button type="button" class="xbtn" data-nddel="${s.id}" aria-label="Remove ${esc(s.name)}">×</button>
-      <div class="ndr-2"><span class="nd-flags">${m.r}${m.r230}${numOr(s.dil, 1) !== 1 ? `<span class="nd-r">diluted ×${fmt(s.dil, 0)}</span>` : ''}${s.stage === 'final' ? '<span class="nd-r">final</span>' : ''}</span>
+      <input type="text" data-ndk="name" value="${esc(s.name)}" aria-label="Sample name"><span class="nd-v" title="${esc(m.src)}">${esc(m.val)}</span><button type="button" class="xbtn" data-nddel="${s.id}" aria-label="Remove ${esc(s.name)}">×</button>
+      <div class="ndr-2"><span class="nd-flags">${s.unitReview ? `<span class="nd-r hi" title="${esc(s.unitReview)}">Review Required</span>` : ''}${m.r}${m.r230}${numOr(s.dil, 1) !== 1 ? `<span class="nd-r">diluted ×${fmt(s.dil, 0)}</span>` : ''}${s.stage === 'final' ? '<span class="nd-r">final</span>' : ''}</span>
         <details class="nd-edit"><summary>Edit</summary><div class="nd-edit-b"><select data-ndk="runId" aria-label="Step"><option value="">No step</option>${steps.map((r, k) => { const p = poolRows(r); return `<option value="${r.id}"${r.id === s.runId ? ' selected' : ''}>${k + 1} · ${esc(p ? p.label : shortRunName(r))}</option>`; }).join('')}</select>
         <select data-ndk="stage" aria-label="Stage"><option value="pool"${s.stage !== 'final' ? ' selected' : ''}>Pool</option><option value="final"${s.stage === 'final' ? ' selected' : ''}>Final</option></select>
         <label class="nd-dil" title="Dilution factor before measuring">×<input type="number" step="any" min="1" data-ndk="dil" value="${s.dil ?? 1}" aria-label="Dilution factor"></label>
@@ -5718,7 +5736,7 @@ function buildConcFig(r){ const sp = ndFinalOf(r).filter(x => x.spec), info = nc
   if (sp.length) return buildNDSVG(sp, info);
   const fs = fontSize(), W = Math.max(numOr(opt.w, 3.5), 3.4)*72; return composeRuns([ncObj(r)], {layout: 'row', W, chromH: numOr(opt.wfH, 2.2)*72, titles: true, letters: false, showGels: false, connectors: false, arrows: false, gelMaxH: 0, bandH: fs*5}); }
 function buildNDSVG(only, info){
-  const sp = (only || ndSamples.filter(s => s.stage !== 'conc')).filter(s => s.spec && !s.hide); if (!sp.length) return {svg: null, geo: null}; info = info || [];
+  const sp = (only || ndSamples.filter(s => s.stage !== 'conc')).filter(s => s.spec && !s.hide); if (!sp.length) return {svg: null, geo: null}; info = (info || []).slice(); if (sp.some(s => s.unitReview)) info.push('Review Required: concentration units');
   const S = style({}), {W, H, fs, lw, aw, cw, tl, tOut} = S, o = opt, pal = PAL.okabe, norm = o.ndNorm === 'a280';
   const val = (s, i) => norm && s.a280 ? s.spec.ab[i]/s.a280 : s.spec.ab[i];
   const xs = sp.flatMap(s => s.spec.wl), xlo = Math.max(numOr(o.ndFrom, 240), Math.min(...xs)), xhi = Math.min(350, Math.max(...xs));
@@ -6475,7 +6493,7 @@ function btwCarry(){ const el = $('#btwCarry'), rid = curStep.startsWith('btw:')
   const nm = r ? shortRunName(r) : 'the run', F = r ? ndFinalOf(r) : [], ms = r ? poolMeas(r) : {}, b = (prep.btw || {})[rid] || {}, card = r && numOr(r.poolConc, 0) > 0;
   /* the readings loaded for this step, each with its own concentration, and the mean that is used */
   const li = $('#btwNdList'), lh = !F.length ? '' : `<div class="btwnd-r"><b>${ms.nd ? `${fmt(ms.nd.m, 2)}${ms.nd.sd != null ? ` ± ${fmt(ms.nd.sd, 2)}` : ''} mg/mL` : ''}</b><span class="muted">${F.length > 1 ? `mean of ${F.length} readings` : '1 reading'}</span></div>`
-    + F.map(s => (c => `<div class="btwnd-r"><span>${esc(s.name || 'Reading')}</span><span class="muted">${c.v != null ? `${fmt(c.v, 2)} mg/mL` : ''}${s.r280 != null ? `, 260/280 ${fmt(s.r280, 2)}` : ''}</span><button type="button" class="btwnd-x" data-btwndx="${esc(s.id)}" aria-label="Remove ${esc(s.name || 'reading')}" title="Remove this reading">×</button></div>`)(ndConc(s))).join('');
+    + F.map(s => (c => `<div class="btwnd-r"><span>${esc(s.name || 'Reading')}</span><span class="muted">${esc(ndValueText(s))}${s.unitReview ? ` <span class="warnc" title="${esc(s.unitReview)}">Review Required</span>` : ''}${s.r280 != null ? `, 260/280 ${fmt(s.r280, 2)}` : ''}</span><button type="button" class="btwnd-x" data-btwndx="${esc(s.id)}" aria-label="Remove ${esc(s.name || 'reading')}" title="Remove this reading">×</button></div>`)(ndConc(s))).join('');
   if (li._h !== lh) { li._h = lh; li.innerHTML = lh; }
   $('#btwNdAdd').textContent = F.length ? 'Load another NanoDrop export' : 'Load NanoDrop export'; $('#btwNdAdd').classList.toggle('primary', !F.length);
   const tb = $('#btwTypeBox'); tb.hidden = F.length > 0; if (numOr(b.conc, 0) > 0 && !F.length) $('#btwMore').open = true;

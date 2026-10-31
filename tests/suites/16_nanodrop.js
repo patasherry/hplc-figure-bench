@@ -1,4 +1,5 @@
 const {open, H, suite, fs} = require('../lib/harness');
+process.chdir(require('../lib/harness').ROOT);
 const F = require('../data/gen_import_sec');
 const T = suite('16_nanodrop');
 const SEL = {quick: '#homeQuick', project: '#projFile', save: '#projSave', file: '#file', nd: '#ndFile',
@@ -20,6 +21,41 @@ async function fresh(id, fn){
 }
 
 (async () => {
+  // Unknown units survive import unchanged, including with a known header or coefficient present.
+  const unitFile = require('../data/gen_nd_units');
+  for (const mode of ['row', 'header', 'conflict', 'metadata']) await fresh('unit-review-' + mode, async (p, h) => {
+    await h.newProject('Unit review ' + mode);
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    const header = mode === 'header' ? 'Concentration (widgets/mL)' : mode === 'conflict' ? 'Concentration (mg/mL)' : 'Concentration';
+    const unit = mode === 'header' ? '' : mode === 'conflict' ? 'ug/mL' : mode === 'metadata' ? 'mg/mL' : 'widgets/mL';
+    await p.setInputFiles(SEL.nd, unitFile(header, [['Unknown', '7.25', unit]], mode === 'metadata' ? ['Concentration Units:\twidgets/mL'] : []));
+    const row = p.locator(SEL.row).first(); await row.waitFor();
+    const rawUnit = mode === 'header' || mode === 'row' ? 'widgets/mL' : unit;
+    T.check('nd/unit-review/' + mode + '/value', await row.locator(SEL.concentration).textContent() === '7.25 ' + rawUnit, await row.textContent());
+    T.check('nd/unit-review/' + mode + '/warning', (await row.textContent()).includes('Review Required'), await row.textContent());
+    await row.locator(SEL.edit).click(); await row.locator(SEL.run).selectOption({index: 1});
+    await p.locator(SEL.poolVolume).fill('2');
+    T.check('nd/unit-review/' + mode + '/no-derived-mass', await p.locator(SEL.poolStats).textContent() === '' && await p.locator(SEL.mass).first().textContent() === '', await p.locator('.ndg').first().textContent());
+    await p.locator('#methodsBox').evaluate(e => {e.open = true; e.dispatchEvent(new Event('toggle'));});
+    const methods = await h.methods();
+    T.check('nd/unit-review/' + mode + '/methods', methods.includes('Review Required') && methods.includes('7.25 ' + rawUnit), methods);
+    const data = await saved(p), sample = data.nanodrop[0];
+    T.check('nd/unit-review/' + mode + '/saved', sample.conc === 7.25 && sample.sourceUnit === rawUnit && /Review Required/.test(sample.unitReview), JSON.stringify(sample));
+    await p.setInputFiles(SEL.project, {name: 'roundtrip.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data))});
+    await h.step('final');
+    T.check('nd/unit-review/' + mode + '/roundtrip', (await p.locator(SEL.row).first().textContent()).includes('Review Required') && await p.locator(SEL.concentration).first().textContent() === '7.25 ' + rawUnit, await p.locator(SEL.row).first().textContent());
+  });
+  await fresh('unit-review-known', async (p, h) => {
+    await h.newProject('Known unit aliases'); await h.addRun('data/chrom/valid_unicorn.zip'); await h.step('final');
+    await p.setInputFiles(SEL.nd, unitFile('Concentration', [['Ascii', '1500', 'ug/mL'], ['Micro sign', '1500', 'µg/mL'], ['Greek mu', '1500', 'μg/mL'], ['Spaced', '1500', ' uG / mL ']]));
+    await p.locator(SEL.row).nth(3).waitFor();
+    // Turn off the synthetic corrected column through the UI to inspect the concentration conversion.
+    await p.locator('#o-ndCorr').evaluate(e => {e.checked = false; e.dispatchEvent(new Event('change', {bubbles: true}));});
+    const values = await p.locator(SEL.concentration).allTextContents();
+    T.check('nd/unit-review/known-values', values.every(v => v === '1.50 mg/mL'), JSON.stringify(values));
+    T.check('nd/unit-review/known-no-warning', !(await p.locator('#ndList').textContent()).includes('Review Required'));
+  });
   // Two 1 mg/mL readings become 3 and 1 while editing: mean 2, sample SD sqrt(2), mass 4 mg in 2 mL.
   for (const stage of ['pool', 'final']) await fresh('live-dilution-' + stage, async (p, h) => {
     const id = 'nd/live-dilution/' + stage;
