@@ -1118,6 +1118,7 @@ button,input,select,textarea{font-family:inherit}
 
     <section class="grp optsec" data-for="overlay run">
       <h2>Window</h2>
+      <label class="check"><input type="checkbox" id="o-zoomMode" data-opt="zoomMode">Zoom mode: drag on figure to select window</label>
       <div class="row">
         <label class="f">X from<input type="number" step="any" id="o-xmin" data-opt="xmin" placeholder="auto"></label>
         <label class="f">X to<input type="number" step="any" id="o-xmax" data-opt="xmax" placeholder="auto"></label>
@@ -1332,7 +1333,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
   intMethod:'gauss', poolStyle:'band', poolColor:'#E69F00', poolAlpha:0.3, intBase:'line', intLabel:'num', intProm:5, intFill:true, eps:'', path:2,
   wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfFull:false, wfArrows:true, gelFrame:true, ladder:'biorad',
-  zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4,
+  zoomMode:false, zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4,
   preset:'single', w:3.5, h:2.6, fs:8, lw:0.75, font:'Arial', palette:'okabe', bg:true, dpi:600};
 const RANGE = ['xmin','xmax','ymin','ymax'];
 /* Native E. coli proteins commonly co-purified by IMAC (Bolanos-Garcia & Davies 2006, Table 1), DnaK, and common purification additives.
@@ -4938,7 +4939,7 @@ window.addEventListener('pointermove', e => {
 ['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; }));
 $('#gelOffReset').addEventListener('click', () => { runs.forEach(r => { r.gelOff = {}; }); prep.offs = {}; render(); });
 paper.addEventListener('pointerdown', e => {
-  const c = chartAt(); if (!c || !c.run || e.button !== 0) return;
+  const c = chartAt(); if (!c || (!c.run && !opt.zoomMode) || e.button !== 0) return;
   const p = svgPoint(e); if (!p) return; const lx = p.x - c.ox, ly = p.y - c.oy, g = c.g;
   if (lx < g.L || lx > g.R || ly < g.T || ly > g.B) return;
   e.preventDefault(); drag = {c, x0: lx};
@@ -4955,7 +4956,13 @@ window.addEventListener('pointerup', () => {
   if (!drag) return; const d = drag; drag = null; dragBox.hidden = true;
   if (d.x1 === undefined || Math.abs(d.x1 - d.x0) < 3) return;
   const g = d.c.g, inv = X => g.xlo + (X - g.L)/(g.R - g.L)*(g.xhi - g.xlo);
-  d.c.run.integ = (d.c.run.integ || []).concat([{a: inv(Math.min(d.x0, d.x1)), b: inv(Math.max(d.x0, d.x1))}]); render();
+  const a = inv(Math.min(d.x0, d.x1)), b = inv(Math.max(d.x0, d.x1));
+  if (opt.zoomMode) {
+    const ro = d.c.run || opt; ro.xmin = a; ro.xmax = b; syncControls();
+  } else if (d.c.run) {
+    d.c.run.integ = (d.c.run.integ || []).concat([{a, b}]);
+  }
+  render();
 });
 
 /* purification summary: one row per workflow step with its pool */
