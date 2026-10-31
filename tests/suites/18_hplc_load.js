@@ -70,32 +70,59 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
     T.check('zero_meas/hplc_long_header/diagnosed', toasts.some(t => /empty_ascii_export\.txt/.test(t) && /chromatogram/i.test(t) && /no data points/i.test(t) && !/no columns of numbers found/i.test(t)), `toasts: ${toasts.join(' | ') || 'none'}`);
   });
 
-  /* A recognised measurement of 0 is data; empty or malformed values are not. Same file shape, per import path. */
-  await T.t('zero_measurement_valid_vs_malformed', async () => {
+  /* An explicit acceptance matrix (issue #594) distinguishing legitimate zero from blank/absent or malformed data. */
+  await T.t('zero_measurement_matrix', async () => {
     await p.reload();
     await h.wait(500);
-    await h.newProject('zero measurements, valid vs malformed');
+    await h.newProject('zero measurements matrix');
     const load = async (name, content) => { await p.evaluate(() => document.querySelectorAll('.toast, #toast').forEach(e => { e.textContent = ''; })); await p.setInputFiles('#file', {name, mimeType: 'text/csv', buffer: Buffer.from(content)}); await p.waitForTimeout(700); return h.toasts(); };
+
+    // 1. Generic HPLC parses (CSV, generic text format)
     const hdr = 'Time (min),UV 280 (mAU)\n';
-    let t = await load('valid_zero_hplc.csv', hdr + '0,0\n1,0\n2,0\n3,0\n');
-    T.check('zero_meas/hplc/valid-zero-loads', t.some(x => /Loaded 1 trace/.test(x)), `toasts: ${t.join(' | ')}`);
-    t = await load('malformed_hplc.csv', hdr + '0,0bad\n1,0bad\n2,0bad\n');
-    T.check('zero_meas/hplc/malformed-rejected', t.some(x => /malformed_hplc\.csv/.test(x) && /no data points/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
-    t = await load('mixed_hplc.csv', hdr + '0,0\n1,0bad\n2,0\n3,0\n');
-    T.check('zero_meas/hplc/mixed-loads', t.some(x => /Loaded 1 trace/.test(x)), `toasts: ${t.join(' | ')}`);
+
+    // Issue #442: valid zero values
+    let t = await load('442_valid_zero.csv', hdr + '0,0\n1,0\n2,0\n3,0\n');
+    T.check('matrix/442_valid_zero/loads', t.some(x => /Loaded 1 trace/.test(x)), `toasts: ${t.join(' | ')}`);
+
+    // Issue #446: malformed rows rejected
+    t = await load('446_malformed.csv', hdr + '0,0bad\n1,0bad\n2,0bad\n');
+    T.check('matrix/446_malformed/rejected', t.some(x => /446_malformed\.csv/.test(x) && /no data points/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
+
+    // Issue #454: mixed valid and malformed rows (longest block kept)
+    t = await load('454_mixed.csv', hdr + '0,0\n1,0bad\n2,0\n3,0\n');
+    T.check('matrix/454_mixed/loads', t.some(x => /Loaded 1 trace/.test(x)), `toasts: ${t.join(' | ')}`);
+
+    // Absent value checks: a comma without a number should not be parsed as zero
+    t = await load('absent_value_hplc.csv', hdr + '0,\n1,\n2,\n3,\n');
+    T.check('matrix/absent/hplc-rejected', t.some(x => /absent_value_hplc\.csv/.test(x) && /no data points/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
+
+    // 2. ÄKTA specific parses (UNICORN exports with specific headers)
     const akta = 'UV 1_280\tCond\nml\tmAU\tml\tmS/cm\n';
-    t = await load('valid_zero_akta.csv', akta + '0\t0\t0\t10\n1\t0\t1\t10\n2\t0\t2\t10\n3\t0\t3\t10\n');
-    T.check('zero_meas/akta/valid-zero-loads', t.some(x => /Loaded 1 ÄKTA run/.test(x)), `toasts: ${t.join(' | ')}`);
-    t = await load('malformed_akta.csv', akta + '0\t0bad\t0\t0bad\n1\t0bad\t1\t0bad\n');
-    T.check('zero_meas/akta/malformed-rejected', t.some(x => /malformed_akta\.csv/.test(x) && /no usable UV traces/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
+
+    // Issue #527: valid zeros and malformed
+    t = await load('527_akta_valid.csv', akta + '0\t0\t0\t10\n1\t0\t1\t10\n2\t0\t2\t10\n3\t0\t3\t10\n');
+    T.check('matrix/527_akta_valid/loads', t.some(x => /Loaded 1 ÄKTA run/.test(x)), `toasts: ${t.join(' | ')}`);
+
+    t = await load('527_akta_malformed.csv', akta + '0\t0bad\t0\t10\n1\t0bad\t1\t10\n2\t0bad\t2\t10\n');
+    T.check('matrix/527_akta_malformed/rejected', t.some(x => /527_akta_malformed\.csv/.test(x) && /no usable UV traces/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
+
+    // Absent value checks for ÄKTA
+    t = await load('absent_value_akta.csv', akta + '0\t\t0\t10\n1\t\t1\t10\n2\t\t2\t10\n3\t\t3\t10\n');
+    T.check('matrix/absent/akta-rejected', t.some(x => /absent_value_akta\.csv/.test(x) && /no usable UV traces/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
+
+
+    // Verify internal state matches the assertions on what should load
     const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
-    const fPath = path.join(__dirname, '..', 'results', 'zero_meas_proj.json');
+    const fPath = path.join(__dirname, '..', 'results', 'zero_matrix_proj.json');
     await dl.saveAs(fPath);
     const d = JSON.parse(fs.readFileSync(fPath, 'utf8'));
-    const z = (d.traces || []).find(x => x.name === 'valid_zero_hplc'), m = (d.traces || []).find(x => x.name === 'mixed_hplc');
-    T.check('zero_meas/hplc/valid-zero-values', !!z && z.rows.length === 4 && z.rows.every(r => r[1] === 0), JSON.stringify(z && z.rows));
-    /* a row with a malformed value ends the numeric block (existing behaviour: the longest contiguous block is kept); the bad value never becomes a number */
-    T.check('zero_meas/hplc/mixed-keeps-longest-block-no-bad-values', !!m && JSON.stringify(m.rows) === '[[2,0],[3,0]]', JSON.stringify(m && m.rows));
+
+    const z = (d.traces || []).find(x => x.name === '442_valid_zero');
+    const m = (d.traces || []).find(x => x.name === '454_mixed');
+
+    T.check('matrix/442_valid_zero/values', !!z && z.rows.length === 4 && z.rows.every(r => r[1] === 0), JSON.stringify(z && z.rows));
+    /* existing behaviour: the longest contiguous block is kept; the bad value never becomes a number */
+    T.check('matrix/454_mixed/keeps-longest-block', !!m && JSON.stringify(m.rows) === '[[2,0],[3,0]]', JSON.stringify(m && m.rows));
   });
 
   T.check('no-page-errors', !errs.length, errs.join(' | '));
