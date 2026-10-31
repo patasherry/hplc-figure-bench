@@ -602,6 +602,7 @@ button,input,select,textarea{font-family:inherit}
       <div class="checks">
         <label class="check"><input type="checkbox" id="o-wfLetters" data-opt="wfLetters">Panel letters</label>
         <label class="check"><input type="checkbox" id="o-wfGels" data-opt="wfGels">Gels under each step</label>
+        <label class="check" title="Draw each chromatogram over its whole run instead of the cropped window. The crop of the run itself is kept for the single-run figure"><input type="checkbox" id="o-wfFull" data-opt="wfFull">Full chromatogram in the workflow</label>
         <label class="check"><input type="checkbox" id="o-wfArrows" data-opt="wfArrows">Arrows between steps</label>
         <label class="check"><input type="checkbox" id="o-noGelSlot" data-opt="noGelSlot">Mark steps without a gel (on screen only)</label>
         <label class="check" title="Grid and stacked figures taller than 9.5 in get shorter traces and gels"><input type="checkbox" id="o-wfFit" data-opt="wfFit">Fit to page height</label>
@@ -1321,7 +1322,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   rxlabel:'Volume (mL)', rylabel:'Absorbance (mAU)', y2grad:'Buffer B (%)', y2cond:'Conductivity (mS/cm)',
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
   intMethod:'gauss', poolStyle:'band', poolColor:'#E69F00', poolAlpha:0.3, intBase:'line', intLabel:'num', intProm:5, intFill:true, eps:'', path:2,
-  wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfArrows:true, gelFrame:true, ladder:'biorad',
+  wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfFull:false, wfArrows:true, gelFrame:true, ladder:'biorad',
   zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4,
   preset:'single', w:3.5, h:2.6, fs:8, lw:0.75, font:'Arial', palette:'okabe', bg:true, dpi:600};
 const RANGE = ['xmin','xmax','ymin','ymax'];
@@ -2330,7 +2331,7 @@ function buildRunPlainSVG(run, ov){
   if (run.prep) return buildPrepSVG(run, ov);
   const o = opt, S = style(ov), {W, H, fs, lw, aw, cw, tl, tOut} = S, idp = ov.idp || '';
   const uvC = uvOf(run), dEnd = uvC.xs[uvC.xs.length-1];
-  const auto = runAuto(run), xlo = numOr(run.xmin, auto.lo); let xhi = numOr(run.xmax, auto.hi); if (!(xhi > xlo)) xhi = xlo + 1;
+  const auto = runAuto(run), wfF = opt.wfFull && ov.nest, xlo = wfF ? uvC.xs[0] : numOr(run.xmin, auto.lo); let xhi = wfF ? dEnd : numOr(run.xmax, auto.hi); if (!(xhi > xlo)) xhi = xlo + 1;
   const uv = windowXY(procFull(run), xlo, xhi);
   if (uv.xs.length < 2) return {svg: null, geo: null};
   const secC = o.sec === 'grad' ? run.grad : o.sec === 'cond' ? run.cond : null;
