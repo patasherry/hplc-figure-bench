@@ -460,7 +460,30 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
   .paper > svg{width:auto;max-width:none;max-height:none;flex:none;margin-inline:auto}
   header.top p{font-size:12.5px}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* iOS-inspired look (UI only, the figures are untouched): tokens, inset grouped sections, switches, segmented control, rounded buttons.
+   --ios-blue is the iOS blue for non-text marks; --accent is the same hue darkened to pass WCAG AA for text and button fills. */
+:root{--ios-blue:#007aff;--accent:#0066d6;--accent-ink:#ffffff;--accent-soft:#dbe9fb;--bg:#e9e9ef;--panel:#f2f2f7;--card:#ffffff;--sep:rgba(60,60,67,.18);--label:#1c1c1e;--label2:#5f5f66;--ink:var(--label);--muted:var(--label2);--line:var(--sep);--r:10px;--r-s:8px;--ease:150ms ease}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--ios-blue:#0a84ff;--accent:#409cff;--accent-ink:#0d1020;--accent-soft:#16304f;--bg:#000000;--panel:#121214;--card:#1c1c1e;--sep:rgba(235,235,245,.18);--label:#f2f2f7;--label2:#a1a1a8;--ink:var(--label);--muted:var(--label2);--line:var(--sep)}}
+:root[data-theme="dark"]{--ios-blue:#0a84ff;--accent:#409cff;--accent-ink:#0d1020;--accent-soft:#16304f;--bg:#000000;--panel:#121214;--card:#1c1c1e;--sep:rgba(235,235,245,.18);--label:#f2f2f7;--label2:#a1a1a8;--ink:var(--label);--muted:var(--label2);--line:var(--sep)}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Instrument Sans",system-ui,sans-serif}
+button,input,select,textarea{font-family:inherit}
+#panel > .grp{background:var(--card);border:0;border-radius:12px;margin:10px 10px 0}
+#panel > .grp:last-child{margin-bottom:10px}
+#panel > .grp > h2{font-size:13px;font-weight:600;font-variant-caps:all-small-caps;letter-spacing:.06em;color:var(--muted)}
+#panel .grp details.sub{border-top:.5px solid var(--sep)}
+.btn{border-radius:10px;border-color:var(--sep);min-height:32px;transition:background-color var(--ease),border-color var(--ease),filter var(--ease),transform var(--ease)}
+.btn:active:not(:disabled){transform:scale(.98)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.seg{border-radius:10px;background:var(--soft);padding:2px}
+.seg label{border-radius:8px;min-height:28px;display:grid;place-items:center;transition:background-color var(--ease),color var(--ease),box-shadow var(--ease)}
+#panel .check input[type=checkbox],#panel input[type=checkbox]{-webkit-appearance:none;appearance:none;position:relative;flex:none;width:38px;height:22px;margin:0;border-radius:11px;background:var(--line2);border:0;cursor:pointer;transition:background-color var(--ease)}
+#panel input[type=checkbox]::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform var(--ease)}
+#panel input[type=checkbox]:checked{background:var(--ios-blue)}
+#panel input[type=checkbox]:checked::after{transform:translateX(16px)}
+#panel input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#panel input[type=checkbox]:disabled{opacity:.45;cursor:default}
+#panel .check{min-height:32px;gap:10px}
+@media (prefers-reduced-motion:reduce){*,*::after{transition:none!important}}
 </style>
 
 <header class="top">
