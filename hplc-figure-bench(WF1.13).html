@@ -5543,7 +5543,8 @@ let ndSamples = [], ndUid = 1;
 const splitRow = (line, d) => { const out = []; let cur = '', q = false; for (let i = 0; i < line.length; i++) { const c = line[i];
   if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; } else if (c === '"') q = true; else if (c === d) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out.map(v => v.trim()); };
 const ND_HEAD = /(a?\s?260\s*\/\s*a?\s?280|\ba\s?280\b|\ba\s?205\b|mg\s*\/\s*ml|ng\s*\/\s*[µu]l|conc)/i, ND_NAME = /sample\s*(name|id)|^"?sample"?\s*$/i;
-const isWl = h => /^\d{3}(\.\d+)?\s*(nm)?$/i.test(String(h).trim());
+const ND_UNITS = /^(mg|[µu]g)\s*\/\s*ml$|^ng\s*\/\s*[µu]l$/i; /* the concentration units parseNanoDrop reads or converts to mg/mL (or keeps as ng/µL for nucleic acid) */
+const isWl = h =>/^\d{3}(\.\d+)?\s*(nm)?$/i.test(String(h).trim());
 function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
     if (/^\s*vendor|:\s*$/i.test(H[0] || '')) continue; /* metadata rows ("Vendor: Agilent", "Sample Name:") are not the table header */
     if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) {
@@ -5592,6 +5593,8 @@ function parseNanoDrop(text){
   const cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
   const wcols = H.map((h, i) => ({i, w: parseFloat(h)})).filter(x => isWl(H[x.i]) && x.w >= 190 && x.w <= 850);
   const headAll = hn.join(' '), dyeFile = /dye|degree of label/.test(headAll);
+  /* the concentration unit the file states (Units cell, else the bracket in the header). One the parser does not convert is kept as read, flagged for review */
+  const hU = cConc >= 0 ? ((H[cConc].match(/\(([^()]*)\)/) || [])[1] || '').trim() : '', unitIn = r => { const u = cUnit >= 0 ? String(r[cUnit] || '').trim() : ''; return u || (/\/|%/.test(hU) || /^[pnµμum]?M$/.test(hU) ? hU : ''); };
   return data.filter(r => {
     const nm = (r[cName] || '').trim();
     return r.length > 2 && nm.length > 0 && !nm.endsWith(':') && !/^vendor/i.test(nm);
@@ -5604,6 +5607,7 @@ function parseNanoDrop(text){
     const s = ndNew({name: r[cName], row: i, when: [cDate >= 0 ? r[cDate] : '', cTime >= 0 ? r[cTime] : ''].filter(Boolean).join(' '), type: typ, kind, a280, a260, a230: g(cA230), a340: g(cA340), r280: g(cR280), r230: g(cR230),
       conc, unit: kind === 'nucleic' ? 'ng/µL' : 'mg/mL', base: cBase >= 0 ? r[cBase] : '', baseA: g(cBaseA), corr, imp: cImp >= 0 && r[cImp] ? {name: r[cImp], a280: g(cImpA)} : null, hide: CRUDE_RE.test(r[cName])});
     if (s.r280 == null && a260 != null && a280 > 0) s.r280 = a260/a280; if (s.r230 == null && a260 != null && s.a230 > 0) s.r230 = a260/s.a230;
+    const uIn = unitIn(r); if (conc != null && uIn && !ND_UNITS.test(uIn)) s.unitWarn = uIn;
     if (wcols.length > 10) { const wl = [], ab = []; wcols.forEach(x => { const v = ndNum(r[x.i], d); if (v != null) { wl.push(x.w); ab.push(v); } }); if (wl.length > 10) s.spec = {wl, ab};
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }; if (s.a280 == null) s.a280 = at(280); if (s.a230 == null) s.a230 = at(230); if (s.a340 == null) s.a340 = at(340);
       if (s.r230 == null && s.a230 > 0 && at(260) != null) s.r230 = at(260)/s.a230; }
@@ -5625,8 +5629,8 @@ function addNanoDrop(list, name, to){
   fresh.forEach(s => { if (to && s.kind !== 'nucleic') { s.runId = to; s.stage = 'conc'; ndSamples.push(s); return; } s.runId = s.kind === 'nucleic' || CRUDE_RE.test(s.name) ? '' : ndGuessRun(s.name); if (/conc|final|dialy|after/i.test(s.name)) s.stage = 'final'; ndSamples.push(s); });
   /* a file loaded on a Concentrated step: readings already loaded elsewhere move to it too */
   if (to) list.forEach(s => { const o = find(s); if (o && o.kind !== 'nucleic') { o.runId = to; o.stage = 'conc'; } });
-  const dup = list.length - fresh.length - merged, sp = fresh.some(s => s.spec);
-  toast(`Added ${fresh.length} NanoDrop reading${fresh.length === 1 ? '' : 's'}${merged ? `, filled in ${merged} already loaded` : ''}${dup ? `, skipped ${dup} already loaded` : ''}${to ? '' : sp ? '. Spectra are on the NanoDrop spectra tab' : ''}`);
+  const dup = list.length - fresh.length - merged, sp = fresh.some(s => s.spec), uw = [...new Set(fresh.filter(s => s.unitWarn).map(s => s.unitWarn))];
+  toast(`Added ${fresh.length} NanoDrop reading${fresh.length === 1 ? '' : 's'}${merged ? `, filled in ${merged} already loaded` : ''}${dup ? `, skipped ${dup} already loaded` : ''}${to ? '' : sp ? '. Spectra are on the NanoDrop spectra tab' : ''}${uw.length ? `. Review required: unrecognised concentration unit ${uw.join(', ')}, kept as read` : ''}`);
   $('#ndList')._n = -1; renderND(); render();
 }
 /* the A280 of a 1 mg/mL solution for a step: tagged or untagged form from the Protein section, else the single value set, else none */
@@ -5681,7 +5685,8 @@ function renderND(){
     const val = c.v == null ? '' : crude ? `A₂₈₀ ${fmt(s.a280, 2)}` : `${fmt(c.v, c.unit === 'ng/µL' ? 1 : 2)} ${c.unit}`;
     const r = s.r280 == null ? '' : `<span class="nd-r ${f}" title="A260/A280. About 0.57 for pure protein. NAD(P)-binding proteins can read 0.6 to 0.9 from bound nucleotide alone. Above 0.8 points to nucleic acid">${f ? '▲ ' : ''}260/280 ${fmt(s.r280, 2)}</span>`;
     const cb = c.raw != null ? `<span class="nd-r" title="Corrected for nucleic acid by the NanoDrop. Uncorrected: ${fmt(c.raw, 2)} mg/mL${s.imp && s.imp.a280 != null ? `. ${esc(s.imp.name)} adds A280 ${fmt(s.imp.a280, 3)}` : ''}">corrected</span>` : '';
-    return {val, src: crude ? 'crude sample, not converted' : c.src, r: r + cb, r230: s.kind !== 'nucleic' ? ((sc => sc != null && sc > 0.05 ? `<span class="nd-r mid" title="A340 is ${fmt(100*sc, 0)}% of A280, so light scattering from aggregates or particles adds to A280">scatter ${fmt(sc, 2)}</span>` : '')(s.a280 > 0 && (s.baseA ?? s.a340) != null ? (s.baseA ?? s.a340)/s.a280 : null)) : s.r230 != null && s.r230 < 1.8 ? `<span class="nd-r mid" title="A260/A230. Low values point to imidazole, DTT, Tris or a mismatched blank">260/230 ${fmt(s.r230, 2)}</span>` : ''}; };
+    const uw = s.unitWarn && c.v != null && /instrument/.test(c.src) ? `<span class="nd-r hi nd-unit" title="The file gives this concentration in ${esc(s.unitWarn)}, a unit this app does not convert. The number is kept as read and shown as ${c.unit}: check it before use">▲ Review required: ${esc(s.unitWarn)}</span>` : '';
+    return {val, src: crude ? 'crude sample, not converted' : c.src, r: uw + r + cb, r230: s.kind !== 'nucleic' ? ((sc => sc != null && sc > 0.05 ? `<span class="nd-r mid" title="A340 is ${fmt(100*sc, 0)}% of A280, so light scattering from aggregates or particles adds to A280">scatter ${fmt(sc, 2)}</span>` : '')(s.a280 > 0 && (s.baseA ?? s.a340) != null ? (s.baseA ?? s.a340)/s.a280 : null)) : s.r230 != null && s.r230 < 1.8 ? `<span class="nd-r mid" title="A260/A230. Low values point to imidazole, DTT, Tris or a mismatched blank">260/230 ${fmt(s.r230, 2)}</span>` : ''}; };
   const live = el.contains(document.activeElement) && el._n === NDS.length;
   const groups = steps.map(r => ({r, ss: NDS.filter(s => s.runId === r.id)})).filter(g => g.ss.length).concat([{r: null, ss: NDS.filter(s => !steps.some(r => r.id === s.runId))}]).filter(g => g.ss.length);
   const stat = x => x ? `${fmt(x.m, 2)}${x.sd != null ? ` ± ${fmt(x.sd, 2)}` : ''} mg/mL${x.n > 1 ? `, n ${x.n}` : ''}` : '';
