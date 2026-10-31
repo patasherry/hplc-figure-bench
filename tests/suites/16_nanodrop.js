@@ -202,5 +202,17 @@ async function fresh(id, fn){
     T.check('nd/zero-measurement-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Measured zero', value: '0.00 mg/mL'}]), JSON.stringify(rows));
   });
 
+
+  // A measurement can contain a valid suffix like '0.05A' or '1.23*' and it should be properly extracted.
+  await fresh('suffix-measurement-validation', async (p, h) => {
+    await h.newProject('Suffix measurement validation');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    await p.setInputFiles(SEL.nd, F.nd('suffix-measurements.tsv', [['Suffix A', '0.05A', '0.05A'], ['Suffix star', '1.23*', '1.23*']], false));
+    await p.locator(SEL.row).first().waitFor();
+    const rows = await p.$$eval(SEL.row, els => els.map(el => ({name: el.querySelector('input[data-ndk="name"]')?.value, value: el.querySelector('.nd-v')?.textContent.trim()})));
+    T.check('nd/suffix-measurement-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Suffix A', value: '0.05 mg/mL'}, {name: 'Suffix star', value: '1.23 mg/mL'}]), JSON.stringify(rows));
+  });
+
   T.done();
 })();
