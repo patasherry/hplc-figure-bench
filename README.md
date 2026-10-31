@@ -18,6 +18,8 @@ From the home screen, enter a project name and click **"Start project"**. Use th
 
 In the workflow figure, click a panel to select it, then drag it to fine-tune the layout by hand (a move under 4 px counts as a click). The arrows between panels follow, and the figure grows so nothing is cut off. The move is saved with the project and used in SVG/PNG exports. **Reset position** in the panel's toolbar puts it back.
 
+**Parallel branches.** To show steps in parallel (for example one IMAC fraction going to SEC and another to anion exchange), open a step in the timeline and set **Comes from** to the earlier step it follows, with an optional **Which fraction or pool** note that is printed on its arrow. Steps that come from the same step are drawn as branches, with the parent's arrow forking to each one; a step cannot come from itself or from a step that comes from it. Projects without **Comes from** are drawn as before. The Methods text adds "(from <step>)" to a branched step; yields and branch-aware Methods wording are not part of this yet.
+
 **3. SEC calibration**
 Open the **Size exclusion (SEC)** section and tick **"Size peaks with calibration standards (apparent MW, Kav, oligomer state)"**. Choose a standard kit (Bio-Rad, Cytiva HMW/LMW, or custom), drop a standards run file, select it under **"Read standard volumes from"**, and click **"Read peaks"** to review and confirm the peak-to-standard matching. The app fits $\log_{10}(\text{MW})$ against $K_{\text{av}}$ (or $V_e$) and labels SEC peaks with apparent molecular weight or oligomer state.
 

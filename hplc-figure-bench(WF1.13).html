@@ -540,6 +540,7 @@ button,input,select,textarea{font-family:inherit}
       <p class="hint ss-what" id="ssWhat"></p>
       <div class="ss-quick" id="ssQuick" hidden></div>
       <div class="ss-gels" id="ssGels"></div>
+      <div class="ss-from" id="ssFromBox" hidden><label class="f">Comes from<select id="ssFrom"></select></label><label class="f">Which fraction or pool<input type="text" id="ssFromNote" placeholder="For example Fractions B5–B8"></label></div>
     </section>
     <section class="grp stepfoot" id="stepFoot" hidden>
       <label class="f">Notebook notes<textarea id="ssNotes" rows="2" placeholder="Anything to remember about this step"></textarea></label>
@@ -3552,8 +3553,13 @@ function composeRuns(list, cfg){
   /* grid: two panels per row, read left to right then down (for 3 or more steps) */
   const grid = cfg.layout === 'grid' && n > 2, row = (cfg.layout === 'row' || (cfg.layout === 'grid' && n === 2)) && n > 1, side = opt.gelPos === 'right', vgap = fs*2.8;
   let gap = fs*1.4;
+  /* branches: par[i] is the panel panel i comes from; a panel that does not follow its predecessor skips ahead */
+  const par = wfParents(list), fromN = i => wfFromNoteOf(list[i]), edgeNote = i => fromN(i + 1) || arrowNote(list[i]);
+  const skips = []; for (let i = 1; i < n; i++) if (par[i] !== i - 1 && cfg.arrows) skips.push(i);
+  /* a grid row holds two panels; a branch starts a new row */
+  const gcell = []; if (grid) { let rw = 0, cl = 0; list.forEach((r, i) => { if (i > 0 && (cl === 2 || par[i] !== i - 1)) { rw++; cl = 0; } gcell.push({row: rw, col: cl}); cl++; }); }
   if (n > 1 && cfg.arrows) {
-    if (row || grid) { const words = list.slice(0, -1).flatMap(r => poolLabel(r).split(' ')), nw = list.slice(0, -1).flatMap(r => arrowNote(r).split(/\s+/)).reduce((m, w) => Math.max(m, w.length), 0);
+    if (row || grid) { const words = list.slice(0, -1).flatMap(r => poolLabel(r).split(' ')), nw = list.slice(0, -1).flatMap((r, i) => edgeNote(i).split(/\s+/)).reduce((m, w) => Math.max(m, w.length), 0);
       gap = Math.max(fs*3.4, words.reduce((m,w) => Math.max(m, w.length), 0)*cw + 10, nw ? Math.min(fs*7, Math.max(nw*fs*0.8*0.52 + 8, fs*5.5)) : 0); }
     else gap = fs*3;
   }
@@ -3646,7 +3652,7 @@ function composeRuns(list, cfg){
       let gx, gw;
       if (sideHere) { const x0 = chartW + fs*2.8 + extraGap, avail = Math.max(fs*4, pw[i] - x0); gw = avail; gx = x0; }
       else { const avail = R - L; const sh0 = shared.get(r.id + ':' + g.id) || {}; gw = gz > 1 ? pw[i] - fs*2.5 : Math.min(pw[i] - fs*2.5, (sh0.wide ? Math.max(gelW(i), pw[i] - fs*2.5) : gelW(i))*gz); gx = r.prep || opt.gelAlign === 'left' ? L : opt.gelAlign === 'right' ? R - gw : L + (avail - gw)/2; gx = Math.max(r.prep ? fs*0.3 : fs*2.5, Math.min(pw[i] - gw, gx)); }
-      const sh = shared.get(r.id + ':' + g.id) || {}, view = {fit: true, win: sh.win, fixedH: sideHere ? 0 : sh.fixedH*gz, labH: sh.labH, labMode: sideHere ? null : sh.labMode, vf: sideHere ? 0 : sh.vf, taMode: sideHere ? null : sh.taMode, align: sideHere ? 'left' : opt.gelAlign, minH: sideHere ? chromH*0.75 : 0, spill: (row && i < n - 1) || (grid && i % 2 === 0 && i < n - 1) ? gap*0.8 : 0};
+      const sh = shared.get(r.id + ':' + g.id) || {}, view = {fit: true, win: sh.win, fixedH: sideHere ? 0 : sh.fixedH*gz, labH: sh.labH, labMode: sideHere ? null : sh.labMode, vf: sideHere ? 0 : sh.vf, taMode: sideHere ? null : sh.taMode, align: sideHere ? 'left' : opt.gelAlign, minH: sideHere ? chromH*0.75 : 0, spill: (row && i < n - 1) || (grid && gcell[i].col === 0 && i < n - 1 && gcell[i + 1].row === gcell[i].row) ? gap*0.8 : 0};
       const dry = gelPart(g, 0, 0, gw, gH, idx, false, view), o = off[g.id] || {dx: 0, dy: 0};
       const item = {g, idx, gx: gx + o.dx, gy: gy + o.dy, gw, h: dry.h, view};
       gy += dry.h + fs*0.8; bottom = Math.max(bottom, item.gy + dry.h);
@@ -3658,15 +3664,19 @@ function composeRuns(list, cfg){
   });
   WF_WL = undefined; COND_N = 0;
   const pos = []; let Ht = 0, yAcc = 0, xAcc = 0;
-  const rowH = grid ? [] : null; if (grid) panels.forEach((p, i) => { const k = i >> 1; rowH[k] = Math.max(rowH[k] || 0, p.h); });
+  const rowH = grid ? [] : null; if (grid) panels.forEach((p, i) => { const k = gcell[i].row; rowH[k] = Math.max(rowH[k] || 0, p.h); });
   panels.forEach((p, i) => { if (row) { pos.push({x: xAcc, y: 0}); xAcc += pw[i] + gap; Ht = Math.max(Ht, p.h); }
-    else if (grid) { const k = i >> 1, y = rowH.slice(0, k).reduce((a, b) => a + b + vgap, 0); pos.push({x: i === n - 1 && n % 2 ? (Wt - pw[i])/2 : (i % 2)*(pw[0] + gap), y}); Ht = Math.max(Ht, y + rowH[k]); }
+    else if (grid) { const k = gcell[i].row, y = rowH.slice(0, k).reduce((a, b) => a + b + vgap, 0); pos.push({x: i === n - 1 && gcell[i].col === 0 && par[i] === i - 1 ? (Wt - pw[i])/2 : gcell[i].col*(pw[0] + gap), y}); Ht = Math.max(Ht, y + rowH[k]); }
     else { pos.push({x: 0, y: yAcc}); yAcc += p.h + (i < n-1 ? gap : 0); Ht = yAcc; } });
   /* panels the user dragged: add the offset (never left of or above the figure) and grow the figure to hold them */
   const W0 = Wt, H0 = Ht + fs*0.4;
   panels.forEach((p, i) => { const dx = numOr(list[i].wfDx, 0), dy = numOr(list[i].wfDy, 0); if (!dx && !dy) return;
     pos[i].x = Math.max(0, pos[i].x + dx); pos[i].y = Math.max(0, pos[i].y + dy); Wt = Math.max(Wt, pos[i].x + pw[i]); Ht = Math.max(Ht, pos[i].y + p.h); });
   Ht += fs*0.4;
+  /* a branch that skips panels is routed round them: over the top in a row, down a rail on the left in a stack or a grid */
+  const railBase = fs*1.3, topPad = row && skips.length ? railBase + skips.length*fs : 0, leftPad = !row && skips.length ? fs*0.8 + skips.length*fs*0.6 : 0;
+  if (topPad) { pos.forEach(q => { q.y += topPad; }); Ht += topPad; }
+  if (leftPad) { pos.forEach(q => { q.x += leftPad; }); Wt += leftPad; }
   const defs = new Map(), body = [], links = [], gelBoxes = [];
   panels.forEach((p, i) => {
     const {x, y} = pos[i];
@@ -3676,7 +3686,7 @@ function composeRuns(list, cfg){
       body.push(`<text x="${r2(x)}" y="${r2(y + fs*1.1)}" fill="#000000">${letter}${esc(tl[0])}</text>`);
       if (tl[1]) body.push(`<text x="${r2(x + ind)}" y="${r2(y + fs*2.25)}" fill="#000000">${esc(tl[1])}</text>`);
     }
-    if (p.chart.svg) body.push(`<g transform="translate(${r2(x)} ${r2(y + titleH)})">${p.chart.svg}</g>`);
+    if (p.chart.svg) body.push(`<g data-wfp="${esc(p.r.id)}" transform="translate(${r2(x)} ${r2(y + titleH)})">${p.chart.svg}</g>`);
     if (p.slot) { const q = p.slot; body.push(`<rect x="${r2(x + q.x)}" y="${r2(y + q.y)}" width="${r2(q.w)}" height="${r2(q.h)}" fill="none" stroke="#999999" stroke-width="0.6" stroke-dasharray="2 2"/><text x="${r2(x + q.x + q.w/2)}" y="${r2(y + q.y + q.h/2 + fs*0.3)}" text-anchor="middle" font-size="${r2(fs*0.8)}" fill="#777777">no gel for this step</text><text x="${r2(x + q.x + q.w/2)}" y="${r2(y + q.y + q.h/2 + fs*1.2)}" text-anchor="middle" font-size="${r2(fs*0.65)}" fill="#999999">(not in exports)</text>`); }
     p.gi.forEach((gg, k) => {
       const gy = y + gg.gy, part = gelPart(gg.g, x + gg.gx, gy, gg.gw, gH, gg.idx, false, gg.view); defs.set(part.id, part.defs);
@@ -3708,33 +3718,48 @@ function composeRuns(list, cfg){
       return `<line x1="${r2(xa)}" y1="${r2(ya)}" x2="${r2(xb - 4*c)}" y2="${r2(yb - 4*s)}" stroke-width="1"/><path d="M${r2(xb)} ${r2(yb)}L${r2(bx - 2.6*s)} ${r2(by + 2.6*c)}L${r2(bx + 2.6*s)} ${r2(by - 2.6*c)}Z" stroke="none"/>`; };
     body.push(`<g fill="#000000" stroke="#000000">`);
     for (let i=0;i<n-1;i++){
-      const lab = poolLabel(list[i]), note = arrowNote(list[i]), nf = fs*0.8;
+      if (par[i + 1] !== i) continue;
+      const lab = poolLabel(list[i]), note = edgeNote(i), nf = fs*0.8, eid = ` data-wfe="${esc(list[i].id)}>${esc(list[i + 1].id)}"`;
       /* the note wraps to the gap's width and sits under the arrow */
       const wrapN = (t, w) => { const room = Math.max(6, Math.floor(w/(nf*0.52))), out = []; let ln = ''; t.replace(/(\d) (°C|°|mM|µM|M|h|min|mL|µL|kDa|%)(?=\s|,|$)/g, '$1\u00a0$2').split(/ +/).forEach(x => { if (ln && (ln + ' ' + x).length > room) { out.push(ln); ln = x; } else ln = ln ? ln + ' ' + x : x; }); if (ln) out.push(ln); return out; };
-      if (grid && i % 2 === 1) {
+      if (grid && gcell[i + 1].row !== gcell[i].row) {
         /* end of a grid row: an elbow from under this panel to the top of the first panel on the next row */
         /* from below the row, down onto the next panel's letter, so it never lands on a title */
-        const xa = pos[i].x + pw[i]/2, xb = pos[i+1].x + fs*0.4, y1 = pos[i].y + rowH[i >> 1] + fs*0.5, y2 = pos[i+1].y + fs*0.1, ym = Math.max(y1 + fs*0.4, y2 - vgap*0.45);
-        body.push(`<path d="M${r2(xa)} ${r2(y1)}V${r2(ym)}H${r2(xb)}V${r2(y2 - 5)}" fill="none" stroke-width="1"/>`);
+        const xa = pos[i].x + pw[i]/2, xb = pos[i+1].x + fs*0.4, y1 = pos[i].y + rowH[gcell[i].row] + fs*0.5, y2 = pos[i+1].y + fs*0.1, ym = Math.max(y1 + fs*0.4, y2 - vgap*0.45);
+        body.push(`<path${eid} d="M${r2(xa)} ${r2(y1)}V${r2(ym)}H${r2(xb)}V${r2(y2 - 5)}" fill="none" stroke-width="1"/>`);
         body.push(`<path d="M${r2(xb)} ${r2(y2)}L${r2(xb - 2.6)} ${r2(y2 - 5)}L${r2(xb + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
         if (lab || note) body.push(`<text x="${r2((xa + xb)/2)}" y="${r2(ym - 3)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       } else if (row || grid) {
         const x1 = pos[i].x + pw[i] + 3, x2 = pos[i+1].x - 3, ay1 = pos[i].y + titleH + (cfg.bandH ? Math.min(fs*2.9, cfg.bandH*0.45) : Math.min(panels[i].ch, panels[i+1].ch)*0.45), ay2 = ay1 - pos[i].y + pos[i+1].y, ay = (ay1 + ay2)/2, words = lab ? lab.split(' ') : [];
         if (ay1 === ay2) {
-          body.push(`<line x1="${r2(x1)}" y1="${r2(ay)}" x2="${r2(x2 - 4)}" y2="${r2(ay)}" stroke-width="1"/>`);
+          body.push(`<line${eid} x1="${r2(x1)}" y1="${r2(ay)}" x2="${r2(x2 - 4)}" y2="${r2(ay)}" stroke-width="1"/>`);
           body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
-        } else body.push(slantArrow(x1, ay1, x2, ay2));
+        } else body.push(slantArrow(x1, ay1, x2, ay2).replace('<line', '<line' + eid));
         words.forEach((w, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay - 4 - (words.length - 1 - k)*fs*1.1)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(w)}</text>`));
         if (note) wrapN(note, x2 - x1).forEach((t, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay + nf*1.25 + k*nf*1.1)}" text-anchor="middle" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(t)}</text>`));
       } else {
         const ax = fs*1.2 + pos[i].x, ax2 = fs*1.2 + pos[i+1].x, y1 = pos[i].y + panels[i].h + 3, y2 = pos[i+1].y - 3;
         if (ax === ax2) {
-          body.push(`<line x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
+          body.push(`<line${eid} x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
           body.push(`<path d="M${r2(ax)} ${r2(y2)}L${r2(ax - 2.6)} ${r2(y2 - 5)}L${r2(ax + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
-        } else body.push(slantArrow(ax, y1, ax2, y2));
+        } else body.push(slantArrow(ax, y1, ax2, y2).replace('<line', '<line' + eid));
         if (lab || note) body.push(`<text x="${r2(ax + fs*0.8)}" y="${r2((y1 + y2)/2 + fs*0.35)}" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       }
     }
+    /* the extra branches: from the end of the parent's arrow, round the panels in between, onto the branch */
+    skips.forEach((c, k) => { const q = par[c], nf = fs*0.8, txt = [poolLabel(list[q]), fromN(c)].filter(Boolean).join(', '), eid = `data-wfe="${esc(list[q].id)}>${esc(list[c].id)}"`;
+      if (row) {
+        const x1 = pos[q].x + pw[q] + 3, x2 = pos[c].x - 3, xt = x1 + 4, xd = x2 - gap*0.4, yT = railBase + k*fs, ay = pos[q].y + titleH + (cfg.bandH ? Math.min(fs*2.9, cfg.bandH*0.45) : Math.min(panels[q].ch, panels[Math.min(n - 1, q + 1)].ch)*0.45);
+        body.push(`<path ${eid} d="M${r2(xt)} ${r2(ay)}V${r2(yT)}H${r2(xd)}V${r2(ay)}H${r2(x2 - 4)}" fill="none" stroke-width="1"/>`);
+        body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
+        if (txt) body.push(`<text x="${r2((xt + xd)/2)}" y="${r2(yT - 2)}" text-anchor="middle" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(txt)}</text>`);
+      } else {
+        const railX = fs*0.5 + k*fs*0.6, xs = grid ? pos[q].x + pw[q]/2 : leftPad + fs*1.2, xe = grid ? pos[c].x + fs*0.4 : xs,
+          y1 = grid ? pos[q].y + rowH[gcell[q].row] + fs*0.5 : pos[q].y + panels[q].h + 3, y2 = grid ? pos[c].y + fs*0.1 : pos[c].y - 3, yA = y1 + fs*0.5, yB = Math.max(yA + fs*0.5, y2 - 5 - fs*0.5);
+        body.push(`<path ${eid} d="M${r2(xs)} ${r2(y1)}V${r2(yA)}H${r2(railX)}V${r2(yB)}H${r2(xe)}V${r2(y2 - 5)}" fill="none" stroke-width="1"/>`);
+        body.push(`<path d="M${r2(xe)} ${r2(y2)}L${r2(xe - 2.6)} ${r2(y2 - 5)}L${r2(xe + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
+        if (txt) body.push(`<text x="${r2(xe + fs*0.6)}" y="${r2(yB - 3)}" text-anchor="start" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(txt)}</text>`);
+      } });
     body.push('</g>');
   }
   if (cfg.raw) return {body: links.join('') + body.join(''), defs, geo: {W: Wt, H: Ht, W0, H0, comp: true, gelBoxes, widened: widened ? cfg.W : 0, taller: taller ? cfg.chromH : 0, pos: pos.map((q, i) => ({x: q.x, y: q.y, w: pw[i], h: panels[i].h, id: list[i].id, th: titleH}))}};
@@ -3853,8 +3878,17 @@ function wfList(){ let list = runs.filter(r => r.inWf); const c = cleaveStep();
     if (next.length === pend.length) { next.forEach(m => list.push(manObj(m))); break; } pend = next; }
   return list; }
 /* the workflow figure's panels: the steps, plus a Concentrated and NanoDrop panel after each column that has one */
-function wfFigList(){ const L = wfList(); if (!prep.on || !prep.btw) return L; const out = [];
+function wfFigListRaw(){ const L = wfList(); if (!prep.on || !prep.btw) return L; const out = [];
   L.forEach(x => { out.push(x); if (!x.prep && prep.btw[x.id]) out.push(ncObj(x)); }); return out; }
+/* branches: a step may come from an earlier step (wfFrom, with a note wfFromNote); with none set, each step follows the one before, as always */
+const wfFromOf = r => !r ? '' : r.prep === 'manual' ? String((r.man || {}).wfFrom || '') : r.prep === 'ndconc' ? String(((prep.btw || {})[r.run && r.run.id] || {}).wfFrom || '') : r.prep ? '' : String(r.wfFrom || '');
+const wfFromNoteOf = r => !r ? '' : String((r.prep === 'manual' ? (r.man || {}).wfFromNote : r.prep === 'ndconc' ? ((prep.btw || {})[r.run && r.run.id] || {}).wfFromNote : r.prep ? '' : r.wfFromNote) || '').trim();
+/* the index each step comes from: its wfFrom when that step is earlier in the list, otherwise the step before */
+function wfParents(L){ return L.map((r, i) => { const f = wfFromOf(r), j = f ? L.findIndex(x => x.id === f) : -1; return j >= 0 && j < i ? j : i - 1; }); }
+/* with branches, each step is followed by its own branch, so a branch is drawn in one piece */
+function wfFigList(){ const L = wfFigListRaw(); if (!L.some(r => wfFromOf(r))) return L;
+  const par = wfParents(L), kids = L.map(() => []); par.forEach((q, i) => { if (q >= 0) kids[q].push(i); });
+  const out = [], walk = i => { out.push(L[i]); kids[i].forEach(walk); }; walk(0); return out; }
 function ncObj(r){ const id = 'nc:' + r.id, o = prepObj[id] || (prepObj[id] = {id, prep: 'ndconc', gelOff: {}, fracs: [], integ: []}), b = prep.btw[r.id] || {};
   const nm = hasTxt(b.title) ? b.title.trim() : ({dil: 'Diluted', exch: 'Buffer exchanged', filt: 'Filtered', hold: 'Held overnight'})[b.how] || 'Concentrated';
   return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(b.arrow || '').trim(), wfW: numOr(b.wfW, 0.85), gelZ: 1, run: r, wfDx: numOr(b.wfDx, 0), wfDy: numOr(b.wfDy, 0)}); }
@@ -4300,8 +4334,10 @@ function methodsText(){
   const conds = steps.map(runCond), one = k => { const vs = [...new Set(conds.map(c => c[k]).filter(Boolean))]; return vs.length === 1 && conds.every(c => c[k]) ? vs[0] : ''; }, instAll = one('mInst'), tempAll = one('mTemp');
   if (steps.length > 1 && (instAll || tempAll)) P.push(`All chromatography was run${instAll ? ` on ${art(instAll)} ${instAll}` : ''}${tempAll ? ` at ${deg(tempAll)}` : ''}.`);
   const need = t => `[${t} not entered]`;
+  /* a step that comes from an earlier step other than the one before says so; the full branch wording is for later */
+  const brTxt = r => { const f = wfFromOf(r), q = f && wfFigListRaw().find(x => x.id === f); return q ? ` (from ${stepTitle(q)})` : ''; };
   wf.forEach((r, i) => { const ttl = stepTitle(r), Lt = letterOf(r);
-    if (r.prep === 'manual') { P.push(manSentence(r, Lt, wf)); return; }
+    if (r.prep === 'manual') { P.push(manSentence(r, Lt, wf) + brTxt(r)); return; }
     if (r.prep === 'cleave') { const pr = cleaveProtease(), ra = v(prep.ratio), bf = v(prep.dialBuffer), T = v(prep.clvTemp), h = v(prep.clvTime), mw = v(prep.mwco);
       P.push(`Tag removal${Lt ? ` (panel ${Lt})` : ''}: the pool was ${bf ? `dialyzed${mw ? ` (${unitIf(mw, 'kDa')} MWCO)` : ''} against ${bf}` : 'dialyzed'}${pr ? ` with ${pr}${ra ? ` at ${/^\d/.test(ra) && !/:/.test(ra) ? '1:' + ra : ra}${/w\/w|mol/i.test(ra) ? '' : ' (w/w)'}` : ''}` : ''}${T ? ` at ${deg(T)}` : ''}${h ? ` for ${hrs(h)}` : ''}.`); return; }
     const k = steps.indexOf(r) + 1, c = runCond(r), sec = isSec(r), first = !wf.slice(0, wf.indexOf(r)).some(x => !x.prep || x.prep === 'manual'), cap = poolCaption(r), ft = /flow/i.test(cap);
@@ -4309,7 +4345,7 @@ function methodsText(){
     /* a column name read from the file name is marked for checking; one typed by hand or logged by UNICORN is not */
     const colChk = '';
     const col = c.mCol ? `${art(c.mCol)} ${c.mCol}${c.mCV && !/\d\s*mL|\/\d+/.test(c.mCol) ? ` (${c.mCV} mL)` : ''}${/column$/i.test(c.mCol) ? '' : ' column'}${colChk}` : `the column ${need('column')}`;
-    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')}${condCheck(r, 'mFlow')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
+    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}${brTxt(r)}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')}${condCheck(r, 'mFlow')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
     t += c.mBufA ? (sec ? ` in ${c.mBufA}` : ` equilibrated in buffer A (${c.mBufA})`) : ` ${need('buffer')}`;
     if (hasTxt(r.mWash) && !sec) t += `, washed with ${lc(v(r.mWash))}`;
     let grad = c.mGrad ? (c.mGradAuto ? lc(c.mGrad).replace(/^linear /, 'a linear gradient from ').replace(/^step to /, 'a step to ') : lc(c.mGrad)) + condCheck(r, 'mGrad') : '';
@@ -6251,8 +6287,29 @@ function renderStepSheet(L){
     + (rmT ? `<span class="sp"></span><button type="button" class="btn danger${rmArm === k ? ' armed' : ''}" data-remove="1">${rmArm === k ? 'Remove? Click again' : rmT}</button>` : '');
   const ae = $('#ssActs'); if (ae._h !== ah) { ae._h = ah; ae.innerHTML = ah; } ae.hidden = !ah;
   renderQuick(onGel || kind === 'btw' ? '' : kind);
+  syncFrom(onGel ? '' : k);
   placeFoot();
 }
+/* Comes from: a step can follow any earlier step, so a fraction can go to one next step and another fraction to a second (a branch) */
+const wfStepObj = k => { const kind = k.split(':')[0], id = k.slice(kind.length + 1); return kind === 'run' ? runs.find(r => r.id === id) : kind === 'man' ? (prep.manual || []).find(m => m.id === id) : kind === 'btw' ? (prep.btw || {})[id] : null; };
+const wfStepId = k => k.startsWith('btw:') ? 'nc:' + k.slice(4) : k.slice(k.indexOf(':') + 1);
+/* true when candId already comes (directly or through the steps before it) from selfId */
+function wfFromCycle(selfId, candId){ if (!candId) return false; const L = wfFigListRaw(), seen = new Set(); let cur = candId;
+  while (cur && !seen.has(cur)) { if (cur === selfId) return true; seen.add(cur); const i = L.findIndex(x => x.id === cur); if (i < 0) break; const f = wfFromOf(L[i]); cur = f && L.some(x => x.id === f) ? f : i > 0 ? L[i - 1].id : ''; }
+  return false; }
+function syncFrom(k){ const box = $('#ssFromBox'), o = k && ['run', 'man', 'btw'].includes(k.split(':')[0]) ? wfStepObj(k) : null; if (!o) { box.hidden = true; return; }
+  const id = wfStepId(k), raw = wfFigListRaw(), i = raw.findIndex(x => x.id === id); box.hidden = i < 1; if (box.hidden) return;
+  const sel = $('#ssFrom'), oh = '<option value="">The step before (default)</option>' + raw.slice(0, i).map(x => `<option value="${esc(x.id)}">${esc(stepTitle(x))}</option>`).join('');
+  if (sel._h !== oh) { sel._h = oh; sel.innerHTML = oh; }
+  const cur = wfFromOf(raw[i]); sel.value = raw.slice(0, i).some(x => x.id === cur) ? cur : '';
+  const ni = $('#ssFromNote'); if (ni !== document.activeElement) ni.value = o.wfFromNote || ''; }
+$('#ssFrom').addEventListener('change', e => { const k = curStep, o = wfStepObj(k); if (!o) return; const v = e.target.value;
+  if (wfFromCycle(wfStepId(k), v)) { toast('A step cannot come from itself or from a step that comes from it'); syncFrom(k); return; }
+  if (v) o.wfFrom = v; else delete o.wfFrom; gels.forEach(g => { g._prepA = null; }); render(); });
+$('#ssFromNote').addEventListener('input', e => { const o = wfStepObj(curStep); if (!o) return; const v = e.target.value; if (v.trim()) o.wfFromNote = v; else delete o.wfFromNote; render(); });
+/* a removed step hands its branches on to the step it came from */
+function wfUnlink(id){ const up = wfFromOf(wfFigListRaw().find(x => x.id === id)); const fix = o => { if (o && o.wfFrom === id) { if (up) o.wfFrom = up; else delete o.wfFrom; } };
+  runs.forEach(fix); (prep.manual || []).forEach(fix); Object.keys(prep.btw || {}).forEach(q => fix(prep.btw[q])); }
 /* notes and the move and remove buttons close the step: they sit after the step's own fields */
 function placeFoot(){ const foot = $('#stepFoot'); if (!PROJ) { foot.hidden = true; return; }
   foot.hidden = $('#ssNotes').parentNode.hidden && $('#ssActs').hidden; if (foot.hidden) return;
@@ -6354,7 +6411,7 @@ $('#ssQuick').addEventListener('click', e => { const b = e.target.closest('butto
     opt.myQuick = (Array.isArray(opt.myQuick) ? opt.myQuick : []).concat([{id: 'q' + Date.now().toString(36), k: kind, n: nm, set}]); saveOpt(); render(); toast(`Saved "${nm}" as a quick fill`); } });
 /* a step that others follow hands them on to the step before it */
 function relinkAfter(id){ const L = wfList(), i = L.findIndex(x => x.id === id), prev = i > 0 ? L[i - 1].id : ''; (prep.manual || []).forEach(m => { if (m.after === id) m.after = prev; }); return prev; }
-function removeStep(k){ const kind = k.split(':')[0], id = k.slice(kind.length + 1);
+function removeStep(k){ const kind = k.split(':')[0], id = k.slice(kind.length + 1); if (['run', 'man', 'btw'].includes(kind)) wfUnlink(kind === 'btw' ? 'nc:' + id : id);
   if (kind === 'run') { const prev = relinkAfter(id), b = document.querySelector(`.trace.run[data-id="${id}"] [data-act="del"]`); if (b) b.click(); selectStep(prev ? (runs.some(r => r.id === prev) ? 'run:' + prev : isManId(prev) ? 'man:' + prev : prev === 'cleave' && prep.cleave ? 'cleave' : 'lysis') : 'lysis'); return; }
   if (kind === 'man') { const prev = relinkAfter(id); prep.manual = (prep.manual || []).filter(m => m.id !== id); if (prep.offs) delete prep.offs[id]; delete prepObj[id]; gels.forEach(g => { if (g.assign) g.assign = g.assign.map(a => a === id ? '' : a); if (g.runId === id) g.runId = ''; g._prepA = null; });
     if (prep.stepMeta) delete prep.stepMeta[k]; selectStep(prev ? (runs.some(r => r.id === prev) ? 'run:' + prev : isManId(prev) ? 'man:' + prev : prev === 'cleave' ? 'cleave' : 'lysis') : 'lysis'); return; }
