@@ -1,4 +1,4 @@
-const {open, H, suite, fs} = require('../lib/harness');
+const {open, H, suite, fs, path} = require('../lib/harness');
 const T = suite('test_nanodrop_units');
 
 async function fresh(id, fn){
@@ -11,7 +11,7 @@ async function fresh(id, fn){
 (async () => {
   await fresh('nanodrop_unit_conversion', async (p, h) => {
     await h.newProject('Unit conversion test');
-    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.addRun(path.join(__dirname, '..', 'data', 'chrom', 'valid_unicorn.zip'));
     await p.waitForTimeout(500);
     await h.step('final');
     await p.waitForTimeout(200);
@@ -45,6 +45,12 @@ async function fresh(id, fn){
         val: r.querySelector('.nd-v')?.textContent || ''
     })));
     T.check('nd/unit/mg_mL', tableRows.some(r => r.name === 'Sample mg_mL' && r.val.startsWith('2.00 mg/mL')), `Expected 2.00 mg/mL for 2 mg/mL, got ${tableRows.find(r => r.name === 'Sample mg_mL')?.val}`);
+
+    const data_unknown = `Date,Sample Name,Protein (IU/mL),A280,A260/A280,Sample Type\n10/24/2026 10:00:00 AM,Sample unknown_unit,3.0,3.000,0.57,1 Abs = 1 mg / mL`;
+    await p.setInputFiles('#ndFile', {name: 'nd_unit_unknown.csv', mimeType: 'text/csv', buffer: Buffer.from(data_unknown)});
+    await p.waitForFunction(() => document.querySelectorAll('.ndr').length === 4);
+    const unknown = await p.$eval('.ndr:has(input[value="Sample unknown_unit"])', r => ({value: r.querySelector('.nd-v')?.textContent || '', flags: r.querySelector('.nd-flags')?.textContent || ''}));
+    T.check('nd/unit/unknown_review_required', unknown.value === '3.00 IU/mL' && /Review Required/.test(unknown.flags), `Expected preserved 3.00 IU/mL with Review Required, got ${JSON.stringify(unknown)}`);
 
 
     });

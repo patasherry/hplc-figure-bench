@@ -5544,6 +5544,13 @@ const splitRow = (line, d) => { const out = []; let cur = '', q = false; for (le
   if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; } else if (c === '"') q = true; else if (c === d) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out.map(v => v.trim()); };
 const ND_HEAD = /(a?\s?260\s*\/\s*a?\s?280|\ba\s?280\b|\ba\s?205\b|mg\s*\/\s*ml|ng\s*\/\s*[µu]l|conc)/i, ND_NAME = /sample\s*(name|id)|^"?sample"?\s*$/i;
 const isWl = h => /^\d{3}(\.\d+)?\s*(nm)?$/i.test(String(h).trim());
+/* Protein concentrations are stored as mg/mL. Keep an unrecognized vendor unit, but never treat it as mg/mL. */
+function ndUnitInfo(v){ const text = String(v || '').replace(/Âµ/g, 'µ'), norm = text.toLowerCase().replace(/[µμ]/g, 'u').replace(/\s/g, '');
+  const m = norm.match(/\b(g|mg|ug|ng)\/(l|ml|ul)\b/); if (!m) return null;
+  const mass = {g: 1000, mg: 1, ug: .001, ng: .000001}[m[1]], vol = {l: 1000, ml: 1, ul: .001}[m[2]];
+  return {raw: m[0], unit: 'mg/mL', factor: mass/vol};
+}
+const ndUnitText = v => { const m = String(v || '').replace(/Âµ/g, 'µ').match(/\b[^\s(),]+\s*\/\s*[^\s(),]+\b/); return m ? m[0] : ''; };
 function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
     if (/^\s*vendor|:\s*$/i.test(H[0] || '')) continue; /* metadata rows ("Vendor: Agilent", "Sample Name:") are not the table header */
     if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) {
@@ -5583,11 +5590,11 @@ function parseNanoDrop(text){
   if (hd.rows === 'wavelengths') { return H.slice(1).map((nm, k) => { const wl = [], ab = []; data.forEach(r => { const w = ndNum(r[0], d), v = ndNum(r[k + 1], d); if (w != null && v != null) { wl.push(w); ab.push(v); } });
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }, a280 = at(280), a260 = at(260);
       return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null && !s.name.trim().endsWith(':') && !/^vendor/i.test(s.name.trim())); }
-  const hn = H.map(h => h.toLowerCase().replace(/\s+/g, ' ')), col = f => hn.findIndex(f);
+  const hn = H.map(h => h.toLowerCase().replace(/Âµ/g, 'µ').replace(/\s+/g, ' ')), col = f => hn.findIndex(f);
   const cName = col(h => ND_NAME.test(h)), cR280 = col(h => /a?\s?260\s*\/\s*a?\s?280/.test(h)), cR230 = col(h => /a?\s?260\s*\/\s*a?\s?230/.test(h));
   const absCol = w => col(h => new RegExp(`\\ba ?${w}\\b|^${w}$`).test(h) && !/\//.test(h) && !/conc|mg|µg|ug|ng|raw/.test(h));
   const cA280 = absCol(280), cA260 = absCol(260), cA230 = absCol(230), cA205 = absCol(205), cA340 = col(h => /\b340\b/.test(h) && !/baseline/.test(h));
-  const cConc = col(h => /conc|mg\s*\/\s*ml|ng\s*\/\s*[µu]l|[µu]g\s*\/\s*ml/.test(h) && !/\/\s*a/.test(h) && !/dye|corrected/.test(h)), cUnit = col(h => /^units?$/.test(h));
+  const cConc = col(h => /conc|(?:mg|ng|[Âµµu]g|g)\s*\/\s*(?:m|[Âµµu])?l|\([^)]*\/\s*(?:m|[Âµµu])?l\)/.test(h) && !/\/\s*a/.test(h) && !/dye|corrected/.test(h)), cUnit = col(h => /^units?$/.test(h));
   const cCorr = col(h => /corrected/.test(h) && /mg|conc/.test(h)), cImp = col(h => /^impurity 1$/.test(h)), cImpA = col(h => /^impurity 1 a ?280/.test(h)), cBaseA = col(h => /baseline abs/.test(h));
   const cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
   const wcols = H.map((h, i) => ({i, w: parseFloat(h)})).filter(x => isWl(H[x.i]) && x.w >= 190 && x.w <= 850);
@@ -5596,13 +5603,16 @@ function parseNanoDrop(text){
     const nm = (r[cName] || '').trim();
     return r.length > 2 && nm.length > 0 && !nm.endsWith(':') && !/^vendor/i.test(nm);
   }).map((r, i) => {
-    const typ = cType >= 0 ? r[cType] : '', unitTxt = ((cUnit >= 0 ? r[cUnit] : '') + ' ' + (cConc >= 0 ? hn[cConc] : '')).toLowerCase();
-    const kind = /ng\s*\/\s*[µu]l|nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
+    const typ = cType >= 0 ? r[cType] : '', headUnit = cConc >= 0 ? H[cConc] : '', fieldUnit = cUnit >= 0 ? r[cUnit] : '', hUnit = ndUnitInfo(headUnit), fUnit = ndUnitInfo(fieldUnit), unitTxt = (fieldUnit + ' ' + headUnit).toLowerCase(), proteinConc = /protein/i.test(headUnit);
+    const kind = (/ng\s*\/\s*[µu]l|nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) && !proteinConc) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
     let conc = cConc >= 0 ? ndNum(r[cConc], d) : null;
     const g = c => c >= 0 ? ndNum(r[c], d) : null, a280 = g(cA280), a260 = g(cA260); let corr = g(cCorr);
-    if (/[µu]g\s*\/\s*ml/.test(unitTxt)) { if (conc != null) conc /= 1000; if (corr != null) corr /= 1000; }
+    const unitMismatch = hUnit && fUnit && hUnit.factor !== fUnit.factor, unitUnknown = conc != null && (!!ndUnitText(headUnit) && !hUnit || !!ndUnitText(fieldUnit) && !fUnit);
+    const unitReview = unitMismatch ? `NanoDrop concentration units disagree (${ndUnitText(headUnit) || hUnit.raw} versus ${ndUnitText(fieldUnit) || fUnit.raw})` : unitUnknown ? `NanoDrop concentration unit ${ndUnitText(fieldUnit) || ndUnitText(headUnit) || 'was not provided'} is not recognized` : '';
+    const unitInfo = hUnit || fUnit;
+    if (!unitReview && unitInfo) { if (conc != null) conc *= unitInfo.factor; if (corr != null) corr *= unitInfo.factor; }
     const s = ndNew({name: r[cName], row: i, when: [cDate >= 0 ? r[cDate] : '', cTime >= 0 ? r[cTime] : ''].filter(Boolean).join(' '), type: typ, kind, a280, a260, a230: g(cA230), a340: g(cA340), r280: g(cR280), r230: g(cR230),
-      conc, unit: kind === 'nucleic' ? 'ng/µL' : 'mg/mL', base: cBase >= 0 ? r[cBase] : '', baseA: g(cBaseA), corr, imp: cImp >= 0 && r[cImp] ? {name: r[cImp], a280: g(cImpA)} : null, hide: CRUDE_RE.test(r[cName])});
+      conc, unit: unitReview ? (ndUnitText(fieldUnit) || ndUnitText(headUnit) || 'unknown unit') : kind === 'nucleic' ? 'ng/µL' : 'mg/mL', unitReview, base: cBase >= 0 ? r[cBase] : '', baseA: g(cBaseA), corr, imp: cImp >= 0 && r[cImp] ? {name: r[cImp], a280: g(cImpA)} : null, hide: CRUDE_RE.test(r[cName])});
     if (s.r280 == null && a260 != null && a280 > 0) s.r280 = a260/a280; if (s.r230 == null && a260 != null && s.a230 > 0) s.r230 = a260/s.a230;
     if (wcols.length > 10) { const wl = [], ab = []; wcols.forEach(x => { const v = ndNum(r[x.i], d); if (v != null) { wl.push(x.w); ab.push(v); } }); if (wl.length > 10) s.spec = {wl, ab};
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }; if (s.a280 == null) s.a280 = at(280); if (s.a230 == null) s.a230 = at(230); if (s.a340 == null) s.a340 = at(340);
@@ -5651,6 +5661,7 @@ const ndA205 = ss => ss.length > 0 && ss.every(s => s.kind === 'a205' && s.conc 
 /* concentration of one reading. A205, labels and nucleic acid readings keep the instrument's value */
 function ndConc(s){ const c0 = ndConcRaw(s); if (opt.ndCorr !== false && s.corr != null && s.conc > 0 && c0.unit === 'mg/mL' && c0.v != null) return Object.assign({}, c0, {v: c0.v*s.corr/s.conc, raw: c0.v, src: c0.src + ', nucleic acid corrected'}); return c0; }
 function ndConcRaw(s){ const dil = numOr(s.dil, 1) || 1;
+  if (s.unitReview) return {v: null, unit: s.unit || 'unknown unit', src: s.unitReview};
   if (s.kind === 'nucleic') return {v: s.conc != null ? s.conc*dil : null, unit: 'ng/µL', src: 'instrument'};
   if (s.kind !== 'protein' && s.conc != null) return {v: s.conc*dil, unit: 'mg/mL', src: s.kind === 'a205' ? 'A205, instrument' : 'instrument'};
   const E = ndEpsFor(s.runId);
@@ -5677,11 +5688,11 @@ function renderND(){
   const el = $('#ndList'), steps = runs.filter(r => r.inWf), hasSpec = NDS.some(s => s.spec);
   $('#ndWrap').hidden = !NDS.length; if (!hasSpec) $('#ndSpecOpts').hidden = true;
   if (!NDS.length) { el.innerHTML = ''; return; }
-  const meta = s => { const c = ndConc(s), crude = CRUDE_RE.test(s.name) && s.kind !== 'nucleic', f = r280Flag(s.r280);
-    const val = c.v == null ? '' : crude ? `A₂₈₀ ${fmt(s.a280, 2)}` : `${fmt(c.v, c.unit === 'ng/µL' ? 1 : 2)} ${c.unit}`;
+  const meta = s => { const c = ndConc(s), crude = CRUDE_RE.test(s.name) && s.kind !== 'nucleic', f = r280Flag(s.r280), review = s.unitReview ? `<span class="nd-r warnc" title="${esc(s.unitReview)}">Review Required</span>` : '';
+    const val = s.unitReview && s.conc != null ? `${fmt(s.conc, 2)} ${s.unit}` : c.v == null ? '' : crude ? `A₂₈₀ ${fmt(s.a280, 2)}` : `${fmt(c.v, c.unit === 'ng/µL' ? 1 : 2)} ${c.unit}`;
     const r = s.r280 == null ? '' : `<span class="nd-r ${f}" title="A260/A280. About 0.57 for pure protein. NAD(P)-binding proteins can read 0.6 to 0.9 from bound nucleotide alone. Above 0.8 points to nucleic acid">${f ? '▲ ' : ''}260/280 ${fmt(s.r280, 2)}</span>`;
     const cb = c.raw != null ? `<span class="nd-r" title="Corrected for nucleic acid by the NanoDrop. Uncorrected: ${fmt(c.raw, 2)} mg/mL${s.imp && s.imp.a280 != null ? `. ${esc(s.imp.name)} adds A280 ${fmt(s.imp.a280, 3)}` : ''}">corrected</span>` : '';
-    return {val, src: crude ? 'crude sample, not converted' : c.src, r: r + cb, r230: s.kind !== 'nucleic' ? ((sc => sc != null && sc > 0.05 ? `<span class="nd-r mid" title="A340 is ${fmt(100*sc, 0)}% of A280, so light scattering from aggregates or particles adds to A280">scatter ${fmt(sc, 2)}</span>` : '')(s.a280 > 0 && (s.baseA ?? s.a340) != null ? (s.baseA ?? s.a340)/s.a280 : null)) : s.r230 != null && s.r230 < 1.8 ? `<span class="nd-r mid" title="A260/A230. Low values point to imidazole, DTT, Tris or a mismatched blank">260/230 ${fmt(s.r230, 2)}</span>` : ''}; };
+    return {val, src: crude ? 'crude sample, not converted' : c.src, r: r + cb + review, r230: s.kind !== 'nucleic' ? ((sc => sc != null && sc > 0.05 ? `<span class="nd-r mid" title="A340 is ${fmt(100*sc, 0)}% of A280, so light scattering from aggregates or particles adds to A280">scatter ${fmt(sc, 2)}</span>` : '')(s.a280 > 0 && (s.baseA ?? s.a340) != null ? (s.baseA ?? s.a340)/s.a280 : null)) : s.r230 != null && s.r230 < 1.8 ? `<span class="nd-r mid" title="A260/A230. Low values point to imidazole, DTT, Tris or a mismatched blank">260/230 ${fmt(s.r230, 2)}</span>` : ''}; };
   const live = el.contains(document.activeElement) && el._n === NDS.length;
   const groups = steps.map(r => ({r, ss: NDS.filter(s => s.runId === r.id)})).filter(g => g.ss.length).concat([{r: null, ss: NDS.filter(s => !steps.some(r => r.id === s.runId))}]).filter(g => g.ss.length);
   const stat = x => x ? `${fmt(x.m, 2)}${x.sd != null ? ` ± ${fmt(x.sd, 2)}` : ''} mg/mL${x.n > 1 ? `, n ${x.n}` : ''}` : '';
@@ -6203,7 +6214,7 @@ function bufMismatch(r, c){ if (!c.mBufA || !c.mBufB || isSec(r)) return '';
   const a = parse(c.mBufA), b = parse(c.mBufB), st = guessStep(r) || '', elu = /exchange/i.test(st) ? ['nacl', 'kcl'] : ['imidazole'];
   const bad = Object.keys(a).filter(k => k in b && !elu.includes(k) && Math.abs(a[k] - b[k]) > 1e-9 && k !== 'glycerol');
   return bad.length ? bad.map(k => `${k === 'nacl' ? 'NaCl' : k === 'kcl' ? 'KCl' : k} (A ${a[k]}, B ${b[k]} mM)`).join(', ') : ''; }
-function runNeeds(r){ const c = runCond(r), n = [], pr = poolRows(r); if (!hasTxt(r.path) && !(pr && pr.measured)) n.push('UV path for mg'); if (!c.mCol) n.push('column'); if (!c.mBufA) n.push('buffer'); if (!c.mFlow) n.push('flow rate'); if (!isSec(r) && !c.mGrad && !c.mBufB) n.push('elution'); { const bm = bufMismatch(r, c); if (bm) n.push(`buffer B check: ${bm}`); } return n; }
+function runNeeds(r){ const c = runCond(r), n = [], pr = poolRows(r); if (!hasTxt(r.path) && !(pr && pr.measured)) n.push('UV path for mg'); if (!c.mCol) n.push('column'); if (!c.mBufA) n.push('buffer'); if (!c.mFlow) n.push('flow rate'); if (!isSec(r) && !c.mGrad && !c.mBufB) n.push('elution'); { const bm = bufMismatch(r, c); if (bm) n.push(`buffer B check: ${bm}`); } if (ndSamples.some(s => s.runId === r.id && s.unitReview)) n.push('NanoDrop unit review'); return n; }
 let gapMemo = {k: '', n: 0};
 function methodGaps(){ const t = methodsText(); if (gapMemo.k !== t) gapMemo = {k: t, n: (t.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).length}; return gapMemo.n; }
 function stepList(){
