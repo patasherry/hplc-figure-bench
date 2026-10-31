@@ -582,6 +582,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
         <label class="check"><input type="checkbox" id="o-wfArrows" data-opt="wfArrows">Arrows between steps</label>
         <label class="check"><input type="checkbox" id="o-noGelSlot" data-opt="noGelSlot">Mark steps without a gel (on screen only)</label>
         <label class="check" title="Grid and stacked figures taller than 9.5 in get shorter traces and gels"><input type="checkbox" id="o-wfFit" data-opt="wfFit">Fit to page height</label>
+        <label class="check" title="Draw each trace over its whole recorded range and each gel whole, ignoring the auto crop, the X from/to limits and the main-band gel view. The figure is then scaled to the page like any other"><input type="checkbox" id="o-wfFull" data-opt="wfFull">Show full data range</label>
         <label class="check" title="One line under the figure with the final pool's mg, mg per L of culture and purity, from the summary table"><input type="checkbox" id="o-wfYield" data-opt="wfYield">Final yield under the figure</label>
       </div>
       </details>
@@ -1286,7 +1287,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   rxlabel:'Volume (mL)', rylabel:'Absorbance (mAU)', y2grad:'Buffer B (%)', y2cond:'Conductivity (mS/cm)',
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
   intMethod:'gauss', poolStyle:'band', poolColor:'#E69F00', poolAlpha:0.3, intBase:'line', intLabel:'num', intProm:5, intFill:true, eps:'', path:2,
-  wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfArrows:true, gelFrame:true, ladder:'biorad',
+  wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, wfFull:false, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfArrows:true, gelFrame:true, ladder:'biorad',
   preset:'single', w:3.5, h:2.6, fs:8, lw:0.75, font:'Arial', palette:'okabe', bg:true, dpi:600};
 const RANGE = ['xmin','xmax','ymin','ymax'];
 /* Native E. coli proteins commonly co-purified by IMAC (Bolanos-Garcia & Davies 2006, Table 1), DnaK, and common purification additives.
@@ -2237,7 +2238,7 @@ function buildRunSVG(run, ov){
   if (run.prep) return buildPrepSVG(run, ov);
   const o = opt, S = style(ov), {W, H, fs, lw, aw, cw, tl, tOut} = S, idp = ov.idp || '';
   const uvC = uvOf(run), dEnd = uvC.xs[uvC.xs.length-1];
-  const auto = runAuto(run), xlo = numOr(run.xmin, auto.lo); let xhi = numOr(run.xmax, auto.hi); if (!(xhi > xlo)) xhi = xlo + 1;
+  const auto = runAuto(run), xlo = wfFullNow ? uvC.xs[0] : numOr(run.xmin, auto.lo); let xhi = wfFullNow ? dEnd : numOr(run.xmax, auto.hi); if (!(xhi > xlo)) xhi = xlo + 1;
   const uv = windowXY(procFull(run), xlo, xhi);
   if (uv.xs.length < 2) return {svg: null, geo: null};
   const secC = o.sec === 'grad' ? run.grad : o.sec === 'cond' ? run.cond : null;
@@ -3486,7 +3487,7 @@ function composeRuns(list, cfg){
     const items = list.flatMap(r => gelsFor(r).map(g => ({r, g, idx: lanesFor(g, 'marker').concat(lanesFor(g, r.id)).sort((a, b) => a - b)})));
     /* the main band's mass, taken from the most reliable gel (a marked target, then the protein's size, then the strongest band) */
     let mw = numOr(opt.gelFocusKda, NaN);
-    if (!(mw > 0) && opt.gelView === 'focus') { const rank = w => /marked|set/.test(w) ? 3 : /protein/.test(w) ? 2 : 1; let best = null;
+    if (!(mw > 0) && opt.gelView === 'focus' && !wfFullNow) { const rank = w => /marked|set/.test(w) ? 3 : /protein/.test(w) ? 2 : 1; let best = null;
       items.forEach(it => { gelFocusWin(it.g, it.idx); const f = it.g._focus; if (f && f.mw && (!best || rank(f.why) > rank(best.why))) best = f; }); mw = best ? best.mw : NaN; if (best) items.forEach(it => { it.g._focus = best; }); }
     const sp = Math.max(1.2, numOr(opt.gelSpan, 2.5));
     /* with no protein size, the strongest band is often lysate or tag, not the protein: show the whole gel instead of guessing */
@@ -3494,7 +3495,7 @@ function composeRuns(list, cfg){
     if (guess) { mw = NaN; items.forEach(it => { if (it.g._focus) it.g._focus = {mw: null, why: 'none'}; }); }
     /* keep the free tag in view too, so the gel shows that cleavage worked */
     const tagK = (() => { const t = protForms()[2]; const k = t ? t.mass/1000 : numOr(opt.tagKda, NaN); return k >= 6 ? k : NaN; })();
-    items.forEach(it => { it.win = opt.gelView === 'focus' && !guess ? (gelWinForMass(it.g, mw, sp, tagK) || gelFocusWin(it.g, it.idx)) : null; });
+    items.forEach(it => { it.win = opt.gelView === 'focus' && !wfFullNow && !guess ? (gelWinForMass(it.g, mw, sp, tagK) || gelFocusWin(it.g, it.idx)) : null; });
     /* natural sizes first, then the median height and the tallest label band for all */
     const sideOf = it => side && gelsFor(it.r).length, wOf = it => gelW(list.indexOf(it.r));
     /* fillH: the height at which a gel's lanes fill the plot width at true proportions; a gel with many lanes may also use the panel's margin */
@@ -3657,7 +3658,10 @@ function yieldLine(res){
   svg = svg.replace(/<\/svg>$/, lines.map((l, i) => `<text x="0" y="${r2(H + fs*1.25 + i*lf*1.2)}" font-size="${r2(lf)}" fill="#000000">${esc(l)}</text>`).join('') + '</svg>');
   return {svg, geo: Object.assign({}, res.geo, {H: H2})};
 }
-function buildWorkflow(){
+/* set while the workflow figure is built with "Show full data range": traces and gels are drawn whole, then the fit passes below scale the figure to the page */
+let wfFullNow = false;
+function buildWorkflow(){ wfFullNow = !!opt.wfFull; try { return buildWorkflowFig(); } finally { wfFullNow = false; } }
+function buildWorkflowFig(){
   const pre = prepSteps(), list = wfFigList(), PAGE = 9.5*72;
   const cfg = {layout: opt.wfLayout, W: numOr(opt.wfW,7.2)*72, chromH: numOr(opt.wfH,2.2)*72, titles: true, letters: opt.wfLetters, showGels: opt.wfGels, connectors: opt.connectors, arrows: opt.wfArrows, gelMaxH: numOr(opt.wfGelH,1.8)*72};
   /* Fit to page: a grid or stacked figure taller than the page gets shorter traces and gels (never below 60%) until it fits */
