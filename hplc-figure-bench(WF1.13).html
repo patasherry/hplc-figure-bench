@@ -1545,11 +1545,16 @@ function parseAkta(text, fname){
   for (let c=0;c<units.length-1;c+=2){ const nm = names[c] || ''; if (!nm) continue;
     /* UNICORN 6/7 names (UV 1_280, Conductivity) and UNICORN 5 names with a run prefix (run12:10_UV1_280nm, run12:10_Cond) */
     curves.push({name: nm, xu: units[c], yu: units[c+1], col: c, kind: curveKind(nm, units[c+1]), xs: [], ys: [], ev: []}); }
+  const sample = lines.length > 6000 ? lines.slice(0,3000).concat(lines.slice(-3000)) : lines;
+  let sc = 0, sc_dc = 0;
+  for (const L of sample) { if (!L.trim()) continue; let k = 0, bad = 0; for (const f of sp(L)) { if (!isNaN(toNum(f,false))) k++; else if (f.trim()) bad++; } if (k >= 2) sc += k - bad; }
+  for (const L of sample) { if (!L.trim()) continue; let k = 0, bad = 0; for (const f of sp(L)) { if (!isNaN(toNum(f,true))) k++; else if (f.trim()) bad++; } if (k >= 2) sc_dc += k - bad; }
+  const dc = sc_dc > sc;
   for (let i=u+1;i<lines.length;i++){ const L = lines[i]; if (!L) continue; const f = sp(L);
-    for (const cv of curves){ const xs = f[cv.col]; if (xs === undefined || xs === '') continue; const x = toNum(xs, d !== ','); if (!isFinite(x)) continue;
+    for (const cv of curves){ const xs = f[cv.col]; if (xs === undefined || xs === '') continue; const x = toNum(xs, dc); if (!isFinite(x)) continue;
       const v = (f[cv.col+1] || '').trim().replace(/^"|"$/g, '');
       if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
-      else { const y = toNum(v, d !== ','); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
+      else { const y = toNum(v, dc); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
   const ak = aktaFromCurves(curves, fname);
   if (!ak) return {bad: 'an ÄKTA/UNICORN file, but has no usable UV traces: export the UV curve from UNICORN'};
   return ak;
