@@ -1,0 +1,8 @@
+Vendor: Agilent
+Instrument: Cary 60
+Date: 2026-10-31
+Time: 12:00:00
+
+Sample Name	A280	A260/A280	Protein (mg/mL)
+Agilent 1	2.500	0.57	2.500
+Agilent 2	2.500	0.57	2.500

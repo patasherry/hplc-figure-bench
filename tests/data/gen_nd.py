@@ -163,3 +163,23 @@ if __name__ == '__main__':
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else {}
     doc['nd'] = EXP; doc['nd_note'] = __doc__.split('Ground truth per file')[1].strip()
     json.dump(doc, open(p, 'w', encoding='utf-8'), indent=1, ensure_ascii=False); print(f'{len(EXP)} NanoDrop files -> {OUT}')
+
+# 12. Agilent metadata
+r12 = [('Agilent 1', 2.500, 0.57), ('Agilent 2', 2.500, 0.57)]
+lines = [
+    'Vendor: Agilent',
+    'Instrument: Cary 60',
+    'Date: 2026-10-31',
+    'Time: 12:00:00',
+    '',
+    'Sample Name\tA280\tA260/A280\tProtein (mg/mL)',
+    'Agilent 1\t2.500\t0.57\t2.500',
+    'Agilent 2\t2.500\t0.57\t2.500'
+]
+w('nanodrop_metadata_agilent.txt', '\r\n'.join(lines) + '\r\n')
+rec('nanodrop_metadata_agilent.txt', 'Agilent vendor metadata preamble', r12, 'Agilent metadata preamble')
+
+if __name__ == '__main__':
+    p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else {}
+    doc['nd'] = EXP; doc['nd_note'] = __doc__.split('Ground truth per file')[1].strip()
+    json.dump(doc, open(p, 'w', encoding='utf-8'), indent=1, ensure_ascii=False); print(f'{len(EXP)} NanoDrop files -> {OUT}')
