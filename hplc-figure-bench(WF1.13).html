@@ -195,6 +195,14 @@ details.tip[open]{display:grid;gap:6px;background:var(--well);border:1px solid v
 body:not(.secstds) .secstd{display:none!important}
 /* in a project the panel shows the step; settings wait behind More options */
 body.proj:not(.moreopen) #panel > .optsec{display:none!important}
+body.proj.searching #panel > .optsec:not([hidden]):not(.srchmiss){display:grid!important}
+.psearch{padding:10px 16px 0;order:-2}.psearch input{width:100%;box-sizing:border-box}
+.srchmiss{display:none!important}
+details.more{border-top:1px dashed var(--line);padding-top:8px}
+details.more > summary{cursor:pointer;font-size:12px;color:var(--muted)}
+details.more > summary:hover{color:var(--ink)}
+details.more > .morebody{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 10px;margin-top:10px}
+details.more > .morebody > *{min-width:0}
 body.proj #panel .grp:not(#stepSheet) details.tip{display:none}
 body.proj .noproj, body.proj label:has(#o-runCond2){display:none!important}
 body.proj #panel[data-sec="1"] > #secPanel{order:0}
@@ -522,6 +530,7 @@ button,input,select,textarea{font-family:inherit}
 
 <div class="app">
   <aside class="panel" id="panel">
+    <div class="psearch"><input type="search" id="panelSearch" placeholder="Search settings" aria-label="Search settings" autocomplete="off"></div>
     <section class="grp steps" id="stepsPanel" hidden>
       <h2>Steps</h2>
       <ol class="tl" id="tl"></ol>
@@ -4421,7 +4430,7 @@ function render(){
   else { document.querySelectorAll('#panel > [data-step]:not([data-for])').forEach(el => { el.hidden = false; }); document.querySelectorAll('#prepPanel details.sub').forEach(d => { d.hidden = d.dataset.sub === 'ptr' || d.dataset.sub === 'pbtw' || d.dataset.sub === 'pman'; }); }
   /* More options shows when this step has settings to offer */
   { const mo = $('#moreOpts'), any = PROJ && [...document.querySelectorAll('#panel > .optsec')].some(x => !x.hidden); mo.hidden = !any; $('#moreBtn').textContent = document.body.classList.contains('moreopen') ? 'Fewer options' : 'More options'; $('#moreBtn').setAttribute('aria-expanded', document.body.classList.contains('moreopen')); $('#moreWhat').hidden = document.body.classList.contains('moreopen'); }
-  renderSec(); renderProt(); renderPrep(); renderND(); grpStatus(); renderNext(); renderWfTool();
+  renderSec(); renderProt(); renderPrep(); renderND(); grpStatus(); moreSync(); renderNext(); renderWfTool();
   { const lab = id => { const e = $(id); return e && e.closest('label'); }, side = opt.gelPos === 'right', full = opt.gelView === 'full';
     [['#o-gelAlign', side], ['#o-gelSide', !side], ['#o-gelFocusKda', full], ['#o-gelSpan', full]].forEach(([id, hide]) => { const l = lab(id); if (l) l.hidden = hide; }); }
   { const fi = $('#gelFocusInfo'), r0 = kind === 'run' && f ? f.run : null, gl = r0 ? gelsFor(r0) : kind === 'workflow' ? gels : [], g0 = gl.find(x => x._focus);
@@ -5767,6 +5776,41 @@ document.querySelectorAll('#panel > .grp').forEach(sec => { const h = sec.queryS
   set(closed);
   const tog = () => { const c = !sec.classList.contains('collapsed'); set(c); try { localStorage.setItem(key, c ? '1' : '0'); } catch (e) {} };
   h.addEventListener('click', tog); h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tog(); } }); });
+/* ---------- More options inside each section (open or closed remembered), and the settings search ---------- */
+/* rarely changed settings: moved, never removed, so every id and label stays. A setting changed from its default opens its More options. */
+const ADV = {'sub:rwin': ['o-fracEvery', 'o-runPad'], 'sub:rgel': ['o-gelAlign', 'o-gelGap', 'o-gelSide', 'o-linkFrom', 'o-laneMark', 'o-laneAlpha', 'gelSizeReset', 'gelOffReset'], 'sub:rpool': ['o-poolColor'],
+  'Peak integration': ['o-intProm', 'o-path', 'o-eps', 'o-intFill'], 'Processing': ['o-baseline', 'o-smooth'], 'Peak labels': ['o-peakRot', 'o-peakDec', 'o-prom', 'o-peakColor', 'o-peakMax'],
+  'Axes': ['o-ticksOut', 'o-y2grad', 'o-y2cond', 'o-sbValue', 'o-sbUnit', 'o-zoomInsetPos', 'o-zoomInsetSize'], 'Figure style': ['o-lw', 'o-font', 'o-bg'], 'Layout': ['o-stack'],
+  'sub:gcrop': ['o-gelAutoCrop', 'o-gelFrame'], 'sub:gbands': ['o-tagTol', 'o-bandSens', 'o-purBase', 'o-tagCounts'], 'sub:gknown': ['o-knownTol', 'o-knownMin', 'o-knownCount']};
+const moreBoxes = [];
+Object.entries(ADV).forEach(([key, ids]) => {
+  const host = key.startsWith('sub:') ? document.querySelector(`#panel details.sub[data-sub="${key.slice(4)}"]`) : [...document.querySelectorAll('#panel > .grp')].find(g => { const h = g.querySelector(':scope > h2'); return h && h.firstChild && h.firstChild.textContent.trim() === key; });
+  if (!host) return;
+  const d = document.createElement('details'), body = document.createElement('div'); d.className = 'more'; d.dataset.more = key; body.className = 'morebody';
+  const sm = document.createElement('summary'); sm.textContent = 'More options'; d.append(sm, body);
+  ids.forEach(id => { const e = document.getElementById(id), w = e && (e.tagName === 'BUTTON' ? e : e.closest('label')); if (w && host.contains(w)) body.appendChild(w); });
+  if (!body.children.length) return;
+  host.appendChild(d); moreBoxes.push(d);
+  try { if (localStorage.getItem('hfb-more-' + key) === '1') d.open = true; } catch (e) {}
+  d.addEventListener('toggle', () => { if (document.body.classList.contains('searching')) return; try { localStorage.setItem('hfb-more-' + key, d.open ? '1' : '0'); } catch (e) {} }); });
+/* a setting changed from its default is never hidden: its More options opens (once, so closing it by hand sticks) */
+function moreSync(){
+  moreBoxes.forEach(d => { const nd = [...d.querySelectorAll('[data-opt]')].some(e => { const k = e.dataset.opt; return k in DEF && JSON.stringify(opt[k]) !== JSON.stringify(DEF[k]); });
+    if (nd && !d._nd) d.open = true; d._nd = nd; }); }
+{ const inp = $('#panelSearch'); let saved = null;
+  const run = () => { const q = inp.value.trim().toLowerCase(), pn = $('#panel');
+    if (!q) { if (saved) { saved.forEach(([el, st]) => { if (el.matches('.grp')) { el.classList.toggle('collapsed', st); const h = el.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', String(!st)); } else el.open = st; }); saved = null; }
+      document.body.classList.remove('searching'); pn.querySelectorAll('.srchmiss').forEach(x => x.classList.remove('srchmiss')); return; }
+    if (!saved) saved = [...pn.querySelectorAll(':scope > .grp'), ...pn.querySelectorAll('details.sub, details.more')].map(el => [el, el.matches('.grp') ? el.classList.contains('collapsed') : el.open]);
+    document.body.classList.add('searching');
+    pn.querySelectorAll('.srchmiss').forEach(x => x.classList.remove('srchmiss'));
+    const labs = [...pn.querySelectorAll('label')].filter(l => !l.closest('#stepsPanel, #stepSheet, .psearch'));
+    labs.forEach(l => { if (!(l.textContent + ' ' + (l.title || '')).toLowerCase().includes(q)) l.classList.add('srchmiss'); });
+    const hits = labs.filter(l => !l.classList.contains('srchmiss') && !l.hidden);
+    hits.forEach(l => { for (let a = l.parentElement; a && a !== pn; a = a.parentElement) { if (a.matches('details')) a.open = true; if (a.matches('.grp')) { a.classList.remove('collapsed'); const h = a.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', 'true'); } } });
+    pn.querySelectorAll('details.more, details.sub').forEach(d => { if (!d.querySelector('label:not(.srchmiss)')) d.classList.add('srchmiss'); });
+    pn.querySelectorAll(':scope > .grp').forEach(g => { if (!g.closest('#stepsPanel, #stepSheet') && !g.querySelector('label:not(.srchmiss)')) g.classList.add('srchmiss'); }); };
+  inp.addEventListener('input', run); }
 function grpStatus(){
   const set = (name, t) => { document.querySelectorAll('#panel > .grp > h2').forEach(h => { if (h.firstChild.textContent.trim() === name) { const st = h.querySelector('.st'); if (st) st.textContent = t; } }); };
   set('Processing', [opt.baseline === 'none' ? 'as recorded' : opt.baseline === 'min' ? 'zeroed' : 'drift removed', +opt.smooth ? `smoothed ${opt.smooth} pt` : 'no smoothing'].join(', '));
