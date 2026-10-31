@@ -30,6 +30,11 @@ function nd(name, readings, dates = true){
   const head = dates ? ['Sample Name', 'A280', 'Concentration', 'Date', 'Time'] : ['Sample Name', 'A280', 'Concentration'];
   return file(name, [head.join('\t'), ...readings.map(r => r.join('\t'))].join('\n'));
 }
+// A NanoDrop table whose concentration column states its unit: in the header bracket, or with units = true in a Units column.
+function ndUnit(name, unit, readings, units = false){
+  const head = ['Sample Name', 'A280', units ? 'Concentration' : `Conc. (${unit})`].concat(units ? ['Units'] : []);
+  return file(name, [head.join('\t'), ...readings.map(r => r.concat(units ? [unit] : []).join('\t'))].join('\n'));
+}
 // A UNICORN 7 export of the UV curve alone: one name row over a single ml,mAU pair. Peak 80 mAU at 12 mL on a 1.5 mAU baseline.
 function uvOnly(name = 'uv_only_u7.csv'){
   const rows = ['Chrom.1,', 'UV 1_280,', 'ml,mAU'];
@@ -68,4 +73,4 @@ function unicornZip(name, drop = []){
   const src = unzip(fsys.readFileSync(path.join(__dirname, 'chrom', 'valid_unicorn.zip')));
   return {name, mimeType: 'application/zip', buffer: zip(src.filter(e => !drop.some(n => e.name === `Chrom.1_${n}_True`)))};
 }
-module.exports = {file, unicorn, project, nd, uvOnly, unicornZip};
+module.exports = {file, unicorn, project, nd, ndUnit, uvOnly, unicornZip};

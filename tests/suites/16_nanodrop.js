@@ -293,5 +293,27 @@ async function fresh(id, fn){
     T.check('nd/vendor-preamble-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Real sample', value: '1.50 mg/mL'}]), JSON.stringify(rows));
   });
 
+  // #626: a concentration in a unit the app does not convert is kept as read and flagged for review, not silently passed off as mg/mL.
+  await fresh('unit-review-flag', async (p, h) => {
+    await h.newProject('Unit review flag');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    const files = [F.ndUnit('unit-pmol.tsv', 'pmol/µL', [['Molar head', '0.50', '12.5']]), F.ndUnit('unit-col-uM.tsv', 'µM', [['Molar col', '0.40', '8']], true),
+      F.ndUnit('unit-mg.tsv', 'mg/mL', [['Mass mg', '2.00', '2']]), F.ndUnit('unit-ug.tsv', 'µg/mL', [['Mass ug', '1.50', '1500']])];
+    const toasts = [], order = ['Molar head', 'Molar col', 'Mass mg', 'Mass ug'];
+    for (let i = 0; i < files.length; i++) {
+      await p.setInputFiles(SEL.nd, files[i]);
+      await p.waitForFunction(n => document.querySelectorAll('.ndr').length === n, i + 1);
+      toasts.push((await p.locator('#toast .pill').allTextContents()).filter(t => t.startsWith('Added')).pop() || '');
+    }
+    const rows = await p.$$eval(SEL.row, els => els.map(el => ({name: el.querySelector('input[data-ndk="name"]')?.value, value: el.querySelector('.nd-v')?.textContent.trim(), flag: el.querySelector('.nd-unit')?.textContent.trim() || ''}))).then(r => r.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name)));
+    const want = [{name: 'Molar head', value: '12.50 mg/mL', flag: '▲ Review required: pmol/µL'}, {name: 'Molar col', value: '8.00 mg/mL', flag: '▲ Review required: µM'},
+      {name: 'Mass mg', value: '2.00 mg/mL', flag: ''}, {name: 'Mass ug', value: '1.50 mg/mL', flag: ''}];
+    T.check('nd/unit-review/rows', JSON.stringify(rows) === JSON.stringify(want), JSON.stringify(rows));
+    T.check('nd/unit-review/toast', /Review required: unrecognised concentration unit pmol\/µL, kept as read/.test(toasts[0]) && /Review required: unrecognised concentration unit µM/.test(toasts[1]) && !/Review required/.test(toasts[2] + toasts[3]), JSON.stringify(toasts));
+    const nd = (await saved(p)).nanodrop || [];
+    T.check('nd/unit-review/saved', JSON.stringify(nd.map(s => [s.name, s.conc, s.unitWarn || ''])) === JSON.stringify([['Molar head', 12.5, 'pmol/µL'], ['Molar col', 8, 'µM'], ['Mass mg', 2, ''], ['Mass ug', 1.5, '']]), JSON.stringify(nd.map(s => [s.name, s.conc, s.unitWarn])));
+  });
+
   T.done();
 })();
