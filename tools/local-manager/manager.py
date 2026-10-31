@@ -461,6 +461,14 @@ def jules_questions(s):
             log(f'#{i["number"]} question failed: {e}')
             continue
         path = ' → '.join(trail)
+        late = [c for c in comments(i['number']) if c['id'] > q['id'] and (c['body'].lstrip().lower().startswith('answer for jules') or c['body'].startswith('No answer came within'))]
+        if late and who not in ('owner', 'lead'):  # the other manager (PC or cloud), a person, or the leader's rule reply got there first: one reply per question
+            s['answered'][key] = 'someone else'
+            log(f'#{i["number"]}: question already answered while the ladder worked, so this answer is not posted')
+            continue
+        if heartbeat_check_cloud_yield():
+            log(f'#{i["number"]}: the PC manager is back, so the cloud copy leaves this question to it')
+            continue
         if who == 'owner':
             label(i['number'], add=['needs-owner'])
             post(i['number'], f"**Needs your OK, Patrick:** {ans} Reply **OK** to approve or **No** to decline.\n\nJules asked:\n> {text[:600]}\n\n_Path: {path}._" + SIGN.format(rv.MODEL))
@@ -1722,6 +1730,18 @@ def self_update(s):
 PC_ONLY = {'review', 'claude jobs', 'board', 'advise', 'digest', 'update'}  # need the local model, Claude Code, Codex or this PC's checkout
 
 
+def heartbeat_check_cloud_yield():
+    """Cloud only: True when the PC manager has come back during this pass, so the cloud copy should not post."""
+    if not CLOUD:
+        return False
+    try:
+        c = next((c for c in reversed(comments(TRACK)) if c['body'].startswith(HEARTBEAT)), None)
+        m = c and re.search(r'pc-heartbeat (\d+)', c['body'])
+        return bool(m) and (time.time() - int(m.group(1))) / 60 < CLOUD_STANDBY
+    except Exception:
+        return False
+
+
 def heartbeat(s):
     """PC: refresh the heartbeat comment on the tracking issue every 5 minutes. Cloud: return its age in minutes (None if there is none)."""
     cid = s.get('hb_id')
@@ -1767,6 +1787,8 @@ def one_pass():
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
             continue  # first-pass notes from the local model: off, its time goes to writing code
         s['busy'] = {'duty': name, 'since': time.time()}
+        if not CLOUD:
+            heartbeat(s)  # a long pass (a hard question, a board meeting) must not look like the PC is off
         save(s)
         try:
             duty(s)
