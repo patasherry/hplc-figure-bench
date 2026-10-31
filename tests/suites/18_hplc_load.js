@@ -18,7 +18,7 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
     await p.waitForTimeout(500);
 
     // Verify it appears in trace list
-    const traces = await p.$$eval('.trace', els => els.map(e => e.textContent));
+    const traces = await p.$$eval('.trace', els => Array.from(els).map(e => e.textContent));
     T.check('hplc_export/loads', traces.length > 0, 'HPLC export file loaded successfully and appears in trace list');
 
     // Export project JSON
@@ -68,6 +68,38 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
     await p.waitForTimeout(600);
     const toasts = await h.toasts();
     T.check('zero_meas/hplc_long_header/diagnosed', toasts.some(t => /empty_ascii_export\.txt/.test(t) && /chromatogram/i.test(t) && /no data points/i.test(t) && !/no columns of numbers found/i.test(t)), `toasts: ${toasts.join(' | ') || 'none'}`);
+  });
+
+
+  await T.t('zero_measurement_values', async () => {
+    await p.reload();
+    await h.wait(500);
+    await h.newProject('zero measurements values');
+
+    // Load a synthetic file with exact zeros for values
+    // On main this will load successfully, proving zero works.
+    const content = 'Time,UV\n0.0,0\n1.0,0.0\n2.0,0.0\n';
+    await p.setInputFiles('#file', {name: 'zeros.csv', mimeType: 'text/csv', buffer: Buffer.from(content)});
+    await p.waitForTimeout(600);
+
+    // Wait for the UI element so the test doesn't randomly fail
+    await p.waitForSelector('.trace', { state: 'visible', timeout: 5000 }).catch(() => {});
+    const traces = await p.$$eval('.trace', els => els.map(e => e.textContent));
+    T.check('zero_meas/values/loads', traces.length > 0, 'Zero measurement file loaded successfully');
+
+    // Export and check the values inside
+    const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 10000 }), p.click('#projSave')]);
+    const fPath = path.join(__dirname, '..', 'results', 'zeros_proj.json');
+    await dl.saveAs(fPath);
+    const d = JSON.parse(fs.readFileSync(fPath, 'utf8'));
+
+    const r = (d.traces || []).find(x => x.name === 'zeros');
+    T.check('zero_meas/values/has-trace', !!r, 'Project has the trace with zeros');
+    if (r) {
+      T.check('zero_meas/values/points', r.rows.length === 3, 'All 3 points with 0 were loaded: ' + r.rows.length);
+      T.check('zero_meas/values/point1', Math.abs(r.rows[0][1]) < 0.001, 'First point y is 0');
+      T.check('zero_meas/values/point3', Math.abs(r.rows[2][1]) < 0.001, 'Third point y is 0');
+    }
   });
 
   T.check('no-page-errors', !errs.length, errs.join(' | '));
