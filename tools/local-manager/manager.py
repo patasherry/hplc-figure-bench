@@ -20,7 +20,7 @@ Run:  python tools\\local-manager\\manager.py          (keeps running)
       python tools\\local-manager\\manager.py --once   (one pass)
       python tools\\local-manager\\manager.py --dry    (one pass, prints what it would do, changes nothing)
 """
-import datetime as dt, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.request
+import base64, datetime as dt, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1349,6 +1349,93 @@ def jules_failed(s):
             log(f'#{i["number"]}: Jules failed 3 times, handed to Copilot (then Claude Code)')
 
 
+# ---------- usability scopes: the PC walks one use case through the app, the local model takes notes, the board proposes fixes ----------
+UX_MARK = '<!-- ux-scope-report -->'
+UX_EVERY = cfg.get('ux_every_hours', 6)  # one scope per this many hours while the PC is on; 0 turns it off
+UX_LABEL = 'ux-report'
+UX_NOTES = """You are a biochemistry graduate student using HPLC Figure Bench, an app for protein purification figures, for the first time.
+Your goal: {goal}
+You just did this step: {step}{err}
+Look at the screenshot of the app after that step. Note at most 3 concrete problems a real user would hit here: a label or message that is unclear,
+jargon with no explanation, a control that is hard to find or hidden, text that is cut off or overlapping, anything that looks broken.
+Don't note taste, and don't judge whether a scientific number is right. If nothing stands out, return an empty list.
+Return ONE JSON object: {{"notes": [{{"problem": "one sentence", "where": "which part of the screen", "severity": "high|medium|low"}}]}}"""
+
+
+def look(prompt, png):
+    """The local model reads a screenshot (Ollama vision). Returns its notes, or None when the model can't take images."""
+    body = {'model': rv.MODEL, 'stream': False, 'format': 'json', 'options': {'temperature': 0.2, 'num_ctx': int(cfg.get('num_ctx', 65536))},
+            'messages': [{'role': 'user', 'content': prompt, 'images': [base64.b64encode(Path(png).read_bytes()).decode()]}]}
+    req = urllib.request.Request(rv.OLLAMA + '/api/chat', data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=600) as r:
+            out = re.sub(r'<think>.*?</think>', '', json.loads(r.read())['message']['content'], flags=re.S)
+        return [n for n in (json.loads(out[out.find('{'):out.rfind('}') + 1]).get('notes') or []) if isinstance(n, dict) and n.get('problem')][:3]
+    except urllib.error.HTTPError as e:
+        log(f'ux: the local model would not read the screenshot ({e.code}); notes from plain checks only')
+        return None
+    except Exception as e:
+        log(f'ux: no notes for one screenshot ({str(e)[:120]})')
+        return []
+
+
+def ux_scope(s):
+    """Walk one test scope (tests/ux/scopes.js) through the app, add the local model's notes on each screenshot,
+    file the report as an issue, and put it on the Direction board's agenda so the advisers propose fixes."""
+    u = s.setdefault('ux', {})
+    if not UX_EVERY or DRY or time.time() - u.get('at', 0) < UX_EVERY * 3600:
+        return
+    node = shutil.which('node')
+    if not node or not (ROOT / 'tests' / 'node_modules').exists():
+        return log('ux: node or the test libraries are missing on this PC, so no usability scope this time')
+    ids = subprocess.run([node, 'tests/ux/scope.js'], cwd=ROOT, capture_output=True, text=True, timeout=120).stdout.split('scopes:', 1)[-1].strip().split(', ')
+    ids = [x for x in ids if x]
+    if not ids:
+        return log('ux: no scopes found')
+    sc = ids[u.get('next', 0) % len(ids)]
+    u['at'], u['next'] = time.time(), u.get('next', 0) + 1
+    out = WORK / 'ux' / sc
+    shutil.rmtree(out, ignore_errors=True)
+    env = {k: v for k, v in os.environ.items() if k != 'HFB_PRIVATE_DATA'}  # synthetic data only: screenshots must never show real lab files
+    log(f'ux: walking the "{sc}" scope')
+    try:
+        subprocess.run([node, 'tests/ux/scope.js', sc, str(out)], cwd=ROOT, env=env, capture_output=True, text=True, timeout=1800)
+        rep_ = json.loads((out / 'report.json').read_text(encoding='utf-8'))
+    except Exception as e:
+        return log(f'ux: the "{sc}" scope did not finish ({str(e)[:200]})')
+    vision = True
+    for st in rep_['steps']:
+        st['notes'] = []
+        if vision and st.get('shot') and Path(st['shot']).exists():
+            n = look(UX_NOTES.format(goal=rep_['goal'], step=st['name'], err=f"\nThat step did not work: {st['error']}" if st['error'] else ''), st['shot'])
+            if n is None:
+                vision = False
+            else:
+                st['notes'] = n
+    failed = [st for st in rep_['steps'] if not st['ok']]
+    found = list(dict.fromkeys(f for st in rep_['steps'] for f in st['findings']))
+    notes = list({n['problem'].strip().lower(): (st['name'], n) for st in reversed(rep_['steps']) for n in st['notes']}.values())[::-1]  # one line per problem, at the first step it showed up
+    if not failed and not found and not notes:
+        return log(f'ux: "{sc}" went through cleanly, nothing to report')
+    rows = '\n'.join(f"| {k + 1} | {st['name']} | {'✅' if st['ok'] else '❌ ' + st['error'][:120].replace('|', '/')} | {st['ms']/1000:.1f} s |" for k, st in enumerate(rep_['steps']))
+    body = (f"{UX_MARK}\n**Usability scope: {rep_['title']}**\n\nGoal: {rep_['goal']}\n\n"
+            f"| # | Step | Result | Time |\n|---|---|---|---|\n{rows}\n\n"
+            + ("### Steps a user could not complete\n" + '\n'.join(f"- **{st['name']}:** {st['error']}" for st in failed) + '\n\n' if failed else '')
+            + ("### Found by plain checks\n" + '\n'.join(f'- {f}' for f in found[:20]) + '\n\n' if found else '')
+            + ("### The local model's notes on the screenshots\n" + '\n'.join(f"- [{n.get('severity', '?')}] **{w}:** {n['problem']}" + (f" ({n['where']})" if n.get('where') else '') for w, n in notes[:15]) + '\n\n' if notes else
+               '' if vision else '_The local model could not read screenshots, so there are no notes from it._\n\n')
+            + f"Reproduce: `node tests/ux/scope.js {sc} <folder>` (synthetic data; the screenshots stay on the PC).\n\n"
+            f"The Direction board (#{BOARD}) takes this report as its next topic and proposes fixes. Some of these may be false alarms from a scripted walk: the board should check each one before proposing a fix.")
+    old = next((i for i in issues(UX_LABEL) if i['title'].startswith(f"UX scope: {rep_['title']}")), None)
+    if old:
+        post(old['number'], '**A newer walk of this scope:**\n\n' + body + SIGN.format(rv.MODEL)); n = old['number']
+    else:
+        n = gh(f'repos/{REPO}/issues', 'POST', {'title': f"UX scope: {rep_['title']}", 'labels': [UX_LABEL, 'from-ux-test'], 'body': body + SIGN.format(rv.MODEL)})['number']
+    s.setdefault('board', {})['ux_topic'] = (f"Usability report #{n} ({rep_['title']}). For each real problem in it, propose one small fix (one PR each); "
+        "say which findings look like false alarms of the scripted walk.\n" + '\n'.join([f"- could not: {st['name']}: {st['error']}" for st in failed] + [f'- {f}' for f in found[:10]] + [f"- {n_['problem']}" for _, n_ in notes[:10]])[:3000])
+    log(f'ux: "{sc}" reported in #{n}, on the board\'s agenda')
+
+
 # ---------- direction board: the local model, Gemini and ChatGPT discuss where to go, Patrick decides ----------
 BOARD_MARK = '<!-- direction-round -->'
 PROPOSE = """You are {who}, one of three AI advisers on HPLC Figure Bench, a single-file HTML app a biochemistry graduate student (Patrick) uses for real protein purification data.
@@ -1546,6 +1633,10 @@ def board(s):
     if ask and str(ask['id']) != b.get('asked'):
         b['asked'] = str(ask['id']); b['at'] = time.time()
         board_round(s, re.sub(r'^\W*discuss\s*:\s*', '', ask['body'], flags=re.I).strip()[:4000])  # Patrick's whole request, which may be a plan of several paragraphs
+    elif b.get('ux_topic'):  # a usability scope report waits for the advisers' fixes
+        topic = b.pop('ux_topic'); b['at'] = time.time()
+        log('board: meeting on a usability report')
+        board_round(s, topic)
     else:
         since = b.setdefault('since', dt.datetime.now(dt.timezone.utc).isoformat())
         merged = [p for p in gh(f'repos/{REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=50') if p.get('merged_at') and p['merged_at'] > since]
@@ -1727,7 +1818,7 @@ def self_update(s):
             sys.exit(0)
 
 
-PC_ONLY = {'review', 'claude jobs', 'board', 'advise', 'digest', 'update'}  # need the local model, Claude Code, Codex or this PC's checkout
+PC_ONLY = {'review', 'claude jobs', 'board', 'ux', 'advise', 'digest', 'update'}  # need the local model, Claude Code, Codex or this PC's checkout
 
 
 def heartbeat_check_cloud_yield():
@@ -1781,7 +1872,7 @@ def one_pass():
         log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
     else:
         heartbeat(s)
-    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
