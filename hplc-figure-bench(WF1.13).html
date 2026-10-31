@@ -1622,7 +1622,10 @@ function processTrace(t){
   return processXY(xs, ys, numOr(opt.xmin, -Infinity), numOr(opt.xmax, Infinity), opt.normalize, numOr(t.scale, 1));
 }
 function detectPeaks(t){
-  const {xs, ys} = processTrace(t); const n = ys.length; if (n < 7) return;
+  const tmpMin = opt.xmin, tmpMax = opt.xmax; opt.xmin = -Infinity; opt.xmax = Infinity;
+  const {xs, ys} = processTrace(t);
+  opt.xmin = tmpMin; opt.xmax = tmpMax;
+  const n = ys.length; if (n < 7) return;
   const range = arrMax(ys) - arrMin(ys); if (!(range > 0)) return;
   const thr = range * numOr(opt.prom, 5)/100, w = Math.max(2, Math.round(n*0.004)), span = Math.max(10, Math.round(n*0.08));
   const found = [];
@@ -1635,7 +1638,9 @@ function detectPeaks(t){
     const prom = v - Math.max(mL, mR); if (prom >= thr) found.push({x: xs[i] - (+t.xshift||0), prom});
   }
   found.sort((a,b)=>b.prom-a.prom);
-  const keep = found.slice(0, Math.max(1, numOr(opt.peakMax, 8)));
+    const cropMin = numOr(opt.xmin, -Infinity), cropMax = numOr(opt.xmax, Infinity);
+  const croppedFound = found.filter(p => p.x >= cropMin && p.x <= cropMax);
+  const keep = croppedFound.slice(0, Math.max(1, numOr(opt.peakMax, 8)));
   const manual = t.peaks.filter(p => !p.auto || p.label);
   const tol = (xs[n-1]-xs[0]) * 0.004;
   keep.forEach(p => { if (!manual.some(m => Math.abs(m.x - p.x) < tol)) manual.push({x: p.x, label: '', auto: true}); });
@@ -1969,7 +1974,9 @@ const procFull = run => { const cv = uvOf(run), k = `${opt.smooth}|${opt.baselin
 const windowXY = (q, lo, hi) => { const i0 = lowerBound(q.xs, lo); let i1 = q.xs.length; while (i1 > i0 && q.xs[i1-1] > hi) i1--; return {xs: q.xs.slice(i0, i1), ys: q.ys.slice(i0, i1)}; };
 /* peak areas read the recorded trace, like pool areas: the figure's smoothing and baseline change the picture only; integration has its own baseline (opt.intBase) */
 function integRows(run){
-  const uv = uvOf(run);
+  const uvOrig = run.uvs[run.uvi] || run.uvs[0];
+  const uv = {xs: uvOrig.xs, ys: uvOrig.ys, yu: uvOrig.yu};
+  if (/^au$/i.test(String(uv.yu || '').trim())) { uv.ys = uv.ys.map(v => v*1000); uv.yu = 'mAU'; }
   let rows = [];
   const regs = (run.integ || []).slice().sort((p, q) => p.a - q.a);
   if (opt.intMethod === 'gauss') rows = gaussRows(uv, regs);
@@ -1997,7 +2004,10 @@ function measToStep(r){ const b = prep.btw && prep.btw[r.id], c = numOr(r.poolCo
   prep.btw = prep.btw || {}; prep.btw[r.id] = Object.assign({how: 'conc'}, b, {conc: 'poolConc' in r ? r.poolConc : (b && b.conc) ?? '', vOut: 'poolFinalVol' in r ? r.poolFinalVol : (b && b.vOut) ?? ''}); delete r.poolConc; delete r.poolFinalVol; if (typeof renderSteps === 'function') renderSteps(); }
 /* pooled UV uses the same baseline choice as the peak regions: a line across each pooled block, or 0 mAU */
 function poolRows(run){
-  const uv = uvOf(run), xs = uv.xs, ys = uv.ys, B = poolBlocks(run); if (!B.length) return null;
+  const uvOrig = run.uvs[run.uvi] || run.uvs[0];
+  const uv = {xs: uvOrig.xs, ys: uvOrig.ys, yu: uvOrig.yu};
+  if (/^au$/i.test(String(uv.yu || '').trim())) { uv.ys = uv.ys.map(v => v*1000); uv.yu = 'mAU'; }
+  const xs = uv.xs, ys = uv.ys, B = poolBlocks(run); if (!B.length) return null;
   const a = B[0].a, b = B[B.length - 1].b, ia = Math.max(0, lowerBound(xs, a)), ib = Math.min(xs.length - 1, lowerBound(xs, b)); if (xs.length < 2 || !(b > a) || b <= xs[0] || a >= xs[xs.length - 1]) return null;
   /* baseline: zero, or a line between the lowest points just outside the pool, walking out while the trace keeps falling */
   const rng = (arrMax(ys) - arrMin(ys)) || 1, tol = rng*0.003, w = Math.max(1, Math.round(xs.length*0.002));
@@ -2012,7 +2022,10 @@ function poolRows(run){
     k: meas && mgA > 0 ? mg/mgA : null};
 }
 function autoIntegrate(run){
-  const {xs, ys} = xUnit(run) === 'min' && !(uvFlow(run) > 0) ? procFull(run) : runUV(Object.assign({}, run, {crop: ''})), n = ys.length; if (n < 10) return 0;
+  const uvOrig = run.uvs[run.uvi] || run.uvs[0];
+  const uv = {xs: uvOrig.xs, ys: uvOrig.ys, yu: uvOrig.yu};
+  if (/^au$/i.test(String(uv.yu || '').trim())) { uv.ys = uv.ys.map(v => v*1000); uv.yu = 'mAU'; }
+  const {xs, ys} = {xs: uv.xs, ys: uv.ys}; const n = ys.length; if (n < 10) return 0;
   const mn = arrMin(ys), range = arrMax(ys) - mn; if (!(range > 0)) return 0;
   const dn = []; for (let i=1;i<n;i++) dn.push(Math.abs(ys[i] - ys[i-1])); dn.sort((p, q) => p - q); const nsd = (dn[dn.length >> 1] || 0)*1.4826/Math.SQRT2;
   const sec = isSec(run), thr = Math.max(10*nsd, range*(sec ? Math.min(numOr(opt.intProm, 5), 2) : numOr(opt.intProm, 5))/100), w = Math.max(2, Math.round(n*0.004)), span = Math.max(10, Math.round(n*0.15));

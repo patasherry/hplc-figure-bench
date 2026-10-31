@@ -134,5 +134,42 @@ async function peakFile(e) {
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }
+
+  await T.t('cropped_sec_detect_peaks', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await h.newProject('SEC mass calc');
+      await h.addRun(path.join(DATA, 'chrom/sec_semicolon_unicorn7.csv'));
+
+      let runStep;
+      for (let t0 = Date.now(); !runStep && Date.now() - t0 < 10000; await h.wait(250)) runStep = (await h.timeline()).find(x => /^run:/.test(x.k));
+      if (runStep) await h.step(runStep.k);
+      await h.wait(400);
+
+      // force a crop before detection
+      await setOpt(p, 'o-xmin', '10');
+      await setOpt(p, 'o-xmax', '15');
+
+      // select peak auto-integration (from 10_data_truth.js pattern)
+      await p.evaluate(() => { const el = document.getElementById('intAuto'); if (el) el.click(); });
+      await h.wait(500);
+
+      const peakTable = await h.peakTable();
+      if (T.check('has peaks', peakTable.length > 1, 'Table has peaks')) {
+        const head = peakTable[0];
+        const ia = head.findIndex(c => /^Area/.test(c));
+        const r1 = peakTable[1], r2 = peakTable[2];
+        const area1 = r1 && ia >= 0 ? num(r1[ia]) : NaN;
+        const area2 = r2 && ia >= 0 ? num(r2[ia]) : NaN;
+
+        T.check('peak1.area', Math.abs(area1 - 196) <= 5, `Peak 1 area ${area1} near 196`);
+        T.check('peak2.area', Math.abs(area2 - 30) <= 2, `Peak 2 area ${area2} near 30`);
+      }
+    } finally {
+      T.check(`cropped/no-page-errors`, !errs.length, errs.join(' | '));
+      await close();
+    }
+  });
+
   T.done();
 })();
