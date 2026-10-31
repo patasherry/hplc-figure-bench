@@ -36,6 +36,7 @@ BOARD_LOW_QUEUE = cfg.get('board_low_queue', 5)  # and when fewer jobs than this
 AUTO_MAX, AUTO_QUEUE, AUTO_AVG = 3, 10, 3.5  # adopt at most 3 a round, while fewer than 10 jobs wait, with an average of 3.5+ and nobody below 3
 BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
+COPILOT_MODE = cfg.get('copilot_mode', 'off')  # off (Patrick has no Copilot credits): no Copilot jobs at all, and its turn goes to Claude Code. auto: the cloud agent, and the Copilot CLI while it is paused. cloud or cli: only that one
 CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 6), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
 TRACK = cfg.get('tracking_issue', 17)
 CLOUD_STANDBY = cfg.get('cloud_standby_minutes', 20)  # the cloud copy works only when the PC manager has been quiet this long
@@ -690,7 +691,7 @@ def gate(s):
                 gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n### Automatic review of PR #{n} (Jules out of tries)\n\n{notes}'})
                 post(n, ('**Handed to Claude Code** on the owner\'s PC: Copilot\'s attempt did not pass either.' if cop else f'**Handed to Copilot**, then Claude Code if needed: Jules was sent back {MAX_SENDBACKS} times.') + f' Problems:\n\n{notes}' + SIGN.format(rv.MODEL))
                 gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
-            nxt = 'for-claude-code' if cop else 'for-copilot'
+            nxt = 'for-claude-code' if cop or COPILOT_MODE == 'off' else 'for-copilot'
             label(issue, add=[nxt], remove=['jules-queue', 'jules-done', 'jules-running', 'needs-coordinator', 'copilot-done'])
             log(f'PR #{n}: #{issue} handed to {"Claude Code" if nxt == "for-claude-code" else "Copilot"}')
         elif probs:
@@ -977,7 +978,7 @@ def antigravity(s):
             log(f'#{i["number"]}: Antigravity job not tracked any more, back to Jules')
     # hand out: first jobs that wait for a worker that isn't there (Copilot while it is paused, Claude Code while the PC is off), then Jules' backlog
     ok = lambda i: str(i['number']) not in s.get('ag_tried', {}) and str(i['number']) not in a and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
-    cop_off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
+    cop_off = COPILOT_MODE == 'off' or max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
     waiting = ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
               ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] if CLOUD else [])
     queue = [i for i in issues('jules-queue') if ok(i) and not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
@@ -1127,7 +1128,7 @@ def bg_worker(s, key):
         return
     busy = {n for k in _bg for n in _bg[k]}
     ok = lambda i: str(i['number']) not in tried and i['number'] not in busy and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
-    cop_off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
+    cop_off = COPILOT_MODE == 'off' or max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
     fresh = lambda i: i['number'] not in busy and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
     seen = s.setdefault('q_seen', {}); now = time.time()
     queue = sorted(issues('jules-queue'), key=lambda x: -x['number'])
@@ -1335,7 +1336,7 @@ def jules_failed(s):
         if 'pull_request' in i or str(i['number']) in s['ccfail']:
             continue
         if any('attempts ended without a PR' in c['body'] for c in comments(i['number'])[-3:]):
-            label(i['number'], add=['for-copilot'], remove=['needs-coordinator'])
+            label(i['number'], add=['for-claude-code' if COPILOT_MODE == 'off' else 'for-copilot'], remove=['needs-coordinator'])
             s['ccfail'][str(i['number'])] = 1
             log(f'#{i["number"]}: Jules failed 3 times, handed to Copilot (then Claude Code)')
 
@@ -1553,7 +1554,6 @@ def board(s):
 # ---------- GitHub Copilot coding agent: overflow worker beside Jules (needs a paid Copilot plan) ----------
 COPILOT = 'copilot-swe-agent[bot]'
 COPILOT_AT_ONCE = cfg.get('copilot_at_once', 4)
-COPILOT_MODE = cfg.get('copilot_mode', 'auto')  # auto: the cloud agent, and the Copilot CLI on this PC while the cloud agent is paused. cloud or cli: only that one
 COPILOT_WHEN_QUEUE = cfg.get('copilot_when_queue', 1)  # hand jobs to Copilot while at least this many wait for Jules
 _copilot = {'off_until': 0}  # kept in memory, so a restart (for example after a plan change) retries at once
 COPILOT_RULES = ('Follow AGENTS.md exactly (read docs/CODEMAP.md first). Change only hplc-figure-bench(WF1.13).html and files under tests/suites, tests/data and tests/lib. '
@@ -1592,8 +1592,8 @@ def copilot(s):
     # hand out overflow: only while Jules has a backlog, at most COPILOT_AT_ONCE at a time
     queue = [i for i in issues('jules-queue') if 'pull_request' not in i and not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
     retry = [i for i in issues('for-copilot') if 'pull_request' not in i]  # Jules is out of tries on these: Copilot goes first, before Claude Code
-    off = max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
-    cli = bool(shutil.which('copilot')) and s.get('copilot_cli_off_until', 0) < time.time() and (COPILOT_MODE == 'cli' or (COPILOT_MODE == 'auto' and off))
+    off = COPILOT_MODE == 'off' or max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
+    cli = COPILOT_MODE != 'off' and bool(shutil.which('copilot')) and s.get('copilot_cli_off_until', 0) < time.time() and (COPILOT_MODE == 'cli' or (COPILOT_MODE == 'auto' and off))
     off = off and not cli  # the CLI covers for the paused cloud agent
     if off or len(issues('copilot-running')) >= COPILOT_AT_ONCE or not (retry or len(queue) >= COPILOT_WHEN_QUEUE):
         if retry and off:
@@ -1788,7 +1788,7 @@ def agent_checks():
               ('Gemini (REST API)', lambda: ask_gemini(q)),
               ('Claude Code (read-only)', lambda: ask_claude(q)),
               ('ChatGPT (Codex, read-only)', lambda: ask_codex(q)),
-              ('Copilot CLI', lambda: run(['copilot', '-s', '-p'], q, timeout=300)))
+              ('Copilot CLI', lambda: run(['copilot', '-s', '-p'], q, timeout=300)))[:None if COPILOT_MODE != 'off' else -1]
     res = []
     for name, f in checks:
         t0 = time.time()
