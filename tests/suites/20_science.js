@@ -220,6 +220,19 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
   });
 
 
+  /* ================= #437: the final yield follows a measured step without a chromatogram placed after the last pool ================= */
+  await T.t('p5_final_manual', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Final manual yield'); await h.gb(F.gb);
+    await h.addRun(F.imac); await h.pool('T1-T6'); await setRun('path', 2);
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="man:other"]').click()); await h.wait(500);
+    await setField('#man-name', 'Final buffer exchange'); await setField('#man-conc', '0.5'); await setField('#man-vol', '1');
+    const m = await methods(), res = (m.match(/Results:[^]*/) || [''])[0];
+    T.check('p5m.manual_amount_reported', /After the Final buffer exchange step, the sample held 0\.50 mg \(0\.50 mg\/mL in 1(\.0)? mL\)/.test(res), `Results: ${res.slice(0, 600) || 'none'}`);
+    T.check('p5m.final_is_manual_step', !/final pool held/i.test(res), `Results still names the earlier pool as the final amount: ${(res.match(/[^.]*final pool held[^.]*\./i) || [''])[0]}`); /* guards: 0.50 mg/mL x 1 mL kept is the final amount, not the earlier pool's mg */
+  });
+
   await T.t('p5', async () => {
     await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
     await h.newProject('Volume override');
