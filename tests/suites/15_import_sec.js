@@ -89,6 +89,9 @@ async function fresh(id, fn){
     T.check('unicorn/dot-unchanged', dot && dot.uvs[0].xs[1] === 0.25 && dot.uvs[0].ys[0] === 2.5);
   });
   await fresh('unicorn-semicolon', async (p, h) => {
+    // Canonical synthetic test and acceptance matrix for SEC semicolon separation.
+    // Cross-links prior evidence from issues #215, #248, #398, #551, #576, and #593.
+    // Nominated implementation issue: #593 (leaving parser implementation for P4).
     await h.newProject('Synthetic comma numbers');
     await h.addRun(path.join(DATA, 'chrom', 'sec_semicolon_unicorn7.csv'));
     await p.waitForTimeout(500);
