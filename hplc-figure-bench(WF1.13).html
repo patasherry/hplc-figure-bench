@@ -1458,7 +1458,7 @@ function svgHead(Wpt, Hpt){
 }
 
 /* ---------- parsing: generic ---------- */
-const NUM = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
+const NUM = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?([A-Za-z*])?$/;
 function decode(buf){
   const b = new Uint8Array(buf);
   if (b[0]===0xFF && b[1]===0xFE) return new TextDecoder('utf-16le').decode(b.subarray(2));
@@ -1471,7 +1471,7 @@ function decode(buf){
 const clean = f => f.trim().replace(/^"(.*)"$/,'$1').trim();
 function splitLine(L, d){ return d === 'ws' ? L.trim().split(/\s+/) : L.split(d); }
 /* Generic chromatogram and ÄKTA CSV values use this directly; NanoDrop first applies its delimiter-specific decimal normalization. Zero is a measurement, while blank and malformed fields are not. */
-function measurementNumber(v){ const s = clean(String(v ?? '')); return NUM.test(s) ? Number(s) : null; }
+function measurementNumber(v){ const s = clean(String(v ?? '')); return NUM.test(s) ? parseFloat(s) : null; }
 function toNum(f, dc){ f = clean(f); if (dc) f = f.replace(/^-?\d+,\d+(?:[eE][-+]?\d+)?$/, m => m.replace(',', '.')); const v = measurementNumber(f); return v == null ? NaN : v; }
 function parseText(text){
   const lines = text.split(/\r\n|\n|\r/);
@@ -5504,13 +5504,13 @@ const isWl = h => /^\d{3}(\.\d+)?\s*(nm)?$/i.test(String(h).trim());
 function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
     if (/^\s*vendor|:\s*$/i.test(H[0] || '')) continue; /* metadata rows ("Vendor: Agilent", "Sample Name:") are not the table header */
     if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) {
-        for (let j = i + 1; j < lines.length; j++) {
+        for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
             const row = splitRow(lines[j], d);
             if (row.some(v => ndNum(v, d) != null)) return {i, d, H, rows: 'samples'};
         }
     }
     if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1) {
-        for (let j = i + 1; j < lines.length; j++) {
+        for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
             const row = splitRow(lines[j], d);
             if (row.some(v => ndNum(v, d) != null)) return {i, d, H, rows: 'wavelengths'};
         }
@@ -5539,7 +5539,7 @@ function parseNanoDrop(text){
   /* spectra laid out as rows: one column per sample, one row per wavelength */
   if (hd.rows === 'wavelengths') { return H.slice(1).map((nm, k) => { const wl = [], ab = []; data.forEach(r => { const w = ndNum(r[0], d), v = ndNum(r[k + 1], d); if (w != null && v != null) { wl.push(w); ab.push(v); } });
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }, a280 = at(280), a260 = at(260);
-      return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null); }
+      return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null && !s.name.trim().endsWith(':') && !/^vendor/i.test(s.name.trim())); }
   const hn = H.map(h => h.toLowerCase().replace(/\s+/g, ' ')), col = f => hn.findIndex(f);
   const cName = col(h => ND_NAME.test(h)), cR280 = col(h => /a?\s?260\s*\/\s*a?\s?280/.test(h)), cR230 = col(h => /a?\s?260\s*\/\s*a?\s?230/.test(h));
   const absCol = w => col(h => new RegExp(`\\ba ?${w}\\b|^${w}$`).test(h) && !/\//.test(h) && !/conc|mg|µg|ug|ng|raw/.test(h));
@@ -5549,7 +5549,10 @@ function parseNanoDrop(text){
   const cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
   const wcols = H.map((h, i) => ({i, w: parseFloat(h)})).filter(x => isWl(H[x.i]) && x.w >= 190 && x.w <= 850);
   const headAll = hn.join(' '), dyeFile = /dye|degree of label/.test(headAll);
-  return data.filter(r => r.length > 2 && (r[cName] || '').length).map((r, i) => {
+  return data.filter(r => {
+    const nm = (r[cName] || '').trim();
+    return r.length > 2 && nm.length > 0 && !nm.endsWith(':') && !/^vendor/i.test(nm);
+  }).map((r, i) => {
     const typ = cType >= 0 ? r[cType] : '', unitTxt = ((cUnit >= 0 ? r[cUnit] : '') + ' ' + (cConc >= 0 ? hn[cConc] : '')).toLowerCase();
     const kind = /ng\s*\/\s*[µu]l|nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
     let conc = cConc >= 0 ? ndNum(r[cConc], d) : null;
