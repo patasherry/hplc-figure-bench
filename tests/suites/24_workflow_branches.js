@@ -1,5 +1,6 @@
 // Workflow branches: a step can come from an earlier step (Comes from), so one fraction goes to one next step and another fraction to a second.
-const {open, H, suite, src} = require('../lib/harness');
+const {open, H, suite, src, DATA, path} = require('../lib/harness');
+  const openFolds = loc => loc.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } });
 (async () => { const T = suite('24_workflow_branches');
   const boxes = p => p.$$eval('#paper svg g[data-wfp]', gs => gs.map(g => { const b = g.getBoundingClientRect(); return {id: g.dataset.wfp, l: b.left, r: b.right, t: b.top, b: b.bottom}; }));
   const edges = p => p.$$eval('#paper svg [data-wfe]', es => es.map(e => { const b = e.getBoundingClientRect(); return {e: e.dataset.wfe, l: b.left, r: b.right, t: b.top, b: b.bottom}; }));
@@ -68,4 +69,74 @@ const {open, H, suite, src} = require('../lib/harness');
       T.check('legacy: panels in one row, in order', b.every((x, i) => i === 0 || (b[i - 1].r <= x.l + 1 && Math.abs(b[i - 1].t - x.t) < 3)), JSON.stringify(b)); T.check('legacy: one plain arrow between neighbours, no branch routes', (await edges(p)).length === Math.max(0, b.length - 1)); }
     else T.check('legacy: no workflow figure in this fixture (skipped)', true);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
+  await T.t('branches-yields', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), q: src('q')};
+
+    await h.newProject('Linear vs Branch');
+    await h.gb(F.gb);
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+    await h.addRun(F.sec);
+    await h.suggest();
+    await h.addRun(F.q);
+    await h.suggest();
+
+    const tl = (await h.timeline()).filter(x => x.k.startsWith('run:'));
+    const ids = tl.map(x => x.k.slice(4));
+
+    // Linear checks:
+    await openWf(p);
+    await p.evaluate(() => {
+      const el = document.getElementById('o-wfYield');
+      if (el) { el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.wait(500);
+
+    const linTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
+    T.check('linear: exactly one final yield line', linTexts.length === 1, linTexts.map(x => x.t).join(' | '));
+    T.check('linear: methods has no split text', !/was split:/i.test(await h.methods()));
+
+    // Now branch: AEX comes from IMAC (ids[0])
+    await setFrom(p, h, tl[2].k, ids[0]);
+    await p.fill('#ssFromNote', 'fractions B9-B12');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+
+    // SEC note
+    await h.step(tl[1].k);
+    await p.fill('#ssFromNote', 'fractions B5-B8');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+
+    // Add conc after SEC: 1.42 mg/mL, 2.0 mL -> 2.84 mg
+    await h.step(tl[1].k);
+    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
+    const c1 = p.locator('#btw-conc'); await openFolds(c1);
+    await c1.fill('1.42'); await c1.dispatchEvent('change');
+    const v1 = p.locator('#btw-vOut'); await openFolds(v1);
+    await v1.fill('2.0'); await v1.dispatchEvent('change');
+    await h.wait(400);
+
+    // Add conc after AEX: 1.42 mg/mL, 1.5 mL -> 2.13 mg
+    await h.step(tl[2].k);
+    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
+    const c2 = p.locator('#btw-conc'); await openFolds(c2);
+    await c2.fill('1.42'); await c2.dispatchEvent('change');
+    const v2 = p.locator('#btw-vOut'); await openFolds(v2);
+    await v2.fill('1.5'); await v2.dispatchEvent('change');
+    await h.wait(400);
+
+    await openWf(p);
+    const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
+    T.check('branch: two final yield lines', brTexts.length === 2, brTexts.map(x => x.t).join(' | '));
+    T.check('branch: SEC yield matches hand arithmetic (1.42 * 2.0 = 2.84 mg)', brTexts.some(t => /Final pool \(C, Size exclusion\): 2\.84 mg/.test(t.t)), brTexts.map(x => x.t).join(' | '));
+    T.check('branch: AEX yield matches hand arithmetic (1.42 * 1.5 = 2.13 mg)', brTexts.some(t => /Final pool \(E, Anion exchange\): 2\.13 mg/.test(t.t)), brTexts.map(x => x.t).join(' | '));
+
+    const meth = await h.methods();
+    T.check('branch: methods text describes the split', /The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10\/300 GL column \(step 2, panel C\) and fractions B9-B12 to a Q 6 mL column \(step 3, panel E\)\./.test(meth), meth);
+    T.check('branch: results section reports both branch pools', /After size exclusion, concentration left 2\.84 mg/.test(meth) && /After anion exchange, concentration left 2\.13 mg/.test(meth), meth);
+
+    T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
+
   T.done(); })();
