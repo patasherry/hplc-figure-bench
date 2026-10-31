@@ -1198,6 +1198,18 @@ button,input,select,textarea{font-family:inherit}
           <option value="none">None</option>
         </select>
       </label>
+      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Zoom inset: whole run, with the X window magnified</label>
+      <div class="row">
+        <label class="f">Inset position
+          <select id="o-zoomInsetPos" data-opt="zoomInsetPos">
+            <option value="tr">Upper right</option>
+            <option value="tl">Upper left</option>
+            <option value="br">Lower right</option>
+            <option value="beside">Beside (second panel)</option>
+          </select>
+        </label>
+        <label class="f">Inset size (fraction of width)<input type="number" step="0.05" min="0.15" max="0.6" id="o-zoomInsetSize" data-opt="zoomInsetSize"></label>
+      </div>
     </section>
 
     <section class="grp optsec">
@@ -1310,6 +1322,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
   intMethod:'gauss', poolStyle:'band', poolColor:'#E69F00', poolAlpha:0.3, intBase:'line', intLabel:'num', intProm:5, intFill:true, eps:'', path:2,
   wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfArrows:true, gelFrame:true, ladder:'biorad',
+  zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4,
   preset:'single', w:3.5, h:2.6, fs:8, lw:0.75, font:'Arial', palette:'okabe', bg:true, dpi:600};
 const RANGE = ['xmin','xmax','ymin','ymax'];
 /* Native E. coli proteins commonly co-purified by IMAC (Bolanos-Garcia & Davies 2006, Table 1), DnaK, and common purification additives.
@@ -2123,9 +2136,44 @@ function style(ov){
   return {W, H, fs, lw, aw: Math.max(0.5, Math.min(lw, 1.5*fs/8)), cw: fs*0.56, tl: fs*0.45, tOut: o.ticksOut ? fs*0.45 : 0, head};
 }
 
+/* ---------- figure: zoom inset ---------- */
+/* Presentation only: the main plot shows the whole run and a small second plot shows the x-window. Nothing that is calculated reads these. */
+function withOpt(patch, fn){ const old = {}; Object.keys(patch).forEach(k => { old[k] = opt[k]; opt[k] = patch[k]; }); try { return fn(); } finally { Object.keys(old).forEach(k => { opt[k] = old[k]; }); } }
+const zoomSize = () => Math.max(0.15, Math.min(0.6, numOr(opt.zoomInsetSize, 0.4)));
+const zoomPos = () => ['tr', 'tl', 'br', 'beside'].includes(opt.zoomInsetPos) ? opt.zoomInsetPos : 'tr';
+/* the region zoomed into: the x-window; with none set, the middle third of the run */
+function zoomWindow(lo, hi, a, b){
+  const hasA = numOr(a, null) !== null, hasB = numOr(b, null) !== null;
+  const za = Math.max(lo, hasA ? +a : hasB ? lo : lo + (hi - lo)/3), zb = Math.min(hi, hasB ? +b : hasA ? hi : lo + (hi - lo)*2/3);
+  return zb > za ? {a: za, b: zb} : null;
+}
+function zoomCompose(S, m, win, buildIn){
+  const o = opt, pos = zoomPos(), beside = pos === 'beside', g = m.geo, {L, R, T, B} = g;
+  const iw = beside ? S.W*zoomSize() : (R - L)*zoomSize(), ih = beside ? S.H : Math.min((B - T)*0.8, iw*S.H/S.W*1.15);
+  const ins = buildIn(iw, ih); if (!ins || !ins.svg) return null;
+  const pad = 3, ix = beside ? S.W - iw : pos === 'tl' ? L + pad : R - iw - pad, iy = beside ? 0 : pos === 'br' ? B - ih - pad : T + pad;
+  const src = g.uv ? [{xs: g.uv.xs, yp: g.uv.ys}] : g.P; let mx = -Infinity;
+  src.forEach(p => { for (let i = Math.max(0, lowerBound(p.xs, win.a)); i < p.xs.length && p.xs[i] <= win.b; i++) if (p.yp[i] > mx) mx = p.yp[i]; });
+  const rTop = isFinite(mx) ? Math.max(T, Math.min(B - 4, g.py(mx) - 3)) : T, xa = g.px(win.a), xb = g.px(win.b);
+  const tg = beside ? {x0: ix + ins.geo.L, x1: ix + ins.geo.R, y0: ins.geo.T, y1: ins.geo.B} : {x0: ix, x1: ix + iw, y0: iy, y1: iy + ih};
+  const ln = (x1, y1, x2, y2) => `<line x1="${r2(x1)}" y1="${r2(y1)}" x2="${r2(x2)}" y2="${r2(y2)}"/>`;
+  let con = '';
+  if (tg.y1 < rTop - 2) con = ln(xa, rTop, tg.x0, tg.y1) + ln(xb, rTop, tg.x1, tg.y1);
+  else if (xb <= tg.x0) con = ln(xb, rTop, tg.x0, tg.y0) + ln(xb, B, tg.x0, tg.y1);
+  else if (xa >= tg.x1) con = ln(xa, rTop, tg.x1, tg.y0) + ln(xa, B, tg.x1, tg.y1);
+  const inner = beside ? m.svg : m.svg.slice(S.head.length, m.svg.length - 6);
+  const out = [S.head];
+  if (beside && o.bg) out.push(`<rect width="${r2(S.W)}" height="${r2(S.H)}" fill="#ffffff"/>`);
+  out.push(`<g data-plot="main">${inner}</g>`);
+  out.push(`<g id="zoom-region" stroke="#777777" stroke-width="${r2(Math.max(0.3, S.aw*0.6))}" fill="none"><rect x="${r2(xa)}" y="${r2(rTop)}" width="${r2(xb - xa)}" height="${r2(B - rTop)}" fill="#000000" fill-opacity="0.05"/>${con}</g>`);
+  out.push(`<g id="zoom-inset" data-plot="inset" transform="translate(${r2(ix)} ${r2(iy)})">${beside ? '' : `<rect width="${r2(iw)}" height="${r2(ih)}" fill="#ffffff" stroke="#999999" stroke-width="0.4"/>`}${ins.svg}</g></svg>`);
+  return {svg: out.join(''), geo: g};
+}
+
 /* ---------- figure: HPLC overlay ---------- */
-function buildSVG(){
-  const o = opt, S = style(), {W, H, fs, lw, aw, cw, tl, tOut} = S;
+function buildOverlaySVG(ov){
+  ov = ov || {};
+  const o = opt, S = style(ov), {W, H, fs, lw, aw, cw, tl, tOut} = S, idp = ov.idp || '';
   const vis = traces.filter(t => t.visible); const order = o.flip ? vis.slice().reverse() : vis;
   const P = order.map(t => Object.assign({t}, processTrace(t))).filter(p => p.xs.length > 1);
   if (!P.length) return {svg: null, geo: null};
@@ -2160,8 +2208,8 @@ function buildSVG(){
   const px = x => L + (x-xlo)/(xhi-xlo)*(R-L), py = y => B - (y-y0)/(y1-y0)*(B-T), invX = X => xlo + (X-L)/(R-L)*(xhi-xlo);
   const s = [S.head];
   if (o.bg) s.push(`<rect width="${r2(W)}" height="${r2(H)}" fill="#ffffff"/>`);
-  s.push(`<defs><clipPath id="plot-area"><rect x="${r2(L)}" y="${r2(T)}" width="${r2(R-L)}" height="${r2(B-T)}"/></clipPath></defs>`);
-  s.push(`<g clip-path="url(#plot-area)" fill="none" stroke-width="${lw}" stroke-linejoin="round" stroke-linecap="round">`);
+  s.push(`<defs><clipPath id="${idp}plot-area"><rect x="${r2(L)}" y="${r2(T)}" width="${r2(R-L)}" height="${r2(B-T)}"/></clipPath></defs>`);
+  s.push(`<g clip-path="url(#${idp}plot-area)" fill="none" stroke-width="${lw}" stroke-linejoin="round" stroke-linecap="round">`);
   const nb = Math.max(200, Math.round((R-L)*4));
   P.forEach(p => s.push(`<path d="${pathD(p.xs, p.yp, xlo, xhi, nb, px, py)}" stroke="${p.t.color}"/>`));
   s.push('</g>');
@@ -2251,11 +2299,33 @@ function buildSVG(){
   return {svg: s.join(''), geo: {L,R,T,B,xlo,xhi,y0,y1,P,px,py,W,H,lblLeft}};
 }
 
+function buildSVG(ov){
+  ov = ov || {};
+  if (!opt.zoomInset || ov.noZoom || ov.nest) return buildOverlaySVG(ov);
+  const S = style(), wa = opt.xmin, wb = opt.xmax, beside = zoomPos() === 'beside';
+  const m = withOpt({xmin: '', xmax: ''}, () => buildOverlaySVG(beside ? {noZoom: true, nest: true, wPt: S.W*(1 - zoomSize()), hPt: S.H} : {noZoom: true}));
+  if (!m.svg) return m;
+  const win = zoomWindow(m.geo.xlo, m.geo.xhi, wa, wb);
+  const z = win && zoomCompose(S, m, win, (w, h) => withOpt({xmin: win.a, xmax: win.b, legend: 'none', scalebar: false, xlabel: '', ylabel: '', ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildOverlaySVG({noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})));
+  return z || buildOverlaySVG({noZoom: true});
+}
+
 /* ---------- figure: ÄKTA run chart ---------- */
 /* x axis title: your own text, else elution volume for SEC runs and time for runs exported against minutes */
 function runXLabel(run){ const o = opt; if (o.rxlabel !== DEF.rxlabel) return o.rxlabel; const u = xUnit(run);
   return u === 'min' ? (isSec(run) ? 'Elution time (min)' : 'Time (min)') : isSec(run) ? 'Elution volume (mL)' : o.rxlabel; }
 function buildRunSVG(run, ov){
+  ov = ov || {};
+  if (!opt.zoomInset || run.prep || ov.noZoom || ov.nest) return buildRunPlainSVG(run, ov);
+  const S = style(), wa = run.xmin, wb = run.xmax, beside = zoomPos() === 'beside', put = (a, b) => { run.xmin = a; run.xmax = b; };
+  let m; try { put('', ''); m = buildRunPlainSVG(run, beside ? {noZoom: true, nest: true, wPt: S.W*(1 - zoomSize()), hPt: S.H} : {noZoom: true}); } finally { put(wa, wb); }
+  if (!m.svg) return m;
+  const win = zoomWindow(m.geo.xlo, m.geo.xhi, wa, wb);
+  const z = win && zoomCompose(S, m, win, (w, h) => { try { put(win.a, win.b);
+    return withOpt({rxlabel: '', rylabel: '', runCond: 'none', ndFig: 'none', runTitle: false, ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildRunPlainSVG(run, {noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})); } finally { put(wa, wb); } });
+  return z || buildRunPlainSVG(run, {noZoom: true});
+}
+function buildRunPlainSVG(run, ov){
   ov = ov || {};
   if (run.prep) return buildPrepSVG(run, ov);
   const o = opt, S = style(ov), {W, H, fs, lw, aw, cw, tl, tOut} = S, idp = ov.idp || '';
@@ -2514,7 +2584,7 @@ function buildRunSVG(run, ov){
   }
   s.push('</svg>');
   const fracC = nonW.map(sg => ({label: sg.label, x: px((Math.max(sg.a, xlo) + Math.min(sg.b, xhi))/2)}));
-  return {svg: s.join(''), geo: {L,R,T,B,xlo,xhi,y0,y1,P:[],px,py,W,H,run:true, fracC, nFr: nonW.length, frA: nonW[0] && nonW[0].label, frB: nonW.length && nonW[nonW.length-1].label}};
+  return {svg: s.join(''), geo: {L,R,T,B,xlo,xhi,y0,y1,P:[],uv,px,py,W,H,run:true, fracC, nFr: nonW.length, frA: nonW[0] && nonW[0].label, frB: nonW.length && nonW[nonW.length-1].label}};
 }
 
 /* SEC calibration figure: standards and the fitted line on log(MW) against Kav (or Ve), with sample peaks sized on it */
