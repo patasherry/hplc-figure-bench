@@ -271,5 +271,27 @@ async function fresh(id, fn){
     T.check('nd/zero-measurement-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Measured zero', value: '0.00 mg/mL'}]), JSON.stringify(rows));
   });
 
+  // Suffix numbers like 0.05A or 1.23* should be parsed as 0.05 and 1.23
+  await fresh('suffix-measurement-validation', async (p, h) => {
+    await h.newProject('Suffix measurement validation');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    await p.setInputFiles(SEL.nd, F.nd('suffix-measurements.tsv', [['Suffixed A', '0.05A', '0.05A'], ['Suffixed Star', '1.23*', '1.23*']], false));
+    await p.locator(SEL.row).first().waitFor();
+    const rows = await p.$$eval(SEL.row, els => els.map(el => ({name: el.querySelector('input[data-ndk="name"]')?.value, value: el.querySelector('.nd-v')?.textContent.trim()})));
+    T.check('nd/suffix-measurement-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Suffixed A', value: '0.05 mg/mL'}, {name: 'Suffixed Star', value: '1.23 mg/mL'}]), JSON.stringify(rows));
+  });
+
+  // Rows where sample name starts with "Vendor" or ends with ":" should be excluded.
+  await fresh('vendor-preamble-validation', async (p, h) => {
+    await h.newProject('Vendor preamble validation');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    await p.setInputFiles(SEL.nd, F.nd('vendor-preamble.tsv', [['Vendor: Preamble', '1.0', '1.0'], ['Some:', '1.0', '1.0'], ['Real sample', '1.5', '1.5']], false));
+    await p.locator(SEL.row).first().waitFor();
+    const rows = await p.$$eval(SEL.row, els => els.map(el => ({name: el.querySelector('input[data-ndk="name"]')?.value, value: el.querySelector('.nd-v')?.textContent.trim()})));
+    T.check('nd/vendor-preamble-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Real sample', value: '1.50 mg/mL'}]), JSON.stringify(rows));
+  });
+
   T.done();
 })();
