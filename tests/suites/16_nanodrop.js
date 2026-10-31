@@ -155,6 +155,75 @@ async function fresh(id, fn){
 
 
 
+
+  await T.t('malformed-header-toast', async () => {
+    const app = await open();
+    const p = app.p, h = H(p);
+
+    await h.newProject('malformed_header_test');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await p.waitForTimeout(500);
+
+    await h.step('final');
+    await p.waitForTimeout(200);
+
+    // Provide a newly generated file using the file path
+    await p.setInputFiles('#file', 'data/nd/nd_malformed_header.csv');
+
+    // Wait for the toast to appear
+    await p.waitForSelector('#toast .pill', {timeout: 2000});
+
+    // Check if the toast has the correct text
+    const toastText = await p.locator('#toast').textContent();
+    T.check('nd/malformed-header-toast', toastText.includes('has no usable measurements'), 'Expected toast to mention "no usable measurements", got: ' + toastText);
+
+    await app.close();
+  });
+
+
+  await T.t('nanodrop-metadata-positive', async () => {
+    const app = await open();
+    const p = app.p, h = H(p);
+
+    await h.newProject('metadata_positive_test');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await p.waitForTimeout(500);
+
+    await h.step('final');
+    await p.waitForTimeout(200);
+
+    // Provide the multiline preamble file
+    await p.setInputFiles('#ndFile', 'data/nd/nd_multiline_preamble.csv');
+    await p.waitForTimeout(400);
+
+    await p.waitForFunction(() => document.querySelectorAll('.ndr').length > 0 || document.querySelector('.toast'), {timeout: 2000}).catch(() => {});
+
+    // Read DOM table stats for Sample 1
+    const s1Row = await p.$$eval('.ndr', rows => {
+        for (const r of rows) {
+            const nameEl = r.querySelector('input[data-ndk="name"]');
+            if (nameEl && nameEl.value.trim() === 'Sample 1') {
+                const valText = r.querySelector('.nd-v')?.textContent || '';
+                return {
+                    conc: parseFloat(valText.split(' ')[0]) || null
+                };
+            }
+        }
+        return null;
+    });
+
+    T.check('nd/metadata-positive/s1_conc', s1Row && Math.abs(s1Row.conc - 2.5) < 0.001, 'Expected Sample 1 concentration 2.5, got ' + (s1Row ? s1Row.conc : 'not found'));
+
+    // Verify it handles full vendor extraction by saving and checking JSON (like the exp loop does)
+    const download = p.waitForEvent('download'); await click(p, SEL.save);
+    const data = JSON.parse(fs.readFileSync(await (await download).path(), 'utf8'));
+    const nd = data.nanodrop || [];
+    const s1 = nd.find(n => n.name === 'Sample 1');
+    T.check('nd/metadata-positive/json_conc', s1 && Math.abs((s1.a280 != null ? s1.a280 : s1.conc) - 2.5) < 0.001, `Expected Sample 1 json concentration 2.5, got ${s1 ? (s1.a280 != null ? s1.a280 : s1.conc) : 'not found'}`);
+
+    await app.close();
+  });
+
   await T.t('nanodrop-metadata-skip', async () => {
     const app = await open();
     const p = app.p, h = H(p);
@@ -200,6 +269,28 @@ async function fresh(id, fn){
     await p.locator(SEL.row).first().waitFor();
     const rows = await p.$$eval(SEL.row, els => els.map(el => ({name: el.querySelector('input[data-ndk="name"]')?.value, value: el.querySelector('.nd-v')?.textContent.trim()})));
     T.check('nd/zero-measurement-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Measured zero', value: '0.00 mg/mL'}]), JSON.stringify(rows));
+  });
+
+  // Suffix numbers like 0.05A or 1.23* should be parsed as 0.05 and 1.23
+  await fresh('suffix-measurement-validation', async (p, h) => {
+    await h.newProject('Suffix measurement validation');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    await p.setInputFiles(SEL.nd, F.nd('suffix-measurements.tsv', [['Suffixed A', '0.05A', '0.05A'], ['Suffixed Star', '1.23*', '1.23*']], false));
+    await p.locator(SEL.row).first().waitFor();
+    const rows = await p.$$eval(SEL.row, els => els.map(el => ({name: el.querySelector('input[data-ndk="name"]')?.value, value: el.querySelector('.nd-v')?.textContent.trim()})));
+    T.check('nd/suffix-measurement-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Suffixed A', value: '0.05 mg/mL'}, {name: 'Suffixed Star', value: '1.23 mg/mL'}]), JSON.stringify(rows));
+  });
+
+  // Rows where sample name starts with "Vendor" or ends with ":" should be excluded.
+  await fresh('vendor-preamble-validation', async (p, h) => {
+    await h.newProject('Vendor preamble validation');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    await p.setInputFiles(SEL.nd, F.nd('vendor-preamble.tsv', [['Vendor: Preamble', '1.0', '1.0'], ['Some:', '1.0', '1.0'], ['Real sample', '1.5', '1.5']], false));
+    await p.locator(SEL.row).first().waitFor();
+    const rows = await p.$$eval(SEL.row, els => els.map(el => ({name: el.querySelector('input[data-ndk="name"]')?.value, value: el.querySelector('.nd-v')?.textContent.trim()})));
+    T.check('nd/vendor-preamble-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Real sample', value: '1.50 mg/mL'}]), JSON.stringify(rows));
   });
 
   T.done();

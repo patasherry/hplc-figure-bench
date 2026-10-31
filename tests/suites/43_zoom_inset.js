@@ -1,6 +1,6 @@
 // 43 zoom inset: the whole run on the main plot, the X window magnified in a second small plot. Presentation only.
 // UI and DOM only: options are set through the inputs, the figure is read from the SVG in #paper.
-const {open, H, suite, path, DATA} = require('../lib/harness');
+const {open, H, suite, path, DATA, APP} = require('../lib/harness');
 const T = suite('43_zoom_inset');
 
 const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false;
@@ -64,6 +64,41 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       T.check('run/off-one-plot-area', (await plotAreas(p)) === 1, 'inset removed');
       T.check('run/no-errors', errs.length === 0, errs.join(' | '));
     } catch (e) { T.check('run/threw', false, String(e).slice(0, 300)); } finally { await close(); }
+  }
+  /* Dragging interactions: zoom vs integration mode */
+  {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await h.newProject('zoom drag'); await h.addRun(path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv')); await h.wait(500);
+      const b = await p.evaluate(() => document.querySelector('#paper svg').getBoundingClientRect());
+
+      // Default dragging: adds integration region
+      await p.mouse.move(b.left + b.width / 3, b.top + b.height / 2);
+      await p.mouse.down();
+      await p.mouse.move(b.left + b.width * 2 / 3, b.top + b.height / 2, {steps: 10});
+      await p.mouse.up();
+      await h.wait(500);
+
+      // Verify integration via DOM (table #intTable) instead of internal state
+      const regions = await p.evaluate(() => document.querySelectorAll('#intTable tbody tr').length);
+      T.check('drag/integration-mode-default', regions > 0, `integration regions in table: ${regions}`);
+
+      // Turn on zoom mode
+      await setOpt(p, 'o-zoomMode', true); await h.wait(200);
+      await p.mouse.move(b.left + b.width / 4, b.top + b.height / 2);
+      await p.mouse.down();
+      await p.mouse.move(b.left + b.width / 2, b.top + b.height / 2, {steps: 10});
+      await p.mouse.up();
+      await h.wait(500);
+
+      const newRegions = await p.evaluate(() => document.querySelectorAll('#intTable tbody tr').length);
+      T.check('drag/zoom-mode-no-integration', newRegions === regions, `integration regions in table stayed at ${newRegions}`);
+
+      const xmin = await p.$eval('#o-xmin', e => e.value);
+      const xmax = await p.$eval('#o-xmax', e => e.value);
+      T.check('drag/zoom-mode-updates-window', xmin !== '' && xmax !== '', `xmin: ${xmin}, xmax: ${xmax}`);
+
+    } catch (e) { T.check('drag/threw', false, String(e).slice(0, 300)); } finally { await close(); }
   }
   T.done();
 })();

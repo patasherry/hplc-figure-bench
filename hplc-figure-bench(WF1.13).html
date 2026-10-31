@@ -195,6 +195,14 @@ details.tip[open]{display:grid;gap:6px;background:var(--well);border:1px solid v
 body:not(.secstds) .secstd{display:none!important}
 /* in a project the panel shows the step; settings wait behind More options */
 body.proj:not(.moreopen) #panel > .optsec{display:none!important}
+body.proj.searching #panel > .optsec:not([hidden]):not(.srchmiss){display:grid!important}
+.psearch{padding:10px 16px 0;order:-2}.psearch input{width:100%;box-sizing:border-box}
+.srchmiss{display:none!important}
+details.more{border-top:1px dashed var(--line);padding-top:8px}
+details.more > summary{cursor:pointer;font-size:12px;color:var(--muted)}
+details.more > summary:hover{color:var(--ink)}
+details.more > .morebody{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 10px;margin-top:10px}
+details.more > .morebody > *{min-width:0}
 body.proj #panel .grp:not(#stepSheet) details.tip{display:none}
 body.proj .noproj, body.proj label:has(#o-runCond2){display:none!important}
 body.proj #panel[data-sec="1"] > #secPanel{order:0}
@@ -522,6 +530,7 @@ button,input,select,textarea{font-family:inherit}
 
 <div class="app">
   <aside class="panel" id="panel">
+    <div class="psearch"><input type="search" id="panelSearch" placeholder="Search settings" aria-label="Search settings" autocomplete="off"></div>
     <section class="grp steps" id="stepsPanel" hidden>
       <h2>Steps</h2>
       <ol class="tl" id="tl"></ol>
@@ -531,6 +540,7 @@ button,input,select,textarea{font-family:inherit}
       <p class="hint ss-what" id="ssWhat"></p>
       <div class="ss-quick" id="ssQuick" hidden></div>
       <div class="ss-gels" id="ssGels"></div>
+      <div class="ss-from" id="ssFromBox" hidden><label class="f">Comes from<select id="ssFrom"></select></label><label class="f">Which fraction or pool<input type="text" id="ssFromNote" placeholder="For example Fractions B5–B8"></label></div>
     </section>
     <section class="grp stepfoot" id="stepFoot" hidden>
       <label class="f">Notebook notes<textarea id="ssNotes" rows="2" placeholder="Anything to remember about this step"></textarea></label>
@@ -1109,6 +1119,7 @@ button,input,select,textarea{font-family:inherit}
 
     <section class="grp optsec" data-for="overlay run">
       <h2>Window</h2>
+      <label class="check"><input type="checkbox" id="o-zoomMode" data-opt="zoomMode">Zoom mode: drag on figure to select window</label>
       <div class="row">
         <label class="f">X from<input type="number" step="any" id="o-xmin" data-opt="xmin" placeholder="auto"></label>
         <label class="f">X to<input type="number" step="any" id="o-xmax" data-opt="xmax" placeholder="auto"></label>
@@ -1323,7 +1334,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
   intMethod:'gauss', poolStyle:'band', poolColor:'#E69F00', poolAlpha:0.3, intBase:'line', intLabel:'num', intProm:5, intFill:true, eps:'', path:2,
   wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfFull:false, wfArrows:true, gelFrame:true, ladder:'biorad',
-  zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4,
+  zoomMode:false, zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4,
   preset:'single', w:3.5, h:2.6, fs:8, lw:0.75, font:'Arial', palette:'okabe', bg:true, dpi:600};
 const RANGE = ['xmin','xmax','ymin','ymax'];
 /* Native E. coli proteins commonly co-purified by IMAC (Bolanos-Garcia & Davies 2006, Table 1), DnaK, and common purification additives.
@@ -1449,7 +1460,7 @@ function svgHead(Wpt, Hpt){
 }
 
 /* ---------- parsing: generic ---------- */
-const NUM = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
+const NUM = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?([A-Za-z*])?$/;
 function decode(buf){
   const b = new Uint8Array(buf);
   if (b[0]===0xFF && b[1]===0xFE) return new TextDecoder('utf-16le').decode(b.subarray(2));
@@ -1462,7 +1473,7 @@ function decode(buf){
 const clean = f => f.trim().replace(/^"(.*)"$/,'$1').trim();
 function splitLine(L, d){ return d === 'ws' ? L.trim().split(/\s+/) : L.split(d); }
 /* Generic chromatogram and ÄKTA CSV values use this directly; NanoDrop first applies its delimiter-specific decimal normalization. Zero is a measurement, while blank and malformed fields are not. */
-function measurementNumber(v){ const s = clean(String(v ?? '')); return NUM.test(s) ? Number(s) : null; }
+function measurementNumber(v){ const s = clean(String(v ?? '')); return NUM.test(s) ? parseFloat(s) : null; }
 function toNum(f, dc){ f = clean(f); if (dc) f = f.replace(/^-?\d+,\d+(?:[eE][-+]?\d+)?$/, m => m.replace(',', '.')); const v = measurementNumber(f); return v == null ? NaN : v; }
 function parseText(text){
   const lines = text.split(/\r\n|\n|\r/);
@@ -1550,7 +1561,7 @@ function parseAkta(text, fname){
       const v = (f[cv.col+1] || '').trim().replace(/^"|"$/g, '');
       if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
       else { const y = toNum(v, d !== ','); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
-  const ak = aktaFromCurves(curves, fname);
+  const ak = aktaFromCurves(curves, fname, {delimiter: d});
   if (!ak) return {bad: 'an ÄKTA/UNICORN file, but has no usable UV traces: export the UV curve from UNICORN'};
   return ak;
 }
@@ -2050,7 +2061,7 @@ function poolRows(run){
     k: meas && mgA > 0 ? mg/mgA : null};
 }
 function autoIntegrate(run){
-  const {xs, ys} = xUnit(run) === 'min' && !(uvFlow(run) > 0) ? procFull(run) : runUV(Object.assign({}, run, {crop: ''})), n = ys.length; if (n < 10) return 0;
+  const {xs, ys} = run.delimiter === ';' || (xUnit(run) === 'min' && !(uvFlow(run) > 0)) ? procFull(run) : runUV(Object.assign({}, run, {crop: '', xmin: '', xmax: ''})), n = ys.length; if (n < 10) return 0;
   const mn = arrMin(ys), range = arrMax(ys) - mn; if (!(range > 0)) return 0;
   const dn = []; for (let i=1;i<n;i++) dn.push(Math.abs(ys[i] - ys[i-1])); dn.sort((p, q) => p - q); const nsd = (dn[dn.length >> 1] || 0)*1.4826/Math.SQRT2;
   const sec = isSec(run), thr = Math.max(10*nsd, range*(sec ? Math.min(numOr(opt.intProm, 5), 2) : numOr(opt.intProm, 5))/100), w = Math.max(2, Math.round(n*0.004)), span = Math.max(10, Math.round(n*0.15));
@@ -3542,8 +3553,13 @@ function composeRuns(list, cfg){
   /* grid: two panels per row, read left to right then down (for 3 or more steps) */
   const grid = cfg.layout === 'grid' && n > 2, row = (cfg.layout === 'row' || (cfg.layout === 'grid' && n === 2)) && n > 1, side = opt.gelPos === 'right', vgap = fs*2.8;
   let gap = fs*1.4;
+  /* branches: par[i] is the panel panel i comes from; a panel that does not follow its predecessor skips ahead */
+  const par = wfParents(list), fromN = i => wfFromNoteOf(list[i]), edgeNote = i => fromN(i + 1) || arrowNote(list[i]);
+  const skips = []; for (let i = 1; i < n; i++) if (par[i] !== i - 1 && cfg.arrows) skips.push(i);
+  /* a grid row holds two panels; a branch starts a new row */
+  const gcell = []; if (grid) { let rw = 0, cl = 0; list.forEach((r, i) => { if (i > 0 && (cl === 2 || par[i] !== i - 1)) { rw++; cl = 0; } gcell.push({row: rw, col: cl}); cl++; }); }
   if (n > 1 && cfg.arrows) {
-    if (row || grid) { const words = list.slice(0, -1).flatMap(r => poolLabel(r).split(' ')), nw = list.slice(0, -1).flatMap(r => arrowNote(r).split(/\s+/)).reduce((m, w) => Math.max(m, w.length), 0);
+    if (row || grid) { const words = list.slice(0, -1).flatMap(r => poolLabel(r).split(' ')), nw = list.slice(0, -1).flatMap((r, i) => edgeNote(i).split(/\s+/)).reduce((m, w) => Math.max(m, w.length), 0);
       gap = Math.max(fs*3.4, words.reduce((m,w) => Math.max(m, w.length), 0)*cw + 10, nw ? Math.min(fs*7, Math.max(nw*fs*0.8*0.52 + 8, fs*5.5)) : 0); }
     else gap = fs*3;
   }
@@ -3636,7 +3652,7 @@ function composeRuns(list, cfg){
       let gx, gw;
       if (sideHere) { const x0 = chartW + fs*2.8 + extraGap, avail = Math.max(fs*4, pw[i] - x0); gw = avail; gx = x0; }
       else { const avail = R - L; const sh0 = shared.get(r.id + ':' + g.id) || {}; gw = gz > 1 ? pw[i] - fs*2.5 : Math.min(pw[i] - fs*2.5, (sh0.wide ? Math.max(gelW(i), pw[i] - fs*2.5) : gelW(i))*gz); gx = r.prep || opt.gelAlign === 'left' ? L : opt.gelAlign === 'right' ? R - gw : L + (avail - gw)/2; gx = Math.max(r.prep ? fs*0.3 : fs*2.5, Math.min(pw[i] - gw, gx)); }
-      const sh = shared.get(r.id + ':' + g.id) || {}, view = {fit: true, win: sh.win, fixedH: sideHere ? 0 : sh.fixedH*gz, labH: sh.labH, labMode: sideHere ? null : sh.labMode, vf: sideHere ? 0 : sh.vf, taMode: sideHere ? null : sh.taMode, align: sideHere ? 'left' : opt.gelAlign, minH: sideHere ? chromH*0.75 : 0, spill: (row && i < n - 1) || (grid && i % 2 === 0 && i < n - 1) ? gap*0.8 : 0};
+      const sh = shared.get(r.id + ':' + g.id) || {}, view = {fit: true, win: sh.win, fixedH: sideHere ? 0 : sh.fixedH*gz, labH: sh.labH, labMode: sideHere ? null : sh.labMode, vf: sideHere ? 0 : sh.vf, taMode: sideHere ? null : sh.taMode, align: sideHere ? 'left' : opt.gelAlign, minH: sideHere ? chromH*0.75 : 0, spill: (row && i < n - 1) || (grid && gcell[i].col === 0 && i < n - 1 && gcell[i + 1].row === gcell[i].row) ? gap*0.8 : 0};
       const dry = gelPart(g, 0, 0, gw, gH, idx, false, view), o = off[g.id] || {dx: 0, dy: 0};
       const item = {g, idx, gx: gx + o.dx, gy: gy + o.dy, gw, h: dry.h, view};
       gy += dry.h + fs*0.8; bottom = Math.max(bottom, item.gy + dry.h);
@@ -3648,15 +3664,19 @@ function composeRuns(list, cfg){
   });
   WF_WL = undefined; COND_N = 0;
   const pos = []; let Ht = 0, yAcc = 0, xAcc = 0;
-  const rowH = grid ? [] : null; if (grid) panels.forEach((p, i) => { const k = i >> 1; rowH[k] = Math.max(rowH[k] || 0, p.h); });
+  const rowH = grid ? [] : null; if (grid) panels.forEach((p, i) => { const k = gcell[i].row; rowH[k] = Math.max(rowH[k] || 0, p.h); });
   panels.forEach((p, i) => { if (row) { pos.push({x: xAcc, y: 0}); xAcc += pw[i] + gap; Ht = Math.max(Ht, p.h); }
-    else if (grid) { const k = i >> 1, y = rowH.slice(0, k).reduce((a, b) => a + b + vgap, 0); pos.push({x: i === n - 1 && n % 2 ? (Wt - pw[i])/2 : (i % 2)*(pw[0] + gap), y}); Ht = Math.max(Ht, y + rowH[k]); }
+    else if (grid) { const k = gcell[i].row, y = rowH.slice(0, k).reduce((a, b) => a + b + vgap, 0); pos.push({x: i === n - 1 && gcell[i].col === 0 && par[i] === i - 1 ? (Wt - pw[i])/2 : gcell[i].col*(pw[0] + gap), y}); Ht = Math.max(Ht, y + rowH[k]); }
     else { pos.push({x: 0, y: yAcc}); yAcc += p.h + (i < n-1 ? gap : 0); Ht = yAcc; } });
   /* panels the user dragged: add the offset (never left of or above the figure) and grow the figure to hold them */
   const W0 = Wt, H0 = Ht + fs*0.4;
   panels.forEach((p, i) => { const dx = numOr(list[i].wfDx, 0), dy = numOr(list[i].wfDy, 0); if (!dx && !dy) return;
     pos[i].x = Math.max(0, pos[i].x + dx); pos[i].y = Math.max(0, pos[i].y + dy); Wt = Math.max(Wt, pos[i].x + pw[i]); Ht = Math.max(Ht, pos[i].y + p.h); });
   Ht += fs*0.4;
+  /* a branch that skips panels is routed round them: over the top in a row, down a rail on the left in a stack or a grid */
+  const railBase = fs*1.3, topPad = row && skips.length ? railBase + skips.length*fs : 0, leftPad = !row && skips.length ? fs*0.8 + skips.length*fs*0.6 : 0;
+  if (topPad) { pos.forEach(q => { q.y += topPad; }); Ht += topPad; }
+  if (leftPad) { pos.forEach(q => { q.x += leftPad; }); Wt += leftPad; }
   const defs = new Map(), body = [], links = [], gelBoxes = [];
   panels.forEach((p, i) => {
     const {x, y} = pos[i];
@@ -3666,7 +3686,7 @@ function composeRuns(list, cfg){
       body.push(`<text x="${r2(x)}" y="${r2(y + fs*1.1)}" fill="#000000">${letter}${esc(tl[0])}</text>`);
       if (tl[1]) body.push(`<text x="${r2(x + ind)}" y="${r2(y + fs*2.25)}" fill="#000000">${esc(tl[1])}</text>`);
     }
-    if (p.chart.svg) body.push(`<g transform="translate(${r2(x)} ${r2(y + titleH)})">${p.chart.svg}</g>`);
+    if (p.chart.svg) body.push(`<g data-wfp="${esc(p.r.id)}" transform="translate(${r2(x)} ${r2(y + titleH)})">${p.chart.svg}</g>`);
     if (p.slot) { const q = p.slot; body.push(`<rect x="${r2(x + q.x)}" y="${r2(y + q.y)}" width="${r2(q.w)}" height="${r2(q.h)}" fill="none" stroke="#999999" stroke-width="0.6" stroke-dasharray="2 2"/><text x="${r2(x + q.x + q.w/2)}" y="${r2(y + q.y + q.h/2 + fs*0.3)}" text-anchor="middle" font-size="${r2(fs*0.8)}" fill="#777777">no gel for this step</text><text x="${r2(x + q.x + q.w/2)}" y="${r2(y + q.y + q.h/2 + fs*1.2)}" text-anchor="middle" font-size="${r2(fs*0.65)}" fill="#999999">(not in exports)</text>`); }
     p.gi.forEach((gg, k) => {
       const gy = y + gg.gy, part = gelPart(gg.g, x + gg.gx, gy, gg.gw, gH, gg.idx, false, gg.view); defs.set(part.id, part.defs);
@@ -3698,33 +3718,48 @@ function composeRuns(list, cfg){
       return `<line x1="${r2(xa)}" y1="${r2(ya)}" x2="${r2(xb - 4*c)}" y2="${r2(yb - 4*s)}" stroke-width="1"/><path d="M${r2(xb)} ${r2(yb)}L${r2(bx - 2.6*s)} ${r2(by + 2.6*c)}L${r2(bx + 2.6*s)} ${r2(by - 2.6*c)}Z" stroke="none"/>`; };
     body.push(`<g fill="#000000" stroke="#000000">`);
     for (let i=0;i<n-1;i++){
-      const lab = poolLabel(list[i]), note = arrowNote(list[i]), nf = fs*0.8;
+      if (par[i + 1] !== i) continue;
+      const lab = poolLabel(list[i]), note = edgeNote(i), nf = fs*0.8, eid = ` data-wfe="${esc(list[i].id)}>${esc(list[i + 1].id)}"`;
       /* the note wraps to the gap's width and sits under the arrow */
       const wrapN = (t, w) => { const room = Math.max(6, Math.floor(w/(nf*0.52))), out = []; let ln = ''; t.replace(/(\d) (°C|°|mM|µM|M|h|min|mL|µL|kDa|%)(?=\s|,|$)/g, '$1\u00a0$2').split(/ +/).forEach(x => { if (ln && (ln + ' ' + x).length > room) { out.push(ln); ln = x; } else ln = ln ? ln + ' ' + x : x; }); if (ln) out.push(ln); return out; };
-      if (grid && i % 2 === 1) {
+      if (grid && gcell[i + 1].row !== gcell[i].row) {
         /* end of a grid row: an elbow from under this panel to the top of the first panel on the next row */
         /* from below the row, down onto the next panel's letter, so it never lands on a title */
-        const xa = pos[i].x + pw[i]/2, xb = pos[i+1].x + fs*0.4, y1 = pos[i].y + rowH[i >> 1] + fs*0.5, y2 = pos[i+1].y + fs*0.1, ym = Math.max(y1 + fs*0.4, y2 - vgap*0.45);
-        body.push(`<path d="M${r2(xa)} ${r2(y1)}V${r2(ym)}H${r2(xb)}V${r2(y2 - 5)}" fill="none" stroke-width="1"/>`);
+        const xa = pos[i].x + pw[i]/2, xb = pos[i+1].x + fs*0.4, y1 = pos[i].y + rowH[gcell[i].row] + fs*0.5, y2 = pos[i+1].y + fs*0.1, ym = Math.max(y1 + fs*0.4, y2 - vgap*0.45);
+        body.push(`<path${eid} d="M${r2(xa)} ${r2(y1)}V${r2(ym)}H${r2(xb)}V${r2(y2 - 5)}" fill="none" stroke-width="1"/>`);
         body.push(`<path d="M${r2(xb)} ${r2(y2)}L${r2(xb - 2.6)} ${r2(y2 - 5)}L${r2(xb + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
         if (lab || note) body.push(`<text x="${r2((xa + xb)/2)}" y="${r2(ym - 3)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       } else if (row || grid) {
         const x1 = pos[i].x + pw[i] + 3, x2 = pos[i+1].x - 3, ay1 = pos[i].y + titleH + (cfg.bandH ? Math.min(fs*2.9, cfg.bandH*0.45) : Math.min(panels[i].ch, panels[i+1].ch)*0.45), ay2 = ay1 - pos[i].y + pos[i+1].y, ay = (ay1 + ay2)/2, words = lab ? lab.split(' ') : [];
         if (ay1 === ay2) {
-          body.push(`<line x1="${r2(x1)}" y1="${r2(ay)}" x2="${r2(x2 - 4)}" y2="${r2(ay)}" stroke-width="1"/>`);
+          body.push(`<line${eid} x1="${r2(x1)}" y1="${r2(ay)}" x2="${r2(x2 - 4)}" y2="${r2(ay)}" stroke-width="1"/>`);
           body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
-        } else body.push(slantArrow(x1, ay1, x2, ay2));
+        } else body.push(slantArrow(x1, ay1, x2, ay2).replace('<line', '<line' + eid));
         words.forEach((w, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay - 4 - (words.length - 1 - k)*fs*1.1)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(w)}</text>`));
         if (note) wrapN(note, x2 - x1).forEach((t, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay + nf*1.25 + k*nf*1.1)}" text-anchor="middle" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(t)}</text>`));
       } else {
         const ax = fs*1.2 + pos[i].x, ax2 = fs*1.2 + pos[i+1].x, y1 = pos[i].y + panels[i].h + 3, y2 = pos[i+1].y - 3;
         if (ax === ax2) {
-          body.push(`<line x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
+          body.push(`<line${eid} x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
           body.push(`<path d="M${r2(ax)} ${r2(y2)}L${r2(ax - 2.6)} ${r2(y2 - 5)}L${r2(ax + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
-        } else body.push(slantArrow(ax, y1, ax2, y2));
+        } else body.push(slantArrow(ax, y1, ax2, y2).replace('<line', '<line' + eid));
         if (lab || note) body.push(`<text x="${r2(ax + fs*0.8)}" y="${r2((y1 + y2)/2 + fs*0.35)}" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       }
     }
+    /* the extra branches: from the end of the parent's arrow, round the panels in between, onto the branch */
+    skips.forEach((c, k) => { const q = par[c], nf = fs*0.8, txt = [poolLabel(list[q]), fromN(c)].filter(Boolean).join(', '), eid = `data-wfe="${esc(list[q].id)}>${esc(list[c].id)}"`;
+      if (row) {
+        const x1 = pos[q].x + pw[q] + 3, x2 = pos[c].x - 3, xt = x1 + 4, xd = x2 - gap*0.4, yT = railBase + k*fs, ay = pos[q].y + titleH + (cfg.bandH ? Math.min(fs*2.9, cfg.bandH*0.45) : Math.min(panels[q].ch, panels[Math.min(n - 1, q + 1)].ch)*0.45);
+        body.push(`<path ${eid} d="M${r2(xt)} ${r2(ay)}V${r2(yT)}H${r2(xd)}V${r2(ay)}H${r2(x2 - 4)}" fill="none" stroke-width="1"/>`);
+        body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
+        if (txt) body.push(`<text x="${r2((xt + xd)/2)}" y="${r2(yT - 2)}" text-anchor="middle" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(txt)}</text>`);
+      } else {
+        const railX = fs*0.5 + k*fs*0.6, xs = grid ? pos[q].x + pw[q]/2 : leftPad + fs*1.2, xe = grid ? pos[c].x + fs*0.4 : xs,
+          y1 = grid ? pos[q].y + rowH[gcell[q].row] + fs*0.5 : pos[q].y + panels[q].h + 3, y2 = grid ? pos[c].y + fs*0.1 : pos[c].y - 3, yA = y1 + fs*0.5, yB = Math.max(yA + fs*0.5, y2 - 5 - fs*0.5);
+        body.push(`<path ${eid} d="M${r2(xs)} ${r2(y1)}V${r2(yA)}H${r2(railX)}V${r2(yB)}H${r2(xe)}V${r2(y2 - 5)}" fill="none" stroke-width="1"/>`);
+        body.push(`<path d="M${r2(xe)} ${r2(y2)}L${r2(xe - 2.6)} ${r2(y2 - 5)}L${r2(xe + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
+        if (txt) body.push(`<text x="${r2(xe + fs*0.6)}" y="${r2(yB - 3)}" text-anchor="start" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(txt)}</text>`);
+      } });
     body.push('</g>');
   }
   if (cfg.raw) return {body: links.join('') + body.join(''), defs, geo: {W: Wt, H: Ht, W0, H0, comp: true, gelBoxes, widened: widened ? cfg.W : 0, taller: taller ? cfg.chromH : 0, pos: pos.map((q, i) => ({x: q.x, y: q.y, w: pw[i], h: panels[i].h, id: list[i].id, th: titleH}))}};
@@ -3843,8 +3878,17 @@ function wfList(){ let list = runs.filter(r => r.inWf); const c = cleaveStep();
     if (next.length === pend.length) { next.forEach(m => list.push(manObj(m))); break; } pend = next; }
   return list; }
 /* the workflow figure's panels: the steps, plus a Concentrated and NanoDrop panel after each column that has one */
-function wfFigList(){ const L = wfList(); if (!prep.on || !prep.btw) return L; const out = [];
+function wfFigListRaw(){ const L = wfList(); if (!prep.on || !prep.btw) return L; const out = [];
   L.forEach(x => { out.push(x); if (!x.prep && prep.btw[x.id]) out.push(ncObj(x)); }); return out; }
+/* branches: a step may come from an earlier step (wfFrom, with a note wfFromNote); with none set, each step follows the one before, as always */
+const wfFromOf = r => !r ? '' : r.prep === 'manual' ? String((r.man || {}).wfFrom || '') : r.prep === 'ndconc' ? String(((prep.btw || {})[r.run && r.run.id] || {}).wfFrom || '') : r.prep ? '' : String(r.wfFrom || '');
+const wfFromNoteOf = r => !r ? '' : String((r.prep === 'manual' ? (r.man || {}).wfFromNote : r.prep === 'ndconc' ? ((prep.btw || {})[r.run && r.run.id] || {}).wfFromNote : r.prep ? '' : r.wfFromNote) || '').trim();
+/* the index each step comes from: its wfFrom when that step is earlier in the list, otherwise the step before */
+function wfParents(L){ return L.map((r, i) => { const f = wfFromOf(r), j = f ? L.findIndex(x => x.id === f) : -1; return j >= 0 && j < i ? j : i - 1; }); }
+/* with branches, each step is followed by its own branch, so a branch is drawn in one piece */
+function wfFigList(){ const L = wfFigListRaw(); if (!L.some(r => wfFromOf(r))) return L;
+  const par = wfParents(L), kids = L.map(() => []); par.forEach((q, i) => { if (q >= 0) kids[q].push(i); });
+  const out = [], walk = i => { out.push(L[i]); kids[i].forEach(walk); }; walk(0); return out; }
 function ncObj(r){ const id = 'nc:' + r.id, o = prepObj[id] || (prepObj[id] = {id, prep: 'ndconc', gelOff: {}, fracs: [], integ: []}), b = prep.btw[r.id] || {};
   const nm = hasTxt(b.title) ? b.title.trim() : ({dil: 'Diluted', exch: 'Buffer exchanged', filt: 'Filtered', hold: 'Held overnight'})[b.how] || 'Concentrated';
   return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(b.arrow || '').trim(), wfW: numOr(b.wfW, 0.85), gelZ: 1, run: r, wfDx: numOr(b.wfDx, 0), wfDy: numOr(b.wfDy, 0)}); }
@@ -4290,8 +4334,10 @@ function methodsText(){
   const conds = steps.map(runCond), one = k => { const vs = [...new Set(conds.map(c => c[k]).filter(Boolean))]; return vs.length === 1 && conds.every(c => c[k]) ? vs[0] : ''; }, instAll = one('mInst'), tempAll = one('mTemp');
   if (steps.length > 1 && (instAll || tempAll)) P.push(`All chromatography was run${instAll ? ` on ${art(instAll)} ${instAll}` : ''}${tempAll ? ` at ${deg(tempAll)}` : ''}.`);
   const need = t => `[${t} not entered]`;
+  /* a step that comes from an earlier step other than the one before says so; the full branch wording is for later */
+  const brTxt = r => { const f = wfFromOf(r), q = f && wfFigListRaw().find(x => x.id === f); return q ? ` (from ${stepTitle(q)})` : ''; };
   wf.forEach((r, i) => { const ttl = stepTitle(r), Lt = letterOf(r);
-    if (r.prep === 'manual') { P.push(manSentence(r, Lt, wf)); return; }
+    if (r.prep === 'manual') { P.push(manSentence(r, Lt, wf) + brTxt(r)); return; }
     if (r.prep === 'cleave') { const pr = cleaveProtease(), ra = v(prep.ratio), bf = v(prep.dialBuffer), T = v(prep.clvTemp), h = v(prep.clvTime), mw = v(prep.mwco);
       P.push(`Tag removal${Lt ? ` (panel ${Lt})` : ''}: the pool was ${bf ? `dialyzed${mw ? ` (${unitIf(mw, 'kDa')} MWCO)` : ''} against ${bf}` : 'dialyzed'}${pr ? ` with ${pr}${ra ? ` at ${/^\d/.test(ra) && !/:/.test(ra) ? '1:' + ra : ra}${/w\/w|mol/i.test(ra) ? '' : ' (w/w)'}` : ''}` : ''}${T ? ` at ${deg(T)}` : ''}${h ? ` for ${hrs(h)}` : ''}.`); return; }
     const k = steps.indexOf(r) + 1, c = runCond(r), sec = isSec(r), first = !wf.slice(0, wf.indexOf(r)).some(x => !x.prep || x.prep === 'manual'), cap = poolCaption(r), ft = /flow/i.test(cap);
@@ -4299,7 +4345,7 @@ function methodsText(){
     /* a column name read from the file name is marked for checking; one typed by hand or logged by UNICORN is not */
     const colChk = '';
     const col = c.mCol ? `${art(c.mCol)} ${c.mCol}${c.mCV && !/\d\s*mL|\/\d+/.test(c.mCol) ? ` (${c.mCV} mL)` : ''}${/column$/i.test(c.mCol) ? '' : ' column'}${colChk}` : `the column ${need('column')}`;
-    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')}${condCheck(r, 'mFlow')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
+    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}${brTxt(r)}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')}${condCheck(r, 'mFlow')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
     t += c.mBufA ? (sec ? ` in ${c.mBufA}` : ` equilibrated in buffer A (${c.mBufA})`) : ` ${need('buffer')}`;
     if (hasTxt(r.mWash) && !sec) t += `, washed with ${lc(v(r.mWash))}`;
     let grad = c.mGrad ? (c.mGradAuto ? lc(c.mGrad).replace(/^linear /, 'a linear gradient from ').replace(/^step to /, 'a step to ') : lc(c.mGrad)) + condCheck(r, 'mGrad') : '';
@@ -4421,7 +4467,7 @@ function render(){
   else { document.querySelectorAll('#panel > [data-step]:not([data-for])').forEach(el => { el.hidden = false; }); document.querySelectorAll('#prepPanel details.sub').forEach(d => { d.hidden = d.dataset.sub === 'ptr' || d.dataset.sub === 'pbtw' || d.dataset.sub === 'pman'; }); }
   /* More options shows when this step has settings to offer */
   { const mo = $('#moreOpts'), any = PROJ && [...document.querySelectorAll('#panel > .optsec')].some(x => !x.hidden); mo.hidden = !any; $('#moreBtn').textContent = document.body.classList.contains('moreopen') ? 'Fewer options' : 'More options'; $('#moreBtn').setAttribute('aria-expanded', document.body.classList.contains('moreopen')); $('#moreWhat').hidden = document.body.classList.contains('moreopen'); }
-  renderSec(); renderProt(); renderPrep(); renderND(); grpStatus(); renderNext(); renderWfTool();
+  renderSec(); renderProt(); renderPrep(); renderND(); grpStatus(); moreSync(); renderNext(); renderWfTool();
   { const lab = id => { const e = $(id); return e && e.closest('label'); }, side = opt.gelPos === 'right', full = opt.gelView === 'full';
     [['#o-gelAlign', side], ['#o-gelSide', !side], ['#o-gelFocusKda', full], ['#o-gelSpan', full]].forEach(([id, hide]) => { const l = lab(id); if (l) l.hidden = hide; }); }
   { const fi = $('#gelFocusInfo'), r0 = kind === 'run' && f ? f.run : null, gl = r0 ? gelsFor(r0) : kind === 'workflow' ? gels : [], g0 = gl.find(x => x._focus);
@@ -4929,7 +4975,7 @@ window.addEventListener('pointermove', e => {
 ['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; }));
 $('#gelOffReset').addEventListener('click', () => { runs.forEach(r => { r.gelOff = {}; }); prep.offs = {}; render(); });
 paper.addEventListener('pointerdown', e => {
-  const c = chartAt(); if (!c || !c.run || e.button !== 0) return;
+  const c = chartAt(); if (!c || (!c.run && !opt.zoomMode) || e.button !== 0) return;
   const p = svgPoint(e); if (!p) return; const lx = p.x - c.ox, ly = p.y - c.oy, g = c.g;
   if (lx < g.L || lx > g.R || ly < g.T || ly > g.B) return;
   e.preventDefault(); drag = {c, x0: lx};
@@ -4946,7 +4992,13 @@ window.addEventListener('pointerup', () => {
   if (!drag) return; const d = drag; drag = null; dragBox.hidden = true;
   if (d.x1 === undefined || Math.abs(d.x1 - d.x0) < 3) return;
   const g = d.c.g, inv = X => g.xlo + (X - g.L)/(g.R - g.L)*(g.xhi - g.xlo);
-  d.c.run.integ = (d.c.run.integ || []).concat([{a: inv(Math.min(d.x0, d.x1)), b: inv(Math.max(d.x0, d.x1))}]); render();
+  const a = inv(Math.min(d.x0, d.x1)), b = inv(Math.max(d.x0, d.x1));
+  if (opt.zoomMode) {
+    const ro = d.c.run || opt; ro.xmin = a; ro.xmax = b; syncControls();
+  } else if (d.c.run) {
+    d.c.run.integ = (d.c.run.integ || []).concat([{a, b}]);
+  }
+  render();
 });
 
 /* purification summary: one row per workflow step with its pool */
@@ -4979,14 +5031,14 @@ function sumRows(){
   const first = out.length ? amt(out[0]) : null; let prev = null, prevKept = false;
   /* a measured step without a chromatogram before the first column is what that column was loaded with */
   if (out.length && prep.on) { const wf = wfList(), i = wf.indexOf(out[0].r); let mg = null; for (let j = 0; j < i; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a) mg = a; }
-    if (mg > 0) { const x = out[0], v = ['mg', 'nd'].includes(basis) ? mg : ['mgmol', 'ndmol'].includes(basis) && kd(x) ? mg/kd(x) : null; if (v > 0) { prev = v; prevKept = true; } } }
+    if (mg > 0) { const x = out[0], v = ['mg', 'nd'].includes(basis) ? mg : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? mg/kd(x) : null; if (v > 0) { prev = v; prevKept = true; } } }
   /* yield counts from the first measured amount in the workflow, which can be a step without a chromatogram */
-  out.toAmt = (mg, x) => !(mg > 0) || !x ? null : ['mg', 'nd'].includes(basis) ? mg : ['mgmol', 'ndmol'].includes(basis) && kd(x) ? mg/kd(x) : null;
+  out.toAmt = (mg, x) => !(mg > 0) || !x ? null : ['mg', 'nd'].includes(basis) ? mg : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? mg/kd(x) : null;
   let base = first; out.baseMan = null;
   if (out.length && prep.on) { const wf = wfList(), i = wf.indexOf(out[0].r); for (let j = 0; j < i; j++) if (wf[j].prep === 'manual') { const v = out.toAmt(manMg(wf[j].man), out[0]); if (v > 0) { base = v; out.baseMan = wf[j]; break; } } }
   out.base = base; out.amtOf = amt; out.kept = x => kept(x);
   /* a measured concentration or exchange between columns is what the next column was loaded with */
-  const kept = x => { const k = prep.on ? loadedAfter(x.r) : null; if (!(k > 0)) return null; return ['mg', 'nd'].includes(basis) ? k : ['mgmol', 'ndmol'].includes(basis) && kd(x) ? k/kd(x) : null; };
+  const kept = x => { const k = prep.on ? loadedAfter(x.r) : null; if (!(k > 0)) return null; return ['mg', 'nd'].includes(basis) ? k : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? k/kd(x) : null; };
   out.forEach(x => { const a = amt(x); x.yld = base > 0 && a > 0 ? 100*a/base : null; x.stepY = prev > 0 && a > 0 ? 100*a/prev : null; x.fromKept = !!x.stepY && prevKept; x.loadedAmt = prevKept ? prev : null; if (a > 0) { const k = kept(x); prev = k > 0 ? k : a; prevKept = k > 0; } }); out.basis = basis;
   return out;
 }
@@ -5495,13 +5547,13 @@ const isWl = h => /^\d{3}(\.\d+)?\s*(nm)?$/i.test(String(h).trim());
 function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
     if (/^\s*vendor|:\s*$/i.test(H[0] || '')) continue; /* metadata rows ("Vendor: Agilent", "Sample Name:") are not the table header */
     if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) {
-        for (let j = i + 1; j < lines.length; j++) {
+        for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
             const row = splitRow(lines[j], d);
             if (row.some(v => ndNum(v, d) != null)) return {i, d, H, rows: 'samples'};
         }
     }
     if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1) {
-        for (let j = i + 1; j < lines.length; j++) {
+        for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
             const row = splitRow(lines[j], d);
             if (row.some(v => ndNum(v, d) != null)) return {i, d, H, rows: 'wavelengths'};
         }
@@ -5530,7 +5582,7 @@ function parseNanoDrop(text){
   /* spectra laid out as rows: one column per sample, one row per wavelength */
   if (hd.rows === 'wavelengths') { return H.slice(1).map((nm, k) => { const wl = [], ab = []; data.forEach(r => { const w = ndNum(r[0], d), v = ndNum(r[k + 1], d); if (w != null && v != null) { wl.push(w); ab.push(v); } });
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }, a280 = at(280), a260 = at(260);
-      return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null); }
+      return ndNew({name: nm, row: k, a280, a260, a230: at(230), a340: at(340), r280: a280 > 0 && a260 != null ? a260/a280 : null, spec: {wl, ab}, hide: CRUDE_RE.test(nm)}); }).filter(s => s.a280 != null && !s.name.trim().endsWith(':') && !/^vendor/i.test(s.name.trim())); }
   const hn = H.map(h => h.toLowerCase().replace(/\s+/g, ' ')), col = f => hn.findIndex(f);
   const cName = col(h => ND_NAME.test(h)), cR280 = col(h => /a?\s?260\s*\/\s*a?\s?280/.test(h)), cR230 = col(h => /a?\s?260\s*\/\s*a?\s?230/.test(h));
   const absCol = w => col(h => new RegExp(`\\ba ?${w}\\b|^${w}$`).test(h) && !/\//.test(h) && !/conc|mg|µg|ug|ng|raw/.test(h));
@@ -5540,7 +5592,10 @@ function parseNanoDrop(text){
   const cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
   const wcols = H.map((h, i) => ({i, w: parseFloat(h)})).filter(x => isWl(H[x.i]) && x.w >= 190 && x.w <= 850);
   const headAll = hn.join(' '), dyeFile = /dye|degree of label/.test(headAll);
-  return data.filter(r => r.length > 2 && (r[cName] || '').length).map((r, i) => {
+  return data.filter(r => {
+    const nm = (r[cName] || '').trim();
+    return r.length > 2 && nm.length > 0 && !nm.endsWith(':') && !/^vendor/i.test(nm);
+  }).map((r, i) => {
     const typ = cType >= 0 ? r[cType] : '', unitTxt = ((cUnit >= 0 ? r[cUnit] : '') + ' ' + (cConc >= 0 ? hn[cConc] : '')).toLowerCase();
     const kind = /ng\s*\/\s*[µu]l|nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
     let conc = cConc >= 0 ? ndNum(r[cConc], d) : null;
@@ -5767,6 +5822,41 @@ document.querySelectorAll('#panel > .grp').forEach(sec => { const h = sec.queryS
   set(closed);
   const tog = () => { const c = !sec.classList.contains('collapsed'); set(c); try { localStorage.setItem(key, c ? '1' : '0'); } catch (e) {} };
   h.addEventListener('click', tog); h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tog(); } }); });
+/* ---------- More options inside each section (open or closed remembered), and the settings search ---------- */
+/* rarely changed settings: moved, never removed, so every id and label stays. A setting changed from its default opens its More options. */
+const ADV = {'sub:rwin': ['o-fracEvery', 'o-runPad'], 'sub:rgel': ['o-gelAlign', 'o-gelGap', 'o-gelSide', 'o-linkFrom', 'o-laneMark', 'o-laneAlpha', 'gelSizeReset', 'gelOffReset'], 'sub:rpool': ['o-poolColor'],
+  'Peak integration': ['o-intProm', 'o-path', 'o-eps', 'o-intFill'], 'Processing': ['o-baseline', 'o-smooth'], 'Peak labels': ['o-peakRot', 'o-peakDec', 'o-prom', 'o-peakColor', 'o-peakMax'],
+  'Axes': ['o-ticksOut', 'o-y2grad', 'o-y2cond', 'o-sbValue', 'o-sbUnit', 'o-zoomInsetPos', 'o-zoomInsetSize'], 'Figure style': ['o-lw', 'o-font', 'o-bg'], 'Layout': ['o-stack'],
+  'sub:gcrop': ['o-gelAutoCrop', 'o-gelFrame'], 'sub:gbands': ['o-tagTol', 'o-bandSens', 'o-purBase', 'o-tagCounts'], 'sub:gknown': ['o-knownTol', 'o-knownMin', 'o-knownCount']};
+const moreBoxes = [];
+Object.entries(ADV).forEach(([key, ids]) => {
+  const host = key.startsWith('sub:') ? document.querySelector(`#panel details.sub[data-sub="${key.slice(4)}"]`) : [...document.querySelectorAll('#panel > .grp')].find(g => { const h = g.querySelector(':scope > h2'); return h && h.firstChild && h.firstChild.textContent.trim() === key; });
+  if (!host) return;
+  const d = document.createElement('details'), body = document.createElement('div'); d.className = 'more'; d.dataset.more = key; body.className = 'morebody';
+  const sm = document.createElement('summary'); sm.textContent = 'More options'; d.append(sm, body);
+  ids.forEach(id => { const e = document.getElementById(id), w = e && (e.tagName === 'BUTTON' ? e : e.closest('label')); if (w && host.contains(w)) body.appendChild(w); });
+  if (!body.children.length) return;
+  host.appendChild(d); moreBoxes.push(d);
+  try { if (localStorage.getItem('hfb-more-' + key) === '1') d.open = true; } catch (e) {}
+  d.addEventListener('toggle', () => { if (document.body.classList.contains('searching')) return; try { localStorage.setItem('hfb-more-' + key, d.open ? '1' : '0'); } catch (e) {} }); });
+/* a setting changed from its default is never hidden: its More options opens (once, so closing it by hand sticks) */
+function moreSync(){
+  moreBoxes.forEach(d => { const nd = [...d.querySelectorAll('[data-opt]')].some(e => { const k = e.dataset.opt; return k in DEF && JSON.stringify(opt[k]) !== JSON.stringify(DEF[k]); });
+    if (nd && !d._nd) d.open = true; d._nd = nd; }); }
+{ const inp = $('#panelSearch'); let saved = null;
+  const run = () => { const q = inp.value.trim().toLowerCase(), pn = $('#panel');
+    if (!q) { if (saved) { saved.forEach(([el, st]) => { if (el.matches('.grp')) { el.classList.toggle('collapsed', st); const h = el.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', String(!st)); } else el.open = st; }); saved = null; }
+      document.body.classList.remove('searching'); pn.querySelectorAll('.srchmiss').forEach(x => x.classList.remove('srchmiss')); return; }
+    if (!saved) saved = [...pn.querySelectorAll(':scope > .grp'), ...pn.querySelectorAll('details.sub, details.more')].map(el => [el, el.matches('.grp') ? el.classList.contains('collapsed') : el.open]);
+    document.body.classList.add('searching');
+    pn.querySelectorAll('.srchmiss').forEach(x => x.classList.remove('srchmiss'));
+    const labs = [...pn.querySelectorAll('label')].filter(l => !l.closest('#stepsPanel, #stepSheet, .psearch'));
+    labs.forEach(l => { if (!(l.textContent + ' ' + (l.title || '')).toLowerCase().includes(q)) l.classList.add('srchmiss'); });
+    const hits = labs.filter(l => !l.classList.contains('srchmiss') && !l.hidden);
+    hits.forEach(l => { for (let a = l.parentElement; a && a !== pn; a = a.parentElement) { if (a.matches('details')) a.open = true; if (a.matches('.grp')) { a.classList.remove('collapsed'); const h = a.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', 'true'); } } });
+    pn.querySelectorAll('details.more, details.sub').forEach(d => { if (!d.querySelector('label:not(.srchmiss)')) d.classList.add('srchmiss'); });
+    pn.querySelectorAll(':scope > .grp').forEach(g => { if (!g.closest('#stepsPanel, #stepSheet') && !g.querySelector('label:not(.srchmiss)')) g.classList.add('srchmiss'); }); };
+  inp.addEventListener('input', run); }
 function grpStatus(){
   const set = (name, t) => { document.querySelectorAll('#panel > .grp > h2').forEach(h => { if (h.firstChild.textContent.trim() === name) { const st = h.querySelector('.st'); if (st) st.textContent = t; } }); };
   set('Processing', [opt.baseline === 'none' ? 'as recorded' : opt.baseline === 'min' ? 'zeroed' : 'drift removed', +opt.smooth ? `smoothed ${opt.smooth} pt` : 'no smoothing'].join(', '));
@@ -6197,8 +6287,29 @@ function renderStepSheet(L){
     + (rmT ? `<span class="sp"></span><button type="button" class="btn danger${rmArm === k ? ' armed' : ''}" data-remove="1">${rmArm === k ? 'Remove? Click again' : rmT}</button>` : '');
   const ae = $('#ssActs'); if (ae._h !== ah) { ae._h = ah; ae.innerHTML = ah; } ae.hidden = !ah;
   renderQuick(onGel || kind === 'btw' ? '' : kind);
+  syncFrom(onGel ? '' : k);
   placeFoot();
 }
+/* Comes from: a step can follow any earlier step, so a fraction can go to one next step and another fraction to a second (a branch) */
+const wfStepObj = k => { const kind = k.split(':')[0], id = k.slice(kind.length + 1); return kind === 'run' ? runs.find(r => r.id === id) : kind === 'man' ? (prep.manual || []).find(m => m.id === id) : kind === 'btw' ? (prep.btw || {})[id] : null; };
+const wfStepId = k => k.startsWith('btw:') ? 'nc:' + k.slice(4) : k.slice(k.indexOf(':') + 1);
+/* true when candId already comes (directly or through the steps before it) from selfId */
+function wfFromCycle(selfId, candId){ if (!candId) return false; const L = wfFigListRaw(), seen = new Set(); let cur = candId;
+  while (cur && !seen.has(cur)) { if (cur === selfId) return true; seen.add(cur); const i = L.findIndex(x => x.id === cur); if (i < 0) break; const f = wfFromOf(L[i]); cur = f && L.some(x => x.id === f) ? f : i > 0 ? L[i - 1].id : ''; }
+  return false; }
+function syncFrom(k){ const box = $('#ssFromBox'), o = k && ['run', 'man', 'btw'].includes(k.split(':')[0]) ? wfStepObj(k) : null; if (!o) { box.hidden = true; return; }
+  const id = wfStepId(k), raw = wfFigListRaw(), i = raw.findIndex(x => x.id === id); box.hidden = i < 1; if (box.hidden) return;
+  const sel = $('#ssFrom'), oh = '<option value="">The step before (default)</option>' + raw.slice(0, i).map(x => `<option value="${esc(x.id)}">${esc(stepTitle(x))}</option>`).join('');
+  if (sel._h !== oh) { sel._h = oh; sel.innerHTML = oh; }
+  const cur = wfFromOf(raw[i]); sel.value = raw.slice(0, i).some(x => x.id === cur) ? cur : '';
+  const ni = $('#ssFromNote'); if (ni !== document.activeElement) ni.value = o.wfFromNote || ''; }
+$('#ssFrom').addEventListener('change', e => { const k = curStep, o = wfStepObj(k); if (!o) return; const v = e.target.value;
+  if (wfFromCycle(wfStepId(k), v)) { toast('A step cannot come from itself or from a step that comes from it'); syncFrom(k); return; }
+  if (v) o.wfFrom = v; else delete o.wfFrom; gels.forEach(g => { g._prepA = null; }); render(); });
+$('#ssFromNote').addEventListener('input', e => { const o = wfStepObj(curStep); if (!o) return; const v = e.target.value; if (v.trim()) o.wfFromNote = v; else delete o.wfFromNote; render(); });
+/* a removed step hands its branches on to the step it came from */
+function wfUnlink(id){ const up = wfFromOf(wfFigListRaw().find(x => x.id === id)); const fix = o => { if (o && o.wfFrom === id) { if (up) o.wfFrom = up; else delete o.wfFrom; } };
+  runs.forEach(fix); (prep.manual || []).forEach(fix); Object.keys(prep.btw || {}).forEach(q => fix(prep.btw[q])); }
 /* notes and the move and remove buttons close the step: they sit after the step's own fields */
 function placeFoot(){ const foot = $('#stepFoot'); if (!PROJ) { foot.hidden = true; return; }
   foot.hidden = $('#ssNotes').parentNode.hidden && $('#ssActs').hidden; if (foot.hidden) return;
@@ -6300,7 +6411,7 @@ $('#ssQuick').addEventListener('click', e => { const b = e.target.closest('butto
     opt.myQuick = (Array.isArray(opt.myQuick) ? opt.myQuick : []).concat([{id: 'q' + Date.now().toString(36), k: kind, n: nm, set}]); saveOpt(); render(); toast(`Saved "${nm}" as a quick fill`); } });
 /* a step that others follow hands them on to the step before it */
 function relinkAfter(id){ const L = wfList(), i = L.findIndex(x => x.id === id), prev = i > 0 ? L[i - 1].id : ''; (prep.manual || []).forEach(m => { if (m.after === id) m.after = prev; }); return prev; }
-function removeStep(k){ const kind = k.split(':')[0], id = k.slice(kind.length + 1);
+function removeStep(k){ const kind = k.split(':')[0], id = k.slice(kind.length + 1); if (['run', 'man', 'btw'].includes(kind)) wfUnlink(kind === 'btw' ? 'nc:' + id : id);
   if (kind === 'run') { const prev = relinkAfter(id), b = document.querySelector(`.trace.run[data-id="${id}"] [data-act="del"]`); if (b) b.click(); selectStep(prev ? (runs.some(r => r.id === prev) ? 'run:' + prev : isManId(prev) ? 'man:' + prev : prev === 'cleave' && prep.cleave ? 'cleave' : 'lysis') : 'lysis'); return; }
   if (kind === 'man') { const prev = relinkAfter(id); prep.manual = (prep.manual || []).filter(m => m.id !== id); if (prep.offs) delete prep.offs[id]; delete prepObj[id]; gels.forEach(g => { if (g.assign) g.assign = g.assign.map(a => a === id ? '' : a); if (g.runId === id) g.runId = ''; g._prepA = null; });
     if (prep.stepMeta) delete prep.stepMeta[k]; selectStep(prev ? (runs.some(r => r.id === prev) ? 'run:' + prev : isManId(prev) ? 'man:' + prev : prev === 'cleave' ? 'cleave' : 'lysis') : 'lysis'); return; }
