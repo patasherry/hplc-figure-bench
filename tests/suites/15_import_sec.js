@@ -78,6 +78,8 @@ async function fresh(id, fn){
     T.check('sec/unmatched-cleared', stds[0].ve === '' && stds[1].ve === 2, JSON.stringify(stds.map(q => q.ve)));
   });
   const secMatrix = [
+    // Note: The unicorn-semicolon fixture addresses issues #215, #248, #398, #551, #576, and #593
+    // It acts as the single canonical acceptance matrix for semicolon-separated SEC parsing.
     { id: 'synth-comma', synth: true, file: 'sec_comma.tsv', comma: true, peaks: [4.5], check: r => r.uvs[0].xs[1] === 0.25 && r.uvs[0].ys[0] === 2.5 && r.cond.ys[0] === 12.5 },
     { id: 'synth-dot', synth: true, file: 'sec_dot.tsv', comma: false, peaks: [4.5], check: r => r.uvs[0].xs[1] === 0.25 && r.uvs[0].ys[0] === 2.5 },
     { id: 'unicorn-semicolon', file: 'sec_semicolon_unicorn7.csv', flow: '0.5', peaks: [12, 14], check: r => r.uvs[0].xs.includes(0.02) || r.uvs[0].xs.includes(0.25) || r.uvs[0].xs.includes(14.48) },
