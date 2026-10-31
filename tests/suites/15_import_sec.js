@@ -1,6 +1,6 @@
 // Synthetic regression checks for SEC matching, UNICORN numbers, column names and NanoDrop imports.
 // Controls and downloaded project files are the only interface to the app.
-const {open, H, suite, fs} = require('../lib/harness');
+const {open, H, suite, fs, path, DATA} = require('../lib/harness');
 const F = require('../data/gen_import_sec');
 const T = suite('15_import_sec');
 const SEL = {quick: '#homeQuick', project: '#projFile', save: '#projSave', file: '#file', nd: '#ndFile',
@@ -90,10 +90,16 @@ async function fresh(id, fn){
   });
   await fresh('unicorn-semicolon', async (p, h) => {
     await h.newProject('Synthetic comma numbers');
-    await h.addRun(F.unicorn('sec_semicolon_unicorn7.csv'));
+    await h.addRun(path.join(DATA, 'chrom', 'sec_semicolon_unicorn7.csv'));
     await p.waitForTimeout(500);
     const data2 = await saved(p), r2 = data2.runs.find(x => x.file === 'sec_semicolon_unicorn7');
     T.check('decimal-comma-sec', r2 && (r2.uvs[0].xs.includes(0.02) || r2.uvs[0].xs.includes(0.25) || r2.uvs[0].xs.includes(14.48)), 'Comma decimal in SEC trace parsed correctly');
+    const step = (await h.timeline()).find(x => x.k.startsWith('run:')); if (step) await h.step(step.k);
+    const flow = p.locator('.trace.run.sel [data-k=mFlow]'); await flow.fill('0.5'); await flow.dispatchEvent('change');
+    await click(p, '#intAuto'); await p.waitForTimeout(900);
+    const table = await h.peakTable(), ve = table[0].findIndex(c => /^(Ve|Center|Apex|Elution time)\b/.test(c)), vals = table.slice(1).filter(r => r.length > 3).map(r => +String(r[ve]).replace(/[^0-9.-]/g, ''));
+    // A time-axis semicolon export may need a manually entered flow rate; both canonical SEC peaks must still be detected from the full trace.
+    T.check('semicolon-flow-keeps-peaks', ve >= 0 && [12, 14].every(x => vals.some(v => Math.abs(v - x) <= 0.3)), `expected 12 and 14 min, peak table has ${vals.join(', ') || 'none'}`);
   });
   for (const size of [75, 200]) await fresh('column-' + size, async (p, h) => {
     await h.newProject('Synthetic column ' + size);
