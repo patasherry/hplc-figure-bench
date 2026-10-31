@@ -290,3 +290,45 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
+
+
+suite('yield_with_manual_conc', async () => {
+  const p = await open();
+
+  // Set up a synthetic run
+  await p.click('#selftest');
+  await p.evaluate(() => {
+    window.__HFB.PROJ = true;
+    window.__HFB.prep.on = true;
+    window.__HFB.opt.wfYield = true;
+    window.__HFB.runs = [{
+      id: 'testrun',
+      name: 'Run 1',
+      inWf: true,
+      grad: { xs: [], ys: [] },
+      fracs: [{ label: 'Pool', a: 1, b: 2 }],
+      uv: { xs: [0, 1.5, 3], ys: [0, 100, 0] },
+      poolFinalVol: 10,
+      poolConc: 2
+    }];
+
+    // We need sumRows().mgOf() to be > 0.
+    window.__HFB.opt.path = 10;
+
+    // Add a manual step after this run
+    window.__HFB.prep.manual = [{
+      id: 'm1',
+      after: 'testrun',
+      name: 'Concentration',
+      conc: '5',
+      vol: '2'
+    }];
+
+    window.__HFB.render();
+  });
+
+  // Verify that the final yield under the figure uses the manual step's mg (10 mg)
+  const wfYieldLines = await p.$$eval('svg text', els => els.map(e => e.textContent));
+  const wfYieldStr = wfYieldLines.join('');
+  H.eq('manual_yield_extracted_correctly', wfYieldStr.includes('10 mg'), true);
+});
