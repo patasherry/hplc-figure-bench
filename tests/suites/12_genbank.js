@@ -160,6 +160,37 @@ const files = {
     T.check('orispan.his_tag', txt.includes('6xHis') || txt.includes('His6 protein') || txt.includes('His6-protein'), `svg: ${txt}`);
   });
 
+  /* 11. Pasted GenBank text (Benchling copy) takes the same path as a file */
+  const paste = async txt => { await p.click('#tl [data-step=construct]'); await p.waitForTimeout(300); if (await p.$eval('#gbPasteBox', e => e.hidden)) await p.click('#gbPaste'); await p.fill('#gbText', txt); await p.click('#gbPasteGo'); await p.waitForTimeout(1000); };
+  const lastToast = async () => (await h.toasts()).join(' | ');
+  await T.t('paste_genbank', async () => {
+    await p.click('text=All projects').catch(() => {}); await h.wait(400);
+    await h.newProject('GenBank Paste');
+    await paste(fs.readFileSync(files.comp, 'utf8'));
+    const st = await status(), txt = await svgText();
+    T.check('paste.status_loaded', st.includes('pCOMP') && st.includes('1,000 bp') && st.includes('255 residues'), `status: ${st}`);
+    T.check('paste.tagged_mass', st.includes('28.7 kDa') || txt.includes('28.7 kDa'), `status: ${st}`);
+    T.check('paste.cleaved_mass', txt.includes('27.1 kDa'), `svg: ${txt}`);
+  });
+  await T.t('paste_refused', async () => {
+    await p.click('text=All projects').catch(() => {}); await h.wait(400);
+    await h.newProject('GenBank Paste Refused');
+    await paste('>seq1\nATGAAAGCTGCTGCTGCT\n');
+    T.check('paste.fasta_refused', /FASTA/.test(await lastToast()) && !(await status()).includes('bp'), `toasts: ${await lastToast()}`);
+    await paste('hello world, not a sequence');
+    T.check('paste.junk_refused', /Could not read/.test(await lastToast()) && !(await status()).includes('bp'), `toasts: ${await lastToast()}`);
+    await paste('LOCUS       PROT1       120 aa            linear   UNK 01-JAN-2000\nFEATURES             Location/Qualifiers\n     CDS             1..120\nORIGIN\n        1 mkaaaaaaaa\n//\n');
+    T.check('paste.protein_refused', /protein GenBank record/.test(await lastToast()) && !(await status()).includes('bp'), `toasts: ${await lastToast()}`);
+  });
+  await T.t('paste_first_record_only', async () => {
+    await p.click('text=All projects').catch(() => {}); await h.wait(400);
+    await h.newProject('GenBank Paste Two');
+    const one = fs.readFileSync(files.comp, 'utf8').replace(/\r/g, '').trimEnd(), body = one.endsWith('//') ? one : one + '\n//';
+    await paste(body + '\n' + body.replace(/pCOMP/g, 'pSECOND') + '\n');
+    const st = await status();
+    T.check('paste.two_records_first_only', st.includes('pCOMP') && !st.includes('pSECOND') && st.includes('1,000 bp') && /first of 2 records/.test(await lastToast()), `status: ${st}, toasts: ${await lastToast()}`);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();

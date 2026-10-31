@@ -32,7 +32,7 @@ Status messages and hints explain missing inputs or unverified numbers. For exam
 **Inputs:**
 *   **Chromatography Data:** `.csv`, `.tsv`, `.txt`, `.zip` (UNICORN 7 result archives), `.asc`, `.dat`, `.arw`, `.xy`, and pasted spreadsheet columns.
 *   **Gel Images:** PNG, JPEG, and TIFF (`.tif`, `.tiff`, decoded on demand via `pako` and `UTIF`).
-*   **Sequences & Plasmids:** GenBank and plasmid files (`.gb`, `.gbk`, `.genbank`, `.ape`, `.dna`) and plain amino acid sequences.
+*   **Sequences & Plasmids:** GenBank and plasmid files (`.gb`, `.gbk`, `.genbank`, `.ape`, `.dna`) and plain amino acid sequences. GenBank text copied from Benchling or SnapGene can be pasted with **Paste GenBank text** in the Construct section. Only the first record is read; FASTA and protein records are refused, and a LOCUS length that differs from the sequence gives a warning.
 *   **Structures:** Local `.cif`, `.mmcif`, `.pdb`, `.ent` files, or live fetches from RCSB PDB by entry code.
 *   **NanoDrop Readings:** `.csv`, `.tsv`, and `.txt` exports from NanoDrop One, 2000, or 8000 (Protein A280, A205, Proteins & Labels, and full spectra), or manual readings via **"Type a reading"**.
 *   **Project Files:** `.json` project files exported from this tool. Damaged or incomplete entries are skipped with a count. Spreadsheets (`.xlsx`) and HEIC/PDF images are not read directly; export them as CSV or PNG/JPEG/TIFF first.
