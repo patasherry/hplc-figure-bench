@@ -4224,8 +4224,8 @@ function btwSentence(b){
   const kit = [dv, mw ? unitIf(mw, 'kDa') + ' MWCO' : ''].filter(Boolean).join(', ');
   return `The pool was then ${how}${kit ? ` (${kit})` : ''}${vi > 0 && vo > 0 ? ` from ${fmtAuto(vi)} mL to ${fmtAuto(vo)} mL` : vo > 0 ? ` to ${fmtAuto(vo)} mL` : ''}${nt ? `${/^(into|in|to|against|with|at)\b/i.test(nt) ? ' ' : ', '}${nt}` : ''}.`;
 }
-function manSentence(o, Lt, wf){ const m = o.man, t = x => String(x == null ? '' : x).trim().replace(/\.$/, ''), rs = t(m.resin), bf = t(m.buffer), wa = t(m.wash), el = t(m.elution), nt = t(m.note), vo = numOr(m.vol, 0);
-  const i = wf.indexOf(o), first = !wf.slice(0, i).some(x => !x.prep || x.prep === 'manual'), src = first && LYS_KEYS.some(q => hasTxt(prep[q])) ? 'the clarified lysate' : first ? 'the sample' : 'the pool';
+function manSentence(o, Lt, wf, brSrc){ const m = o.man, t = x => String(x == null ? '' : x).trim().replace(/\.$/, ''), rs = t(m.resin), bf = t(m.buffer), wa = t(m.wash), el = t(m.elution), nt = t(m.note), vo = numOr(m.vol, 0);
+  const i = wf.indexOf(o), first = !wf.slice(0, i).some(x => !x.prep || x.prep === 'manual'), src = brSrc ? brSrc : first && LYS_KEYS.some(q => hasTxt(prep[q])) ? 'the clarified lysate' : first ? 'the sample' : 'the pool';
   const head = `${o.name}${Lt ? ` (panel ${Lt})` : ''}: `, gap = w => `[${w} not entered]`;
   let b = m.kind === 'batch' ? `${src} was bound in batch to ${rs || gap('resin')}${bf ? ` in ${bf}` : ''}${wa ? `, washed with ${wa}` : ''}${el ? ` and eluted with ${el}` : ''}`
     : m.kind === 'precip' ? `the protein was precipitated${rs ? ` with ${rs}` : ''}${el ? ` (${el})` : ''}${bf ? ` and resuspended in ${bf}` : ''}`
@@ -4334,18 +4334,18 @@ function methodsText(){
   const conds = steps.map(runCond), one = k => { const vs = [...new Set(conds.map(c => c[k]).filter(Boolean))]; return vs.length === 1 && conds.every(c => c[k]) ? vs[0] : ''; }, instAll = one('mInst'), tempAll = one('mTemp');
   if (steps.length > 1 && (instAll || tempAll)) P.push(`All chromatography was run${instAll ? ` on ${art(instAll)} ${instAll}` : ''}${tempAll ? ` at ${deg(tempAll)}` : ''}.`);
   const need = t => `[${t} not entered]`;
-  /* a step that comes from an earlier step other than the one before says so; the full branch wording is for later */
-  const brTxt = r => { const f = wfFromOf(r), q = f && wfFigListRaw().find(x => x.id === f); return q ? ` (from ${stepTitle(q)})` : ''; };
-  wf.forEach((r, i) => { const ttl = stepTitle(r), Lt = letterOf(r);
-    if (r.prep === 'manual') { P.push(manSentence(r, Lt, wf) + brTxt(r)); return; }
+  /* a step that comes from an earlier step other than the one before says so */
+  const brSrc = (r, i) => { const f = wfFromOf(r); if (!f || (i > 0 && wf[i - 1].id === f)) return ''; const q = wfFigListRaw().find(x => x.id === f); return q ? `the pool from ${stepTitle(q)}` : ''; };
+  wf.forEach((r, i) => { const ttl = stepTitle(r), Lt = letterOf(r), bSrc = brSrc(r, i);
+    if (r.prep === 'manual') { P.push(manSentence(r, Lt, wf, bSrc)); return; }
     if (r.prep === 'cleave') { const pr = cleaveProtease(), ra = v(prep.ratio), bf = v(prep.dialBuffer), T = v(prep.clvTemp), h = v(prep.clvTime), mw = v(prep.mwco);
       P.push(`Tag removal${Lt ? ` (panel ${Lt})` : ''}: the pool was ${bf ? `dialyzed${mw ? ` (${unitIf(mw, 'kDa')} MWCO)` : ''} against ${bf}` : 'dialyzed'}${pr ? ` with ${pr}${ra ? ` at ${/^\d/.test(ra) && !/:/.test(ra) ? '1:' + ra : ra}${/w\/w|mol/i.test(ra) ? '' : ' (w/w)'}` : ''}` : ''}${T ? ` at ${deg(T)}` : ''}${h ? ` for ${hrs(h)}` : ''}.`); return; }
     const k = steps.indexOf(r) + 1, c = runCond(r), sec = isSec(r), first = !wf.slice(0, wf.indexOf(r)).some(x => !x.prep || x.prep === 'manual'), cap = poolCaption(r), ft = /flow/i.test(cap);
-    const src = c.mLoad ? c.mLoad : first && prep.on && LYS_KEYS.some(q => hasTxt(prep[q])) ? 'the clarified lysate' : first ? 'the sample' : 'the pool';
+    const src = c.mLoad ? c.mLoad : bSrc ? bSrc : first && prep.on && LYS_KEYS.some(q => hasTxt(prep[q])) ? 'the clarified lysate' : first ? 'the sample' : 'the pool';
     /* a column name read from the file name is marked for checking; one typed by hand or logged by UNICORN is not */
     const colChk = '';
     const col = c.mCol ? `${art(c.mCol)} ${c.mCol}${c.mCV && !/\d\s*mL|\/\d+/.test(c.mCol) ? ` (${c.mCV} mL)` : ''}${/column$/i.test(c.mCol) ? '' : ' column'}${colChk}` : `the column ${need('column')}`;
-    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}${brTxt(r)}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')}${condCheck(r, 'mFlow')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
+    let t = `Step ${k}${Lt ? ` (${ttl}, panel ${Lt})` : ` (${ttl})`}: ${/^\d/.test(src) ? src : lc(src)} was loaded at ${c.mFlow ? unitIf(c.mFlow, 'mL/min') : need('flow rate')}${condCheck(r, 'mFlow')} onto ${col}${c.mInst && !instAll ? ` (${c.mInst})` : ''}`;
     t += c.mBufA ? (sec ? ` in ${c.mBufA}` : ` equilibrated in buffer A (${c.mBufA})`) : ` ${need('buffer')}`;
     if (hasTxt(r.mWash) && !sec) t += `, washed with ${lc(v(r.mWash))}`;
     let grad = c.mGrad ? (c.mGradAuto ? lc(c.mGrad).replace(/^linear /, 'a linear gradient from ').replace(/^step to /, 'a step to ') : lc(c.mGrad)) + condCheck(r, 'mGrad') : '';

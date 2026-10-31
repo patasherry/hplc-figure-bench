@@ -36,7 +36,7 @@ const {open, H, suite, src} = require('../lib/harness');
       T.check(`branch ${lay}: three panels, two arrows from the first, no overlap`, b2.length === 3 && e2.filter(e => e.e.startsWith(ids[0] + '>')).length === 2 && b2.every((a, i) => b2.every((c, j) => i >= j || a.r <= c.l + 1 || c.r <= a.l + 1 || a.b <= c.t + 1 || c.b <= a.t + 1)), JSON.stringify(b2));
       if (lay === 'grid') { const c = by[ids[2]] && b2.find(x => x.id === ids[2]), a = b2.find(x => x.id === ids[1]); T.check('branch grid: the second branch starts a new row', c && a && c.t >= a.b - 1, JSON.stringify(b2)); } }
     await layout(p, 'row');
-    T.check('methods text names the branch parent', /\(from /.test(await h.methods()));
+    T.check('methods text names the branch parent', /the pool from /.test(await h.methods()));
     /* the summary table still works */
     T.check('summary table renders', (await h.sumTable()).length >= 1);
     /* back to the default */
