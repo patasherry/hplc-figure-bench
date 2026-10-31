@@ -149,6 +149,14 @@ async function fresh(id, fn){
           T.check('nd/' + exp.file + '/p1_conc', p1 && Math.abs((p1.a280 != null ? p1.a280 : p1.conc) - 1.5) < 0.001, `Expected Pool 1 concentration 1.5, got ${p1 ? (p1.a280 != null ? p1.a280 : p1.conc) : 'not found'}`);
       }
 
+      // Check Agilent metadata specific case
+      if (exp.file === 'nanodrop_metadata_agilent.txt') {
+          const prot = nd.filter(n => n.kind !== 'nucleic');
+          const ag1 = prot.find(n => n.name === 'Agilent 1');
+          const ag2 = prot.find(n => n.name === 'Agilent 2');
+          T.check('nd/' + exp.file + '/ag1_conc', ag1 && Math.abs((ag1.a280 != null ? ag1.a280 : ag1.conc) - 2.5) < 0.001, `Expected Agilent 1 concentration 2.5, got ${ag1 ? (ag1.a280 != null ? ag1.a280 : ag1.conc) : 'not found'}`);
+          T.check('nd/' + exp.file + '/ag2_conc', ag2 && Math.abs((ag2.a280 != null ? ag2.a280 : ag2.conc) - 2.5) < 0.001, `Expected Agilent 2 concentration 2.5, got ${ag2 ? (ag2.a280 != null ? ag2.a280 : ag2.conc) : 'not found'}`);
+      }
     });
   }
 
