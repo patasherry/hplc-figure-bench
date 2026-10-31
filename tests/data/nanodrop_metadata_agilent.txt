@@ -1,0 +1,8 @@
+Vendor:	Agilent Technologies	Cary 60
+Sample ID:	A280 / Conc settings	mg/mL
+Serial no.:	8453	1
+
+Sample Name	A280	A260/A280	Protein (mg/mL)
+Pool 1	1.500	0.57	1.500
+Pool 2	1.200	0.58	1.200
+Pool 3	0.800	0.60	0.800

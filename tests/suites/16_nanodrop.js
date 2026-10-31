@@ -180,6 +180,20 @@ async function fresh(id, fn){
     await app.close();
   });
 
+  // Agilent-style preamble: "Sample ID:" is a metadata label, not the table header, and 8453 is a serial number, not a reading.
+  await fresh('nanodrop-metadata-agilent', async (p, h) => {
+    await h.newProject('Agilent metadata');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    await p.setInputFiles(SEL.nd, 'data/nanodrop_metadata_agilent.txt');
+    await p.locator(SEL.row).first().waitFor();
+    await p.waitForTimeout(300);
+    const rows = await p.locator(SEL.row).allInnerTexts();
+    T.check('nanodrop-metadata-agilent/three-rows', rows.length === 3, 'Expected 3 samples, got ' + rows.length);
+    T.check('nanodrop-metadata-agilent/first-value', /^1\.50 mg\/mL/.test(rows[0] || ''), 'First row: ' + rows[0]);
+    T.check('nanodrop-metadata-agilent/no-serial', !rows.some(r => /8453/.test(r)), 'Serial number shown as a reading');
+  });
+
   // A measured zero is valid, but a malformed token beginning with zero is not a measurement.
   await fresh('zero-measurement-validation', async (p, h) => {
     await h.newProject('Zero measurement validation');
