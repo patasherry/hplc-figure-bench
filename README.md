@@ -87,4 +87,4 @@ Status messages and hints explain missing inputs or unverified numbers. For exam
 *   `README.md`: User-facing documentation.
 *   `AGENTS.md` / `CLAUDE.md`: Shared instructions and rules for coding agents.
 *   `.github/workflows/`: GitHub Actions for automated browser tests and PR reviews.
-*   `tests/`: Automated Playwright browser test suite and synthetic test datasets.
+*   `tests/`: Automated Playwright browser test suite and synthetic test datasets.
