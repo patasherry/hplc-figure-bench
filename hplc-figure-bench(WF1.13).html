@@ -1550,7 +1550,7 @@ function parseAkta(text, fname){
       const v = (f[cv.col+1] || '').trim().replace(/^"|"$/g, '');
       if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
       else { const y = toNum(v, d !== ','); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
-  const ak = aktaFromCurves(curves, fname);
+  const ak = aktaFromCurves(curves, fname, {delimiter: d});
   if (!ak) return {bad: 'an ÄKTA/UNICORN file, but has no usable UV traces: export the UV curve from UNICORN'};
   return ak;
 }
@@ -2050,7 +2050,7 @@ function poolRows(run){
     k: meas && mgA > 0 ? mg/mgA : null};
 }
 function autoIntegrate(run){
-  const {xs, ys} = xUnit(run) === 'min' && !(uvFlow(run) > 0) ? procFull(run) : runUV(Object.assign({}, run, {crop: ''})), n = ys.length; if (n < 10) return 0;
+  const {xs, ys} = run.delimiter === ';' || (xUnit(run) === 'min' && !(uvFlow(run) > 0)) ? procFull(run) : runUV(Object.assign({}, run, {crop: '', xmin: '', xmax: ''})), n = ys.length; if (n < 10) return 0;
   const mn = arrMin(ys), range = arrMax(ys) - mn; if (!(range > 0)) return 0;
   const dn = []; for (let i=1;i<n;i++) dn.push(Math.abs(ys[i] - ys[i-1])); dn.sort((p, q) => p - q); const nsd = (dn[dn.length >> 1] || 0)*1.4826/Math.SQRT2;
   const sec = isSec(run), thr = Math.max(10*nsd, range*(sec ? Math.min(numOr(opt.intProm, 5), 2) : numOr(opt.intProm, 5))/100), w = Math.max(2, Math.round(n*0.004)), span = Math.max(10, Math.round(n*0.15));
