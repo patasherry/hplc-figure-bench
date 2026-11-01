@@ -1632,6 +1632,11 @@ def board_round(s, topic=''):
                           ['**Proposals**', ''] + [f'- **{p["id"]}** ({p["by"]}): {p["title"]}. {p["why"]}' for p in props]) + SIGN.format(rv.MODEL))
     talk.extend(f'Opening review, {n}: {t}' for n, t in reviews)
     listing = lambda: '\n'.join(f'{p["id"]} ({p["by"]}): {p["title"]}. Why: {p["why"]} Evidence: {p["evidence"]} Risk: {p["risk"]} Change: {p["change"]}' for p in props if not p['out'])
+    mem = board_memory()
+    for p in props:
+        d = dup_of(p, mem)
+        if d:
+            talk.append(f'System warning on {p["id"]}: matches {d[0]} ({d[1]}). The proposer must revise it to explain why it is distinct, or withdraw it.')
     talk_text = lambda: '\n'.join(talk)[-12000:]
     # open debate: every adviser answers the whole discussion, for DEBATE_ROUNDS rounds
     for k in range(1, DEBATE_ROUNDS + 1):
@@ -1675,15 +1680,6 @@ def board_round(s, topic=''):
     # act on the debate: what all three back becomes an issue, with the reasoning
     queued = len(issues('jules-queue'))
     agreed = [r for r, p in enumerate(ranked, 1) if len(scores[p['id']]) >= 2 and avg[p['id']] >= AUTO_AVG and min(x[1] for x in scores[p['id']]) >= 3]
-    mem, dups = board_memory(), []
-    for r in agreed:
-        d = dup_of(ranked[r - 1], mem)
-        if d:
-            dups.append(f'{r} (duplicate of {d[0]}: {d[1]})')
-    agreed = [r for r in agreed if not any(x.startswith(f'{r} ') for x in dups)]
-    if dups:
-        lines += ['**Not adopted, already done or queued:** ' + '; '.join(dups), '']
-        log(f'board: skipped {len(dups)} duplicate proposals')
     for r in agreed[:max(0, min(AUTO_MAX, AUTO_QUEUE - queued))]:
         p = ranked[r - 1]
         args = '\n'.join(f'- {t}' for t in debate_of(p)) or '- (no arguments recorded)'
