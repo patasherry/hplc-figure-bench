@@ -42,7 +42,7 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
     await h.wait(500);
     await h.newProject('zero measurements');
     const cases = [
-      ['akta', 'empty_akta.csv', 'UV 1_280\tCond\nml\tmAU\tml\tmS/cm\n', /ÄKTA|UNICORN/i, /no usable UV traces/i],
+      ['akta', 'empty_akta.csv', 'UV 1_280\tCond\nml\tmAU\tml\tmS/cm\n', /ÄKTA|UNICORN/i, /missing UV volume\/time and UV absorbance data/i],
       ['nanodrop', 'empty_nd.csv', 'Date,Sample Name,Protein (mg/mL),A280,A260/A280,Sample Type\n', /NanoDrop/i, /no usable measurements/i],
       ['hplc', 'empty_hplc.csv', 'Time (min),UV 280 (mAU)\n', /chromatogram/i, /no data points/i]
     ];
@@ -111,11 +111,19 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
     T.check('matrix/527_akta_valid/loads', t.some(x => /Loaded 1 ÄKTA run/.test(x)), `toasts: ${t.join(' | ')}`);
 
     t = await load('527_akta_malformed.csv', akta + '0\t0bad\t0\t10\n1\t0bad\t1\t10\n2\t0bad\t2\t10\n');
-    T.check('matrix/527_akta_malformed/rejected', t.some(x => /527_akta_malformed\.csv/.test(x) && /no usable UV traces/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
+    T.check('matrix/527_akta_malformed/rejected', t.some(x => /527_akta_malformed\.csv/.test(x) && /missing UV absorbance data/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
 
     // Absent value checks for ÄKTA
     t = await load('absent_value_akta.csv', akta + '0\t\t0\t10\n1\t\t1\t10\n2\t\t2\t10\n3\t\t3\t10\n');
-    T.check('matrix/absent/akta-rejected', t.some(x => /absent_value_akta\.csv/.test(x) && /no usable UV traces/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
+    T.check('matrix/absent/akta-rejected', t.some(x => /absent_value_akta\.csv/.test(x) && /missing UV absorbance data/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
+
+    /* A failed IMAC import names the missing UV fields together, rather than leaving the user with the generic trace warning. */
+    t = await load('imac_missing_uv.csv', akta + '\t\t0\t10\n\t\t1\t10\n\t\t2\t10\n\t\t3\t10\n');
+    T.check('matrix/imac-missing-fields/named', t.some(x => /imac_missing_uv\.csv/.test(x) && /missing UV volume\/time and UV absorbance data/i.test(x) && !/no usable UV traces/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
+
+    /* An incomplete extra UV curve stays optional when another UV curve is usable. */
+    t = await load('imac_partial_uv.csv', 'UV 1_280\tUV 2_280\nml\tmAU\tml\tmAU\n0\t1\t\t\n1\t2\t\t\n2\t3\t\t\n3\t4\t\t\n');
+    T.check('matrix/imac-partial-uv/loads', t.some(x => /Loaded 1 ÄKTA run/.test(x)) && !t.some(x => /missing UV/i.test(x)), `toasts: ${t.join(' | ')}`);
 
 
     // Verify internal state matches the assertions on what should load

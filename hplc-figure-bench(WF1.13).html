@@ -1559,14 +1559,15 @@ function parseAkta(text, fname){
   const curves = [];
   for (let c=0;c<units.length-1;c+=2){ const nm = names[c] || ''; if (!nm) continue;
     /* UNICORN 6/7 names (UV 1_280, Conductivity) and UNICORN 5 names with a run prefix (run12:10_UV1_280nm, run12:10_Cond) */
-    curves.push({name: nm, xu: units[c], yu: units[c+1], col: c, kind: curveKind(nm, units[c+1]), xs: [], ys: [], ev: []}); }
+    curves.push({name: nm, xu: units[c], yu: units[c+1], col: c, kind: curveKind(nm, units[c+1]), xs: [], ys: [], ev: [], hasX: false, hasY: false}); }
   for (let i=u+1;i<lines.length;i++){ const L = lines[i]; if (!L) continue; const f = sp(L);
-    for (const cv of curves){ const xs = f[cv.col]; if (xs === undefined || xs === '') continue; const x = toNum(xs, d !== ','); if (!isFinite(x)) continue;
-      const v = (f[cv.col+1] || '').trim().replace(/^"|"$/g, '');
-      if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
-      else { const y = toNum(v, d !== ','); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
+    for (const cv of curves){ const x = toNum(f[cv.col], d !== ','), v = (f[cv.col+1] || '').trim().replace(/^"|"$/g, '');
+      if (isFinite(x)) cv.hasX = true;
+      if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') { if (isFinite(x)) cv.ev.push({x, label: v}); }
+      else { const y = toNum(v, d !== ','); if (isFinite(y)) cv.hasY = true; if (isFinite(x) && isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
   const ak = aktaFromCurves(curves, fname, {delimiter: d});
-  if (!ak) return {bad: 'an ÄKTA/UNICORN file, but has no usable UV traces: export the UV curve from UNICORN'};
+  if (!ak) { const uv = curves.filter(c => c.kind === 'uv'), missing = !uv.length ? ['UV volume/time', 'UV absorbance'] : [!uv.some(c => c.hasX) && 'UV volume/time', !uv.some(c => c.hasY) && 'UV absorbance'].filter(Boolean);
+    return {bad: `an ÄKTA/UNICORN file, but is missing ${missing.length ? missing.join(' and ') : 'paired UV volume/time and UV absorbance'} data: export the UV curve from UNICORN`, missing}; }
   return ak;
 }
 /* what a UNICORN curve is, from its name and unit. UV path length (cm) and derived UV curves (UV_CUT_TEMP@100) are not traces */
