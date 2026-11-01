@@ -4536,7 +4536,7 @@ function render(){
   else s2 = 'Click a peak to label it';
   const lblOff = kind === 'overlay' && geo && geo.lblLeft || [];
   if (lblOff.length) s2 = `${lblOff.length} peak label${lblOff.length === 1 ? '' : 's'} left off for lack of room (${lblOff.slice(0, 4).join(', ')}${lblOff.length > 4 ? ', …' : ''}). Try a lower Max per trace, fewer decimals, a wider figure or a higher Y to`;
-  if (kind === 'workflow' && PROJ) s2 += '. Click a panel to edit it';
+  if (kind === 'workflow' && PROJ) s2 += '. Click a panel to edit it; drag the selected panel to move it';
   if (kind === 'workflow' && opt.runCond === 'full' && opt.wfLayout === 'row') s2 += '. Full run conditions read better in the Grid layout';
   $('#spec2').textContent = s2; $('#spec2').classList.toggle('warn', !!lblOff.length); $('#spec2').title = lblOff.length ? s2 : '';
   $('#exNote').hidden = !(traces.length && traces.every(t => t.ex));
@@ -5009,17 +5009,26 @@ window.addEventListener('pointermove', e => {
 ['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (gelDrag) { gelDrag = null; render(); } }));
 /* drag the selected workflow panel (inside its selection box) to move it; under 4 px it stays a click */
 let wfDrag = null, wfRaf = 0;
+function wfDragCursor(e){
+  if (wfDrag) { paper.style.cursor = wfDrag.on ? 'grabbing' : 'grab'; return; }
+  const f = curFig(), p = svgPoint(e), q = p && G && G.pos && wfSel && G.pos.find(x => x.id === wfSel);
+  if (!PROJ || !f || f.kind !== 'workflow' || !q || !p) { paper.style.cursor = ''; return; }
+  if (gelBoxAt(p)) return;
+  paper.style.cursor = p.x >= q.x && p.x <= q.x + q.w && p.y >= q.y && p.y <= q.y + q.h ? 'grab' : '';
+}
 paper.addEventListener('pointerdown', e => {
   if (e.button !== 0 || !wfSel || !PROJ || !G || !G.pos) return; const f = curFig(), svg = paper.querySelector('svg'); if (!f || f.kind !== 'workflow' || !svg) return;
   const p = svgPoint(e), q = p && G.pos.find(x => x.id === wfSel), it = q && wfItem(wfSel), m = svg.getScreenCTM(); if (!it || !m || !(p.x >= q.x && p.x <= q.x + q.w && p.y >= q.y && p.y <= q.y + q.h)) return;
   wfDrag = {it, cx: e.clientX, cy: e.clientY, k: 1/m.a, ox: it.ox, oy: it.oy, minX: it.ox - q.x, minY: it.oy - q.y, on: false};
+  wfDragCursor(e);
 }, true);
 window.addEventListener('pointermove', e => {
-  const d = wfDrag; if (!d) return; if (!d.on) { if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) return; d.on = true; }
+  const d = wfDrag; if (!d) { wfDragCursor(e); return; } if (!d.on) { if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) { wfDragCursor(e); return; } d.on = true; }
+  wfDragCursor(e);
   const o = {dx: Math.max(d.minX, d.ox + (e.clientX - d.cx)*d.k), dy: Math.max(d.minY, d.oy + (e.clientY - d.cy)*d.k)}; gelMovedAt = Date.now();
   cancelAnimationFrame(wfRaf); wfRaf = requestAnimationFrame(() => { const it = wfItem(wfSel); if (it) wfSet(it, 'off', o); });
 });
-['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; }));
+['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, e => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; wfDragCursor(e); }));
 $('#gelOffReset').addEventListener('click', () => { runs.forEach(r => { r.gelOff = {}; }); prep.offs = {}; render(); });
 paper.addEventListener('pointerdown', e => {
   const c = chartAt(); if (!c || (!c.run && !opt.zoomMode) || e.button !== 0) return;
