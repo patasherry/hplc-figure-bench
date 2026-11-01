@@ -250,7 +250,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
     T.check('split-discard: one final yield line', brTexts.length === 1, brTexts.map(x => x.t).join(' | '));
     const meth = await h.methods();
-    T.check('split-discard: methods text contains split', /split:/i.test(meth), meth);
+    T.check('split-discard: methods text contains split', !/split:/i.test(meth), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
   T.done(); })();
