@@ -1,4 +1,4 @@
-const {open, H, suite, path, fs, DATA} = require('../lib/harness');
+const { open, H, suite, path, fs, DATA } = require('../lib/harness');
 const EXP = JSON.parse(fs.readFileSync(path.join(DATA, 'expected_peaks.json'), 'utf8')), CH = path.join(DATA, 'chrom');
 const T = suite('14_peaks');
 
@@ -17,6 +17,62 @@ async function peaks(p, h) {
 async function detect(p) {
   await p.evaluate(() => { const b = document.getElementById('intAuto'); if (b) b.click(); });
   await p.waitForTimeout(900);
+}
+
+async function overlapTest() {
+  const {p, errs, close} = await open();
+  const h = H(p);
+  try {
+    await h.newProject('overlap_test');
+
+    // We need a synthetic file with close peaks.
+    // We can use peak_overlapping.csv which is already in tests/data/chrom
+    await h.addRun(path.join(CH, 'peak_overlapping.csv'));
+    await p.waitForTimeout(300);
+
+    // Auto detect peaks
+    await detect(p);
+
+    // Turn on peak labels in UI
+    await p.evaluate(() => {
+       const el = document.getElementById('o-showPeaks');
+       if (el && !el.checked) {
+           el.click();
+       }
+    });
+
+    await p.waitForTimeout(500);
+
+    // Find the labels
+    const labels = await p.evaluate(() => {
+      const texts = Array.from(document.querySelectorAll('svg text'));
+      return texts.map(t => {
+        const box = t.getBoundingClientRect();
+        return { text: t.textContent, x: box.x, y: box.y, width: box.width, height: box.height };
+      });
+    });
+
+    const peakLabels = labels.filter(t => t.text.includes("P1") || t.text.includes("P2") || t.text.includes("P3"));
+
+    T.check('overlap/found-labels', peakLabels.length >= 2, `Found ${peakLabels.length} peak labels (expected at least 2)`);
+
+    let overlap = false;
+    for (let i = 0; i < peakLabels.length; i++) {
+      for (let j = i + 1; j < peakLabels.length; j++) {
+        const a = peakLabels[i], b = peakLabels[j];
+        if (a.x < b.x + b.width && a.x + a.width > b.x &&
+            a.y < b.y + b.height && a.y + a.height > b.y) {
+          overlap = true;
+        }
+      }
+    }
+
+    T.check('overlap/no-overlap', !overlap, 'Peak labels should not overlap');
+
+  } finally {
+    T.check(`overlap/no-page-errors`, !errs.length, errs.join(' | '));
+    await close();
+  }
 }
 
 async function peakFile(e) {
@@ -131,6 +187,7 @@ async function peakFile(e) {
 }
 
 (async () => {
+  await T.t('overlap', overlapTest);
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }

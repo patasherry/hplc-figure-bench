@@ -2264,14 +2264,14 @@ function buildOverlaySVG(ov){
     });
     /* each label clears every trace under it, and gets a thin leader when that lifts it away from its own peak */
     const k = (xhi - xlo)/(R - L), topIn = (a, b) => { let m = -Infinity; P.forEach(p => { for (let i = Math.max(0, lowerBound(p.xs, a)); i < p.xs.length && p.xs[i] <= b; i++) if (p.yp[i] > m) m = p.yp[i]; }); return m; };
-    items.forEach(it => { it.w = o.peakRot ? pf : it.raw.length*pcw; it.h = o.peakRot ? it.raw.length*pcw : pf; const xd = xlo + (it.X - L)*k, m = topIn(xd - it.w/2*k, xd + it.w/2*k);
+    items.forEach(it => { it.w = o.peakRot ? pf : it.raw.length*pcw; it.h = o.peakRot ? it.raw.length*pcw : pf; const wBox = it.w + (o.peakRot ? pf*0.85 : pf*0.2); const xd = xlo + (it.X - L)*k, m = topIn(xd - wBox/2*k, xd + wBox/2*k);
       it.Y0 = Math.max(T + it.h, Math.min(it.Y, isFinite(m) ? py(m) - 3 : it.Y)); });
     items.sort((a,b) => b.Y0 - a.Y0);
     const leaders = [];
     s.push(`<g font-size="${r2(pf)}">`);
     /* a label that would have to leave the figure to clear the others is left off and named under the figure */
     items.forEach(it => {
-      const w = it.w, bot = placeLabel(boxes, it.X - w/2, it.X + w/2, it.Y0, it.h, 0);
+      const w = it.w + (o.peakRot ? pf*0.85 : pf*0.2), bot = placeLabel(boxes, it.X - w/2, it.X + w/2, it.Y0, it.h, 0);
       if (bot == null) { lblLeft.push(it.raw); return; }
       if (it.Y - bot > fs*1.2) leaders.push({x: it.X, a: bot + 1.5, b: it.Y, own: boxes.length - 1});
       const txt = esc(it.raw);
