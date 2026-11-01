@@ -465,4 +465,58 @@ await T.t('malformed-id', async () => { const {p, errs, close} = await open(), h
   await close();
 });
 
-T.done(); })();
+}();
+
+T.t('incomplete run condition warnings', async p => {
+  await open(p);
+  await p.evaluate(() => {
+    window.__HFB.PROJ = { runs: [{ id: 'r1', name: 'IMAC', inWf: true, shade: 'A1', prep: 'run' }] };
+    window.__HFB.runs = window.__HFB.PROJ.runs;
+    window.__HFB.curStep = 'run:r1';
+    window.__HFB.render();
+  });
+
+  await p.waitForSelector('#stepSheet');
+
+  let warnText = await p.evaluate(() => {
+    const list = window.__HFB.stepList();
+    const step = list.find(s => s.k === 'run:r1');
+    return step ? step.warn : '';
+  });
+
+  T.check('warntext includes UV path guidance', warnText.includes('Enter UV flow-cell path length (mm) to calculate protein mass'), warnText);
+  T.check('warntext includes buffer and flow rate guidance', warnText.includes('enter column, buffer, flow-rate and elution fields'), warnText);
+
+  await p.evaluate(() => {
+    window.__HFB.runs[0].path = '2';
+    window.__HFB.render();
+  });
+
+  warnText = await p.evaluate(() => {
+    const list = window.__HFB.stepList();
+    const step = list.find(s => s.k === 'run:r1');
+    return step ? step.warn : '';
+  });
+
+  T.check('warntext removes UV path guidance after path is filled', !warnText.includes('calculate protein mass'), warnText);
+  T.check('warntext retains buffer guidance', warnText.includes('Enter column, buffer, flow-rate and elution fields'), warnText);
+
+  await p.evaluate(() => {
+    window.__HFB.runs[0].mCol = 'HisTrap';
+    window.__HFB.runs[0].mBufA = 'Buffer A';
+    window.__HFB.runs[0].mFlow = '1.0';
+    window.__HFB.runs[0].mGrad = 'Step';
+    window.__HFB.runs[0].mBufB = 'Buffer B';
+    window.__HFB.render();
+  });
+
+  warnText = await p.evaluate(() => {
+    const list = window.__HFB.stepList();
+    const step = list.find(s => s.k === 'run:r1');
+    return step ? step.warn : '';
+  });
+
+  T.check('warntext is empty after all fields are filled', warnText === '', warnText);
+});
+
+T.done();
