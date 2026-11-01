@@ -67,8 +67,30 @@ def gen_not_unicorn():
         zout.writestr("some_file.txt", "This is not a unicorn archive")
         zout.writestr("another_file.csv", "Time,Value\n1,2\n3,4")
 
+def gen_zero_measurement_unicorn():
+    np.random.seed(42)
+    fn = 'zero_measurement.zip'
+    inj = 1.0
+    flow = 0.5
+    x = np.round(np.arange(0, 30.0001, 0.002), 5).astype(float)
+    y = signal(x, [(inj + 12.0, 0.4, 40.0)])
+    xs4 = x[::20]
+    fr = [(inj + 0.0, 'Waste'), (inj + 6.0, '1.A.1')]
+    log = [(0.0, 'Method Run')]
+
+    curves = [
+        dict(name='Conductivity', type='Conduction', yu='mS/cm', xs=xs4, ys=np.full(xs4.size, 15.0), num=2),
+        dict(name='UV', type='UV', yu='mAU', xs=np.array([]), ys=np.array([]), num=1, uvpath=2)
+    ]
+
+    path = os.path.join(OUT, fn)
+    write_unicorn_zip(path, 23.562, curves, {'Fraction': fr, 'Injection': [(inj, 'Inj')], 'Logbook': log}, flow)
+
+
+
 if __name__ == '__main__':
     gen_valid_unicorn()
+    gen_zero_measurement_unicorn()
     gen_missing_curve_unicorn()
     gen_not_unicorn()
     print("Generated 11_unicorn_zip test files.")
