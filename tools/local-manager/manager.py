@@ -542,7 +542,7 @@ def owner_replies(s):
 
 # ---------- review gate: plain-code checks on every finished Jules PR, so the lead only sees PRs that pass ----------
 APP_ = 'hplc-figure-bench(WF1.13).html'
-ALLOWED = re.compile(r'^(hplc-figure-bench\(WF1\.13\)\.html|README\.md|tests/(suites|data|lib)/|tests/README\.md|docs/)')
+ALLOWED = re.compile(r'^(hplc-figure-bench\(WF1\.13\)\.html|README\.md|tests/(suites|data|lib|ux)/|tests/README\.md|docs/)')
 MAX_SENDBACKS = 2
 
 
