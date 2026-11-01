@@ -198,6 +198,27 @@ await T.t('legacy-sec', async () => {
   await close();
 });
 
+await T.t('zero-measurement.import', async () => { const {p, errs, close} = await open(), h = H(p);
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.waitForTimeout(600);
+
+  await h.addConc(null, 2.0);
+  await p.click('#homeNd');
+  await p.waitForTimeout(200);
+
+  const ndData = `Sample Name\tNucleic Acid(ng/uL)\tA260/A280\tA230\nSample 1\t0.0\t1.8\t1.0`;
+  await p.setInputFiles('#ndFile', {name: 'zero_conc.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(ndData)});
+  await p.waitForTimeout(1000);
+
+  const rows = await p.$$('.ndr');
+  T.check('zero-measurement.kept', rows.length === 1, `Expected 1 ndr, found ${rows.length}.`);
+  if (rows.length === 1) {
+    const val = await rows[0].$eval('.nd-v', el => el.textContent);
+    T.check('zero-measurement.value', val === '0.0' || val === '0', `Concentration value is ${val}`);
+  }
+  await close();
+});
+
 await T.t('falsey-preserve', async () => {
   const {p, errs, close} = await open(), h = H(p);
   const proj = {
