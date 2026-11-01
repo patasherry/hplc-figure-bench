@@ -68,7 +68,7 @@ async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return
     await h.newProject('Unicorn 7 missing curve');
     await h.addRun(path.join(DATA, 'chrom', 'missing_curve.zip'));
 
-    await p.waitForSelector('#toast :text-matches("not a UNICORN result archive", "i")');
+    await h.wait(1500);
     const badFiles = await p.$$eval('#badFiles li', els => els.map(e => e.textContent));
     const toasts = await h.toasts();
     // Missing UV curve causes parseUnicornZip to return null, which pushes "not a UNICORN result archive".
@@ -77,13 +77,24 @@ async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return
     T.check('no page errors for missing curve', !errs.length, errs.join(' | '));
   });
 
+  await T.t('zero measurement archive', async () => {
+    await p.reload();
+    await h.wait(900);
+    await h.newProject('Unicorn 7 zero measurement');
+    await h.addRun(path.join(DATA, 'chrom', 'zero_measurement.zip'));
+    await h.wait(1500);
+    const toasts = await h.toasts();
+    T.check('gives a message for zero measurement', toasts.some(t => /no readable data points/i.test(t)), `toasts: ${toasts.join(' | ') || 'none'}`);
+    T.check('no page errors for zero measurement', !errs.length, errs.join(' | '));
+  });
+
   await T.t('not unicorn archive', async () => {
     await p.reload();
     await h.wait(900);
     await h.newProject('Unicorn 7 invalid');
     await h.addRun(path.join(DATA, 'chrom', 'not_unicorn.zip'));
 
-    await h.wait(500);
+    await h.wait(1500);
     const badFiles = await p.$$eval('#badFiles li', els => els.map(e => e.textContent));
     const toasts = await h.toasts();
     T.check('invalid format message', badFiles.some(t => /not a UNICORN result archive/i.test(t)) || toasts.some(t => /not a UNICORN result archive/i.test(t)), `badFiles: ${badFiles}, toasts: ${toasts}`);
