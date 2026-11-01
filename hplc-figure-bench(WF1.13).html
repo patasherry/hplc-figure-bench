@@ -255,7 +255,7 @@ details.paste[open]{display:grid;gap:8px}
 .thead{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;gap:6px;align-items:center}
 .thead.r{grid-template-columns:auto minmax(0,1fr) auto auto}
 .thead.g{grid-template-columns:auto minmax(0,1fr) auto}
-.thead input[type=text]{font-weight:500;border-color:transparent;background:transparent;padding-inline:6px;text-overflow:ellipsis;min-width:0}
+.thead input[type=text]{font-weight:500;border-color:transparent;background:transparent;padding-inline:6px}
 .thead input[type=text]:hover{border-color:var(--line2)}
 .thead input[type=text]:focus{background:var(--field)}
 .thead input[type=color]{width:16px;height:16px;min-height:0;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;overflow:hidden;margin-inline:4px 2px}
@@ -308,7 +308,6 @@ input.autoval::placeholder{color:var(--accent);opacity:.85}
 .methods[open]{display:grid;gap:6px}
 .methods textarea{width:100%;box-sizing:border-box;font:inherit;font-size:12px;line-height:1.45;resize:vertical}
 .cardopts input.tiny{width:4.2em;padding:2px 5px;font-size:12px;margin-left:4px;min-height:24px}
-.cardopts input[data-k="path"]{width:7.5em}
 .nextbar{display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:6px 10px;font-size:13px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:6px 6px 6px 12px}
 .nextbar .btns{align-items:center;gap:4px}
 .xclose{font:inherit;font-size:16px;line-height:1;width:26px;height:26px;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
@@ -525,7 +524,7 @@ button,input,select,textarea{font-family:inherit}
   <p class="home-where" id="homeWhere"></p>
   <div class="home-alt">
     <button class="btn" id="homeImport" type="button">Open file</button>
-    <button class="btn" id="homeQuick" type="button">Make a quick figure with example data</button>
+    <button class="btn quiet" id="homeQuick" type="button">Make a quick figure without a project</button>
   </div>
 </section>
 
@@ -604,7 +603,7 @@ button,input,select,textarea{font-family:inherit}
       <div class="row">
         <label class="f">Figure width (in)<input type="number" step="0.1" min="2" id="o-wfW" data-opt="wfW"></label>
       </div>
-      <details class="cardtext" id="wfMore" open><summary>Figure options</summary>
+      <details class="cardtext" id="wfMore"><summary>Figure options</summary>
       <div class="row">
         <label class="f">Chromatogram height (in)<input type="number" step="0.1" min="1" id="o-wfH" data-opt="wfH"></label>
         <label class="f">Panel titles<select id="o-wfTitle" data-opt="wfTitle"><option value="step">Step type</option><option value="name">File names</option></select></label>
@@ -788,7 +787,7 @@ button,input,select,textarea{font-family:inherit}
       <p class="hint noproj">Concentration is A280 divided by the A280 of 1 mg/mL for the form in that step (tagged or untagged, from the Protein section), else the single A280 value set under Peak integration, else the instrument's value. Lysate, load and flowthrough readings keep their A280 only. 260/280 above 0.6 is marked, and above 0.8 points to nucleic acid, although NAD(P) binding proteins can reach 0.9 from bound nucleotide alone.</p>
     </section>
 
-    <section class="grp moreopts" id="moreOpts" hidden><button type="button" class="btn quiet" id="moreBtn" aria-expanded="false">More options</button><span class="muted" id="moreWhat"><button type="button" class="linkbtn" data-more-sec="Window">Window</button>, <button type="button" class="linkbtn" data-more-sec="Peak integration">peaks</button>, <button type="button" class="linkbtn" data-more-sec="Size exclusion (SEC)">size exclusion</button>, <button type="button" class="linkbtn" data-more-sec="Axes">axes</button> and <button type="button" class="linkbtn" data-more-sec="Figure style">style</button></span></section>
+    <section class="grp moreopts" id="moreOpts" hidden><button type="button" class="btn quiet" id="moreBtn" aria-expanded="false">More options</button><span class="muted" id="moreWhat">Window, peaks, size exclusion, axes and style</span></section>
     <section class="grp optsec" data-for="run workflow">
       <h2>ÄKTA runs</h2>
       <label class="f" title="From each run card's Run conditions">Run conditions under the trace<select id="o-runCond2" data-opt="runCond"><option value="none">None</option><option value="short">Column, flow and temperature</option><option value="full">Also buffers, gradient and load</option></select></label>
@@ -1127,18 +1126,6 @@ button,input,select,textarea{font-family:inherit}
         <label class="f">Y from<input type="number" step="any" id="o-ymin" data-opt="ymin" placeholder="auto"></label>
         <label class="f">Y to<input type="number" step="any" id="o-ymax" data-opt="ymax" placeholder="auto"></label>
       </div>
-      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Zoom inset: whole run, with the X window magnified</label>
-      <div class="row">
-        <label class="f">Inset position
-          <select id="o-zoomInsetPos" data-opt="zoomInsetPos">
-            <option value="tr">Upper right</option>
-            <option value="tl">Upper left</option>
-            <option value="br">Lower right</option>
-            <option value="beside">Beside (second panel)</option>
-          </select>
-        </label>
-        <label class="f">Inset size (fraction of width)<input type="number" step="0.05" min="0.15" max="0.6" id="o-zoomInsetSize" data-opt="zoomInsetSize"></label>
-      </div>
       <div class="btns"><button class="btn quiet" id="resetRange" type="button">Reset to auto</button></div>
       <p class="hint" data-for="run">The window is saved per run and also applies in the workflow figure.</p>
     </section>
@@ -1223,6 +1210,18 @@ button,input,select,textarea{font-family:inherit}
           <option value="none">None</option>
         </select>
       </label>
+      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Zoom inset: whole run, with the X window magnified</label>
+      <div class="row">
+        <label class="f">Inset position
+          <select id="o-zoomInsetPos" data-opt="zoomInsetPos">
+            <option value="tr">Upper right</option>
+            <option value="tl">Upper left</option>
+            <option value="br">Lower right</option>
+            <option value="beside">Beside (second panel)</option>
+          </select>
+        </label>
+        <label class="f">Inset size (fraction of width)<input type="number" step="0.05" min="0.15" max="0.6" id="o-zoomInsetSize" data-opt="zoomInsetSize"></label>
+      </div>
     </section>
 
     <section class="grp optsec">
@@ -1502,13 +1501,10 @@ function parseText(text){
   lines.forEach((L, i) => {
     if (!L.trim()) return;
     const nums = splitLine(L, d).map(f => toNum(f, dc)); let k = 0; for (const v of nums) if (!isNaN(v)) k++;
-    if (k >= 2) { if (!cr) { cr = {start:i, rows:[]}; runsN.push(cr); } cr.rows.push(nums); cr.end = i; } else cr = null;
+    if (k >= 2) { if (!cr) { cr = {start:i, rows:[]}; runsN.push(cr); } cr.rows.push(nums); } else cr = null;
   });
   const run = runsN.reduce((a,b) => b.rows.length > a.rows.length ? b : a);
   if (!run || run.rows.length < 2) throw new Error('has no data points');
-  /* a row with an unreadable value (0bad, a blank cell) splits the data and only the longest block is kept: count the rows left out on either side, up to the last readable row, so they are not dropped silently */
-  const w = run.rows[0].length, lostOn = (i, step) => { let n = 0, nb = 0; for (; i >= 0 && i < lines.length; i += step) { if (!lines[i].trim()) continue; const fs = splitLine(lines[i], d); let k = 0; for (const f of fs) if (!isNaN(toNum(f, dc))) k++; if (fs.length !== w || !k) break; if (k < 2) nb++; else { n += nb + 1; nb = 0; } } return n; };
-  const skipped = lostOn(run.start - 1, -1) + lostOn(run.end + 1, 1);
   let ncol = 0; for (const r of run.rows) if (r.length > ncol) ncol = r.length;
   const isHeader = fs => fs.length >= 2 && fs.filter(f => f && isNaN(toNum(f,dc))).length >= Math.min(2, fs.length);
   let names = null, above = null, j = run.start - 1;
@@ -1518,7 +1514,7 @@ function parseText(text){
   const cols = []; for (let c=0;c<ncol;c++) cols.push((names && names[c]) || ('Column ' + (c+1)));
   let xc = 0, yc = 1;
   if (ncol >= 3) { const rs = run.rows.slice(0, 6); if (rs.length > 3 && rs.every((r,i) => r[0] === rs[0][0] + i)) { xc = 1; yc = 2; } }
-  return {rows: run.rows, cols, xc, yc, skipped};
+  return {rows: run.rows, cols, xc, yc};
 }
 
 /* ---------- parsing: ÄKTA / UNICORN ---------- */
@@ -4468,7 +4464,6 @@ function buildFig(f, screen){ FIG_SCREEN = !!screen;
 
 /* ---------- UI ---------- */
 const paper = $('#paper'), list = $('#list');
-$('#moreOpts').addEventListener('click', e => { const b = e.target.closest('[data-more-sec]'); if (b) { document.body.classList.add('moreopen'); render(); const sec = [...document.querySelectorAll('#panel > .grp')].find(g => { const h = g.querySelector(':scope > h2'); return h && h.firstChild && h.firstChild.textContent.trim() === b.dataset.moreSec; }); if (sec) { sec.classList.remove('collapsed'); const h = sec.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', 'true'); sec.scrollIntoView({behavior: smooth(), block: 'start'}); } } });
 $('#moreBtn').addEventListener('click', () => { document.body.classList.toggle('moreopen'); render(); });
 /* the ladder is detected automatically whenever the crop, lanes or ladder sizes change, until you mark it by hand */
 function ensureLadder(g){
@@ -4536,7 +4531,7 @@ function render(){
   else s2 = 'Click a peak to label it';
   const lblOff = kind === 'overlay' && geo && geo.lblLeft || [];
   if (lblOff.length) s2 = `${lblOff.length} peak label${lblOff.length === 1 ? '' : 's'} left off for lack of room (${lblOff.slice(0, 4).join(', ')}${lblOff.length > 4 ? ', …' : ''}). Try a lower Max per trace, fewer decimals, a wider figure or a higher Y to`;
-  if (kind === 'workflow' && PROJ) s2 += '. Click a panel to edit it; drag the selected panel to move it';
+  if (kind === 'workflow' && PROJ) s2 += '. Click a panel to edit it';
   if (kind === 'workflow' && opt.runCond === 'full' && opt.wfLayout === 'row') s2 += '. Full run conditions read better in the Grid layout';
   $('#spec2').textContent = s2; $('#spec2').classList.toggle('warn', !!lblOff.length); $('#spec2').title = lblOff.length ? s2 : '';
   $('#exNote').hidden = !(traces.length && traces.every(t => t.ex));
@@ -4615,7 +4610,7 @@ function renderList(){
     return `<div class="trace run" data-id="${r.id}" data-kind="run">
       <div class="thead r">
         <input type="color" id="c${r.id}" data-k="color" value="${r.color}" aria-label="UV trace color">
-        <input type="text" id="n${r.id}" data-k="name" value="${esc(r.name)}" aria-label="Run name" title="${esc(r.name)}">
+        <input type="text" id="n${r.id}" data-k="name" value="${esc(r.name)}" aria-label="Run name">
         <button type="button" class="icon" data-act="up" title="Move earlier in the workflow" aria-label="Move earlier" ${idx === 0 ? 'disabled' : ''}>↑</button>
         <button type="button" class="icon" data-act="del" title="Remove run" aria-label="Remove run">✕</button>
       </div>
@@ -4650,7 +4645,7 @@ function renderList(){
   const gelCards = gels.map(g => `<div class="trace gelc" data-id="${g.id}" data-kind="gel">
       <div class="thead g">
         <img class="thumb" src="${g.thumb}" alt="">
-        <input type="text" id="n${g.id}" data-k="name" value="${esc(g.name)}" aria-label="Gel name" title="${esc(g.name)}">
+        <input type="text" id="n${g.id}" data-k="name" value="${esc(g.name)}" aria-label="Gel name">
         <button type="button" class="icon" data-act="del" title="Remove gel" aria-label="Remove gel">✕</button>
       </div>
       ${gelCardBody(g)}
@@ -4662,7 +4657,7 @@ function renderList(){
     return `<div class="trace" data-id="${t.id}" data-kind="trace">
       <div class="thead">
         <input type="color" id="c${t.id}" data-k="color" value="${t.color}" aria-label="Trace color">
-        <input type="text" id="n${t.id}" data-k="name" value="${esc(t.name)}" aria-label="Trace name" title="${esc(t.name)}">
+        <input type="text" id="n${t.id}" data-k="name" value="${esc(t.name)}" aria-label="Trace name">
         <label class="eye"><input type="checkbox" id="v${t.id}" data-k="visible" ${t.visible?'checked':''}>Show</label>
         <button type="button" class="icon" data-act="up" title="Move up" aria-label="Move up">↑</button>
         <button type="button" class="icon" data-act="del" title="Remove trace" aria-label="Remove trace">✕</button>
@@ -4674,7 +4669,7 @@ function renderList(){
         <label class="f">X shift<input type="number" step="any" id="xs${t.id}" data-k="xshift" value="${t.xshift}"></label>
       </div>
       <div class="peaks"><span class="plabel">Peaks</span>${chips || '<span class="hint">none</span>'}
-        <button type="button" class="mini" data-act="detect">Detect peaks</button>
+        <button type="button" class="mini" data-act="detect">Detect</button>
         <button type="button" class="mini" data-act="clear">Clear</button></div>
     </div>`;
   }).join('');
@@ -5009,26 +5004,17 @@ window.addEventListener('pointermove', e => {
 ['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (gelDrag) { gelDrag = null; render(); } }));
 /* drag the selected workflow panel (inside its selection box) to move it; under 4 px it stays a click */
 let wfDrag = null, wfRaf = 0;
-function wfDragCursor(e){
-  if (wfDrag) { paper.style.cursor = wfDrag.on ? 'grabbing' : 'grab'; return; }
-  const f = curFig(), p = svgPoint(e), q = p && G && G.pos && wfSel && G.pos.find(x => x.id === wfSel);
-  if (!PROJ || !f || f.kind !== 'workflow' || !q || !p) { paper.style.cursor = ''; return; }
-  if (gelBoxAt(p)) return;
-  paper.style.cursor = p.x >= q.x && p.x <= q.x + q.w && p.y >= q.y && p.y <= q.y + q.h ? 'grab' : '';
-}
 paper.addEventListener('pointerdown', e => {
   if (e.button !== 0 || !wfSel || !PROJ || !G || !G.pos) return; const f = curFig(), svg = paper.querySelector('svg'); if (!f || f.kind !== 'workflow' || !svg) return;
   const p = svgPoint(e), q = p && G.pos.find(x => x.id === wfSel), it = q && wfItem(wfSel), m = svg.getScreenCTM(); if (!it || !m || !(p.x >= q.x && p.x <= q.x + q.w && p.y >= q.y && p.y <= q.y + q.h)) return;
   wfDrag = {it, cx: e.clientX, cy: e.clientY, k: 1/m.a, ox: it.ox, oy: it.oy, minX: it.ox - q.x, minY: it.oy - q.y, on: false};
-  wfDragCursor(e);
 }, true);
 window.addEventListener('pointermove', e => {
-  const d = wfDrag; if (!d) { wfDragCursor(e); return; } if (!d.on) { if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) { wfDragCursor(e); return; } d.on = true; }
-  wfDragCursor(e);
+  const d = wfDrag; if (!d) return; if (!d.on) { if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) return; d.on = true; }
   const o = {dx: Math.max(d.minX, d.ox + (e.clientX - d.cx)*d.k), dy: Math.max(d.minY, d.oy + (e.clientY - d.cy)*d.k)}; gelMovedAt = Date.now();
   cancelAnimationFrame(wfRaf); wfRaf = requestAnimationFrame(() => { const it = wfItem(wfSel); if (it) wfSet(it, 'off', o); });
 });
-['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, e => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; wfDragCursor(e); }));
+['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; }));
 $('#gelOffReset').addEventListener('click', () => { runs.forEach(r => { r.gelOff = {}; }); prep.offs = {}; render(); });
 paper.addEventListener('pointerdown', e => {
   const c = chartAt(); if (!c || (!c.run && !opt.zoomMode) || e.button !== 0) return;
@@ -5331,9 +5317,8 @@ async function loadFiles(files){
   if (PROJ && newRuns.length) { const nr = newRuns.filter(r => r.inWf).pop() || newRuns[newRuns.length - 1]; curStep = 'run:' + nr.id; cur = nr.id; } else if (added.length) cur = 'overlay';
   renderList(); syncControls(); render();
   const n = added.length + newRuns.length, lostMsg = lost.length ? `. Curves with no readable data points were left out: ${lost.join('; ')}. Export the result from UNICORN again to include them.` : '';
-  const sk = added.filter(a => a.parsed.skipped), skipMsg = sk.length ? `. Left out ${sk.map(a => `${a.parsed.skipped} row${a.parsed.skipped > 1 ? 's' : ''} of ${a.name}`).join(', ')}: a row with an unreadable value splits the data, and only the longest unbroken block is kept. Check the file.` : '';
-  if (bad.length) toast(`Could not read ${bad.join(', ')}. Use an ÄKTA (UNICORN) export or a text file with time and signal columns${(lostMsg + skipMsg) || '.'}`);
-  else if (n) toast((dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}` : `Loaded ${n} trace${n > 1 ? 's' : ''}`) + lostMsg + skipMsg);
+  if (bad.length) toast(`Could not read ${bad.join(', ')}. Use an ÄKTA (UNICORN) export or a text file with time and signal columns${lostMsg || '.'}`);
+  else if (n) toast((dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}` : `Loaded ${n} trace${n > 1 ? 's' : ''}`) + lostMsg);
   if (imgs.length) addGelFiles(imgs);
 }
 function addParsed(added, quiet){
@@ -5615,28 +5600,26 @@ function buildStructSVG(st){
 
 /* ---------- NanoDrop: protein A280 readings ---------- */
 let ndSamples = [], ndUid = 1;
-const splitRow = (line, d) => { const out = []; let cur = '', q = false; for (let i = 0; i < line.length; i++) { const c = line[i];
-  if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; } else if (c === '"') q = true; else if (c === d) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out.map(v => v.trim()); };
 const ND_HEAD = /(a?\s?260\s*\/\s*a?\s?280|\ba\s?280\b|\ba\s?205\b|mg\s*\/\s*ml|ng\s*\/\s*[µu]l|conc)/i, ND_NAME = /sample\s*(name|id)|^"?sample"?\s*$/i;
 const ND_UNITS = /^(mg|[µu]g)\s*\/\s*ml$|^ng\s*\/\s*[µu]l$/i; /* the concentration units parseNanoDrop reads or converts to mg/mL (or keeps as ng/µL for nucleic acid) */
 const isWl = h =>/^\d{3}(\.\d+)?\s*(nm)?$/i.test(String(h).trim());
-function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d);
+function ndHeader(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i]; const d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = csvSplit(l, d).map(v => v.trim());
     if (/^\s*vendor|:\s*$/i.test(H[0] || '')) continue; /* metadata rows ("Vendor: Agilent", "Sample Name:") are not the table header */
     if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) {
         for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
-            const row = splitRow(lines[j], d);
+            const row = csvSplit(lines[j], d).map(v => v.trim());
             if (row.some(v => ndNum(v, d) != null)) return {i, d, H, rows: 'samples'};
         }
     }
     if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1) {
         for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
-            const row = splitRow(lines[j], d);
+            const row = csvSplit(lines[j], d).map(v => v.trim());
             if (row.some(v => ndNum(v, d) != null)) return {i, d, H, rows: 'wavelengths'};
         }
     }
 } return null; }
 function looksNanoDrop(text){ const L = text.split(/\r?\n/).filter(l => l.trim()); return !!ndHeader(L) || (L.slice(0, 80).some(l => /^wavelength/i.test(l.trim()) && /absorbance/i.test(l)) && L.some(l => /^a?\s?260\s*\/\s*a?280\b/i.test(l.trim()))); }
-function isNanoDropHead(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i], d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = splitRow(l, d); if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) return true; if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1 && H.some(h => isWl(h) || /\b(abs|absorbance|a280)\b/i.test(h))) return true; } return false; }
+function isNanoDropHead(lines){ for (let i = 0; i < Math.min(lines.length, 80); i++) { const l = lines[i], d = (l.match(/\t/g) || []).length >= 2 ? '\t' : (l.match(/;/g) || []).length > (l.match(/,/g) || []).length ? ';' : ','; const H = csvSplit(l, d).map(v => v.trim()); if (H.some(h => ND_NAME.test(h)) && H.some(h => ND_HEAD.test(h))) return true; if (/^(wavelength|wl|nm)/i.test(H[0] || '') && H.length > 1 && H.some(h => isWl(h) || /\b(abs|absorbance|a280)\b/i.test(h))) return true; } return false; }
 const ndNum = (v, d) => { let s = String(v ?? '').replace(/\s/g, ''); if (d === ';') { const m = s.match(/^[+-]?(\d*)(?:\.(\d{3}))*,(\d+)(?:[eE][+-]?\d+)?$/); s = m ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '.'); } else { const m = s.match(/^[+-]?(\d*),(\d+)(?:[eE][+-]?\d+)?$/); s = m && !(m[2].length === 3 && /^[1-9]\d{0,2}$/.test(m[1])) ? s.replace(',', '.') : s.replace(/,/g, ''); } return measurementNumber(s); };
 const CRUDE_RE = /lys|load|flow|\bft\b|supernat|pellet|crude|input|clarif/i;
 function ndNew(o){ return Object.assign({id: 'nd' + (ndUid++), name: '', kind: 'protein', a280: null, a260: null, a230: null, a340: null, r280: null, r230: null, conc: null, unit: 'mg/mL', runId: '', stage: 'pool', dil: 1, hide: false}, o); }
@@ -5654,7 +5637,7 @@ function parseNDSingle(lines){
 function parseNanoDrop(text){
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim()), one = parseNDSingle(lines); if (one) return one;
   const hd = ndHeader(lines); if (!hd) return [];
-  const {H, d} = hd, data = lines.slice(hd.i + 1).map(l => splitRow(l, d));
+  const {H, d} = hd, data = lines.slice(hd.i + 1).map(l => csvSplit(l, d).map(v => v.trim()));
   /* spectra laid out as rows: one column per sample, one row per wavelength */
   if (hd.rows === 'wavelengths') { return H.slice(1).map((nm, k) => { const wl = [], ab = []; data.forEach(r => { const w = ndNum(r[0], d), v = ndNum(r[k + 1], d); if (w != null && v != null) { wl.push(w); ab.push(v); } });
       const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.6); return i < 0 ? null : ab[i]; }, a280 = at(280), a260 = at(260);
@@ -5906,7 +5889,7 @@ document.querySelectorAll('#panel > .grp').forEach(sec => { const h = sec.queryS
 /* rarely changed settings: moved, never removed, so every id and label stays. A setting changed from its default opens its More options. */
 const ADV = {'sub:rwin': ['o-fracEvery', 'o-runPad'], 'sub:rgel': ['o-gelAlign', 'o-gelGap', 'o-gelSide', 'o-linkFrom', 'o-laneMark', 'o-laneAlpha', 'gelSizeReset', 'gelOffReset'], 'sub:rpool': ['o-poolColor'],
   'Peak integration': ['o-intProm', 'o-path', 'o-eps', 'o-intFill'], 'Processing': ['o-baseline', 'o-smooth'], 'Peak labels': ['o-peakRot', 'o-peakDec', 'o-prom', 'o-peakColor', 'o-peakMax'],
-  'Window': ['o-zoomInsetPos', 'o-zoomInsetSize'], 'Axes': ['o-ticksOut', 'o-y2grad', 'o-y2cond', 'o-sbValue', 'o-sbUnit'], 'Figure style': ['o-lw', 'o-font', 'o-bg'], 'Layout': ['o-stack'],
+  'Axes': ['o-ticksOut', 'o-y2grad', 'o-y2cond', 'o-sbValue', 'o-sbUnit', 'o-zoomInsetPos', 'o-zoomInsetSize'], 'Figure style': ['o-lw', 'o-font', 'o-bg'], 'Layout': ['o-stack'],
   'sub:gcrop': ['o-gelAutoCrop', 'o-gelFrame'], 'sub:gbands': ['o-tagTol', 'o-bandSens', 'o-purBase', 'o-tagCounts'], 'sub:gknown': ['o-knownTol', 'o-knownMin', 'o-knownCount']};
 const moreBoxes = [];
 Object.entries(ADV).forEach(([key, ids]) => {
