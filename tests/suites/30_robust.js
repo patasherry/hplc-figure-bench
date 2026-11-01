@@ -465,4 +465,24 @@ await T.t('malformed-id', async () => { const {p, errs, close} = await open(), h
   await close();
 });
 
+/* only prep.manual[].id is scanned for the next manual step ID: "m900" in the prep name, a run name, a step name or a stepMeta key is free text, not an ID (#378) */
+await T.t('manual-id-scope', async () => { const {p, errs, close} = await open(), h = H(p);
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.waitForTimeout(600);
+  const d = {app: 'HPLC Figure Bench', version: 1, runs: [], prep: {name: 'm900', trPlasmid: 'm900', manual: [{id: 'm2', kind: 'column', name: 'm900'}], stepMeta: {'man:m900': {}}, titles: {m900: 'm900'}}};
+  await p.setInputFiles('#projFile', {name: 'manual_id_scope.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))});
+  await p.waitForTimeout(1000);
+  await p.click('#tl [data-addmenu]');
+  await p.waitForTimeout(300);
+  await p.click('#tl [data-addstep="man:column"]');
+  await p.waitForTimeout(500);
+  const steps = await p.$$eval('#tl button[data-step^="man:"]', els => els.map(e => e.getAttribute('data-step')));
+  T.check('manual-id-scope.next-after-manual', steps.includes('man:m3') && !steps.includes('man:m901'), `manual step IDs: ${steps.join(', ')}`);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
+  const ex = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
+  T.check('manual-id-scope.prep-name-kept', !!ex.prep && ex.prep.name === 'm900', `prep.name: ${ex.prep && ex.prep.name}`);
+  T.check('manual-id-scope.no-error', errs.length === 0, errs.join(' | '));
+  await close();
+});
+
 T.done(); })();
