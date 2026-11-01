@@ -4632,7 +4632,7 @@ function renderList(){
       ${(() => { const c = runCond(r), f = (k, lab, ph, extra) => `<label class="f">${lab}<input type="${extra && extra.num ? 'number' : 'text'}"${extra && extra.num ? ' step="any" min="0"' : ''} id="${k}${r.id}" data-k="${k}" value="${esc(r[k] == null ? '' : r[k])}" placeholder="${esc(c.auto[k] ? 'auto: ' + c.auto[k] : ph)}"${c.auto[k] ? ` class="autoval" title="Read from the run: ${esc(c.auto[k])}. This is what the figure and methods use until you type your own."` : ''}></label>`;
         const filled = COND_KEYS.some(k => String(r[k] || '').trim());
         const miss = runNeeds(r).filter(n => !/UV path/.test(n)), sumT = [c.mCol, c.mFlow ? `${c.mFlow} mL/min` : ''].filter(Boolean).join(', ');
-        return `<details class="cardtext runcond"${PROJ ? (miss.length ? ' open' : '') : filled ? ' open' : ''}><summary>Run conditions${PROJ && sumT ? `<span class="muted">: ${esc(sumT)}${miss.length ? `, needs ${esc(miss.join(', '))}` : ''}</span>` : ''}</summary>
+        return `<details class="cardtext runcond"${PROJ ? (miss.length ? ' open' : '') : filled ? ' open' : ''}><summary>Run conditions${PROJ && sumT ? `<span class="muted">: ${esc(sumT)}${miss.length ? `, needs ${esc(miss.join(', '))} field${miss.length > 1 ? 's' : ''}` : ''}</span>` : ''}</summary>
         ${f('mCol', 'Column', 'e.g. HisTrap FF 5 mL')}
         <div class="row">${f('mCV', 'Column volume (mL)', 'e.g. 5', {num: 1})}${f('mFrac', 'Fraction size (mL)', 'e.g. 1')}</div>
         ${isSec(r) ? f('mBufA', 'Running buffer', 'e.g. 20 mM HEPES pH 7.5, 150 mM NaCl, 1 mM TCEP') : f('mBufA', 'Buffer A', 'e.g. 50 mM Tris pH 8.0, 300 mM NaCl, 20 mM imidazole') + f('mBufB', 'Buffer B', 'e.g. buffer A with 500 mM imidazole')}
@@ -6303,7 +6303,15 @@ function stepList(){
       L.push({k: 'man:' + mm.id, g: first ? 'Purification' : '', t: r.name, done: any && !need, warn: need, s: need || [String(mm.resin || '').trim(), a ? `${sig2(a)} mg` : ''].filter(Boolean).join(', ') || MAN_KINDS[mm.kind] || 'Details'}); first = false; return; }
     if (r.prep === 'cleave') { const q = cleaveQuant(), pr = cleaveProtease(); L.push({k: 'cleave', g: first ? 'Purification' : '', t: stepTitle(r), done: !!(hasTxt(prep.protease) || hasTxt(prep.dialBuffer) || q || m('cleave').date), s: [pr, q ? `≈${fmt(q.pct, 0)}% cleaved` : ''].filter(Boolean).join(', ') || 'Protease, dialysis, cleavage gel'}); first = false; return; }
     const p = poolRows(r), pl = poolLabel(r), mg = p && p.mg > 0 ? `${sig2(p.mg)} mg` : '', pooled = !!String(r.shade || '').trim(), nd = pooled ? runNeeds(r) : [], o = odd(r);
-    const warn = !pooled ? '' : [o ? `Step yield ${o}%, check the UV path` : '', nd.length ? `${o ? 'needs' : 'Needs'} ${nd.join(', ')}` : ''].filter(Boolean).join(', ');
+    let ndStr = '';
+    if (nd.length) {
+      const parts = []; if (nd.includes('UV path for mg')) parts.push('enter UV flow-cell path length (mm) to calculate protein mass');
+      const conds = nd.filter(n => ['column', 'buffer', 'flow rate', 'elution'].includes(n)).map(s => s === 'flow rate' ? 'flow-rate' : s);
+      if (conds.length) parts.push(`enter ${conds.length === 1 ? conds[0] : conds.slice(0, -1).join(', ') + ' and ' + conds[conds.length - 1]} field${conds.length > 1 ? 's' : ''} to show ${conds.length > 1 ? 'those' : 'that'} run condition${conds.length > 1 ? 's' : ''}`);
+      parts.push(...nd.filter(n => n.startsWith('buffer B check')));
+      ndStr = parts.join('; '); if (!o) ndStr = ndStr.charAt(0).toUpperCase() + ndStr.slice(1);
+    }
+    const warn = !pooled ? '' : [o ? `Step yield ${o}%, check the UV path` : '', ndStr].filter(Boolean).join('; ');
     L.push({k: 'run:' + r.id, g: first ? 'Purification' : '', t: stepTitle(r), done: pooled, warn, s: warn || (pl ? [pl, mg].filter(Boolean).join(', ') : 'Set the pooled fractions'), run: r}); first = false;
     const b = btwOf(r); if (b) { const kp = btwMg(r); L.push({k: 'btw:' + r.id, t: ncObj(r).name, done: !!kp,
       s: (ms => [ms.c > 0 && (ms.src === 'btw' || ms.nd) ? `${fmt(ms.c, 2)} mg/mL` : '', numOr(b.vOut, 0) > 0 ? `${fmtAuto(+b.vOut)} mL` : '', kp ? `${sig2(kp.mg)} mg` : ''].filter(Boolean).join(', '))(poolMeas(r)) || 'NanoDrop export and volume'}); } });

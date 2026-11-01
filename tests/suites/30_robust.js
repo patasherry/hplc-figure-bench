@@ -475,4 +475,31 @@ await T.t('suggest-label', async () => {
   await close();
 });
 
+
+await T.t('incomplete-run-state', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  await h.newProject('Incomplete Run State');
+  await p.locator('#selftest').click();
+  await p.evaluate(() => {
+    window.__HFB.opt.path = 2; // Make sure the default is what we expect
+    window.__HFB.runs = [{id: 'r1', name: 'Test Run', fracs: [{name: 'A1', v: 1, c: 1, a: 1, e: 100}], inWf: true, shade: 'A1-A1', mCol: '', mBufA: '', mFlow: ''}];
+    window.__HFB.pools = [{r: 'r1', label: '1', start: 0, end: 1, a: 0, b: 10}];
+    window.__HFB.render();
+  });
+
+  const tl = await h.timeline();
+  const t = tl.find(x => x.k === 'run:r1');
+  T.check('warning text incomplete', /enter UV flow-cell path length/i.test(t.s || ''), t.s);
+
+  await h.step('run:r1');
+  await p.fill('#upr1', '10');
+  await p.waitForTimeout(100);
+  const tl2 = await h.timeline();
+  const t2 = tl2.find(x => x.k === 'run:r1');
+  T.check('warning text incomplete 2', !/enter UV flow-cell path length/i.test(t2.s || ''), t2.s);
+  T.check('warning text incomplete 3', /enter buffer and flow-rate fields/i.test(t2.s || ''), t2.s);
+  await close();
+});
+
+
 T.done(); })();
