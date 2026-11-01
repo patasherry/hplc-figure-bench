@@ -3782,13 +3782,14 @@ function buildRunFig(run){
 const sig2 = v => v >= 100 ? fmt(v, 0) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2) : v >= 0.1 ? fmt(v, 2) : fmt(v, 3);
 function finalYield(path){
   const allRows = sumRows(), rows = path ? allRows.filter(x => path.includes(x.r)) : allRows, mgOf = allRows.mgOf || (() => null);
-  const fin = rows.slice().reverse().find(x => mgOf(x) > 0); if (!fin) return null;
+  const fin = rows.slice().reverse().find(x => mgOf(x) !== null && !x.p.none && (x.p.measured || x.p.area != null)); if (!fin) return null;
   /* the final sample's own concentration and volume, when entered, give the amount kept; the last pool stays the chromatography figure */
-  const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc > 0 ? kc : mgOf(fin);
-  let fc = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finConc, 0) : 0, fv = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finVol, 0) : 0, meas = fc > 0 && fv > 0, manLoad = null;
+  const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc !== null ? kc : mgOf(fin);
+  let fc = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finConc, null) : null, fv = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finVol, null) : null, meas = fc != null && fv != null, manLoad = null;
   /* no final sample entered: a measured step without a chromatogram after the last pool (a concentration, a buffer exchange) is what was kept */
-  if (!meas && prep.on) { const wf = path || wfList(); for (let j = wf.indexOf(fin.r) + 1; j > 0 && j < wf.length; j++) if (wf[j].prep === 'manual' && manMg(wf[j].man)) { const m = wf[j].man; fc = numOr(m.conc, 0); fv = numOr(m.vol, 0); meas = true; manLoad = mgOf(fin); } }
+  if (!meas && prep.on) { const wf = path || wfList(); for (let j = wf.indexOf(fin.r) + 1; j > 0 && j < wf.length; j++) if (wf[j].prep === 'manual' && manMg(wf[j].man) != null) { const m = wf[j].man; fc = numOr(m.conc, null); fv = numOr(m.vol, null); meas = true; manLoad = mgOf(fin); } }
   const mg = meas ? fc*fv : pm;
+  if (mg == null) return null;
   const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, perG = cG > 0 ? mg/cG : null;
   const poolVol = fin.nd && fin.nd.mg != null ? fin.nd.vol : fin.p && fin.p.measured ? fin.p.measVol : fin.p && fin.p.vol > 0 ? fin.p.vol : null;
   return {fin, k: allRows.indexOf(fin), mg, poolMg: pm, poolVol, poolPerL: cL > 0 ? pm/cL : null, meas, fc, fv, perL: cL > 0 ? mg/cL : null, perG, cL, basis: meas ? 'final' : allRows.basis, poolBasis: allRows.basis, pur: fin.pur, purEst: fin.purEst,
@@ -4388,7 +4389,7 @@ function methodsText(){
     const nt = String(r.note || '').trim().replace(/\.$/, ''), verb = /^[A-Za-z]+(ed|en)\b/.test(nt), tagNote = !prep.cleave && PROT_NOTE.test(nt) && !PROT_NOT.test(nt);
     if (pool) t += ` Fractions ${pool.replace(/^Pool\s*/, '')}${vol} were pooled${nt && !tagNote ? (verb ? ` and ${lc(nt)}` : ` (next: ${nt})`) : ''}.`;
     if (tagNote) t += ` The tag was then removed (${lc(nt)}).`;
-    const wfPar = wfParents(wf), ri = wf.indexOf(r), children = wf.filter((_, ci) => wfPar[ci] === ri);
+    const wfPar = wfParents(wf), ri = wf.indexOf(r), children = wf.filter((c, ci) => wfPar[ci] === ri && c.inWf !== false);
     if (children.length > 1) {
       const parts = children.map((c, ci) => {
         const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
@@ -5108,9 +5109,9 @@ function sumRows(){
       if (pi >= 0) { let cur = pi; while (cur >= 0 && !prevMap.has(wf[cur])) cur = par[cur]; if (cur >= 0) pInfo = prevMap.get(wf[cur]); }
       if (!pInfo && prevMap.has('start')) pInfo = prevMap.get('start');
       const pAmt = pInfo ? pInfo.amt : null, pKept = pInfo ? pInfo.kept : false;
-      x.stepY = pAmt > 0 && a > 0 ? 100*a/pAmt : null; x.fromKept = !!x.stepY && pKept;
+      x.stepY = pAmt > 0 && a != null ? 100*a/pAmt : null; x.fromKept = !!x.stepY && pKept;
       x.loadedAmt = pKept ? pAmt : null;
-      if (a > 0) { const k = kept(x); prevMap.set(x.r, {amt: k > 0 ? k : a, kept: k > 0}); }
+      if (a != null) { const k = kept(x); prevMap.set(x.r, {amt: k != null ? k : a, kept: k != null}); }
     });
   }
   out.basis = basis;
