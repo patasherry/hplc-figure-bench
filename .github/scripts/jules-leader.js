@@ -13,7 +13,7 @@
 const QUICK = /\b(skip|bypass|without (running|waiting)|instead of)\b[^.?]{0,60}\b(compare(\.js)?|test suite|tests?|comparison)\b|\b(compare(\.js)?|comparison|test suite|bash|shell|environment)\b[^.?]{0,60}\b(too (slow|long)|time[sd]? ?out|stopped responding|not responding|hang|hung|unresponsive)\b|\b(shall|should|may|can) i (now )?(proceed|submit|open the (pr|pull request)|commit)\b/i;
 const SCI = /yield|extinction|concentrat|mg\/ml|purity|kda|molecular weight|calibrat|integrat|baseline|a280|a260|which (value|number|default)|scientific/i; /* a question about a number still goes to the managers */
 const QUICK_ANSWER = 'Do not skip, weaken or delete any check. If node compare.js is too slow or the shell stops responding, run only the suites you changed (node tests/suites/NN_name.js) and fix any failure in your own new checks. Then commit and open the pull request now, stating exactly what you ran and its result: the Test suite action runs the full comparison on the PR. If a check fails because the app looks wrong, keep it failing and explain it in the PR.';
-const MAX_RUNNING = 15, MAX_APP = 8, LIGHT = i => /^(tests?|audit|docs?)\b/i.test(i.title || ''), MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, LOCAL_FIRST = 10, API = 'https://jules.googleapis.com/v1alpha/';
+const MAX_RUNNING = 15, MAX_APP = 12, LIGHT = i => /^(tests?|audit|docs?)\b|^add (a |one )?(failing |ui[- ]level )?(tests?|checks?)\b|^(prove|verify|confirm)\b/i.test(i.title || ''), MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, LOCAL_FIRST = 10, API = 'https://jules.googleapis.com/v1alpha/';
 const L = {queue: 'jules-queue', run: 'jules-running', done: 'jules-done', fail: 'needs-coordinator', triage: 'needs-triage'};
 const MARK = '<!-- jules-leader ';
 const SAFE = f => /^(tests\/|docs\/|\.github\/ISSUE_TEMPLATE\/)/.test(f) || f === 'README.md' || f === 'tests/README.md';
@@ -77,7 +77,12 @@ module.exports = async ({github, context, core}) => {
     const hrs = s.since ? (Date.now() - Date.parse(s.since))/3.6e6 : 0;
     if (st === 'IN_PROGRESS' && hrs > MAX_HOURS && !s.nudged) { await jules(`${s.session}:sendMessage`, {prompt: 'This session has run for several hours. Please finish now: commit what works, open the pull request, and list what remains under "Open questions" in the PR description.'}).catch(() => {});
       s.nudged = true; await putState(i.number, s, `Jules leader: attempt ${s.attempt} has run for ${Math.round(hrs)} h, asked Jules to wrap up.`); say(`#${i.number}: nudged after ${Math.round(hrs)} h`); continue; }
-    if (st === 'IN_PROGRESS' && hrs > 2*MAX_HOURS && !labels(i).includes(L.fail)) { await github.rest.issues.addLabels({owner, repo, issue_number: i.number, labels: [L.fail]}); say(`#${i.number}: still running after ${Math.round(hrs)} h, flagged`); }
+    /* still not done 12 hours in (working, or stuck waiting): free the slot. A fresh attempt in smaller steps, or after the last attempt Codex's heavy model takes it */
+    if (['IN_PROGRESS', 'AWAITING_USER_FEEDBACK', 'PAUSED', 'AWAITING_PLAN_APPROVAL', 'QUEUED', 'PLANNING'].includes(st) && hrs > 2*MAX_HOURS) {
+      if ((s.attempt || 1) < MAX_ATTEMPTS) { await start(i, (s.attempt || 1) + 1, `the previous attempt was still unfinished after ${Math.round(hrs)} hours`); }
+      else { await jules(`${s.session}:sendMessage`, {prompt: 'Stop now: do not commit and do not open a pull request. This task has moved to another agent.'}).catch(() => {});
+        await putState(i.number, s, `Jules leader: attempt ${s.attempt} was still unfinished after ${Math.round(hrs)} h, the last attempt Jules gets. Handed to Codex.`); await setLabels(i.number, ['for-codex'], [L.run]); }
+      freed.add(i.number); say(`#${i.number}: over ${Math.round(hrs)} h, slot freed`); continue; }
     if (st === 'AWAITING_PLAN_APPROVAL') { await jules(`${s.session}:approvePlan`, {}).catch(() => {}); say(`#${i.number}: approved plan`); continue; }
     /* Jules asked a question: post it on the issue, and tell Jules to decide by the rules and list open questions in the PR */
     /* a session paused with a question also waits for the user: treat it the same way */
