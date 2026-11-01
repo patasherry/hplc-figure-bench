@@ -304,6 +304,8 @@ ul.sumnotes{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
 .cardtext[open]{display:grid;gap:6px}
 .runcond[open]{gap:9px}
 input.autoval::placeholder{color:var(--accent);opacity:.85}
+.condwarn{display:block;color:var(--warn);font-size:11.5px;line-height:1.35}
+label.f.condmissing>input{border-color:var(--warn)}
 .methods{margin-top:8px;border-top:1px solid var(--line);padding-top:6px}
 .methods>summary{cursor:pointer;font-size:12px;color:var(--muted);padding:2px 0}
 .methods[open]{display:grid;gap:6px}
@@ -4310,6 +4312,12 @@ function guessFrac(r){ const segs = fracSegments(r, uvOf(r).xs[uvOf(r).xs.length
 function runCond(r){
   const v = k => String(r[k] == null ? '' : r[k]).trim(), au = {mCol: guessColumn(r), mCV: (c => c ? String(+(+c).toPrecision(3)) : '')(guessCV(r)), mFlow: r.flowAuto ? fmt(r.flowAuto, r.flowAuto < 1 ? 2 : 1) : '', mTemp: '', mGrad: guessGradient(r), mFrac: guessFrac(r)};
   const o = {}; COND_KEYS.forEach(k => { o[k] = v(k) || au[k] || ''; o[k + 'Auto'] = !v(k) && !!au[k]; }); o.auto = au; return o; }
+/* IMAC needs these four values for a reproducible condition. Keep the warning beside the field that resolves it, rather than adding another summary surface. */
+function imacCondWarnings(r){ const c = runCond(r), w = {}; if (guessStep(r) !== 'IMAC') return w;
+  if (!c.mCol) w.mCol = 'Enter the column.'; if (!c.mBufA) w.mBufA = 'Enter buffer A.'; if (!c.mFlow) w.mFlow = 'Enter the flow rate.';
+  if (!c.mBufB && !c.mGrad) w.mGrad = 'Enter buffer B or a gradient/elution.'; return w; }
+function syncImacCondWarnings(r, card){ if (!card) return; const w = imacCondWarnings(r); card.querySelectorAll('[data-condwarn]').forEach(note => { const msg = w[note.dataset.condwarn] || '', lab = note.closest('label'), input = lab && lab.querySelector('input');
+    note.hidden = !msg; note.textContent = msg; if (lab) lab.classList.toggle('condmissing', !!msg); if (input) { if (msg) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid'); } }); }
 /* measurable conditions typed by hand, checked against what the file logged. Only a plain number, or a single linear %B range, is compared;
    words, ranges and other units are left alone, and the tolerances allow for sensor drift and rounding, so a check means a real disagreement */
 const numTyped = (s, u) => { const m = new RegExp(`^\\s*(\\d+(?:\\.\\d+)?)\\s*(?:${u})?\\s*$`, 'i').exec(String(s == null ? '' : s)); return m ? +m[1] : null; };
@@ -4630,7 +4638,7 @@ function renderList(){
         <label class="eye" title="UV flow cell path of the instrument this run was on (ÄKTA usually 2 mm, HPLC often 10 mm). Used for mg from the A280 area">UV path (mm)<input type="number" step="any" min="0.1" id="up${r.id}" data-k="path" value="${esc(r.path ?? '')}" placeholder="assumed: ${esc(String(numOr(opt.path, 2)))}" class="tiny autoval" title="Not in the file. ÄKTA monitors are usually 2 mm, HPLC flow cells often 10 mm"></label>
       </div>
       ${r.inWf && !(poolRows(r) || {}).measured ? (massWhy(r) ? `<p class="hint uvhint">No mg from the UV area: ${esc(massWhy(r))}.</p>` : !hasTxt(r.path) ? `<p class="hint uvhint">UV path assumed ${esc(fmtAuto(numOr(opt.path, 2)))} mm (not in the file). ÄKTA monitors are usually 2 mm, HPLC flow cells often 10 mm. The mg from the UV area depend on it.</p>` : '') : ''}
-      ${(() => { const c = runCond(r), f = (k, lab, ph, extra) => `<label class="f">${lab}<input type="${extra && extra.num ? 'number' : 'text'}"${extra && extra.num ? ' step="any" min="0"' : ''} id="${k}${r.id}" data-k="${k}" value="${esc(r[k] == null ? '' : r[k])}" placeholder="${esc(c.auto[k] ? 'auto: ' + c.auto[k] : ph)}"${c.auto[k] ? ` class="autoval" title="Read from the run: ${esc(c.auto[k])}. This is what the figure and methods use until you type your own."` : ''}></label>`;
+      ${(() => { const c = runCond(r), imacWarn = imacCondWarnings(r), f = (k, lab, ph, extra) => { const warn = imacWarn[k] || '', wid = `cw-${k}${r.id}`; return `<label class="f${warn ? ' condmissing' : ''}">${lab}<input type="${extra && extra.num ? 'number' : 'text'}"${extra && extra.num ? ' step="any" min="0"' : ''} id="${k}${r.id}" data-k="${k}" value="${esc(r[k] == null ? '' : r[k])}" placeholder="${esc(c.auto[k] ? 'auto: ' + c.auto[k] : ph)}"${c.auto[k] ? ` class="autoval" title="Read from the run: ${esc(c.auto[k])}. This is what the figure and methods use until you type your own."` : ''}${imacWarn && Object.prototype.hasOwnProperty.call(imacWarn, k) ? ` aria-describedby="${wid}" aria-invalid="true"` : ''}>${guessStep(r) === 'IMAC' ? `<span class="condwarn" id="${wid}" data-condwarn="${k}" aria-live="polite"${warn ? '' : ' hidden'}>${esc(warn)}</span>` : ''}</label>`; };
         const filled = COND_KEYS.some(k => String(r[k] || '').trim());
         const miss = runNeeds(r).filter(n => !/UV path/.test(n)), sumT = [c.mCol, c.mFlow ? `${c.mFlow} mL/min` : ''].filter(Boolean).join(', ');
         return `<details class="cardtext runcond"${PROJ ? (miss.length ? ' open' : '') : filled ? ' open' : ''}><summary>Run conditions${PROJ && sumT ? `<span class="muted">: ${esc(sumT)}${miss.length ? `, needs ${esc(miss.join(', '))}` : ''}</span>` : ''}</summary>
@@ -4696,6 +4704,7 @@ list.addEventListener('input', e => {
   else if (k === 'scale') t[k] = numOr(el.value, 1);
   else if (k === 'runId' && t.src) { const asg = gelLabels(t).map((_, i) => laneAssign(t, i)); t.runId = el.value; t.assign = asg.map(a => a === 'marker' ? 'marker' : el.value); if (curGel() === t) renderLaneTable(); }
   else t[k] = el.value;
+  if (k === 'name' || COND_KEYS.includes(k)) syncImacCondWarnings(t, el.closest('.trace'));
   if (k === 'crop') { t.xmin = t.xmax = ''; }
   if (k === 'name') { const tb = $('#figtabs'); tb._h = null; const sn = document.getElementById('sn' + t.id); if (sn) sn.placeholder = opt.wfTitle === 'name' ? t.name : guessStep(t) || t.name; }
   if (k === 'runId' || k === 'inWf') { renderList(); }
