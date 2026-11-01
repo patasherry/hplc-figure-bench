@@ -128,6 +128,8 @@ module.exports = async ({github, context, core}) => {
   for (const p of prs) { if (p.draft) continue;
     const fobj = await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: p.number, per_page: 100}), files = fobj.map(f => f.filename);
     const labels = p.labels.map(l => l.name);
+    if (labels.includes('awaiting-owner')) continue; /* a Direction board idea: Patrick OKs it on the PR, and the local manager merges it */
+    { const m = /(?:closes|fixes|resolves)\s+#(\d+)/i.exec(p.body || ''); if (m && !labels.includes('merge-ok')) { const il = (await github.rest.issues.get({owner, repo, issue_number: +m[1]})).data.labels.map(l => l.name); if (il.includes('from-board')) continue; } }
     if (!fobj.every(SAFE_FILE)) { if (!labels.includes(L.fail)) { await setLabels(p.number, [L.fail], []); say(`PR #${p.number}: changes the app or workflows, flagged for the coordinator`); } continue; }
     const runs = (await github.rest.actions.listWorkflowRunsForRepo({owner, repo, head_sha: p.head.sha, per_page: 20})).data.workflow_runs.filter(r => r.name === 'Test suite');
     const cs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: p.number, per_page: 100}), rep = cs.reverse().find(c => c.body.includes('<!-- test-suite-report -->'));

@@ -546,6 +546,53 @@ ALLOWED = re.compile(r'^(hplc-figure-bench\(WF1\.13\)\.html|README\.md|tests/(su
 MAX_SENDBACKS = 2
 
 
+OWNER_ASK = '<!-- owner-merge-ask -->'
+
+
+def held(s, pr, ilabels):
+    """Board ideas are worked on at once, but Patrick OKs each finished PR before it merges.
+    True when this PR waits for him; asks him once per commit (label awaiting-owner)."""
+    if 'from-board' not in ilabels or 'merge-ok' in {l['name'] for l in pr.get('labels', [])}:
+        return False
+    n, sha = pr['number'], pr['head']['sha']
+    if s.setdefault('asked_owner', {}).get(str(n)) != sha and not DRY:
+        s['asked_owner'][str(n)] = sha
+        label(n, add=['awaiting-owner'])
+        post(n, f'{OWNER_ASK}\n**Ready for your OK, Patrick:** this PR comes from a Direction board idea. It passed the tests and the automatic review'
+             ' and is waiting only for you. Reply **OK** on this PR to merge it, or **No** to close it (a reason after it helps).' + SIGN.format(rv.MODEL))
+        log(f'PR #{n}: board idea, waiting for Patrick\'s OK to merge')
+    return True
+
+
+def owner_merge_replies(s):
+    """Patrick's OK or No on a board PR that waits for him."""
+    s.setdefault('owner', {})
+    for pr in gh(f'repos/{REPO}/pulls?state=open&per_page=50'):
+        if 'awaiting-owner' not in {l['name'] for l in pr.get('labels', [])}:
+            continue
+        n, cs = pr['number'], comments(pr['number'])
+        ask = max((c['id'] for c in cs if c['body'].startswith(OWNER_ASK)), default=0)
+        reply = next((c for c in reversed(cs) if c['id'] > ask and by_owner(c) and (YES.match(c['body']) or NO.match(c['body']))), None)
+        if not reply or str(reply['id']) in s['owner'] or DRY:
+            continue
+        s['owner'][str(reply['id'])] = 1
+        if YES.match(reply['body']):
+            label(n, add=['merge-ok'], remove=['awaiting-owner'])
+            try:
+                gh(f'repos/{REPO}/pulls/{n}/merge', 'PUT', {'merge_method': 'squash'})
+                post(n, 'Merged after Patrick\'s OK.' + SIGN.format(rv.MODEL)); log(f'PR #{n} merged after Patrick\'s OK')
+            except Exception as e:  # a conflict, for example: the gate looks at it again, now with his OK
+                s.get('gated', {}).pop(str(n), None); s.get('passed', {}).pop(str(n), None)
+                post(n, f'Patrick OKed this, but it could not merge yet ({str(e)[:150]}). The gate retries it.' + SIGN.format(rv.MODEL))
+        else:
+            label(n, remove=['awaiting-owner'])
+            gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
+            m = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
+            if m:
+                label(int(m.group(1)), add=['owner-declined'], remove=['jules-queue', 'jules-done'])
+            post(n, 'Closed: Patrick said No.' + SIGN.format(rv.MODEL)); log(f'PR #{n} closed by Patrick')
+
+
 def report_of(n):
     cs = comments(n)
     return next((c['body'] for c in reversed(cs) if '<!-- test-suite-report -->' in c['body']), '')
@@ -666,6 +713,11 @@ def gate(s):
             stuck_conflict = True  # GitHub runs no PR tests while a PR conflicts with main, so without this it would wait forever
         files = [f['filename'] for f in gh(f'repos/{REPO}/pulls/{n}/files?per_page=100')]
         if rv.APP not in files and all(ALLOWED.match(f) for f in files) and not (stuck_conflict or waits_approval):
+            m_ = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
+            iss_ = int(m_.group(1)) if m_ else linked_issue(n)
+            il_ = {l['name'] for l in gh(f'repos/{REPO}/issues/{iss_}').get('labels', [])} if iss_ else set()
+            if t and t.get('conclusion') == 'success' and '### ✅ No regressions' in report_of(n):
+                held(s, pr, il_)  # a board idea waits for Patrick; the leader leaves PRs labelled awaiting-owner alone
             s['gated'][str(n)] = sha  # tests or docs only and nothing stray: the leader's own merge rule handles it
             continue
         full = gh(f'repos/{REPO}/pulls/{n}')
@@ -709,7 +761,10 @@ def gate(s):
         else:
             ilabels = {l['name'] for l in gh(f'repos/{REPO}/issues/{issue}').get('labels', [])} if issue else set()
             needs = 'needs-owner' in ilabels
-            science = bool(ilabels & {'needs-owner', 'owner-approved', 'board-approved'})  # it changes a number the app reports
+            science = bool(ilabels & {'needs-owner', 'owner-approved', 'board-approved', 'from-board'})  # it may change a number the app reports: the AI lead review checks it (board ideas then wait for Patrick's OK)
+            if not science and t.get('conclusion') == 'success' and held(s, pr, ilabels):
+                s['gated'][str(n)] = sha
+                continue
             if AUTO_MERGE and not science and not merged_now and t.get('conclusion') == 'success' and full.get('mergeable_state') in ('clean', 'unstable', 'has_hooks'):
                 if not DRY:
                     gh(f'repos/{REPO}/pulls/{n}/merge', 'PUT', {'merge_method': 'squash'})
@@ -1248,6 +1303,10 @@ def act_on_review(s, pr, issue, who, r):
     if dec == 'merge' and not probs:
         if DRY:
             return log(f'[dry] {who} would merge #{n}')
+        il = {l['name'] for l in gh(f'repos/{REPO}/issues/{issue}').get('labels', [])} if issue else set()
+        if 'from-board' in il and 'merge-ok' not in {l['name'] for l in pr.get('labels', [])}:
+            post(n, f'{head}: recommends merging.\n\n{summ}' + SIGN.format(rv.MODEL))
+            return held(s, pr, il)
         post(n, f'{head}: merge.\n\n{summ}' + SIGN.format(rv.MODEL))
         gh(f'repos/{REPO}/pulls/{n}/merge', 'PUT', {'merge_method': 'squash'})
         log(f'PR #{n} merged after the lead review by {who}')
@@ -1575,7 +1634,7 @@ def board_round(s, topic=''):
         votes = '\n'.join(f'- {n}: {sc}/5, {why}' for n, sc, why in scores[p['id']])
         strong = len(scores[p['id']]) >= max(2, len(who)) and min(x[1] for x in scores[p['id']]) >= BOARD_GO  # all three advisers back it strongly: no need to wait for Patrick
         if not DRY:
-            i = gh(f'repos/{REPO}/issues', 'POST', {'title': p['title'], 'labels': (['jules-queue', 'board-approved'] if strong else ['needs-triage']) + ['from-board'],
+            i = gh(f'repos/{REPO}/issues', 'POST', {'title': p['title'], 'labels': ['jules-queue'] + (['board-approved'] if strong else []) + ['from-board'],
                    'body': f'{p["why"]}\n\n**Change:** {p["change"]}\n\n**Evidence:** {p["evidence"]}\n\n**Risk to avoid:** {p["risk"]}\n\n'
                            f'### Why the advisers chose it\n{votes}\n\n<details><summary>The debate</summary>\n\n{args}\n\n</details>\n\n'
                            f'Proposed by {p["by"]} on the Direction board (#{BOARD}) and adopted after debate: all three advisers backed it' +
@@ -1872,7 +1931,7 @@ def one_pass():
         log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
     else:
         heartbeat(s)
-    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('owner merge', owner_merge_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
