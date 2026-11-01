@@ -139,4 +139,78 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
 
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
+
+  await T.t('split-and-pool-yields', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), q: src('q')};
+    await h.newProject('Split and Pool Yields');
+    await h.gb(F.gb);
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+    await h.addRun(F.sec);
+    await h.suggest();
+    await h.addRun(F.q);
+    await h.suggest();
+    const tl = (await h.timeline()).filter(x => x.k.startsWith('run:'));
+    const ids = tl.map(x => x.k.slice(4));
+    const setFrom = async (p, h, stepKey, value) => { await h.step(stepKey); await p.selectOption('#ssFrom', value); await p.waitForTimeout(500); };
+    await setFrom(p, h, tl[2].k, ids[0]);
+    await p.fill('#ssFromNote', 'fractions B9-B12');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+    await h.step(tl[1].k);
+    await p.fill('#ssFromNote', 'fractions B5-B8');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+    await h.step(tl[2].k);
+    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep="man:batch"]'); await h.wait(400);
+    await p.click('#tl [data-step=figure]'); await p.waitForTimeout(700);
+    await p.evaluate(() => {
+      const el = document.getElementById('o-wfYield');
+      if (el) { el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.wait(500);
+    const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
+    T.check('split-pool: multiple final yield lines', brTexts.length > 0, brTexts.map(x => x.t).join(' | '));
+    const meth = await h.methods();
+    T.check('split-pool: methods text contains split', /split:/i.test(meth), meth);
+    T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
+
+  await T.t('split-and-discard-yields', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), q: src('q')};
+    await h.newProject('Split and Discard Yields');
+    await h.gb(F.gb);
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+    await h.addRun(F.sec);
+    await h.suggest();
+    await h.addRun(F.q);
+    await h.suggest();
+    const tl = (await h.timeline()).filter(x => x.k.startsWith('run:'));
+    const ids = tl.map(x => x.k.slice(4));
+    const setFrom = async (p, h, stepKey, value) => { await h.step(stepKey); await p.selectOption('#ssFrom', value); await p.waitForTimeout(500); };
+    await setFrom(p, h, tl[2].k, ids[0]);
+    await p.fill('#ssFromNote', 'fractions B9-B12');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+    await h.step(tl[1].k);
+    await p.fill('#ssFromNote', 'fractions B5-B8');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+    await h.step(tl[2].k);
+    await p.evaluate(id => { const el = document.getElementById('wf' + id); if (el && el.checked) el.click(); }, ids[2]);
+    await h.wait(500);
+    await p.click('#tl [data-step=figure]'); await p.waitForTimeout(700);
+    await p.evaluate(() => {
+      const el = document.getElementById('o-wfYield');
+      if (el) { el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.wait(500);
+    const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
+    T.check('split-discard: one final yield line', brTexts.length === 1, brTexts.map(x => x.t).join(' | '));
+    const meth = await h.methods();
+    T.check('split-discard: methods text contains split', /split:/i.test(meth), meth);
+    T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
+
   T.done(); })();
