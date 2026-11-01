@@ -2332,7 +2332,8 @@ function runXLabel(run){ const o = opt; if (o.rxlabel !== DEF.rxlabel) return o.
   return u === 'min' ? (isSec(run) ? 'Elution time (min)' : 'Time (min)') : isSec(run) ? 'Elution volume (mL)' : o.rxlabel; }
 function buildRunSVG(run, ov){
   ov = ov || {};
-  if (!opt.zoomInset || run.prep || ov.noZoom || ov.nest) return buildRunPlainSVG(run, ov);
+  const doZoom = ov.nest ? run.wfZoom : opt.zoomInset;
+  if (!doZoom || run.prep || ov.noZoom || (ov.nest && ov.idp === 'zi-')) return buildRunPlainSVG(run, ov);
   const S = style(), wa = run.xmin, wb = run.xmax, beside = zoomPos() === 'beside', put = (a, b) => { run.xmin = a; run.xmax = b; };
   let m; try { put('', ''); m = buildRunPlainSVG(run, beside ? {noZoom: true, nest: true, wPt: S.W*(1 - zoomSize()), hPt: S.H} : {noZoom: true}); } finally { put(wa, wb); }
   if (!m.svg) return m;
@@ -4950,14 +4951,14 @@ paper.addEventListener('mousemove', e => {
   ro.textContent = `x ${xv.toFixed(g.run ? 2 : 3)}` + (g.run || opt.mode === 'overlay' ? `   y ${fmtAuto(yv)}` : '') + (c.run ? '   drag to integrate' : '');
 });
 /* ---------- editing the workflow figure in place: click a panel for its title, arrow note, width and gel size ---------- */
-function wfItem(id){ if (!id) return null; const r = runs.find(x => x.id === id); if (r) return {kind: 'run', r, step: 'run:' + id, title: r.stepName || '', auto: guessStep(r) || r.name, arrow: r.note || '', w: numOr(r.wfW, 1), gz: numOr(r.gelZ, 1), gel: gelsFor(r).length > 0, obj: r, ox: numOr(r.wfDx, 0), oy: numOr(r.wfDy, 0)};
+function wfItem(id){ if (!id) return null; const r = runs.find(x => x.id === id); if (r) return {kind: 'run', r, step: 'run:' + id, title: r.stepName || '', auto: guessStep(r) || r.name, arrow: r.note || '', w: numOr(r.wfW, 1), gz: numOr(r.gelZ, 1), gel: gelsFor(r).length > 0, obj: r, ox: numOr(r.wfDx, 0), oy: numOr(r.wfDy, 0), wfZoom: r.wfZoom};
   if (String(id).startsWith('nc:')) { const rid = id.slice(3), b = (prep.btw || {})[rid]; if (!b) return null; return {kind: 'nc', b, step: 'btw:' + rid, title: b.title || '', auto: 'Concentrated', arrow: b.arrow || '', w: numOr(b.wfW, 0.85), gel: false, ox: numOr(b.wfDx, 0), oy: numOr(b.wfDy, 0)}; }
   const m = manSteps().find(x => x.id === id); if (m) { const o = manObj(m); return {kind: 'man', m, step: 'man:' + id, title: m.name || '', auto: MAN_NAME[m.kind] || 'Other step', arrow: m.arrow || '', w: numOr(m.wfW, 1), gz: numOr(m.gelZ, 1), gel: gelsFor(o).length > 0, obj: o, ox: numOr(m.wfDx, 0), oy: numOr(m.wfDy, 0)}; }
   if (['construct', 'transform', 'expr', 'lysis', 'cleave'].includes(id)) return {kind: 'prep', k: id, step: id, title: (prep.titles || {})[id] || '', auto: PREP_NAME[id] || id, gel: false, noArrow: true, noW: true, ox: wfPos(id).wfDx, oy: wfPos(id).wfDy};
   return null; }
 function wfSet(it, f, v){ if (f === 'off') { const dx = Math.round(v.dx*100)/100, dy = Math.round(v.dy*100)/100, o = it.kind === 'nc' ? it.b : it.kind === 'man' ? it.m : it.kind === 'run' ? it.r : null;
     if (!o) { prep.wfOff = Object.assign({}, prep.wfOff); if (dx || dy) prep.wfOff[it.k] = {dx, dy}; else delete prep.wfOff[it.k]; } else if (dx || dy) { o.wfDx = dx; o.wfDy = dy; } else { delete o.wfDx; delete o.wfDy; } }
-  else if (it.kind === 'run') { const r = it.r; if (f === 'title') r.stepName = v; else if (f === 'arrow') r.note = v; else if (f === 'w') r.wfW = v; else if (f === 'gz') r.gelZ = v; }
+  else if (it.kind === 'run') { const r = it.r; if (f === 'title') r.stepName = v; else if (f === 'arrow') r.note = v; else if (f === 'w') r.wfW = v; else if (f === 'gz') r.gelZ = v; else if (f === 'zoom') r.wfZoom = !r.wfZoom; }
   else if (it.kind === 'nc') { const b = it.b; if (f === 'title') b.title = v; else if (f === 'arrow') b.arrow = v; else if (f === 'w') b.wfW = v; }
   else if (it.kind === 'man') { const m = it.m; if (f === 'title') m.name = v; else if (f === 'arrow') m.arrow = v; else if (f === 'w') m.wfW = v; else if (f === 'gz') m.gelZ = v; }
   else if (it.kind === 'prep' && f === 'title') { prep.titles = Object.assign({}, prep.titles, {[it.k]: v}); }
@@ -4975,16 +4976,19 @@ function renderWfTool(){
       + (!it.noArrow && !last ? `<label class="wfl" for="wfA">Arrow note</label><input type="text" id="wfA" value="${esc(it.arrow)}" placeholder="e.g. SUMO protease, 4 °C overnight">` : '')
       + (!it.noW && row ? `<span class="wfg"><span class="wfl">Width</span><button type="button" class="mini" data-wf="w:-1" aria-label="Narrower">−</button><button type="button" class="mini" data-wf="w:1" aria-label="Wider">+</button></span>` : '')
       + (it.gel ? `<span class="wfg"><span class="wfl">Gel</span><button type="button" class="mini" data-wf="gz:-1" aria-label="Smaller gel">−</button><button type="button" class="mini" data-wf="gz:1" aria-label="Larger gel">+</button></span>` : '')
+      + (it.kind === 'run' ? `<label class="check wfl"><input type="checkbox" data-wf="zoom:toggle" ${it.wfZoom ? 'checked' : ''}>Zoom inset</label>` : '')
       + `<button type="button" class="mini" data-wf="reset">Reset position</button><button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button>`; }
   const rb = tool.querySelector('[data-wf=reset]'); if (rb) rb.disabled = !(it.ox || it.oy);
   tool.hidden = false; const th = tool.offsetHeight, tw = tool.offsetWidth, ww = wrap.clientWidth;
   let top = a.y - wr.top - th - 8; if (top < 4) top = b.y - wr.top + 8; let left = Math.min(Math.max(4, a.x - wr.left - 4), Math.max(4, ww - tw - 4));
   Object.assign(tool.style, {left: left + 'px', top: top + 'px'}); }
 $('#wfTool').addEventListener('input', e => { const it = wfItem(wfSel); if (!it) return; if (e.target.id === 'wfT') wfSet(it, 'title', e.target.value); else if (e.target.id === 'wfA') wfSet(it, 'arrow', e.target.value); });
+$('#wfTool').addEventListener('change', e => { const b = e.target.closest('[data-wf]'); if (b && b.dataset.wf === 'zoom:toggle') { const it = wfItem(wfSel); if (it) { wfSet(it, 'zoom', null); } } });
 $('#wfTool').addEventListener('keydown', e => { if (e.key === 'Escape' || (e.key === 'Enter' && e.target.tagName === 'INPUT')) { wfSel = null; renderWfTool(); } });
 $('#wfTool').addEventListener('click', e => { const b = e.target.closest('[data-wf]'); if (!b) return; const it = wfItem(wfSel); if (!it) return; const [f, d] = b.dataset.wf.split(':');
   if (f === 'close') { wfSel = null; renderWfTool(); return; }
   if (f === 'reset') { wfSet(it, 'off', {dx: 0, dy: 0}); return; }
+  if (f === 'zoom') { wfSet(it, 'zoom', null); return; }
   if (f === 'edit') { const k = it.step; wfSel = null; renderWfTool(); selectStep(k); return; }
   const cur0 = f === 'w' ? it.w : it.gz; wfSet(it, f, Math.round(Math.min(f === 'w' ? 3 : 3, Math.max(f === 'w' ? 0.4 : 0.3, cur0 + 0.15*(+d)))*100)/100); });
 paper.addEventListener('click', e => { if (!PROJ || !G || !G.pos || Date.now() - gelMovedAt < 350) return; const f = curFig(); if (!f || f.kind !== 'workflow') return;
@@ -5031,10 +5035,11 @@ window.addEventListener('pointermove', e => {
 ['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, e => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; wfDragCursor(e); }));
 $('#gelOffReset').addEventListener('click', () => { runs.forEach(r => { r.gelOff = {}; }); prep.offs = {}; render(); });
 paper.addEventListener('pointerdown', e => {
-  const c = chartAt(); if (!c || (!c.run && !opt.zoomMode) || e.button !== 0) return;
+  const c = chartAt(); if (!c || e.button !== 0) return;
   const p = svgPoint(e); if (!p) return; const lx = p.x - c.ox, ly = p.y - c.oy, g = c.g;
   if (lx < g.L || lx > g.R || ly < g.T || ly > g.B) return;
-  e.preventDefault(); drag = {c, x0: lx};
+  if (!c.run && !(opt.zoomMode && e.shiftKey)) return;
+  e.preventDefault(); drag = {c, x0: lx, shift: e.shiftKey};
 });
 window.addEventListener('pointermove', e => {
   if (!drag) return; const p = svgPoint(e), svg = paper.querySelector('svg'); if (!p || !svg) return;
@@ -5049,10 +5054,10 @@ window.addEventListener('pointerup', () => {
   if (d.x1 === undefined || Math.abs(d.x1 - d.x0) < 3) return;
   const g = d.c.g, inv = X => g.xlo + (X - g.L)/(g.R - g.L)*(g.xhi - g.xlo);
   const a = inv(Math.min(d.x0, d.x1)), b = inv(Math.max(d.x0, d.x1));
-  if (opt.zoomMode) {
-    const ro = d.c.run || opt; ro.xmin = a; ro.xmax = b; syncControls();
-  } else if (d.c.run) {
-    d.c.run.integ = (d.c.run.integ || []).concat([{a, b}]);
+  if (opt.zoomMode && d.shift) {
+    const ro = d.c.run || opt; ro.xmin = Math.min(a, b); ro.xmax = Math.max(a, b); syncControls();
+  } else if (d.c.run && !d.shift) {
+    d.c.run.integ = (d.c.run.integ || []).concat([{a: Math.min(a, b), b: Math.max(a, b)}]);
   }
   render();
 });

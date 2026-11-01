@@ -86,9 +86,11 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       // Turn on zoom mode
       await setOpt(p, 'o-zoomMode', true); await h.wait(200);
       await p.mouse.move(b.left + b.width / 4, b.top + b.height / 2);
+      await p.keyboard.down('Shift');
       await p.mouse.down();
       await p.mouse.move(b.left + b.width / 2, b.top + b.height / 2, {steps: 10});
       await p.mouse.up();
+      await p.keyboard.up('Shift');
       await h.wait(500);
 
       const newRegions = await p.evaluate(() => document.querySelectorAll('#intTable tbody tr').length);
@@ -99,6 +101,38 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       T.check('drag/zoom-mode-updates-window', xmin !== '' && xmax !== '', `xmin: ${xmin}, xmax: ${xmax}`);
 
     } catch (e) { T.check('drag/threw', false, String(e).slice(0, 300)); } finally { await close(); }
+  }
+  /* Workflow panel zoom inset toggle */
+  {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await h.newProject('wf zoom inset'); await h.addRun(path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv')); await h.wait(500);
+      await setOpt(p, 'o-xmin', '22'); await setOpt(p, 'o-xmax', '28'); await h.wait(500);
+
+      // Ensure run is in workflow
+      await h.wait(500);
+      await p.evaluate(() => { const cb = document.querySelector('.card [data-k="inWf"]'); if (cb && !cb.checked) cb.click(); });
+      await h.wait(500);
+      await p.evaluate(() => { const wftab = document.querySelector('.figtabs button[data-id="workflow"]'); if (wftab) wftab.click(); });
+      await h.wait(500);
+
+
+      // verify it is in workflow and wait a bit
+      await h.wait(500);
+      T.check('wf/no-inset-by-default', (await insetCount(p)) === 0, 'no inset initially');
+
+      // Click the run panel to open wfTool
+      const b = await p.evaluate(() => document.querySelector('#paper svg').getBoundingClientRect());
+      await p.mouse.click(b.left + b.width / 2, b.top + b.height / 2); await h.wait(500);
+
+      // Toggle zoom inset for this run in wfTool
+      // trigger it through DOM click
+      await p.evaluate(() => { const cb = document.querySelector('#wfTool [data-wf="zoom:toggle"]'); if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change', {bubbles: true})); } });
+      await h.wait(500);
+
+      T.check('wf/inset-appears-when-wfZoom-on', (await insetCount(p)) >= 1, `inset count: ${await insetCount(p)}`);
+
+    } catch (e) { T.check('wf/threw', false, String(e).slice(0, 300)); } finally { await close(); }
   }
   T.done();
 })();
