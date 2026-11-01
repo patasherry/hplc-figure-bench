@@ -83,6 +83,7 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
     // Issue #442: valid zero values
     let t = await load('442_valid_zero.csv', hdr + '0,0\n1,0\n2,0\n3,0\n');
     T.check('matrix/442_valid_zero/loads', t.some(x => /Loaded 1 trace/.test(x)), `toasts: ${t.join(' | ')}`);
+    T.check('matrix/442_valid_zero/nothing-left-out', !t.some(x => /left out/i.test(x)), `toasts: ${t.join(' | ')}`);
 
     // Issue #446: malformed rows rejected
     t = await load('446_malformed.csv', hdr + '0,0bad\n1,0bad\n2,0bad\n');
@@ -91,6 +92,12 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
     // Issue #454: mixed valid and malformed rows (longest block kept)
     t = await load('454_mixed.csv', hdr + '0,0\n1,0bad\n2,0\n3,0\n');
     T.check('matrix/454_mixed/loads', t.some(x => /Loaded 1 trace/.test(x)), `toasts: ${t.join(' | ')}`);
+    /* issue #527: the malformed row and the valid zero reading before it are left out, so the load message says so */
+    T.check('matrix/454_mixed/warns-left-out', t.some(x => /Loaded 1 trace/.test(x) && /Left out 2 rows of 454_mixed:/.test(x) && /unreadable value/.test(x)), `toasts: ${t.join(' | ')}`);
+
+    // A trailing row with a missing value and no readings after it loses nothing, so no warning
+    t = await load('527_trailing_blank.csv', hdr + '0,0\n1,0\n2,0\n3,\n');
+    T.check('matrix/527_trailing_blank/no-warning', t.some(x => /Loaded 1 trace/.test(x)) && !t.some(x => /left out/i.test(x)), `toasts: ${t.join(' | ')}`);
 
     // Absent value checks: a comma without a number should not be parsed as zero
     t = await load('absent_value_hplc.csv', hdr + '0,\n1,\n2,\n3,\n');
