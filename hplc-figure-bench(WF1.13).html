@@ -82,6 +82,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .tl .tt{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tl li.cur .tt{color:var(--accent)}
 .tl .ts{grid-column:2 / span 2;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl [data-step="figure"] .ts{white-space:normal;overflow:visible;text-overflow:clip}
 .tl .td{color:var(--muted);font-size:11.5px;white-space:nowrap}
 .tl-add{display:flex;flex-wrap:wrap;gap:6px;padding-left:36px}
 .stepsheet .ss-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -6303,7 +6304,7 @@ function stepList(){
   const fw = !fin || !y ? '' : y.meas && y.loaded && y.mg > y.loaded.mg*1.05 ? `${sig2(y.mg)} mg is more than was loaded, check` : y.purTyped ? 'Purity typed, add a gel of the last pool' : '';
   L.push({k: 'final', g: 'Results', t: 'Final sample', done: fin, warn: fw, s: fw ? fw : fin && y ? `${sig2(y.mg)} mg${y.perL != null ? `, ${sig2(y.perL)} mg per L` : ''}${y.meas ? '' : ', from the last pool'}` : ys.length > 1 ? `Latest pools: ${ys.map(q => `${sig2(q.poolMg)} mg (${stepTitle(q.fin.r)})`).join(', ')}` : y ? `Latest pool: ${sig2(y.poolMg)} mg after ${stepTitle(y.fin.r)}` : 'Concentration, storage, quality checks'});
   const hasWf = figures().some(f => f.kind === 'workflow'), gaps = hasWf ? methodGaps() : 0;
-  L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, s: gaps ? `${gaps} field${gaps === 1 ? '' : 's'} left for the methods` : hasWf ? 'Workflow figure, summary, methods text' : 'Builds once a column is added'});
+  L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, s: gaps ? `${gaps} detail${gaps === 1 ? '' : 's'} still needed for Methods text` : hasWf ? 'Workflow figure, summary, methods text' : 'Builds once a column is added'});
   L.forEach(x => { if (['transform', 'expr', 'lysis'].includes(x.k) && skipped(x.k)) Object.assign(x, {done: false, warn: '', skip: true, s: 'Skipped, left out of the figure and methods'}); });
   return L;
 }
