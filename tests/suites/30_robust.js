@@ -465,4 +465,14 @@ await T.t('malformed-id', async () => { const {p, errs, close} = await open(), h
   await close();
 });
 
+await T.t('suggest-label', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  await h.newProject('Suggest label');
+  await h.dropFiles(F.his);
+  await h.step((await h.timeline()).find(x => /^run:/.test(x.k)).k);
+  const lbl = await p.$eval('.trace.run.sel [data-act="suggest"]', e => e.textContent);
+  T.check('suggest.label', lbl === 'Suggest fractions', 'expected "Suggest fractions", got ' + lbl);
+  await close();
+});
+
 T.done(); })();
