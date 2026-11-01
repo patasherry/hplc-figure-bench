@@ -11,9 +11,10 @@ If an existing UI test already verifies these conditions on the PR branch, you c
 - [ ] **Affected displayed value or message:** (What UI value or message is changing? e.g., "Monomer SEC mass", "Gel lane purity %", "the toast after loading a semicolon-separated file")
 - [ ] **Synthetic input:** (What dataset or synthetic file triggers this case?)
 - [ ] **Tolerance / Contract:** (What is the expected value and allowed tolerance? Or is exact text expected due to contractual rounding?)
+- [ ] **Zero semantics:** (If the change involves zero, is it a measured zero or missing/unknown data?)
 - [ ] **Main-versus-branch result:** (Demonstrate that a test fails on `main` but passes on this branch)
-  - Result on `main`: _____
-  - Result on PR branch: _____
+  - Result on `main` (displayed incorrect value): _____
+  - Result on PR branch (expected displayed value): _____
 
 ## Note for existing coverage
 If an existing test already covers this scenario without failing on `main` (e.g., verifying a different aspect), you *must* add a minimal UI-level synthetic test case that explicitly fails on `main` and passes on the PR branch to prove the fix.
