@@ -53,7 +53,7 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     for (const r of refs) { const f = P.find(q => q.L === r.L), ok = f && (f.title.toLowerCase().includes(r.name.toLowerCase()) || r.name.toLowerCase().includes(f.title.toLowerCase()) || (/tag removal|cleavage/i.test(r.name) && /cleav|protease|ulp1|tev|tag/i.test(f.title)));
       T.check(`${tag}.panel_letter:${r.name}`, ok, `methods panel ${r.L} for ${r.name}; figure ${r.L} = ${f ? f.title : 'missing'}`); } /* guards: letters in the methods point at the same panel in the figure */
     const steps = [...m.matchAll(/Step (\d+) \(/g)].map(x => +x[1]); T.check(`${tag}.step_numbers_contiguous`, steps.every((n, i) => n === i + 1), steps.join(',')); }; /* guards: renumbering after edits */
-  const gapCheck = async tag => { const m = await methods(), br = (m.match(/\[[^\]]+\]/g) || []), it = (await h.timeline()).find(x => x.k === 'figure'), n = it ? (num((it.s || '').match(/(\d+) (field|gap)/) || [0, 0]) ? +(it.s.match(/(\d+) (field|gap)/) || [0, 0])[1] : 0) : null;
+  const gapCheck = async tag => { const m = await methods(), br = (m.match(/\[[^\]]+\]/g) || []), it = (await h.timeline()).find(x => x.k === 'figure'), n = it ? (num((it.s || '').match(/(\d+) (field|gap|detail)/) || [0, 0]) ? +(it.s.match(/(\d+) (field|gap|detail)/) || [0, 0])[1] : 0) : null;
     T.check(`${tag}.gap_count_matches`, n === br.length, `step list says ${it && it.s}; methods brackets ${br.length}: ${br.join(' ')}`); }; /* guards: the gap count names exactly the bracketed gaps */
 
   /* ================= P1: a complete project ================= */
