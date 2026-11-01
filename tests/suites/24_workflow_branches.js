@@ -69,74 +69,114 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       T.check('legacy: panels in one row, in order', b.every((x, i) => i === 0 || (b[i - 1].r <= x.l + 1 && Math.abs(b[i - 1].t - x.t) < 3)), JSON.stringify(b)); T.check('legacy: one plain arrow between neighbours, no branch routes', (await edges(p)).length === Math.max(0, b.length - 1)); }
     else T.check('legacy: no workflow figure in this fixture (skipped)', true);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
-  await T.t('branches-yields', async () => {
-    const {p, errs, close} = await open(), h = H(p);
-    const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), q: src('q')};
+  const yieldCases = [
+    {
+      name: 'split allocation',
+      setup: async (p, h, tl, ids) => {
+        await setFrom(p, h, tl[2].k, ids[0]);
+        await p.fill('#ssFromNote', 'fractions B9-B12'); await p.dispatchEvent('#ssFromNote', 'change'); await h.wait(300);
+        await h.step(tl[1].k); await p.fill('#ssFromNote', 'fractions B5-B8'); await p.dispatchEvent('#ssFromNote', 'change'); await h.wait(300);
 
-    await h.newProject('Linear vs Branch');
-    await h.gb(F.gb);
-    await h.addRun(F.imac);
-    await h.pool('T1-T6');
-    await h.addRun(F.sec);
-    await h.suggest();
-    await h.addRun(F.q);
-    await h.suggest();
+        await h.step(tl[1].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '1.42'); await p.dispatchEvent('#btw-conc', 'change');
+        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '2.0'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
 
-    const tl = (await h.timeline()).filter(x => x.k.startsWith('run:'));
-    const ids = tl.map(x => x.k.slice(4));
+        await h.step(tl[2].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '1.42'); await p.dispatchEvent('#btw-conc', 'change');
+        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '1.5'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+      },
+      expectSvg: ['Final pool (C, Size exclusion): 2.84 mg', 'Final pool (E, Anion exchange): 2.13 mg'],
+      expectMeth: [
+        'The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 to a Q 6 mL column (step 3, panel E).',
+        'After size exclusion, concentration left 2.84 mg',
+        'After anion exchange, concentration left 2.13 mg'
+      ],
+      expectMethMissing: []
+    },
+    {
+      name: 'recombination', // "recombination" means the yields end up in a single reporting or a single unified path, though UI represents it linearly
+      setup: async (p, h, tl, ids) => {
+        // Just linear SEC and AEX without wfFrom set (meaning linear recombination)
+        await h.step(tl[1].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '2.0'); await p.dispatchEvent('#btw-conc', 'change');
+        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '5.0'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+      },
+      expectSvg: ['Final pool (E, Anion exchange):'], // AEX area determines final yield because no manual conc is given after AEX
+      expectMeth: [],
+      expectMethMissing: ['split']
+    },
+    {
+      name: 'missing values',
+      setup: async (p, h, tl, ids) => {
+        await setFrom(p, h, tl[2].k, ids[0]); await h.wait(300);
+        await h.step(tl[1].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '1.0'); await p.dispatchEvent('#btw-conc', 'change');
+        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '2.0'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+        await h.step(tl[2].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', ''); await p.dispatchEvent('#btw-conc', 'change');
+        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '1.5'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+      },
+      expectSvg: ['Final pool (C, Size exclusion): 2.00 mg', 'Final pool (E, Anion exchange): 1.28 mg'],
+      expectMeth: [],
+      expectMethMissing: []
+    },
+    {
+      name: 'zero versus unknown',
+      setup: async (p, h, tl, ids) => {
+        await setFrom(p, h, tl[2].k, ids[0]); await h.wait(300);
+        await h.step(tl[1].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '0'); await p.dispatchEvent('#btw-conc', 'change');
+        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '2.0'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+        await h.step(tl[2].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', ''); await p.dispatchEvent('#btw-conc', 'change');
+        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '1.5'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+      },
+      expectSvg: ['Final pool (C, Size exclusion): 0.00 mg', 'Final pool (E, Anion exchange): 1.28 mg'],
+      expectMeth: [],
+      expectMethMissing: []
+    }
+  ];
 
-    // Linear checks:
-    await openWf(p);
-    await p.evaluate(() => {
-      const el = document.getElementById('o-wfYield');
-      if (el) { el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+  for (const c of yieldCases) {
+    await T.t(`branches-yields-${c.name.replace(/\s+/g, '-')}`, async () => {
+      const {p, errs, close} = await open(), h = H(p);
+      const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), q: src('q')};
+
+      await h.newProject(`Branch - ${c.name}`);
+      await h.gb(F.gb);
+      await h.addRun(F.imac); await h.pool('T1-T6');
+      await h.addRun(F.sec); await h.suggest();
+      await h.addRun(F.q); await h.suggest();
+
+      const tl = (await h.timeline()).filter(x => x.k.startsWith('run:'));
+      const ids = tl.map(x => x.k.slice(4));
+
+      await openWf(p);
+      await p.evaluate(() => {
+        const el = document.getElementById('o-wfYield');
+        if (el) { el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+      });
+      await h.wait(500);
+
+      await c.setup(p, h, tl, ids);
+      await openWf(p);
+
+      const texts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
+      for (const e of c.expectSvg) {
+        const matched = texts.some(t => t.t.includes(e));
+        T.check(`${c.name}: svg contains ${e}`, matched, texts.map(x => x.t).join(' | '));
+      }
+      const meth = await h.methods();
+      for (const e of c.expectMeth) {
+        T.check(`${c.name}: methods contains text`, meth.includes(e), meth);
+      }
+      for (const e of c.expectMethMissing) {
+        T.check(`${c.name}: methods does not contain text`, !meth.includes(e), meth);
+      }
+
+      T.check('no page errors', !errs.length, errs.join(' | '));
+      await close();
     });
-    await h.wait(500);
-
-    const linTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
-    T.check('linear: exactly one final yield line', linTexts.length === 1, linTexts.map(x => x.t).join(' | '));
-    T.check('linear: methods has no split text', !/was split:/i.test(await h.methods()));
-
-    // Now branch: AEX comes from IMAC (ids[0])
-    await setFrom(p, h, tl[2].k, ids[0]);
-    await p.fill('#ssFromNote', 'fractions B9-B12');
-    await p.dispatchEvent('#ssFromNote', 'change');
-    await h.wait(300);
-
-    // SEC note
-    await h.step(tl[1].k);
-    await p.fill('#ssFromNote', 'fractions B5-B8');
-    await p.dispatchEvent('#ssFromNote', 'change');
-    await h.wait(300);
-
-    // Add conc after SEC: 1.42 mg/mL, 2.0 mL -> 2.84 mg
-    await h.step(tl[1].k);
-    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
-    const c1 = p.locator('#btw-conc'); await openFolds(c1);
-    await c1.fill('1.42'); await c1.dispatchEvent('change');
-    const v1 = p.locator('#btw-vOut'); await openFolds(v1);
-    await v1.fill('2.0'); await v1.dispatchEvent('change');
-    await h.wait(400);
-
-    // Add conc after AEX: 1.42 mg/mL, 1.5 mL -> 2.13 mg
-    await h.step(tl[2].k);
-    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
-    const c2 = p.locator('#btw-conc'); await openFolds(c2);
-    await c2.fill('1.42'); await c2.dispatchEvent('change');
-    const v2 = p.locator('#btw-vOut'); await openFolds(v2);
-    await v2.fill('1.5'); await v2.dispatchEvent('change');
-    await h.wait(400);
-
-    await openWf(p);
-    const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
-    T.check('branch: two final yield lines', brTexts.length === 2, brTexts.map(x => x.t).join(' | '));
-    T.check('branch: SEC yield matches hand arithmetic (1.42 * 2.0 = 2.84 mg)', brTexts.some(t => /Final pool \(C, Size exclusion\): 2\.84 mg/.test(t.t)), brTexts.map(x => x.t).join(' | '));
-    T.check('branch: AEX yield matches hand arithmetic (1.42 * 1.5 = 2.13 mg)', brTexts.some(t => /Final pool \(E, Anion exchange\): 2\.13 mg/.test(t.t)), brTexts.map(x => x.t).join(' | '));
-
-    const meth = await h.methods();
-    T.check('branch: methods text describes the split', /The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10\/300 GL column \(step 2, panel C\) and fractions B9-B12 to a Q 6 mL column \(step 3, panel E\)\./.test(meth), meth);
-    T.check('branch: results section reports both branch pools', /After size exclusion, concentration left 2\.84 mg/.test(meth) && /After anion exchange, concentration left 2\.13 mg/.test(meth), meth);
-
-    T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
+  }
 
   T.done(); })();
