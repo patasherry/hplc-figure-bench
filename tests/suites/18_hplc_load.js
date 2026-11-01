@@ -1,4 +1,5 @@
 const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
+const IMAC = require('../data/gen_imac_missing');
 
 (async () => {
   const T = suite('18_hplc_load');
@@ -130,6 +131,34 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
     T.check('matrix/442_valid_zero/values', !!z && z.rows.length === 4 && z.rows.every(r => r[1] === 0), JSON.stringify(z && z.rows));
     /* existing behaviour: the longest contiguous block is kept; the bad value never becomes a number */
     T.check('matrix/454_mixed/keeps-longest-block', !!m && JSON.stringify(m.rows) === '[[2,0],[3,0]]', JSON.stringify(m && m.rows));
+  });
+
+  await T.t('imac_missing_fields', async () => {
+    await p.reload();
+    await h.wait(500);
+    await h.newProject('IMAC missing fields');
+    for (const c of IMAC.missingCases()) {
+      await p.locator('#toast').evaluate(e => e.replaceChildren());
+      await p.setInputFiles('#file', c.file);
+      await h.wait(400);
+      const toasts = (await h.toasts()).filter(t => t.includes(c.file.name));
+      // One consolidated, format-specific list; optional gradient/fractions/flow are never requirements.
+      const list = 'Missing or unreadable required fields: ' + c.fields.join('; ') + '. Export';
+      T.check(`imac/${c.id}/fields`, toasts.length === 1 && toasts[0].includes(list) &&
+        (toasts[0].match(/Missing or unreadable required fields:/g) || []).length === 1, toasts.join(' | '));
+      T.check(`imac/${c.id}/rejected`, toasts.some(t => /no usable UV traces/.test(t)) &&
+        !(await h.timeline()).some(s => /^run:/.test(s.k)), toasts.join(' | '));
+    }
+    for (const c of IMAC.validCases()) {
+      const before = (await h.timeline()).filter(s => /^run:/.test(s.k)).length;
+      await p.locator('#toast').evaluate(e => e.replaceChildren());
+      await p.setInputFiles('#file', c.file);
+      await h.wait(400);
+      const toasts = await h.toasts();
+      // A usable UV trace still loads without requiring other channels or reporting missing optional fields.
+      T.check(`imac/${c.id}/loads-without-warning`, (await h.timeline()).filter(s => /^run:/.test(s.k)).length === before + 1 &&
+        toasts.some(t => /Loaded 1 ÄKTA run/.test(t)) && !toasts.some(t => /Missing or unreadable|Could not read/.test(t)), toasts.join(' | '));
+    }
   });
 
   T.check('no-page-errors', !errs.length, errs.join(' | '));
