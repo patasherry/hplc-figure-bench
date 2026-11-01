@@ -2034,12 +2034,12 @@ function integRows(run){
   return rows;
 }
 /* where a pool's measured concentration comes from: typed on the run card, the Concentrate step after the column, or NanoDrop readings marked Final */
-function poolMeas(run){ const pc = numOr(run.poolConc, 0); if (pc > 0) return {c: pc, v: numOr(run.poolFinalVol, 0), src: 'card'};
-  const b = prep.btw && prep.btw[run.id], bv = b ? numOr(b.vOut, 0) : 0;
-  const F = ndFinalOf(run), st = F.length ? ndStats(F) : null, fv = numOr(run.ndFinalVol, 0) || bv;
-  if (st && st.m > 0) return fv > 0 || b ? {c: st.m, v: fv, src: b ? 'btw' : 'nd', nd: st, how: b && (b.how || 'conc')} : {c: 0, v: 0, src: null, nd: st};
-  const bc = b ? numOr(b.conc, 0) : 0; if (bc > 0) return {c: bc, v: bv, src: 'btw', how: b.how || 'conc'};
-  return {c: 0, v: 0, src: null}; }
+function poolMeas(run){ const pc = numOr(run.poolConc, null); if (pc != null) return {c: pc, v: numOr(run.poolFinalVol, null), src: 'card'};
+  const b = prep.btw && prep.btw[run.id], bv = b ? numOr(b.vOut, null) : null;
+  const F = ndFinalOf(run), st = F.length ? ndStats(F) : null, fv = numOr(run.ndFinalVol, null) != null ? numOr(run.ndFinalVol, null) : bv;
+  if (st && st.m > 0) return (fv != null && fv > 0) || b ? {c: st.m, v: fv, src: b ? 'btw' : 'nd', nd: st, how: b && (b.how || 'conc')} : {c: null, v: null, src: null, nd: st};
+  const bc = b ? numOr(b.conc, null) : null; if (bc != null) return {c: bc, v: bv, src: 'btw', how: b.how || 'conc'};
+  return {c: null, v: null, src: null}; }
 /* NanoDrop readings of the concentrated sample after a column */
 const ndFinalOf = run => typeof ndSamples === 'undefined' ? [] : ndSamples.filter(x => x.runId === run.id && x.stage === 'conc' && x.kind !== 'nucleic' && !x.hide && !CRUDE_RE.test(x.name));
 /* older projects stored a Concentrated step's readings as final: move them to the step */
@@ -2060,7 +2060,7 @@ function poolRows(run){
   const vol = B.reduce((t, k) => t + k.b - k.a, 0), mgA = massOf(area, run), ms = poolMeas(run), pc = ms.c, fv = ms.v, mv = fv > 0 ? fv : xUnit(run) === 'mL' ? vol : (xUnit(run) === 'min' && uvFlow(run) > 0) ? vol * uvFlow(run) : 0;
   /* a NanoDrop reading of the pool, often after it was concentrated, beats the estimate from the UV area; its volume is the one measured */
   /* a reading on the Concentrated step needs the volume after concentrating, never the pool volume */
-  const meas = pc > 0 && mv > 0 && !(ms.src === 'btw' && !(fv > 0)), mg = meas ? pc*mv : mgA;
+  const meas = pc != null && mv != null && mv > 0 && !(ms.src === 'btw' && !(fv > 0)), mg = meas ? pc*mv : mgA;
   return {label: (s0 => isPlate(run) ? s0.toUpperCase() : s0)(String(run.shade || '').trim()).replace(/\s*-\s*/g, '–'), a, b, vol, area, mg, mgArea: mgA, measured: meas, conc: pc > 0 ? pc : null, measVol: meas ? mv : null, concentrated: meas && fv > 0, src: meas ? ms.src : null,
     k: meas && mgA > 0 ? mg/mgA : null};
 }
@@ -3779,15 +3779,15 @@ function buildRunFig(run){
   return composeRuns([run], {single: true, layout: 'stack', W: numOr(opt.w,3.5)*72, chromH: numOr(opt.h,2.6)*72, titles: !!opt.runTitle, letters: false, showGels: true, connectors: opt.connectors, arrows: false, gelMaxH: numOr(opt.wfGelH,1.8)*72});
 }
 /* the final pool's amount as a line under the workflow, so the figure states what came out */
-const sig2 = v => v >= 100 ? fmt(v, 0) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2) : v >= 0.1 ? fmt(v, 2) : fmt(v, 3);
+const sig2 = v => v >= 100 ? fmt(v, 0) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2) : v >= 0.1 || v === 0 ? fmt(v, 2) : fmt(v, 3);
 function finalYield(path){
   const allRows = sumRows(), rows = path ? allRows.filter(x => path.includes(x.r)) : allRows, mgOf = allRows.mgOf || (() => null);
-  const fin = rows.slice().reverse().find(x => mgOf(x) > 0); if (!fin) return null;
+  const fin = rows.slice().reverse().find(x => mgOf(x) != null); if (!fin) return null;
   /* the final sample's own concentration and volume, when entered, give the amount kept; the last pool stays the chromatography figure */
-  const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc > 0 ? kc : mgOf(fin);
-  let fc = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finConc, 0) : 0, fv = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finVol, 0) : 0, meas = fc > 0 && fv > 0, manLoad = null;
+  const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc != null ? kc : mgOf(fin);
+  let fc = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finConc, null) : null, fv = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finVol, null) : null, meas = fc != null && fv != null, manLoad = null;
   /* no final sample entered: a measured step without a chromatogram after the last pool (a concentration, a buffer exchange) is what was kept */
-  if (!meas && prep.on) { const wf = path || wfList(); for (let j = wf.indexOf(fin.r) + 1; j > 0 && j < wf.length; j++) if (wf[j].prep === 'manual' && manMg(wf[j].man)) { const m = wf[j].man; fc = numOr(m.conc, 0); fv = numOr(m.vol, 0); meas = true; manLoad = mgOf(fin); } }
+  if (!meas && prep.on) { const wf = path || wfList(); for (let j = wf.indexOf(fin.r) + 1; j > 0 && j < wf.length; j++) if (wf[j].prep === 'manual' && manMg(wf[j].man) != null) { const m = wf[j].man; fc = numOr(m.conc, null); fv = numOr(m.vol, null); meas = true; manLoad = mgOf(fin); } }
   const mg = meas ? fc*fv : pm;
   const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, perG = cG > 0 ? mg/cG : null;
   const poolVol = fin.nd && fin.nd.mg != null ? fin.nd.vol : fin.p && fin.p.measured ? fin.p.measVol : fin.p && fin.p.vol > 0 ? fin.p.vol : null;
@@ -3810,7 +3810,7 @@ function yieldLine(res){
     const pnm = cm ? (ndForm(y.fin.r) === 'tagged' && cm.tagParts.length ? cm.tn : cm.pn) : '';
     const namePart = ys.length > 1 ? `${letter}${stepTitle(y.fin.r)}` : (y.meas ? '' : `${letter}${stepTitle(y.fin.r)}`);
     const label = y.meas ? (ys.length > 1 ? `Final sample (${namePart})` : 'Final sample') : `Final pool (${namePart})`;
-    const t = y.meas ? `${label}: ${sig2(y.mg)} mg${(() => { const cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null; return cm && cm.pn !== 'protein' ? ' ' + cm.pn : ''; })()} (${sig2(y.fc)} mg/mL in ${fmtAuto(y.fv)} mL)${y.perL != null ? `, ${sig2(y.perL)} mg per L of culture` : ''}${y.perG != null ? `, ${y.perGTxt}` : ''}${hasTxt(prep.qcPurity) && !y.purTyped ? `, ${String(prep.qcPurity).trim()}` : y.pur != null && !(y.purEst && y.pur < 15) ? `, ${y.purEst ? '≈' : ''}${fmt(y.pur, 0)}% pure by gel` : ', purity not measured by gel'}${y.loaded && y.mg > y.loaded.mg*1.05 ? ` (unverified: the final sample exceeds the amount loaded on ${stepTitle(y.loaded.r).toLowerCase()})` : y.odd ? (o => ` (column amounts unverified: ${o ? `${stepTitle(o.r).toLowerCase()} step yield ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'a step yield is above 100%'})`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''}` : `${label}: ${sig2(y.mg)} mg${pnm && pnm !== 'protein' ? ' ' + pnm : ''}${y.perL != null ? `, ${sig2(y.perL)} mg per L of culture` : ''}${y.perG != null ? `, ${y.perGTxt}` : ''}${y.pur != null && !(y.purEst && y.pur < 15) ? `, ${y.purEst ? '≈' : ''}${fmt(y.pur, 0)}% pure by gel` : ', purity not measured by gel'}${['mg', 'mgmol', 'area'].includes(y.basis) ? ' (from the A280 area' : ' (NanoDrop'}${y.odd ? (o => `, unverified because the ${o ? `${stepTitle(o.r).toLowerCase()} step yield is ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'a step yield is above 100%'}`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''})`;
+    const t = y.meas ? `${label}: ${y.mg != null ? sig2(y.mg) + ' mg' : 'unknown yield'}${(() => { const cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null; return cm && cm.pn !== 'protein' ? ' ' + cm.pn : ''; })()} (${sig2(y.fc)} mg/mL in ${fmtAuto(y.fv)} mL)${y.perL != null ? `, ${sig2(y.perL)} mg per L of culture` : ''}${y.perG != null ? `, ${y.perGTxt}` : ''}${hasTxt(prep.qcPurity) && !y.purTyped ? `, ${String(prep.qcPurity).trim()}` : y.pur != null && !(y.purEst && y.pur < 15) ? `, ${y.purEst ? '≈' : ''}${fmt(y.pur, 0)}% pure by gel` : ', purity not measured by gel'}${y.loaded && y.mg > y.loaded.mg*1.05 ? ` (unverified: the final sample exceeds the amount loaded on ${stepTitle(y.loaded.r).toLowerCase()})` : y.odd ? (o => ` (column amounts unverified: ${o ? `${stepTitle(o.r).toLowerCase()} step yield ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'a step yield is above 100%'})`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''}` : `${label}: ${y.mg != null ? sig2(y.mg) + ' mg' : 'unknown yield'}${pnm && pnm !== 'protein' ? ' ' + pnm : ''}${y.perL != null ? `, ${sig2(y.perL)} mg per L of culture` : ''}${y.perG != null ? `, ${y.perGTxt}` : ''}${y.pur != null && !(y.purEst && y.pur < 15) ? `, ${y.purEst ? '≈' : ''}${fmt(y.pur, 0)}% pure by gel` : ', purity not measured by gel'}${['mg', 'mgmol', 'area'].includes(y.basis) ? ' (from the A280 area' : ' (NanoDrop'}${y.odd ? (o => `, unverified because the ${o ? `${stepTitle(o.r).toLowerCase()} step yield is ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'a step yield is above 100%'}`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''})`;
     allLines.push(...wrapWords(nbsp(t), Math.max(20, Math.floor(W/(lf*0.52)))));
   });
   const H2 = H + fs*0.6 + allLines.length*lf*1.2;
@@ -3935,10 +3935,10 @@ const isManId = id => typeof id === 'string' && /^m\d+$/.test(id) && manSteps().
 function manObj(m){ const o = prepObj[m.id] || (prepObj[m.id] = {id: m.id, prep: 'manual', gelOff: {}, fracs: [], integ: []}); prep.offs = prep.offs || {}; o.gelOff = prep.offs[m.id] || (prep.offs[m.id] = {});
   const nm = String(m.name || '').trim() || MAN_NAME[m.kind] || 'Other step';
   return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(m.arrow || '').trim(), wfW: numOr(m.wfW, 1), gelZ: numOr(m.gelZ, 1), man: m, wfDx: numOr(m.wfDx, 0), wfDy: numOr(m.wfDy, 0)}); }
-function manMg(m){ const c = numOr(m.conc, 0), v = numOr(m.vol, 0); return c > 0 && v > 0 ? c*v : null; }
-function manLines(m){ const t = x => String(x == null ? '' : x).trim(), out = [], c = numOr(m.conc, 0), v = numOr(m.vol, 0);
+function manMg(m){ const c = numOr(m.conc, null), v = numOr(m.vol, null); return c != null && v != null ? c*v : null; }
+function manLines(m){ const t = x => String(x == null ? '' : x).trim(), out = [], c = numOr(m.conc, null), v = numOr(m.vol, null);
   if (t(m.resin)) out.push(t(m.resin)); if (t(m.buffer)) out.push(t(m.buffer)); if (t(m.wash) && (m.kind === 'column' || m.kind === 'batch')) out.push('Wash: ' + t(m.wash)); if (t(m.elution)) out.push(t(m.elution));
-  if (v > 0 || c > 0) out.push([v > 0 ? `${fmtAuto(v)} mL` : '', c > 0 ? `${fmtAuto(c)} mg/mL` : '', c > 0 && v > 0 ? `${sig2(c*v)} mg` : ''].filter(Boolean).join(', '));
+  if (v != null || c != null) out.push([v != null ? `${fmtAuto(v)} mL` : '', c != null ? `${fmtAuto(c)} mg/mL` : '', c != null && v != null ? `${sig2(c*v)} mg` : ''].filter(Boolean).join(', '));
   if (t(m.note)) out.push({t: t(m.note), c: '#555555'}); return out; }
 /* the amount loaded on the next column: the last measured amount after this step and before the next column */
 function loadedAfter(r){ const wf = wfList(), i = wf.indexOf(r); let mg = r && r.id ? (btwMg(r) || {}).mg || null : null;
@@ -4246,7 +4246,7 @@ const BTW_T = {conc: 'Concentrated', dil: 'Diluted', exch: 'Buffer exchanged', f
 const btwOf = r => { if (!r || !prep.btw || !prep.btw[r.id]) return null; const p = r.fracs ? poolRows(r) : null; return Object.assign({how: 'conc', _poolVol: p && xUnit(r) === 'mL' && p.vol > 0 ? +fmt(p.vol, 1) : 0}, prep.btw[r.id]); };
 const btwShort = b => { const vo = numOr(b.vOut, 0); return b.how === 'dil' ? (vo > 0 ? `Diluted to ${fmtAuto(vo)} mL` : 'Diluted') : b.how === 'exch' ? 'Buffer exchanged' : b.how === 'filt' ? 'Filtered' : b.how === 'hold' ? 'Held overnight' : vo > 0 ? `Conc. to ${fmtAuto(vo)} mL` : 'Concentrated'; };
 const arrowNote = r => String(r.note || '').trim();
-function btwMg(r){ const b = btwOf(r); if (!b) return null; const ms = poolMeas(r), c = ms.src === 'btw' ? ms.c : 0, vo = numOr(b.vOut, 0); if (!(c > 0 && vo > 0)) return null; const p = poolRows(r), mg = c*vo; return {mg, pct: p && p.mgArea > 0 ? 100*mg/p.mgArea : null}; }
+function btwMg(r){ const b = btwOf(r); if (!b) return null; const ms = poolMeas(r), c = ms.src === 'btw' ? ms.c : null, vo = numOr(b.vOut, null); if (c == null || vo == null) return null; const p = poolRows(r), mg = c*vo; return {mg, pct: p && p.mgArea > 0 ? 100*mg/p.mgArea : null}; }
 function btwSentence(b){
   const dv = String(b.device || '').trim(), mw = String(b.mwco || '').trim(), nt = String(b.note || '').trim().replace(/\.$/, ''), vi = numOr(b.vIn, 0) || numOr(b._poolVol, 0), vo = numOr(b.vOut, 0);
   const how = {conc: 'concentrated', dil: 'diluted', exch: 'buffer exchanged', filt: 'filtered', hold: 'held overnight'}[b.how] || 'concentrated';
@@ -4403,6 +4403,7 @@ function methodsText(){
       t += splitTxt;
     }
     if (pr && pr.measured && pr.src !== 'btw') { const epStr = pr.src === 'nd' ? epPhrase(ndEpsUsed(r)) : ''; t += pr.concentrated ? ` The pool was concentrated to ${fmtAuto(pr.measVol)} mL and measured at ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).` : ` The pool measured ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).`; }
+    else if (pr && pr.measured && pr.src === 'btw') t += ' Its concentration was adjusted.';
     const bw = btwOf(r); if (bw) t += ' ' + btwSentence(bw);
     P.push(t); });
   if (prep.on && (hasTxt(prep.store) || hasTxt(prep.finBuffer))) { const fb = v(prep.finBuffer), stx = v(prep.store);
@@ -6306,11 +6307,11 @@ function stepList(){
     const warn = !pooled ? '' : [o ? `Step yield ${o}%, check the UV path` : '', nd.length ? `${o ? 'needs' : 'Needs'} ${nd.join(', ')}` : ''].filter(Boolean).join(', ');
     L.push({k: 'run:' + r.id, g: first ? 'Purification' : '', t: stepTitle(r), done: pooled, warn, s: warn || (pl ? [pl, mg].filter(Boolean).join(', ') : 'Set the pooled fractions'), run: r}); first = false;
     const b = btwOf(r); if (b) { const kp = btwMg(r); L.push({k: 'btw:' + r.id, t: ncObj(r).name, done: !!kp,
-      s: (ms => [ms.c > 0 && (ms.src === 'btw' || ms.nd) ? `${fmt(ms.c, 2)} mg/mL` : '', numOr(b.vOut, 0) > 0 ? `${fmtAuto(+b.vOut)} mL` : '', kp ? `${sig2(kp.mg)} mg` : ''].filter(Boolean).join(', '))(poolMeas(r)) || 'NanoDrop export and volume'}); } });
+      s: (ms => [ms.c != null && (ms.src === 'btw' || ms.nd) ? `${fmt(ms.c, 2)} mg/mL` : '', numOr(b.vOut, null) != null ? `${fmtAuto(+b.vOut)} mL` : '', kp ? `${sig2(kp.mg)} mg` : ''].filter(Boolean).join(', '))(poolMeas(r)) || 'NanoDrop export and volume'}); } });
   L.push({k: 'add', g: first ? 'Purification' : '', add: true, t: '', s: ''});
   const ys = finalYields(), y = ys[0] || finalYield(), fin = FIN_KEYS.some(v) || ndSamples.some(n => n.stage === 'final') || !!m('final').date;
-  const fw = !fin || !y ? '' : y.meas && y.loaded && y.mg > y.loaded.mg*1.05 ? `${sig2(y.mg)} mg is more than was loaded, check` : y.purTyped ? 'Purity typed, add a gel of the last pool' : '';
-  L.push({k: 'final', g: 'Results', t: 'Final sample', done: fin, warn: fw, s: fw ? fw : fin && y ? `${sig2(y.mg)} mg${y.perL != null ? `, ${sig2(y.perL)} mg per L` : ''}${y.meas ? '' : ', from the last pool'}` : ys.length > 1 ? `Latest pools: ${ys.map(q => `${sig2(q.poolMg)} mg (${stepTitle(q.fin.r)})`).join(', ')}` : y ? `Latest pool: ${sig2(y.poolMg)} mg after ${stepTitle(y.fin.r)}` : 'Concentration, storage, quality checks'});
+  const fw = !fin || !y ? '' : y.meas && y.loaded && y.mg != null && y.mg > y.loaded.mg*1.05 ? `${sig2(y.mg)} mg is more than was loaded, check` : y.purTyped ? 'Purity typed, add a gel of the last pool' : '';
+  L.push({k: 'final', g: 'Results', t: 'Final sample', done: fin, warn: fw, s: fw ? fw : fin && y ? `${y.mg != null ? sig2(y.mg) + ' mg' : 'unknown yield'}${y.perL != null ? `, ${sig2(y.perL)} mg per L` : ''}${y.meas ? '' : ', from the last pool'}` : ys.length > 1 ? `Latest pools: ${ys.map(q => `${q.poolMg != null ? sig2(q.poolMg) + ' mg' : 'unknown yield'} (${stepTitle(q.fin.r)})`).join(', ')}` : y ? `Latest pool: ${y.poolMg != null ? sig2(y.poolMg) + ' mg' : 'unknown yield'} after ${stepTitle(y.fin.r)}` : 'Concentration, storage, quality checks'});
   const hasWf = figures().some(f => f.kind === 'workflow'), gaps = hasWf ? methodGaps() : 0;
   L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, s: gaps ? `${gaps} field${gaps === 1 ? '' : 's'} left for the methods` : hasWf ? 'Workflow figure, summary, methods text' : 'Builds once a column is added'});
   L.forEach(x => { if (['transform', 'expr', 'lysis'].includes(x.k) && skipped(x.k)) Object.assign(x, {done: false, warn: '', skip: true, s: 'Skipped, left out of the figure and methods'}); });
