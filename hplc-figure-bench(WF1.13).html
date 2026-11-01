@@ -1473,7 +1473,7 @@ function decode(buf){
 const clean = f => f.trim().replace(/^"(.*)"$/,'$1').trim();
 function splitLine(L, d){ return d === 'ws' ? L.trim().split(/\s+/) : L.split(d); }
 /* Generic chromatogram and ÄKTA CSV values use this directly; NanoDrop first applies its delimiter-specific decimal normalization. Zero is a measurement, while blank and malformed fields are not. */
-function measurementNumber(v){ const s = clean(String(v ?? '')); return NUM.test(s) ? parseFloat(s) : null; }
+function measurementNumber(v){ const s = clean(String(v ?? '')), n = NUM.test(s) ? parseFloat(s) : NaN; return isFinite(n) ? n : null; }
 function toNum(f, dc){ f = clean(f); if (dc) f = f.replace(/^-?\d+,\d+(?:[eE][-+]?\d+)?$/, m => m.replace(',', '.')); const v = measurementNumber(f); return v == null ? NaN : v; }
 function parseText(text){
   const lines = text.split(/\r\n|\n|\r/);

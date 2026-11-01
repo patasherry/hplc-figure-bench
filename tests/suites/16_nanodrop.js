@@ -260,15 +260,15 @@ async function fresh(id, fn){
     T.check('nd/metadata-agilent', JSON.stringify(rows) === JSON.stringify([{name: 'Pool A', value: '1.25 mg/mL'}, {name: 'Pool B', value: '2.50 mg/mL'}, {name: 'Pool C', value: '0.75 mg/mL'}]), JSON.stringify(rows));
   });
 
-  // A measured zero is valid, but a malformed token beginning with zero is not a measurement.
+  // A measured zero is valid in each supported decimal form, while malformed and non-finite tokens are not measurements.
   await fresh('zero-measurement-validation', async (p, h) => {
     await h.newProject('Zero measurement validation');
     await h.addRun('data/chrom/valid_unicorn.zip');
     await h.step('final');
-    await p.setInputFiles(SEL.nd, F.nd('zero-measurements.tsv', [['Measured zero', '0', '0'], ['Malformed zero', '0bad', '0bad']], false));
+    await p.setInputFiles(SEL.nd, F.nd('zero-measurements.tsv', [['Measured zero', '0', '0'], ['Measured point zero', '0.0', '0.0'], ['Measured comma zero', '0,0', '0,0'], ['Measured point without integer', '.0', '.0'], ['Malformed zero', '0bad', '0bad'], ['Non-finite overflow', '1e999', '1e999']], false));
     await p.locator(SEL.row).first().waitFor();
     const rows = await p.$$eval(SEL.row, els => els.map(el => ({name: el.querySelector('input[data-ndk="name"]')?.value, value: el.querySelector('.nd-v')?.textContent.trim()})));
-    T.check('nd/zero-measurement-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Measured zero', value: '0.00 mg/mL'}]), JSON.stringify(rows));
+    T.check('nd/zero-measurement-validation', JSON.stringify(rows) === JSON.stringify([{name: 'Measured zero', value: '0.00 mg/mL'}, {name: 'Measured point zero', value: '0.00 mg/mL'}, {name: 'Measured comma zero', value: '0.00 mg/mL'}, {name: 'Measured point without integer', value: '0.00 mg/mL'}]), JSON.stringify(rows));
   });
 
   // Suffix numbers like 0.05A or 1.23* should be parsed as 0.05 and 1.23
