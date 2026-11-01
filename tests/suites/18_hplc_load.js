@@ -117,6 +117,12 @@ const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
     t = await load('absent_value_akta.csv', akta + '0\t\t0\t10\n1\t\t1\t10\n2\t\t2\t10\n3\t\t3\t10\n');
     T.check('matrix/absent/akta-rejected', t.some(x => /absent_value_akta\.csv/.test(x) && /no usable UV traces/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
 
+    // Issue #685: the rejection names what is missing, in one message
+    t = await load('685_akta_uv_unreadable.csv', 'UV 1_280\t\tUV 2_260\t\tCond\t\nml\tmAU\tml\tmAU\tml\tmS/cm\n0\tbad\t0\t\t0\t10\n1\tbad\t1\t\t1\t10\n2\tbad\t2\t\t2\t10\n');
+    T.check('matrix/685_akta_uv_unreadable/names-curves', t.some(x => /685_akta_uv_unreadable\.csv/.test(x) && /no usable UV traces/i.test(x) && /no readable values in UV 1_280, UV 2_260\b/.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
+    t = await load('685_akta_no_uv.csv', 'Cond\t\tConc B\t\nml\tmS/cm\tml\t%\n0\t10\t0\t0\n1\t11\t1\t5\n2\t12\t2\t10\n');
+    T.check('matrix/685_akta_no_uv/names-found-curves', t.some(x => /685_akta_no_uv\.csv/.test(x) && /no usable UV traces/i.test(x) && /no UV curve in mAU among its curves \(Cond in mS\/cm, Conc B in %\)/.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
+
 
     // Verify internal state matches the assertions on what should load
     const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);

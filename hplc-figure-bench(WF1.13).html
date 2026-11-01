@@ -1566,7 +1566,10 @@ function parseAkta(text, fname){
       if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
       else { const y = toNum(v, d !== ','); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
   const ak = aktaFromCurves(curves, fname, {delimiter: d});
-  if (!ak) return {bad: 'an ÄKTA/UNICORN file, but has no usable UV traces: export the UV curve from UNICORN'};
+  /* one message naming what is missing: the UV curves without readable values, or the curves found when none is UV */
+  if (!ak) { const uvc = curves.filter(c => c.kind === 'uv'), lst = a => a.length > 4 ? a.slice(0, 4).join(', ') + `, and ${a.length - 4} more` : a.join(', ');
+    const why = uvc.length ? `no readable values in ${lst(uvc.map(c => c.name))}` : `no UV curve in mAU among its curves${curves.length ? ` (${lst(curves.map(c => c.yu ? `${c.name} in ${c.yu}` : c.name))})` : ''}`;
+    return {bad: `an ÄKTA/UNICORN file, but has no usable UV traces: ${why}. Export the UV curve from UNICORN`}; }
   return ak;
 }
 /* what a UNICORN curve is, from its name and unit. UV path length (cm) and derived UV curves (UV_CUT_TEMP@100) are not traces */
