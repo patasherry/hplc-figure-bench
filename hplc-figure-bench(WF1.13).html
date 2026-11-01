@@ -4607,12 +4607,15 @@ function renderLaneTable(){
   const labs = gelLabels(g), short = t => t.length > 24 ? t.slice(0, 23) + '…' : t;
   el.innerHTML = labs.map((l, i) => { const a = laneAssign(g, i);
     const am = !(g.assign || [])[i] && a === '' && g._auto && g._auto.amb && g._auto.amb[i];
-    return `<div class="lrow${am ? ' amb' : ''}"${am ? ` title="${esc(l)} is a fraction in ${am.length} runs. Pick the run it came from, or set the runs' pooled fractions."` : ''}><span>${i + 1}</span><input type="text" id="ln${i}" data-lane="${i}" data-lk="label" value="${esc(l)}" aria-label="Lane ${i + 1} label"><select id="la${i}" data-lane="${i}" data-lk="assign" aria-label="Lane ${i + 1} belongs to"><option value="marker" ${a === 'marker' ? 'selected' : ''}>Ladder</option><option value="" ${a === '' ? 'selected' : ''}>Not shown with a run</option>${PREP_OPT().replace(`value="${a}"`, `value="${a}" selected`)}${runs.map((r, k) => `<option value="${r.id}" ${a === r.id ? 'selected' : ''}>${k + 1}. ${esc(short(shortRunName(r)))}</option>`).join('')}</select></div>`; }).join('');
+    return `<div class="lrow${am ? ' amb' : ''}"${am ? ` title="${esc(l)} is a fraction in ${am.length} runs. Pick the run it came from, or set the runs' pooled fractions."` : ''}><span>${i + 1}</span><input type="text" id="ln${i}" data-lane="${i}" data-lk="label" value="${esc(l)}" aria-label="Lane ${i + 1} label"><select id="la${i}" data-lane="${i}" data-lk="assign" aria-label="Lane ${i + 1} belongs to"><option value="marker" ${a === 'marker' ? 'selected' : ''}>Ladder</option><option value="" ${a === '' ? 'selected' : ''}>Not shown with a run</option>${PREP_OPT().replace(`value="${a}"`, `value="${a}" selected`)}${runs.map((r, k) => `<option value="${r.id}" ${a === r.id ? 'selected' : ''} title="${k + 1}. ${esc(shortRunName(r))}">${k + 1}. ${esc(short(shortRunName(r)))}</option>`).join('')}</select></div>`; }).join('');
+  el.querySelectorAll('select').forEach(laneTitle);
 }
+/* run names are cut short in the lane menus: the full name of the chosen run shows on hover */
+function laneTitle(s){ const o = s.selectedOptions[0]; if (o && o.title) s.title = o.title; else s.removeAttribute('title'); }
 function onLane(el){
   const g = curGel(); if (!g) return; const i = +el.dataset.lane;
   if (el.dataset.lk === 'label') { const labs = gelLabels(g); labs[i] = el.value.replace(/,/g, ' '); g.labels = labs.join(', '); $('#g-labels').value = g.labels; render(); return; }
-  g.assign = g.assign || []; g.assign[i] = el.value; renderList(); render();
+  g.assign = g.assign || []; g.assign[i] = el.value; laneTitle(el); renderList(); render();
 }
 function renderList(){
   const runCards = runs.map((r, idx) => {

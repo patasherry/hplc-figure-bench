@@ -1,4 +1,4 @@
-const {open,suite,fs}=require('../lib/harness');const T=suite('25_gels');
+const {open,H,src,suite,fs}=require('../lib/harness');const T=suite('25_gels');
 const gel=(image,x={})=>Object.assign({id:'g1',name:'synthetic gel',image,nLanes:3,labels:'M, A, B',marksManual:true,marks:[{kda:100,y:.2},{kda:10,y:.8}],black:0,white:255,autoLv:false,tags:[{kind:'target',lane:1,y:120.5/360}],cl:0,cr:0,ct:0,cb:0,rot:0,fine:0,assign:[]},x);
 const project=(g,o={})=>({app:'HPLC Figure Bench',version:1,runs:[],traces:[],gels:[g],cur:'g1',opt:Object.assign({gelAutoCrop:false,bandSens:5,purBase:'lane',purRow:true,knownOn:false,tagPreset:'custom',tagSeq:'',tidy13:true,tidy14:true},o)});
 async function image(p,kind='standard'){return p.evaluate(kind=>{const c=document.createElement('canvas');c.width=300;c.height=360;const x=c.getContext('2d'),im=x.createImageData(300,360);for(let y=0;y<360;y++)for(let a=0;a<300;a++){const lane=Math.floor(a/100),dx=Math.abs(a%100-50),w=Math.exp(-.5*(dx/24)**8),bands=lane===0?[[72,60,4],[145,65,4],[216,65,4],[288,70,4]]:kind==='overlap'?[[120,110,14],[143,70,10]]:kind==='overlap3'?[[95,100,5],[118,20,3],[135,110,22]]:[[120,110,7],[230,55,8]];let dark=bands.reduce((s,[mu,h,z])=>s+h*Math.exp(-.5*((y-mu)/z)**2),0)*w,v=Math.round(Math.max(0,235-dark));if(kind==='inverse')v=255-v;const j=4*(300*y+a);im.data[j]=im.data[j+1]=im.data[j+2]=v;im.data[j+3]=255;}x.putImageData(im,0,0);return c.toDataURL('image/png');},kind);}
@@ -70,4 +70,11 @@ await T.t('cleavage-small-tag', async () => {
     await a.close();
   }
 });
+// Guards #719: a run name too long for the lane menu is cut short there, so the menu shows the full name of the chosen run on hover.
+await T.t('lane-menu-title',async()=>{const a=await open(),p=a.p,h=H(p);try{await h.newProject('lane titles');const name='IMAC_HisTrap_synthetic_lane_title_sample_B7';
+await h.addRun({name:name+'.csv',mimeType:'text/csv',buffer:fs.readFileSync(src('his'))});const png=Buffer.from((await image(p)).split(',')[1],'base64');await p.setInputFiles('#gelFile',{name:'lane_title_gel.png',mimeType:'image/png',buffer:png});await p.waitForTimeout(2500);
+const pick=async last=>{await p.$eval('#la1',(s,last)=>{s.selectedIndex=last?s.options.length-1:1;['input','change'].forEach(t=>s.dispatchEvent(new Event(t,{bubbles:true})));},last);await p.waitForTimeout(400);};
+await pick(true);const s=await p.$eval('#la1',s=>({text:s.selectedOptions[0].textContent,title:s.title}));T.check('lane-menu-title.name-cut-short',s.text.endsWith('…'),JSON.stringify(s));T.check('lane-menu-title.full-name-on-hover',s.title.length>s.text.length&&s.title.startsWith(s.text.slice(0,-1))&&s.title.endsWith('B7'),JSON.stringify(s));
+await pick(false);T.check('lane-menu-title.cleared-when-not-a-run',!(await p.$eval('#la1',s=>s.title)),await p.$eval('#la1',s=>s.title));
+T.check('lane-menu-title.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
 T.done();})();
