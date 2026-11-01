@@ -34,6 +34,8 @@ for(const kind of ['contam','none']){await load(p,project(gel(im,{marks,tags:[{k
 await load(p,project(gel(im,{marks,tags:[{kind:'target',lane:2,y}]}),opt));L=lane(await csv(p));T.check('tags.other-lane-does-not-disable-estimate',L.some(r=>+r[10]>0),JSON.stringify(L));
 await load(p,project(gel(im,{tags:[{kind:'target',lane:1,y},{kind:'tagged',lane:2,y}]})));L=lane(await csv(p));T.check('tags.other-lane-does-not-invent-cleavage',L.every(r=>r[12]===''),JSON.stringify(L));T.check('tags.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
 
+await T.t('lane-assignment-titles',async()=>{const a=await start(),p=a.p;try{const im=await image(p),name='Purified protein alpha replicate with an exceptionally long chromatography description',other='Purified protein beta replicate with an exceptionally long chromatography description',run=(id,name)=>({id,name,uvs:[{xs:[0,1],ys:[0,1],name:'UV',unit:'mAU'}],fracs:[],color:'#0072B2',integ:[]}),d=project(gel(im,{assign:['marker','r1','r1']}));d.runs=[run('r1',name),run('r2',other)];await load(p,d);const s=await p.$eval('#la1',e=>({shown:e.selectedOptions[0].textContent,title:e.title}));T.check('lane-assignment-title-full-label',s.shown.includes('…')&&s.title==='1. '+name,JSON.stringify(s));T.check('lane-assignment-titles.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
+
 await T.t('cleavage-small-tag', async () => {
   const a = await start(), p = a.p;
   try {
