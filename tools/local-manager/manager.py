@@ -32,8 +32,8 @@ cfg, REPO, gh = rv.cfg, rv.REPO, rv.gh
 BOARD = cfg.get('board_issue', 222)
 BOARD_EVERY = cfg.get('board_every_merges', 5)  # a round after this many merged PRs
 BOARD_HOURS = cfg.get('board_every_hours', 4)  # and at least this often while the PC is on
-BOARD_LOW_QUEUE = cfg.get('board_low_queue', 5)  # and when fewer jobs than this wait for Jules
-AUTO_MAX, AUTO_QUEUE, AUTO_AVG = 3, 10, 3.5  # adopt at most 3 a round, while fewer than 10 jobs wait, with an average of 3.5+ and nobody below 3
+BOARD_LOW_QUEUE = cfg.get('board_low_queue', 15)  # and (at most hourly) when fewer jobs than this wait for Jules: keeps Jules' 100 tasks a day supplied
+AUTO_MAX, AUTO_QUEUE, AUTO_AVG = cfg.get('board_adopt_max', 5), cfg.get('board_queue_cap', 25), 3.5  # adopt at most 5 a round, while fewer than 25 jobs wait, with an average of 3.5+ and nobody below 3
 BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
 COPILOT_MODE = cfg.get('copilot_mode', 'off')  # off (Patrick has no Copilot credits): no Copilot jobs at all, and its turn goes to Claude Code. auto: the cloud agent, and the Copilot CLI while it is paused. cloud or cli: only that one
@@ -1405,7 +1405,7 @@ def jules_failed(s):
 
 # ---------- usability scopes: the PC walks one use case through the app, the local model takes notes, the board proposes fixes ----------
 UX_MARK = '<!-- ux-scope-report -->'
-UX_EVERY = cfg.get('ux_every_hours', 6)  # one scope per this many hours while the PC is on; 0 turns it off
+UX_EVERY = cfg.get('ux_every_hours', 3)  # one scope per this many hours while the PC is on; 0 turns it off
 UX_LABEL = 'ux-report'
 UX_NOTES = """You are a biochemistry graduate student using HPLC Figure Bench, an app for protein purification figures, for the first time.
 Your goal: {goal}
