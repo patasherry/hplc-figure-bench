@@ -315,5 +315,16 @@ async function fresh(id, fn){
     T.check('nd/unit-review/saved', JSON.stringify(nd.map(s => [s.name, s.conc, s.unitWarn || ''])) === JSON.stringify([['Molar head', 12.5, 'pmol/µL'], ['Molar col', 8, 'µM'], ['Mass mg', 2, ''], ['Mass ug', 1.5, '']]), JSON.stringify(nd.map(s => [s.name, s.conc, s.unitWarn])));
   });
 
+  // Verify that the NanoDrop parser processes CSV files cleanly using the unified csvSplit function
+  await fresh('unified-csv-split-parsing', async (p, h) => {
+    await h.newProject('Unified csvSplit parsing');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    await p.setInputFiles(SEL.nd, F.nd('csv-split-validation.csv', [['Test "Sample"', '1.05', '1.05']], false));
+    await p.locator(SEL.row).first().waitFor();
+    const rows = await p.$$eval(SEL.row, els => els.map(el => ({name: el.querySelector('input[data-ndk="name"]')?.value, value: el.querySelector('.nd-v')?.textContent.trim()})));
+    T.check('nd/unified-csv-split', JSON.stringify(rows) === JSON.stringify([{name: 'Test Sample', value: '1.05 mg/mL'}]), JSON.stringify(rows));
+  });
+
   T.done();
 })();
