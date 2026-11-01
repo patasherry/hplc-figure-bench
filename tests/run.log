@@ -1,0 +1,35 @@
+00_preflight.js                    pass   1  fail   0  1s
+00_smoke.js                        pass   4  fail   0  5s
+05_quick.js                        pass  10  fail   0  46s
+10_data_truth.js                   pass 351  fail   0  328s
+11_unicorn_zip.js                  pass  13  fail   1  45s
+12_genbank.js                      pass  39  fail   0  40s
+14_peaks.js                        pass  16  fail   0  56s
+15_import_sec.js                   pass  50  fail   0  60s
+16_nanodrop.js                     pass  97  fail   0  121s
+17_cross_format.js                 pass  19  fail   0  22s
+18_hplc_load.js                    pass  22  fail   0  16s
+20_science.js                      pass 153  fail   0  154s
+21_methods.js                      pass  13  fail   0  64s
+22_protein.js                      pass  69  fail   0  367s
+23_provenance.js                   pass  11  fail   0  76s
+24_workflow_branches.js            pass  49  fail   0  157s
+25_gels.js                         pass  36  fail   1  47s
+26_sec_calibration.js              pass  64  fail   0  60s
+27_sec_mass_calculation.js         pass   4  fail   0  8s
+28_sec_figure.js                   pass   6  fail   0  10s
+29_workflow_persist.js             pass   6  fail   0  25s
+30_robust.js                       pass 112  fail   0  477s
+31_wf_full.js                      pass   4  fail   0  10s
+40_visual.js                       pass 295  fail   1  135s
+41_workflow_drag_hint.js           pass   6  fail   0  7s
+42_figures.js                      pass 124  fail   0  32s
+43_ios_look.js                     pass  11  fail   0  6s
+43_zoom_inset.js                   pass  19  fail   0  22s
+44_panel_more.js                   pass  19  fail   0  14s
+50_export.js                       pass  24  fail   0  12s
+60_perf.js                         pass   7  fail   0  31s
+test_nanodrop_units.js             pass   3  fail   1  6s
+test_sec_calibration_units.js      pass   3  fail   0  2s
+
+TOTAL pass 1660  fail 4  crashed suites 0  (APP=/app/hplc-figure-bench(WF1.13).html)
