@@ -7,7 +7,13 @@ async function clickText(p, re, what){
   for (const role of ['button', 'tab', 'link', 'menuitem', 'checkbox', 'radio']) {
     const loc = p.getByRole(role, {name: re});
     const n = await loc.count();
-    for (let i = 0; i < n; i++) if (await loc.nth(i).isVisible()) { await loc.nth(i).click(); await p.waitForTimeout(600); return; }
+    for (let i = 0; i < n; i++) {
+      const el = loc.nth(i);
+      if (await el.isVisible()) {
+        if (await el.evaluate(e => e.classList.contains('tl-i') && e.getAttribute('aria-current') === 'step')) continue;
+        await el.click(); await p.waitForTimeout(600); return;
+      }
+    }
   }
   const lab = p.locator('label', {hasText: re});
   for (let i = 0; i < await lab.count(); i++) if (await lab.nth(i).isVisible()) { await lab.nth(i).click(); await p.waitForTimeout(600); return; }
@@ -65,7 +71,7 @@ module.exports = [
   {id: 'zoom', title: 'Zoom inset and full chromatograms', goal: 'Show a whole run with the peak region magnified, then show full chromatograms in the workflow figure.',
     steps: [
       {name: 'Start a project with a run', run: async ({h, src}) => { await project(h, 'UX zoom'); await h.addRun(src('his')); }},
-      {name: 'Turn on the zoom inset', run: async ({p}) => tick(p, '#o-zoomInset')},
+      {name: 'Turn on the zoom inset', run: async ({p}) => { if (!(await p.isVisible('#o-zoomInset'))) await clickText(p, /window|more options/i, 'Window'); await tick(p, '#o-zoomInset'); }},
       {name: 'Show the workflow figure with full chromatograms', run: async ({p, h}) => { await showWorkflow(p, h); await tick(p, '#o-wfFull'); }},
     ]},
   {id: 'phone-dark', title: 'Phone width and dark mode', goal: 'Use the app on a phone-sized screen in dark mode: open the example, add a run and read the figure.', open: {width: 390, height: 844, dark: true},
