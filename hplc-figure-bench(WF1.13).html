@@ -255,7 +255,7 @@ details.paste[open]{display:grid;gap:8px}
 .thead{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;gap:6px;align-items:center}
 .thead.r{grid-template-columns:auto minmax(0,1fr) auto auto}
 .thead.g{grid-template-columns:auto minmax(0,1fr) auto}
-.thead input[type=text]{font-weight:500;border-color:transparent;background:transparent;padding-inline:6px}
+.thead input[type=text]{font-weight:500;border-color:transparent;background:transparent;padding-inline:6px;text-overflow:ellipsis;min-width:0}
 .thead input[type=text]:hover{border-color:var(--line2)}
 .thead input[type=text]:focus{background:var(--field)}
 .thead input[type=color]{width:16px;height:16px;min-height:0;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;overflow:hidden;margin-inline:4px 2px}
@@ -308,6 +308,7 @@ input.autoval::placeholder{color:var(--accent);opacity:.85}
 .methods[open]{display:grid;gap:6px}
 .methods textarea{width:100%;box-sizing:border-box;font:inherit;font-size:12px;line-height:1.45;resize:vertical}
 .cardopts input.tiny{width:4.2em;padding:2px 5px;font-size:12px;margin-left:4px;min-height:24px}
+.cardopts input[data-k="path"]{width:7.5em}
 .nextbar{display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:6px 10px;font-size:13px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:6px 6px 6px 12px}
 .nextbar .btns{align-items:center;gap:4px}
 .xclose{font:inherit;font-size:16px;line-height:1;width:26px;height:26px;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
@@ -524,7 +525,7 @@ button,input,select,textarea{font-family:inherit}
   <p class="home-where" id="homeWhere"></p>
   <div class="home-alt">
     <button class="btn" id="homeImport" type="button">Open file</button>
-    <button class="btn quiet" id="homeQuick" type="button">Make a quick figure without a project</button>
+    <button class="btn" id="homeQuick" type="button">Make a quick figure with example data</button>
   </div>
 </section>
 
@@ -603,7 +604,7 @@ button,input,select,textarea{font-family:inherit}
       <div class="row">
         <label class="f">Figure width (in)<input type="number" step="0.1" min="2" id="o-wfW" data-opt="wfW"></label>
       </div>
-      <details class="cardtext" id="wfMore"><summary>Figure options</summary>
+      <details class="cardtext" id="wfMore" open><summary>Figure options</summary>
       <div class="row">
         <label class="f">Chromatogram height (in)<input type="number" step="0.1" min="1" id="o-wfH" data-opt="wfH"></label>
         <label class="f">Panel titles<select id="o-wfTitle" data-opt="wfTitle"><option value="step">Step type</option><option value="name">File names</option></select></label>
@@ -787,7 +788,7 @@ button,input,select,textarea{font-family:inherit}
       <p class="hint noproj">Concentration is A280 divided by the A280 of 1 mg/mL for the form in that step (tagged or untagged, from the Protein section), else the single A280 value set under Peak integration, else the instrument's value. Lysate, load and flowthrough readings keep their A280 only. 260/280 above 0.6 is marked, and above 0.8 points to nucleic acid, although NAD(P) binding proteins can reach 0.9 from bound nucleotide alone.</p>
     </section>
 
-    <section class="grp moreopts" id="moreOpts" hidden><button type="button" class="btn quiet" id="moreBtn" aria-expanded="false">More options</button><span class="muted" id="moreWhat">Window, peaks, size exclusion, axes and style</span></section>
+    <section class="grp moreopts" id="moreOpts" hidden><button type="button" class="btn quiet" id="moreBtn" aria-expanded="false">More options</button><span class="muted" id="moreWhat"><button type="button" class="linkbtn" data-more-sec="Window">Window</button>, <button type="button" class="linkbtn" data-more-sec="Peak integration">peaks</button>, <button type="button" class="linkbtn" data-more-sec="Size exclusion (SEC)">size exclusion</button>, <button type="button" class="linkbtn" data-more-sec="Axes">axes</button> and <button type="button" class="linkbtn" data-more-sec="Figure style">style</button></span></section>
     <section class="grp optsec" data-for="run workflow">
       <h2>ÄKTA runs</h2>
       <label class="f" title="From each run card's Run conditions">Run conditions under the trace<select id="o-runCond2" data-opt="runCond"><option value="none">None</option><option value="short">Column, flow and temperature</option><option value="full">Also buffers, gradient and load</option></select></label>
@@ -1126,6 +1127,18 @@ button,input,select,textarea{font-family:inherit}
         <label class="f">Y from<input type="number" step="any" id="o-ymin" data-opt="ymin" placeholder="auto"></label>
         <label class="f">Y to<input type="number" step="any" id="o-ymax" data-opt="ymax" placeholder="auto"></label>
       </div>
+      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Zoom inset: whole run, with the X window magnified</label>
+      <div class="row">
+        <label class="f">Inset position
+          <select id="o-zoomInsetPos" data-opt="zoomInsetPos">
+            <option value="tr">Upper right</option>
+            <option value="tl">Upper left</option>
+            <option value="br">Lower right</option>
+            <option value="beside">Beside (second panel)</option>
+          </select>
+        </label>
+        <label class="f">Inset size (fraction of width)<input type="number" step="0.05" min="0.15" max="0.6" id="o-zoomInsetSize" data-opt="zoomInsetSize"></label>
+      </div>
       <div class="btns"><button class="btn quiet" id="resetRange" type="button">Reset to auto</button></div>
       <p class="hint" data-for="run">The window is saved per run and also applies in the workflow figure.</p>
     </section>
@@ -1210,18 +1223,6 @@ button,input,select,textarea{font-family:inherit}
           <option value="none">None</option>
         </select>
       </label>
-      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Zoom inset: whole run, with the X window magnified</label>
-      <div class="row">
-        <label class="f">Inset position
-          <select id="o-zoomInsetPos" data-opt="zoomInsetPos">
-            <option value="tr">Upper right</option>
-            <option value="tl">Upper left</option>
-            <option value="br">Lower right</option>
-            <option value="beside">Beside (second panel)</option>
-          </select>
-        </label>
-        <label class="f">Inset size (fraction of width)<input type="number" step="0.05" min="0.15" max="0.6" id="o-zoomInsetSize" data-opt="zoomInsetSize"></label>
-      </div>
     </section>
 
     <section class="grp optsec">
@@ -4464,6 +4465,7 @@ function buildFig(f, screen){ FIG_SCREEN = !!screen;
 
 /* ---------- UI ---------- */
 const paper = $('#paper'), list = $('#list');
+$('#moreOpts').addEventListener('click', e => { const b = e.target.closest('[data-more-sec]'); if (b) { document.body.classList.add('moreopen'); render(); const sec = [...document.querySelectorAll('#panel > .grp')].find(g => { const h = g.querySelector(':scope > h2'); return h && h.firstChild && h.firstChild.textContent.trim() === b.dataset.moreSec; }); if (sec) { sec.classList.remove('collapsed'); const h = sec.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', 'true'); sec.scrollIntoView({behavior: smooth(), block: 'start'}); } } });
 $('#moreBtn').addEventListener('click', () => { document.body.classList.toggle('moreopen'); render(); });
 /* the ladder is detected automatically whenever the crop, lanes or ladder sizes change, until you mark it by hand */
 function ensureLadder(g){
@@ -4610,7 +4612,7 @@ function renderList(){
     return `<div class="trace run" data-id="${r.id}" data-kind="run">
       <div class="thead r">
         <input type="color" id="c${r.id}" data-k="color" value="${r.color}" aria-label="UV trace color">
-        <input type="text" id="n${r.id}" data-k="name" value="${esc(r.name)}" aria-label="Run name">
+        <input type="text" id="n${r.id}" data-k="name" value="${esc(r.name)}" aria-label="Run name" title="${esc(r.name)}">
         <button type="button" class="icon" data-act="up" title="Move earlier in the workflow" aria-label="Move earlier" ${idx === 0 ? 'disabled' : ''}>↑</button>
         <button type="button" class="icon" data-act="del" title="Remove run" aria-label="Remove run">✕</button>
       </div>
@@ -4645,7 +4647,7 @@ function renderList(){
   const gelCards = gels.map(g => `<div class="trace gelc" data-id="${g.id}" data-kind="gel">
       <div class="thead g">
         <img class="thumb" src="${g.thumb}" alt="">
-        <input type="text" id="n${g.id}" data-k="name" value="${esc(g.name)}" aria-label="Gel name">
+        <input type="text" id="n${g.id}" data-k="name" value="${esc(g.name)}" aria-label="Gel name" title="${esc(g.name)}">
         <button type="button" class="icon" data-act="del" title="Remove gel" aria-label="Remove gel">✕</button>
       </div>
       ${gelCardBody(g)}
@@ -4657,7 +4659,7 @@ function renderList(){
     return `<div class="trace" data-id="${t.id}" data-kind="trace">
       <div class="thead">
         <input type="color" id="c${t.id}" data-k="color" value="${t.color}" aria-label="Trace color">
-        <input type="text" id="n${t.id}" data-k="name" value="${esc(t.name)}" aria-label="Trace name">
+        <input type="text" id="n${t.id}" data-k="name" value="${esc(t.name)}" aria-label="Trace name" title="${esc(t.name)}">
         <label class="eye"><input type="checkbox" id="v${t.id}" data-k="visible" ${t.visible?'checked':''}>Show</label>
         <button type="button" class="icon" data-act="up" title="Move up" aria-label="Move up">↑</button>
         <button type="button" class="icon" data-act="del" title="Remove trace" aria-label="Remove trace">✕</button>
@@ -4669,7 +4671,7 @@ function renderList(){
         <label class="f">X shift<input type="number" step="any" id="xs${t.id}" data-k="xshift" value="${t.xshift}"></label>
       </div>
       <div class="peaks"><span class="plabel">Peaks</span>${chips || '<span class="hint">none</span>'}
-        <button type="button" class="mini" data-act="detect">Detect</button>
+        <button type="button" class="mini" data-act="detect">Detect peaks</button>
         <button type="button" class="mini" data-act="clear">Clear</button></div>
     </div>`;
   }).join('');
@@ -5891,7 +5893,7 @@ document.querySelectorAll('#panel > .grp').forEach(sec => { const h = sec.queryS
 /* rarely changed settings: moved, never removed, so every id and label stays. A setting changed from its default opens its More options. */
 const ADV = {'sub:rwin': ['o-fracEvery', 'o-runPad'], 'sub:rgel': ['o-gelAlign', 'o-gelGap', 'o-gelSide', 'o-linkFrom', 'o-laneMark', 'o-laneAlpha', 'gelSizeReset', 'gelOffReset'], 'sub:rpool': ['o-poolColor'],
   'Peak integration': ['o-intProm', 'o-path', 'o-eps', 'o-intFill'], 'Processing': ['o-baseline', 'o-smooth'], 'Peak labels': ['o-peakRot', 'o-peakDec', 'o-prom', 'o-peakColor', 'o-peakMax'],
-  'Axes': ['o-ticksOut', 'o-y2grad', 'o-y2cond', 'o-sbValue', 'o-sbUnit', 'o-zoomInsetPos', 'o-zoomInsetSize'], 'Figure style': ['o-lw', 'o-font', 'o-bg'], 'Layout': ['o-stack'],
+  'Window': ['o-zoomInsetPos', 'o-zoomInsetSize'], 'Axes': ['o-ticksOut', 'o-y2grad', 'o-y2cond', 'o-sbValue', 'o-sbUnit'], 'Figure style': ['o-lw', 'o-font', 'o-bg'], 'Layout': ['o-stack'],
   'sub:gcrop': ['o-gelAutoCrop', 'o-gelFrame'], 'sub:gbands': ['o-tagTol', 'o-bandSens', 'o-purBase', 'o-tagCounts'], 'sub:gknown': ['o-knownTol', 'o-knownMin', 'o-knownCount']};
 const moreBoxes = [];
 Object.entries(ADV).forEach(([key, ids]) => {
