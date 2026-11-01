@@ -4397,7 +4397,7 @@ function methodsText(){
         const vb = /fractions\b/i.test(desc) ? 'were applied to' : 'was applied to';
         return {desc, vb, col, sRef};
       });
-      let splitTxt = ` The ${stepTitle(r)} pool was split: `;
+      let splitTxt = ` From the ${stepTitle(r)} pool, `;
       if (parts.length === 2) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc} to ${parts[1].col} (${parts[1].sRef}).`;
       else splitTxt += parts.map((p, idx) => idx === 0 ? `${p.desc} ${p.vb} ${p.col} (${p.sRef})` : idx === parts.length - 1 ? `and ${p.desc} to ${p.col} (${p.sRef}).` : `${p.desc} to ${p.col} (${p.sRef})`).join(', ');
       t += splitTxt;
