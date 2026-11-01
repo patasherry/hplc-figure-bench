@@ -6297,7 +6297,7 @@ function stepList(){
     const warn = !pooled ? '' : [o ? `Step yield ${o}%, check the UV path` : '', nd.length ? `${o ? 'needs' : 'Needs'} ${nd.join(', ')}` : ''].filter(Boolean).join(', ');
     L.push({k: 'run:' + r.id, g: first ? 'Purification' : '', t: stepTitle(r), done: pooled, warn, s: warn || (pl ? [pl, mg].filter(Boolean).join(', ') : 'Set the pooled fractions'), run: r}); first = false;
     const b = btwOf(r); if (b) { const kp = btwMg(r); L.push({k: 'btw:' + r.id, t: ncObj(r).name, done: !!kp,
-      s: (ms => [ms.c > 0 && (ms.src === 'btw' || ms.nd) ? `${fmt(ms.c, 2)} mg/mL` : '', numOr(b.vOut, 0) > 0 ? `${fmtAuto(+b.vOut)} mL` : '', kp ? `${sig2(kp.mg)} mg` : ''].filter(Boolean).join(', '))(poolMeas(r)) || 'NanoDrop export and volume'}); } });
+      s: (ms => [ms.c > 0 && (ms.src === 'btw' || ms.nd) ? `Conc. ${fmt(ms.c, 2)} mg/mL` : '', numOr(b.vOut, 0) > 0 ? `Vol. ${fmtAuto(+b.vOut)} mL` : '', kp ? `Total ${sig2(kp.mg)} mg` : ''].filter(Boolean).join(' · '))(poolMeas(r)) || 'NanoDrop export and volume'}); } });
   L.push({k: 'add', g: first ? 'Purification' : '', add: true, t: '', s: ''});
   const ys = finalYields(), y = ys[0] || finalYield(), fin = FIN_KEYS.some(v) || ndSamples.some(n => n.stage === 'final') || !!m('final').date;
   const fw = !fin || !y ? '' : y.meas && y.loaded && y.mg > y.loaded.mg*1.05 ? `${sig2(y.mg)} mg is more than was loaded, check` : y.purTyped ? 'Purity typed, add a gel of the last pool' : '';

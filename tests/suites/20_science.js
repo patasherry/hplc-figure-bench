@@ -302,6 +302,56 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
 
   /* ================= P7: Micromole yield balance with manual start and transfer amounts (#125) ================= */
   const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, String(v)]);
+  await T.t('p8_workflow_compact_labels', async () => {
+    await h.newProject('Workflow Labels Test');
+    await h.dropFiles(src('his'));
+    await h.pool('T1-T6');
+
+    await p.click('#tl [data-addmenu]');
+    await p.waitForTimeout(300);
+    await p.click('#tl [data-addstep=conc]');
+    await p.waitForTimeout(400);
+
+    const steps = await p.$$eval('#tl button[data-step^="run:"]', els => els.map(e => e.getAttribute('data-step')));
+    const runStep = steps[0].slice(4);
+    await p.click(`#tl [data-step="btw:${runStep}"]`);
+    await p.waitForTimeout(300);
+
+    await p.evaluate(() => {
+        const more = document.getElementById('btwMore');
+        if (more) more.open = true;
+    });
+    await p.waitForTimeout(300);
+
+    await p.evaluate(() => {
+      const vOut = document.getElementById('btw-vOut');
+      if(vOut){ vOut.value = '2.0'; vOut.dispatchEvent(new Event('input', {bubbles: true})); vOut.dispatchEvent(new Event('change', {bubbles: true})); }
+      const conc = document.getElementById('btw-conc');
+      if(conc){ conc.value = '2.10'; conc.dispatchEvent(new Event('input', {bubbles: true})); conc.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await p.waitForTimeout(500);
+
+    // Assert the string is correctly formatted on the timeline card subtitle (.ts)
+    const sub = await p.evaluate((rid) => {
+        const btn = document.querySelector(`#tl [data-step="btw:${rid}"]`);
+        return btn ? btn.querySelector('.ts').textContent.trim() : '';
+    }, runStep);
+
+    T.check('workflow-labels.format', sub === 'Conc. 2.10 mg/mL · Vol. 2.0 mL · Total 4.20 mg', `Expected concise labels but got "${sub}"`);
+
+    // Also check for narrow viewports
+    await p.setViewportSize({width: 320, height: 600});
+    await p.waitForTimeout(200);
+    const subSmall = await p.evaluate((rid) => {
+        const btn = document.querySelector(`#tl [data-step="btw:${rid}"]`);
+        return btn ? btn.querySelector('.ts').textContent.trim() : '';
+    }, runStep);
+    T.check('workflow-labels.format-small', subSmall === 'Conc. 2.10 mg/mL · Vol. 2.0 mL · Total 4.20 mg', `Expected concise labels on small screen but got "${subSmall}"`);
+
+    // reset viewport
+    await p.setViewportSize({width: 1000, height: 750});
+  });
+
   await T.t('p7_umol_yield_balance', async () => {
     await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
     await h.newProject('Umol yield balance');
