@@ -713,11 +713,6 @@ def gate(s):
             stuck_conflict = True  # GitHub runs no PR tests while a PR conflicts with main, so without this it would wait forever
         files = [f['filename'] for f in gh(f'repos/{REPO}/pulls/{n}/files?per_page=100')]
         if rv.APP not in files and all(ALLOWED.match(f) for f in files) and not (stuck_conflict or waits_approval):
-            m_ = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
-            iss_ = int(m_.group(1)) if m_ else linked_issue(n)
-            il_ = {l['name'] for l in gh(f'repos/{REPO}/issues/{iss_}').get('labels', [])} if iss_ else set()
-            if t and t.get('conclusion') == 'success' and '### ✅ No regressions' in report_of(n):
-                held(s, pr, il_)  # a board idea waits for Patrick; the leader leaves PRs labelled awaiting-owner alone
             s['gated'][str(n)] = sha  # tests or docs only and nothing stray: the leader's own merge rule handles it
             continue
         full = gh(f'repos/{REPO}/pulls/{n}')
