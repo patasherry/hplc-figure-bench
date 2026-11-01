@@ -464,6 +464,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
   .stage > *{order:-1;min-width:0}
   .stage > .intp{order:1}
   .toast .pill{border-radius:12px}
+  .toast.overlap{bottom:calc(env(safe-area-inset-bottom,0px) + 72px)}
   /* on a phone the figure keeps its printed size and scrolls sideways, instead of shrinking past legibility */
   .paper{padding:10px;min-height:0;overflow-x:auto;justify-content:flex-start}
   .canvas-body{padding:10px}
@@ -4928,15 +4929,16 @@ function updatePrompt(){
   document.querySelectorAll('[data-tagmode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tagmode === tagMode)));
   if (!g && (tagMode === 'add' || tagMode === 'remove') && curGel()) { el.hidden = false; el.textContent = tagMode === 'add'
     ? 'Click in a lane where a band is missing to add it. It snaps to the darkest point nearby.'
-    : 'Click a band to remove it from the table, labels and purity.'; return; }
-  if (!g && tagMode === 'tagged' && curGel()) { el.hidden = false; el.textContent = 'Click a band to mark it as the tagged form of your protein (purple). It is marked at that position in every lane. Shift-click marks one lane only. Click again to unmark.'; return; }
+    : 'Click a band to remove it from the table, labels and purity.'; $('#toast').classList.toggle('overlap', !el.hidden); return; }
+  if (!g && tagMode === 'tagged' && curGel()) { el.hidden = false; el.textContent = 'Click a band to mark it as the tagged form of your protein (purple). It is marked at that position in every lane. Shift-click marks one lane only. Click again to unmark.'; $('#toast').classList.toggle('overlap', !el.hidden); return; }
   if (!g && tagMode && curGel()) { el.hidden = false; el.textContent = tagMode === 'target'
     ? 'Click a band to mark it as your untagged protein (green). It is marked at that position in every lane. Shift-click marks one lane only. Click again to unmark.'
-    : 'Click a band to mark it as a contaminant (red). It is marked at that position in every lane. Shift-click marks one lane only. Click again to unmark.'; return; }
-  if (!g || cur !== g.id) { el.hidden = true; return; }
+    : 'Click a band to mark it as a contaminant (red). It is marked at that position in every lane. Shift-click marks one lane only. Click again to unmark.'; $('#toast').classList.toggle('overlap', !el.hidden); return; }
+  if (!g || cur !== g.id) { el.hidden = true; $('#toast').classList.remove('overlap'); return; }
   const vals = ladderVals(g);
-  if (marking.idx >= vals.length) { marking = null; el.hidden = true; $('#g-skip').hidden = true; $('#g-mark').textContent = 'Mark ladder bands'; toast('Ladder marked'); return; }
+  if (marking.idx >= vals.length) { marking = null; el.hidden = true; $('#g-skip').hidden = true; $('#g-mark').textContent = 'Mark ladder bands'; toast('Ladder marked'); $('#toast').classList.remove('overlap'); return; }
   el.hidden = false; el.textContent = `Click the ${vals[marking.idx]} kDa band in the marker lane (${marking.idx + 1} of ${vals.length})`;
+  $('#toast').classList.toggle('overlap', !el.hidden);
 }
 $('#g-mark').addEventListener('click', () => {
   const g = curGel(); if (!g) return;
@@ -6714,7 +6716,7 @@ $('#copySvg').addEventListener('click', () => {
 function toast(msg){ const box = $('#toast'); if ([...box.children].some(c => c.textContent === msg)) return;
   const pill = document.createElement('div'); pill.className = 'pill'; pill.textContent = msg; box.appendChild(pill); box.hidden = false;
   while (box.children.length > 3) box.firstChild.remove();
-  setTimeout(() => { pill.remove(); if (!box.children.length) box.hidden = true; }, Math.min(6000, 2600 + msg.length*25)); }
+  setTimeout(() => { pill.remove(); if (!box.children.length) { box.hidden = true; box.classList.remove('overlap'); } }, Math.min(6000, 2600 + msg.length*25)); }
 
 /* ---------- example data ---------- */
 function exampleTraces(){
