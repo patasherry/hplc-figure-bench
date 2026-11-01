@@ -32,8 +32,8 @@ cfg, REPO, gh = rv.cfg, rv.REPO, rv.gh
 BOARD = cfg.get('board_issue', 222)
 BOARD_EVERY = cfg.get('board_every_merges', 5)  # a round after this many merged PRs
 BOARD_HOURS = cfg.get('board_every_hours', 4)  # and at least this often while the PC is on
-BOARD_LOW_QUEUE = cfg.get('board_low_queue', 5)  # and when fewer jobs than this wait for Jules
-AUTO_MAX, AUTO_QUEUE, AUTO_AVG = 3, 10, 3.5  # adopt at most 3 a round, while fewer than 10 jobs wait, with an average of 3.5+ and nobody below 3
+BOARD_LOW_QUEUE = cfg.get('board_low_queue', 15)  # and (at most hourly) when fewer jobs than this wait for Jules: keeps Jules' 100 tasks a day supplied
+AUTO_MAX, AUTO_QUEUE, AUTO_AVG = cfg.get('board_adopt_max', 5), cfg.get('board_queue_cap', 25), 3.5  # adopt at most 5 a round, while fewer than 25 jobs wait, with an average of 3.5+ and nobody below 3
 BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
 COPILOT_MODE = cfg.get('copilot_mode', 'off')  # off (Patrick has no Copilot credits): no Copilot jobs at all, and its turn goes to Claude Code. auto: the cloud agent, and the Copilot CLI while it is paused. cloud or cli: only that one
@@ -1405,7 +1405,7 @@ def jules_failed(s):
 
 # ---------- usability scopes: the PC walks one use case through the app, the local model takes notes, the board proposes fixes ----------
 UX_MARK = '<!-- ux-scope-report -->'
-UX_EVERY = cfg.get('ux_every_hours', 6)  # one scope per this many hours while the PC is on; 0 turns it off
+UX_EVERY = cfg.get('ux_every_hours', 3)  # one scope per this many hours while the PC is on; 0 turns it off
 UX_LABEL = 'ux-report'
 UX_NOTES = """You are a biochemistry graduate student using HPLC Figure Bench, an app for protein purification figures, for the first time.
 Your goal: {goal}
@@ -1526,9 +1526,58 @@ Discussion:
 {talk}"""
 
 
+STOP = set('a an the and or of to in on for with by from is are be it its this that as at into not no do does add make use show fix'.split())
+
+
+def words(t):
+    return {w for w in re.findall(r'[a-z0-9]+', str(t).lower().replace('-', ' ')) if len(w) > 2 and w not in STOP}
+
+
+def board_memory(days=21):
+    """What the project already has or has queued, for the advisers and the duplicate check: merged PRs, open work, and earlier board ideas with their fate."""
+    since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)).isoformat()
+    merged = [p for p in gh(f'repos/{REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=100') if (p.get('merged_at') or '') > since]
+    open_i = [i for i in gh(f'repos/{REPO}/issues?state=open&per_page=100') if 'pull_request' not in i and i['number'] not in (TRACK, BOARD)]
+    ideas = [i for i in gh(f'repos/{REPO}/issues?state=all&labels=from-board&sort=created&direction=desc&per_page=100') if 'pull_request' not in i]
+    fate = lambda i: ('declined by Patrick' if any(l['name'] == 'owner-declined' for l in i['labels']) else
+                      'closed as duplicate or not planned' if i.get('state_reason') == 'not_planned' else 'done' if i['state'] == 'closed' else 'open')
+    return {'merged': [(f'PR #{p["number"]}', p['title']) for p in merged],
+            'open': [(f'#{i["number"]}', i['title'] + ' ' + (i.get('body') or '')[:300]) for i in open_i],
+            'ideas': [(f'#{i["number"]}', i['title'], fate(i)) for i in ideas]}
+
+
+DUP_Q = """Is the proposed change the same work as an existing item (already merged, already queued or running, or an earlier idea that was done or declined)?
+Same work means a PR for one would mostly do the other. Related but different work is NOT a duplicate.
+Proposal: {title}
+Change: {change}
+Candidates:
+{cands}
+Return ONE JSON object: {{"duplicate": true or false, "of": "#N or PR #N", "why": "one short sentence"}}"""
+
+
+def dup_of(p, mem):
+    """The existing item a board proposal repeats, or None. Cheap word overlap first; Gemini Flash Lite confirms close calls only."""
+    pw = words(p.get('title', '') + ' ' + p.get('change', ''))
+    if not pw:
+        return None
+    pool = [(k, t) for k, t in mem['merged']] + [(k, t) for k, t in mem['open']] + [(k, f'{t} ({f})') for k, t, f in mem['ideas'] if f != 'open']
+    scored = sorted(((len(pw & words(t)) / max(1, min(len(pw), len(words(t)))), k, t) for k, t in pool), reverse=True)
+    close = [(k, t) for sc, k, t in scored[:5] if sc >= 0.45]
+    if not close:
+        return None
+    if not GEMINI_KEY:
+        return (close[0][0], 'nearly the same words') if scored[0][0] >= 0.8 else None
+    try:
+        r = helper_json(ask_gemini(DUP_Q.format(title=p.get('title', ''), change=p.get('change', '')[:600], cands='\n'.join(f'- {k}: {t[:200]}' for k, t in close)), ['gemini-flash-lite-latest', 'gemini-flash-latest'])) or {}
+    except Exception:
+        r = {}
+    return (str(r.get('of') or close[0][0]), str(r.get('why', ''))[:200]) if r.get('duplicate') is True else None
+
+
 def board_context():
     """What the advisers review: the goals, what is running, stuck, sent back or merged, and how their own earlier proposals turned out."""
     goals = (ROOT / 'docs' / 'GOALS.md').read_text(encoding='utf-8', errors='replace')[:2500]
+    mem = board_memory()
     merged = [p for p in gh(f'repos/{REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=60') if p.get('merged_at')][:20]
     open_i = [i for i in gh(f'repos/{REPO}/issues?state=open&per_page=100') if i['number'] not in (TRACK, BOARD)]
     lab = lambda i: {l['name'] for l in i['labels']}
@@ -1545,6 +1594,9 @@ def board_context():
         '\nRecently sent back by the review gate:', *([f'- {c["html_url"].split("/")[-1].split("#")[0]}: {c["body"][:300]}' for c in back] or ['- none']),
         '\nMerged recently:', *[f'- {p["title"]}' for p in merged],
         '\nYour own earlier proposals (from the board) and where they are now:', *([f'- #{i["number"]} {i["title"]}: {i["state"]} [{", ".join(sorted(lab(i)))}]' for i in board_i] or ['- none yet']),
+        '\nBoard memory: everything already done, queued or declined in the last 3 weeks. Do NOT propose any of this again; build on it or propose something new.',
+        *[f'- done: {t}' for _, t in mem['merged'][:60]],
+        *[f'- earlier idea {k} ({f}): {t}' for k, t, f in mem['ideas'][:60]],
         '\nOther open issues:', *[row(i) for i in open_i if 'pull_request' not in i and not lab(i) & {'jules-running', 'claude-code-running'}][:40],
         '\nReported by Patrick himself:', *([f'- #{i["number"]} {i["title"]}: {(i.get("body") or "")[:300]}' for i in pick('from-patrick')] or ['- none yet'])])
 
@@ -1623,6 +1675,15 @@ def board_round(s, topic=''):
     # act on the debate: what all three back becomes an issue, with the reasoning
     queued = len(issues('jules-queue'))
     agreed = [r for r, p in enumerate(ranked, 1) if len(scores[p['id']]) >= 2 and avg[p['id']] >= AUTO_AVG and min(x[1] for x in scores[p['id']]) >= 3]
+    mem, dups = board_memory(), []
+    for r in agreed:
+        d = dup_of(ranked[r - 1], mem)
+        if d:
+            dups.append(f'{r} (duplicate of {d[0]}: {d[1]})')
+    agreed = [r for r in agreed if not any(x.startswith(f'{r} ') for x in dups)]
+    if dups:
+        lines += ['**Not adopted, already done or queued:** ' + '; '.join(dups), '']
+        log(f'board: skipped {len(dups)} duplicate proposals')
     for r in agreed[:max(0, min(AUTO_MAX, AUTO_QUEUE - queued))]:
         p = ranked[r - 1]
         args = '\n'.join(f'- {t}' for t in debate_of(p)) or '- (no arguments recorded)'

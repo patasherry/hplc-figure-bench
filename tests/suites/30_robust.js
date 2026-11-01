@@ -465,10 +465,19 @@ await T.t('malformed-id', async () => { const {p, errs, close} = await open(), h
   await close();
 });
 
-}();
+await T.t('suggest-label', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  await h.newProject('Suggest label');
+  await h.dropFiles(F.his);
+  await h.step((await h.timeline()).find(x => /^run:/.test(x.k)).k);
+  const lbl = await p.$eval('.trace.run.sel [data-act="suggest"]', e => e.textContent);
+  T.check('suggest.label', lbl === 'Suggest fractions', 'expected "Suggest fractions", got ' + lbl);
+  await close();
+});
 
-T.t('incomplete run condition warnings', async p => {
-  await open(p);
+
+await T.t('incomplete run condition warnings', async () => {
+  const {p, close} = await open();
   await p.evaluate(() => {
     window.__HFB.PROJ = { runs: [{ id: 'r1', name: 'IMAC', inWf: true, shade: 'A1', prep: 'run' }] };
     window.__HFB.runs = window.__HFB.PROJ.runs;
@@ -517,6 +526,8 @@ T.t('incomplete run condition warnings', async p => {
   });
 
   T.check('warntext is empty after all fields are filled', warnText === '', warnText);
+
+  await close();
 });
 
-T.done();
+T.done(); })();

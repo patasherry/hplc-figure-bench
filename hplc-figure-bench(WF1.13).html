@@ -4536,7 +4536,7 @@ function render(){
   else s2 = 'Click a peak to label it';
   const lblOff = kind === 'overlay' && geo && geo.lblLeft || [];
   if (lblOff.length) s2 = `${lblOff.length} peak label${lblOff.length === 1 ? '' : 's'} left off for lack of room (${lblOff.slice(0, 4).join(', ')}${lblOff.length > 4 ? ', …' : ''}). Try a lower Max per trace, fewer decimals, a wider figure or a higher Y to`;
-  if (kind === 'workflow' && PROJ) s2 += '. Click a panel to edit it';
+  if (kind === 'workflow' && PROJ) s2 += '. Click a panel to edit it; drag the selected panel to move it';
   if (kind === 'workflow' && opt.runCond === 'full' && opt.wfLayout === 'row') s2 += '. Full run conditions read better in the Grid layout';
   $('#spec2').textContent = s2; $('#spec2').classList.toggle('warn', !!lblOff.length); $('#spec2').title = lblOff.length ? s2 : '';
   $('#exNote').hidden = !(traces.length && traces.every(t => t.ex));
@@ -4620,7 +4620,7 @@ function renderList(){
         <button type="button" class="icon" data-act="del" title="Remove run" aria-label="Remove run">✕</button>
       </div>
       <div class="meta"><span class="mk">${r.inWf ? `Step ${runs.filter(x => x.inWf).indexOf(r) + 1}` : r.isStd ? 'Standards' : 'Not in workflow'}</span>${r.timeStr ? `<span>${esc(r.timeStr)}</span>` : ''}<br>${segs.length ? `${segs.length} fractions, ${esc(segs[0].label)} to ${esc(segs[segs.length-1].label)}` : 'No fractions collected'}${r.shift || r.injShift ? `, ${xUnit(r) === 'min' ? 'times' : 'volumes'} from injection` : ''}${nGel ? `, ${nGel} gel${nGel > 1 ? 's' : ''}` : ''}${fracRepeats(r) ? `<br>Tube names repeat after a full rack, so write T5#2 for the second T5.` : ''}${fracNotes(r)}</div>
-      ${segs.length ? '' : '<!--'}<label class="f">Pooled fractions<span class="joined"><input type="text" id="sh${r.id}" data-k="shade" value="${esc(r.shade)}" placeholder="${isPlate(r) ? 'e.g. E6-F9, plate 2: #2A1' : 'e.g. T3-T6'}"${isPlate(r) ? ' title="Plate 1 wells by name (E6-F9). Another plate with # and its number: #2A1-#2A6"' : ''}><button type="button" class="btn" data-act="suggest" title="Pick the fractions under the main peak. You can edit the result.">Suggest</button></span></label>${segs.length ? '' : '-->'}
+      ${segs.length ? '' : '<!--'}<label class="f">Pooled fractions<span class="joined"><input type="text" id="sh${r.id}" data-k="shade" value="${esc(r.shade)}" placeholder="${isPlate(r) ? 'e.g. E6-F9, plate 2: #2A1' : 'e.g. T3-T6'}"${isPlate(r) ? ' title="Plate 1 wells by name (E6-F9). Another plate with # and its number: #2A1-#2A6"' : ''}><button type="button" class="btn" data-act="suggest" title="Pick the fractions under the main peak. You can edit the result.">Suggest fractions</button></span></label>${segs.length ? '' : '-->'}
       ${segs.length && r.inWf ? (pr0 => (ms => ms.src !== 'card' ? (pr0 && pr0.measured ? `<p class="hint">${sig2(pr0.mg)} mg after concentrating (${fmt(pr0.conc, 2)} mg/mL × ${fmtAuto(pr0.measVol)} mL, from ${fmt(pr0.vol, 1)} ${xUnit(r)}). The peak mg use this amount. Change it on the Concentrated step.</p>` : '') : `<div class="row"><label class="f" title="Your NanoDrop reading. If you concentrated the pool first, this is the reading of the concentrated protein">NanoDrop (mg/mL)<input type="number" step="any" min="0" id="pc${r.id}" data-k="poolConc" value="${esc(ms.src === 'card' || (ms.src === 'btw' && !ms.nd) ? ms.c : '')}" placeholder="${ms.nd ? `${fmt(ms.nd.m, 2)}, from NanoDrop file` : 'mg/mL'}"></label><label class="f" title="The volume the reading was taken in. After concentrating, the volume left in the concentrator. Empty means the pool volume from the fractions">Volume after concentrating (mL)<input type="number" step="any" min="0" id="pv${r.id}" data-k="poolFinalVol" value="${esc((ms.src === 'card' || ms.src === 'btw') && ms.v > 0 ? ms.v : '')}" placeholder="${pr0 && xUnit(r) === 'mL' && pr0.vol > 0 ? `not concentrated: ${fmt(pr0.vol, 1)}` : 'pool volume'}"></label></div>${pr0 && pr0.measured ? `<p class="hint">Measured ${sig2(pr0.mg)} mg (${fmtAuto(pr0.conc)} mg/mL × ${fmtAuto(pr0.measVol)} mL${pr0.concentrated ? `, concentrated from ${fmt(pr0.vol, 1)} ${xUnit(r)}` : ''})${pr0.mgArea > 0 ? `, ${fmt(100*pr0.mg/pr0.mgArea, 0)}% of the ${sig2(pr0.mgArea)} mg from the UV area` : ''}. Every peak on this run is scaled by the same factor, so any loss while concentrating is folded into the peak mg.${pr0.src === 'btw' ? ' Also shown on the Concentrated step after this column.' : pr0.src === 'nd' ? ' From the NanoDrop readings marked Final.' : ''}</p>` : ''}`)(poolMeas(r)))(poolRows(r)) : ''}
       ${uvSel}
       ${segs.length > 12 ? `<label class="f">Show<select id="cr${r.id}" data-k="crop" title="Crop the chromatogram to the fractions that matter. A window dragged on the plot still wins"><option value="">All fractions</option><option value="peaks"${r.crop === 'peaks' ? ' selected' : ''}>Fractions around the peaks</option><option value="pool"${r.crop === 'pool' ? ' selected' : ''}>Fractions around the pool</option></select></label>` : ''}
@@ -4632,8 +4632,7 @@ function renderList(){
       ${(() => { const c = runCond(r), f = (k, lab, ph, extra) => `<label class="f">${lab}<input type="${extra && extra.num ? 'number' : 'text'}"${extra && extra.num ? ' step="any" min="0"' : ''} id="${k}${r.id}" data-k="${k}" value="${esc(r[k] == null ? '' : r[k])}" placeholder="${esc(c.auto[k] ? 'auto: ' + c.auto[k] : ph)}"${c.auto[k] ? ` class="autoval" title="Read from the run: ${esc(c.auto[k])}. This is what the figure and methods use until you type your own."` : ''}></label>`;
         const filled = COND_KEYS.some(k => String(r[k] || '').trim());
         const miss = runNeeds(r).filter(n => !/UV path/.test(n)), sumT = [c.mCol, c.mFlow ? `${c.mFlow} mL/min` : ''].filter(Boolean).join(', ');
-        const missText = miss.length === 0 ? '' : miss.length === 1 ? miss[0] : miss.slice(0, -1).join(', ') + ' and ' + miss[miss.length - 1];
-        return `<details class="cardtext runcond"${PROJ ? (miss.length ? ' open' : '') : filled ? ' open' : ''}><summary>Run conditions${PROJ && sumT ? `<span class="muted">: ${esc(sumT)}${miss.length ? `, enter ${esc(missText.replace('flow rate', 'flow-rate'))} field${miss.length > 1 ? 's' : ''}` : ''}</span>` : ''}</summary>
+        return `<details class="cardtext runcond"${PROJ ? (miss.length ? ' open' : '') : filled ? ' open' : ''}><summary>Run conditions${PROJ && sumT ? `<span class="muted">: ${esc(sumT)}${miss.length ? `, needs ${esc(miss.join(', '))}` : ''}</span>` : ''}</summary>
         ${f('mCol', 'Column', 'e.g. HisTrap FF 5 mL')}
         <div class="row">${f('mCV', 'Column volume (mL)', 'e.g. 5', {num: 1})}${f('mFrac', 'Fraction size (mL)', 'e.g. 1')}</div>
         ${isSec(r) ? f('mBufA', 'Running buffer', 'e.g. 20 mM HEPES pH 7.5, 150 mM NaCl, 1 mM TCEP') : f('mBufA', 'Buffer A', 'e.g. 50 mM Tris pH 8.0, 300 mM NaCl, 20 mM imidazole') + f('mBufB', 'Buffer B', 'e.g. buffer A with 500 mM imidazole')}
@@ -5010,17 +5009,26 @@ window.addEventListener('pointermove', e => {
 ['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (gelDrag) { gelDrag = null; render(); } }));
 /* drag the selected workflow panel (inside its selection box) to move it; under 4 px it stays a click */
 let wfDrag = null, wfRaf = 0;
+function wfDragCursor(e){
+  if (wfDrag) { paper.style.cursor = wfDrag.on ? 'grabbing' : 'grab'; return; }
+  const f = curFig(), p = svgPoint(e), q = p && G && G.pos && wfSel && G.pos.find(x => x.id === wfSel);
+  if (!PROJ || !f || f.kind !== 'workflow' || !q || !p) { paper.style.cursor = ''; return; }
+  if (gelBoxAt(p)) return;
+  paper.style.cursor = p.x >= q.x && p.x <= q.x + q.w && p.y >= q.y && p.y <= q.y + q.h ? 'grab' : '';
+}
 paper.addEventListener('pointerdown', e => {
   if (e.button !== 0 || !wfSel || !PROJ || !G || !G.pos) return; const f = curFig(), svg = paper.querySelector('svg'); if (!f || f.kind !== 'workflow' || !svg) return;
   const p = svgPoint(e), q = p && G.pos.find(x => x.id === wfSel), it = q && wfItem(wfSel), m = svg.getScreenCTM(); if (!it || !m || !(p.x >= q.x && p.x <= q.x + q.w && p.y >= q.y && p.y <= q.y + q.h)) return;
   wfDrag = {it, cx: e.clientX, cy: e.clientY, k: 1/m.a, ox: it.ox, oy: it.oy, minX: it.ox - q.x, minY: it.oy - q.y, on: false};
+  wfDragCursor(e);
 }, true);
 window.addEventListener('pointermove', e => {
-  const d = wfDrag; if (!d) return; if (!d.on) { if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) return; d.on = true; }
+  const d = wfDrag; if (!d) { wfDragCursor(e); return; } if (!d.on) { if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) { wfDragCursor(e); return; } d.on = true; }
+  wfDragCursor(e);
   const o = {dx: Math.max(d.minX, d.ox + (e.clientX - d.cx)*d.k), dy: Math.max(d.minY, d.oy + (e.clientY - d.cy)*d.k)}; gelMovedAt = Date.now();
   cancelAnimationFrame(wfRaf); wfRaf = requestAnimationFrame(() => { const it = wfItem(wfSel); if (it) wfSet(it, 'off', o); });
 });
-['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; }));
+['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, e => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; wfDragCursor(e); }));
 $('#gelOffReset').addEventListener('click', () => { runs.forEach(r => { r.gelOff = {}; }); prep.offs = {}; render(); });
 paper.addEventListener('pointerdown', e => {
   const c = chartAt(); if (!c || (!c.run && !opt.zoomMode) || e.button !== 0) return;
@@ -5955,7 +5963,7 @@ function nextStep(){
   const steps = runs.filter(r => r.inWf && !isSec(r) && !r.isStd);
   /* a step for the figure on screen comes first, so the button never edits something out of view */
   const noPools = steps.filter(r => !String(r.shade || '').trim()), noPool = noPools.find(r => r.id === cur) || (curGel() ? null : noPools[0]);
-  if (noPool && (noPool.id === cur || cur === 'workflow')) { const _n = {k: 'pool:' + noPool.id, t: `Set the pooled fractions for ${noPool.id === cur ? 'this run' : shortRunName(noPool)}.`, go: 'Suggest', act: () => { const c = document.querySelector(`.trace.run[data-id="${noPool.id}"] [data-act="suggest"]`); if (c) c.click(); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
+  if (noPool && (noPool.id === cur || cur === 'workflow')) { const _n = {k: 'pool:' + noPool.id, t: `Set the pooled fractions for ${noPool.id === cur ? 'this run' : shortRunName(noPool)}.`, go: 'Suggest fractions', act: () => { const c = document.querySelector(`.trace.run[data-id="${noPool.id}"] [data-act="suggest"]`); if (c) c.click(); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
   if (noPool) { const _n = {k: 'pool:' + noPool.id, t: `${shortRunName(noPool)} has no pooled fractions.`, go: 'Open run', act: () => { selectFig(noPool.id); const el = $('#sh' + noPool.id); if (el) { el.scrollIntoView({behavior: smooth(), block: 'center'}); setTimeout(() => el.focus(), 250); } }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
   const f0 = curFig(), fk = f0 ? f0.kind : 'overlay', secHere = fk === 'workflow' || fk === 'cal' || fk === 'overlay' || (fk === 'run' && isSec(f0.run));
   const secR = secHere && (fk === 'run' && isSec(f0.run) && !f0.run.isStd ? f0.run : runs.find(r => isSec(r) && !r.isStd)); if (secR && opt.secStds) { const f = secFit(secCalFor(secR)); if (!f || !f.mw) { const _n = {k: 'sec:' + secR.id, t: `Calibrate the column to size the peaks in ${stepTitle(secR) !== secR.name ? stepTitle(secR).toLowerCase() : secR.name}.`, go: 'Open SEC settings', act: () => { selectFig(secR.id); const pn = $('#secPanel'); pn.classList.remove('collapsed'); pn.scrollIntoView({behavior: smooth(), block: 'start'}); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; } }
