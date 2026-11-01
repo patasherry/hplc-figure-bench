@@ -5634,7 +5634,7 @@ function parseNDSingle(lines){
     else { const w = ndNum(c[0]); if (w != null && v != null && w >= 190 && w <= 850) { wl.push(w); ab.push(v); } } });
   if (wl.length > 10) { s.spec = {wl, ab}; const at = x => { const i = wl.findIndex(w => Math.abs(w - x) < 0.3); return i < 0 ? null : ab[i]; }; if (s.a280 == null) s.a280 = at(280); s.a230 = at(230); s.a340 = at(340); s.a260 = at(260);
     if (s.r230 == null && s.a230 > 0 && s.a260 != null) s.r230 = s.a260/s.a230; if (s.r280 == null && s.a280 > 0 && s.a260 != null) s.r280 = s.a260/s.a280; }
-  s.hide = CRUDE_RE.test(s.name); return s.a280 != null ? [s] : [];
+  s.hide = CRUDE_RE.test(s.name); return s.a280 != null || s.conc != null ? [s] : [];
 }
 function parseNanoDrop(text){
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim()), one = parseNDSingle(lines); if (one) return one;

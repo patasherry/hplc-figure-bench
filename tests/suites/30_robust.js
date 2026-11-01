@@ -345,7 +345,55 @@ await T.t('damaged-settings', async () => { const {ctx, p, errs, close} = await 
   T.check('settings.no-error-on-start', !errs.length, errs.join(' | ')); // the script gets to the end
   await h.newProject('After damaged settings'); T.check('settings.app-usable', (await h.timeline()).length > 0, 'a new project should open a timeline'); // buttons are wired
   await close(); });
+
+/* zero-measurement concentration imports are correctly retained */
+await T.t('zero-measurement.import', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Zero Conc');
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.waitForTimeout(600);
+
+  const csv = `Sample Name\tNucleic Acid(ng/uL)\tA260/A280\tA230\nZeroTest\t0.0\t1.8\t1.0\nNormalTest\t2.5\t1.8\t1.0`;
+  await p.setInputFiles('#file', {name: 'zero_nd.csv', mimeType: 'text/csv', buffer: Buffer.from(csv)});
+  await p.waitForTimeout(1500);
+
+  const ndRows = await p.$('.ndr');
+  T.check('zero-measurement.kept', ndRows.length === 2, `should keep 0.0 concentration. Expected 2 ndr, found ${ndRows.length}.`);
+  await close();
+});
+
+
+/* zero-measurement concentration imports are correctly retained */
+await T.t('zero-measurement.import', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Zero Conc');
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.waitForTimeout(600);
+
+  const csv = `Sample Name\tNucleic Acid(ng/uL)\tA260/A280\tA230\nZeroTest\t0.0\t1.8\t1.0\nNormalTest\t2.5\t1.8\t1.0`;
+  await p.setInputFiles('#file', {name: 'zero_nd.csv', mimeType: 'text/csv', buffer: Buffer.from(csv)});
+  await p.waitForTimeout(1500);
+
+  const ndRows = await p.$('.ndr');
+  T.check('zero-measurement.kept', ndRows.length === 2, `should keep 0.0 concentration. Expected 2 ndr, found ${ndRows.length}.`);
+  await close();
+});
+
+
+/* zero-measurement concentration imports are correctly retained */
+await T.t('zero-measurement.import', async () => { const {p, errs, close} = await open(), h = H(p); await h.newProject('Zero Conc');
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.waitForTimeout(600);
+
+  const csv = `Sample Name\tNucleic Acid(ng/uL)\tA260/A280\tA230\nZeroTest\t0.0\t1.8\t1.0\nNormalTest\t2.5\t1.8\t1.0`;
+  await p.setInputFiles('#file', {name: 'zero_nd.csv', mimeType: 'text/csv', buffer: Buffer.from(csv)});
+  await p.waitForTimeout(1500);
+
+  const ndRows = await p.$('.ndr');
+  T.check('zero-measurement.kept', ndRows.length === 2, `should keep 0.0 concentration. Expected 2 ndr, found ${ndRows.length}.`);
+  await close();
+});
+
 /* ---------------- older and partial project files ---------------- */
+
+
+
 await T.t('partial-project', async () => { const {p, errs, close} = await open(), h = H(p); await watchToasts(p);
   await h.newProject('Partial base'); await h.dropFiles(F.his); await h.addConc(F.ndSpec, 0.25);
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click(SEL.exportBtn)]);
