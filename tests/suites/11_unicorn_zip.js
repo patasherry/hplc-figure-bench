@@ -90,7 +90,25 @@ async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return
     T.check('no page errors for not unicorn', !errs.length, errs.join(' | '));
   });
 
-  T.check('no page errors overall', !errs.length, errs.join(' | '));
+    await T.t('zero_measurement_diagnostics', async () => {
+    await p.reload();
+    await h.wait(500);
+    await h.newProject('zero measurements unicorn zip');
+
+    await p.setInputFiles('#file', {name: 'empty_unicorn.zip', mimeType: 'application/zip', buffer: require('fs').readFileSync(path.join(DATA, 'chrom', 'empty_unicorn.zip'))});
+    await p.waitForTimeout(600);
+    let toasts = await h.toasts();
+    T.check('zero_meas/empty_unicorn/diagnosed', toasts.some(t => /empty_unicorn\.zip/i.test(t) && /has no data points/i.test(t)), 'toasts: ' + toasts.join(' | '));
+
+    await p.evaluate(() => document.querySelectorAll('.toast, #toast').forEach(e => { e.textContent = ''; }));
+    await p.setInputFiles('#file', {name: 'zeros_unicorn.zip', mimeType: 'application/zip', buffer: require('fs').readFileSync(path.join(DATA, 'chrom', 'zeros_unicorn.zip'))});
+    await p.waitForTimeout(600);
+    toasts = await h.toasts();
+    const traces = await p.$$eval('.trace', els => els.map(e => e.textContent));
+    T.check('zero_meas/zeros_unicorn/loads', traces.length > 0 && toasts.some(t => /Loaded 1 ÄKTA run/i.test(t)), 'Zeros unicorn zip loaded successfully');
+  });
+
+T.check('no page errors overall', !errs.length, errs.join(' | '));
   await close();
   T.done();
 })();
