@@ -475,4 +475,34 @@ await T.t('suggest-label', async () => {
   await close();
 });
 
+await T.t('zero-measurement.import', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  await h.newProject('Zero measurement');
+  await h.dropFiles(F.zip);
+  await h.step('final');
+
+  // Create a synthetic NanoDrop single-sample file format containing a valid wavelength header,
+  // A280 summary lines, and an absorbance array but missing explicit A280 if we want it to parse
+  // using wl array fallback, or we can use the multi-row CSV format.
+  // We'll use the multi-sample CSV format with Date, Date and Time to make isNanoDropHead pass
+  const ndFile = {
+    name: 'zero_conc.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(`Sample Name,Nucleic Acid(ng/uL),A260/A280,A230\nSample 1,0.0,1.8,1.0`)
+  };
+
+  // actually wait for UI to process it
+  await p.setInputFiles('#ndFile', ndFile);
+  await p.waitForFunction(() => document.querySelectorAll('.ndr').length > 0 || document.querySelector('.toast'), {timeout: 2000}).catch(() => {});
+
+  const ndrLen = (await p.$$('.ndr')).length;
+  T.check('zero-measurement.import.len', ndrLen === 1, `expected 1 ndr row, got ${ndrLen}`);
+  if (ndrLen === 1) {
+    const ndrVal = await p.$eval('.ndr .nd-v', el => el.textContent);
+    T.check('zero-measurement.import.val', ndrVal === '0.0 ng/µL' || ndrVal === '0.00 ng/µL', `expected 0.0 or 0.00 ng/µL, got ${ndrVal}`);
+  }
+
+  await close();
+});
+
 T.done(); })();
