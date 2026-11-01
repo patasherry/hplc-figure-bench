@@ -1566,7 +1566,20 @@ function parseAkta(text, fname){
       if (cv.kind === 'frac' || cv.kind === 'log' || cv.kind === 'inj') cv.ev.push({x, label: v});
       else { const y = toNum(v, d !== ','); if (isFinite(y)) { cv.xs.push(x); cv.ys.push(y); } } } }
   const ak = aktaFromCurves(curves, fname, {delimiter: d});
-  if (!ak) return {bad: 'an ÄKTA/UNICORN file, but has no usable UV traces: export the UV curve from UNICORN'};
+  if (!ak) {
+    /* Diagnose only rejected exports: one usable UV curve is enough, and other channels remain optional. */
+    const missing = [], uvs = curves.filter(c => c.kind === 'uv');
+    if (!uvs.length) missing.push('UV curve');
+    for (const cv of uvs) {
+      let hasX = false, hasY = false;
+      for (let i=u+1;i<lines.length;i++) { const f = sp(lines[i]); hasX = hasX || isFinite(toNum(f[cv.col] || '', d !== ',')); hasY = hasY || isFinite(toNum(f[cv.col+1] || '', d !== ',')); }
+      const axis = /^min$/i.test(cv.xu) ? 'time' : 'volume', xu = /^ml$/i.test(cv.xu) ? 'mL' : cv.xu;
+      if (!hasX) missing.push(`${cv.name} ${axis} (${xu})`);
+      if (!hasY) missing.push(`${cv.name} absorbance (${cv.yu})`);
+      if (hasX && hasY) missing.push(`${cv.name} paired ${axis}/absorbance data points (at least 2)`);
+    }
+    return {missing, bad: `an ÄKTA/UNICORN file, but has no usable UV traces. Missing or unreadable required fields: ${missing.join('; ')}. Export the UV curve from UNICORN`};
+  }
   return ak;
 }
 /* what a UNICORN curve is, from its name and unit. UV path length (cm) and derived UV curves (UV_CUT_TEMP@100) are not traces */
