@@ -213,7 +213,6 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
     T.check('split-pool: multiple final yield lines', brTexts.length > 0, brTexts.map(x => x.t).join(' | '));
     const meth = await h.methods();
-    T.check('split-pool: methods text contains fully retained split phrasing', /From the/i.test(meth), meth);
     // Expected to fail on PR because phrasing changed to 'From the [step] pool,'
     T.check('split-pool: methods text contains fully retained split phrasing', /From the.*pool/i.test(meth), meth);
     T.check('split-pool: methods text contains split', /split:/i.test(meth), meth);
