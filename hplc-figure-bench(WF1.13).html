@@ -3839,7 +3839,7 @@ function yieldLine(res){
 }
 function buildWorkflow(){
   const pre = prepSteps(), list = wfFigList(), PAGE = 9.5*72;
-  const cfg = {layout: opt.wfLayout, W: numOr(opt.wfW, numOr(opt.w, 7.2))*72, chromH: numOr(opt.wfH,2.2)*72, titles: true, letters: opt.wfLetters, showGels: opt.wfGels, connectors: opt.connectors, arrows: opt.wfArrows, gelMaxH: numOr(opt.wfGelH,1.8)*72};
+  const cfg = {layout: opt.wfLayout, W: numOr(opt.wfW,7.2)*72, chromH: numOr(opt.wfH,2.2)*72, titles: true, letters: opt.wfLetters, showGels: opt.wfGels, connectors: opt.connectors, arrows: opt.wfArrows, gelMaxH: numOr(opt.wfGelH,1.8)*72};
   /* Fit to page: a grid or stacked figure taller than the page gets shorter traces and gels (never below 60%) until it fits */
   const fit = (L, c, maxH) => { let res = composeRuns(L, c);
     if (opt.wfFit !== false && opt.wfLayout !== 'row' && res.geo && (res.geo.H0 || res.geo.H) > maxH) { let k = 1;
@@ -4816,8 +4816,8 @@ function onOpt(e){
   else v = el.value;
   if (RANGE.includes(k)) { rangeObj()[k] = v; render(); return; }
   opt[k] = v;
-  if (k === 'preset' && PRESETS[opt.preset]) { Object.assign(opt, PRESETS[opt.preset]); if (opt.preset in PRESETS) opt.wfW = PRESETS[opt.preset].w; syncControls(); }
-  if (['w','h','fs','lw','wfW'].includes(k)) { opt.preset = 'custom'; $('#o-preset').value = 'custom'; }
+  if (k === 'preset' && PRESETS[opt.preset]) { Object.assign(opt, PRESETS[opt.preset]); syncControls(); }
+  if (['w','h','fs','lw'].includes(k)) { opt.preset = 'custom'; $('#o-preset').value = 'custom'; }
   if (k === 'palette') { applyPalette(); renderList(); }
   if (k === 'mode' && e.type === 'change') {
     if (opt.mode === 'stack') { opt.showY = false; opt.scalebar = true; if (opt.legend !== 'none') opt.legend = 'direct'; }

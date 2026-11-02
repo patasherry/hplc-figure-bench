@@ -188,8 +188,7 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
   });
 
   // Publication readiness at journal widths (#662): checks that exported figures at single
-  // and double column presets have no text under 6 pt, ticks and text don't overlap,
-  // and workflow width synchronizes with journal presets.
+  // and double column presets have no text under 6 pt, and ticks and text don't overlap.
   await T.t('publication_readiness_journal_widths', async () => {
     const q = await open(), hq = H(q.p), pg = q.p;
     try {
@@ -311,37 +310,17 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
           T.check('pub/akta_single_min_font', smallFonts.length === 0, `small fonts: ${smallFonts.join(', ')}`);
         }
 
-        // Check Workflow figure width synchronization with preset
+        // Check Workflow figure SVG
         await hq2.step('figure');
         await hq2.wait(500);
-
-        // Set preset double (7 in): workflow PNG should be 4200 px wide
-        await pg2.evaluate(v => {
-          const e = document.querySelector('#o-preset');
-          if (e) {
-            e.value = v;
-            e.dispatchEvent(new Event('change', {bubbles: true}));
-            e.dispatchEvent(new Event('input', {bubbles: true}));
-          }
-        }, 'double');
-        await hq2.wait(400);
-        const wfPngDouble = await dl2('#savePng');
-        T.check('pub/wf_preset_double_width', !!wfPngDouble && Math.abs(wfPngDouble.buf.readUInt32BE(16) - 4200) <= 2, `wf double pngW: ${wfPngDouble && wfPngDouble.buf.readUInt32BE(16)}`);
-
-        // Set preset single (3.5 in) with stacked layout: workflow PNG should be 2100 px wide
-        await pg2.evaluate(v => {
-          const l = document.querySelector('#o-wfLayout');
-          if (l) { l.value = 'stack'; l.dispatchEvent(new Event('change', {bubbles: true})); }
-          const e = document.querySelector('#o-preset');
-          if (e) {
-            e.value = v;
-            e.dispatchEvent(new Event('change', {bubbles: true}));
-            e.dispatchEvent(new Event('input', {bubbles: true}));
-          }
-        }, 'single');
-        await hq2.wait(400);
-        const wfPngSingle = await dl2('#savePng');
-        T.check('pub/wf_preset_single_stack_width', !!wfPngSingle && Math.abs(wfPngSingle.buf.readUInt32BE(16) - 2100) <= 2, `wf single stack pngW: ${wfPngSingle && wfPngSingle.buf.readUInt32BE(16)}`);
+        const wfSvg = await dl2('#saveSvg');
+        T.check('pub/wf_svg', !!wfSvg, 'Workflow SVG downloaded');
+        if (wfSvg) {
+          const smallFonts = [...wfSvg.str.matchAll(/font-size="([^"]+)"/g)]
+            .map(m => m[1].endsWith('%') ? 8 * (parseFloat(m[1]) / 100) : parseFloat(m[1]))
+            .filter(fs => fs < 5.99);
+          T.check('pub/wf_min_font', smallFonts.length === 0, `small fonts: ${smallFonts.join(', ')}`);
+        }
 
         T.check('pub/no_page_errors', !q2.errs.length, q2.errs.join(' | '));
       } finally { await q2.close(); }
