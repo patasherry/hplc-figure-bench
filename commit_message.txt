@@ -1,0 +1,3 @@
+Fix workflow compact labels
+
+Added proper label prefixes to workflow trace fields based on the provided report triple context. Replaced naive comma-separated formatting with cleanly punctuated "Conc. X mg/mL · Vol. Y mL · Total Z mg" formats for better readability as requested. A UI test has been added to 20_science.js asserting the behavior.

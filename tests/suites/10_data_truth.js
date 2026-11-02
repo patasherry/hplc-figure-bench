@@ -96,7 +96,7 @@ async function ndFile(e, withEps){ const id = e.file.replace(/\.[^.]+$/, '') + (
     // guards: names with commas, quotes and unicode survive parsing
     for (const n of [...new Set(e.names)]) T.check(`${id}/name:${n}`, sheet.includes(n), sheet.slice(0, 300));
     // guards: the mg carried to the timeline is mean × volume after concentrating
-    T.check(`${id}/timeline-mg`, conc && Math.abs(num((conc.s || '').split(',').find(s => /mg$/.test(s.trim())) || '') - want*vol) <= 0.011, `expected ${(want*vol).toFixed(3)} mg, timeline "${conc && conc.s}"`);
+    T.check(`${id}/timeline-mg`, conc && Math.abs(num((conc.s || '').split('·').find(s => /mg$/.test(s.trim())) || '') - want*vol) <= 0.011, `expected ${(want*vol).toFixed(3)} mg, timeline "${conc && conc.s}"`);
     // guards: an A260/A280 well above 0.6 is pointed out (nucleic acid in the protein)
     if (e.warn_high_ratio) T.check(`${id}/flags-260-280`, /1\.25/.test(sheet) && (/nucleic|contamin|high/i.test(sheet) || await p.locator('#panel .hi, #panel .warn, #panel [class*=warn]').count() > 0), sheet.slice(0, 300));
   } finally { T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | ')); await close(); }

@@ -389,6 +389,29 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     T.check('p7.basis_umol', /µmol|umol/i.test(basisTxt), `basis text: ${basisTxt.slice(0, 150)}`);
   });
 
+    await T.t('p8_workflow_compact_labels', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Workflow compact labels');
+    await h.gb(F.gb); await h.addRun(F.imac); await h.pool('T1-T6');
+
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="conc"]').click()); await h.wait(500);
+
+    // Using evaluate instead of fill to bypass actionability checks
+    await p.evaluate(() => { const e = document.querySelector('#btw-conc'); e.value = '2.10'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); });
+    await p.evaluate(() => { const e = document.querySelector('#btw-vOut'); e.value = '2.0'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); });
+    await h.wait(300);
+
+    await h.wait(500); // give UI time to update
+    const txt = await p.evaluate(() => {
+        const c = Array.from(document.querySelectorAll('#tl [data-step^="btw:"]'));
+        if (!c.length) return 'no_btw_step_found';
+        return c[0].textContent.replace(/[\s\n]+/g, ' ').trim();
+    });
+
+    T.check('p8.workflow_labels', /Conc\. 2\.10 mg\/mL · Vol\. 2(?:\.0)? mL · Total 4\.2[01] mg/.test(txt), 'Expected "Conc. 2.10 mg/mL · Vol. 2.0 mL · Total 4.20 mg", got: ' + txt);
+  });
+
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
