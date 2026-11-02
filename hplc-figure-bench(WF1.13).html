@@ -6082,11 +6082,12 @@ async function openProject(data, name, noUndo){
   nextHidden.delete('undoOpen'); renderNext();
 }
 $('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex)) { toast('Load some data first'); return; }
-  const nm = (runs[0] && runs[0].name) || (gels[0] && gels[0].name) || (traces.find(t => !t.ex) || {}).name || 'figures'; saveFile(`${safe(nm)}_project.json`, JSON.stringify(projectData())); });
+  const nm = (runs[0] && runs[0].name) || (gels[0] && gels[0].name) || (traces.find(t => !t.ex) || {}).name || 'figures'; const d = projectData(); if (MODE === 'quick') d.quick = true; saveFile(`${safe(nm)}_project.json`, JSON.stringify(d)); });
 $('#projOpen').addEventListener('click', () => $('#projFile').click());
 $('#projFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; let data;
   try { data = JSON.parse(await f.text()); } catch (err) { toast(`Could not open ${f.name}`); return; }
-  if (MODE === 'quick' && !data.prep && (!data.runs || !data.runs.some(r => r.inWf))) { try { await openProject(data, f.name); } catch (err) { toast(`Could not open ${f.name}`); } return; }
+  /* a file saved from Quick mode always carries prep, so its quick flag lets it reopen here instead of as a new project */
+  if (MODE === 'quick' && (!data.prep || data.quick === true) && (!data.runs || !data.runs.some(r => r.inWf))) { try { await openProject(data, f.name); } catch (err) { toast(`Could not open ${f.name}`); } return; }
   await importAsProject(data, f.name); });
 /* from the home screen or a project, a project file opens as a project of its own and never replaces the open one */
 async function importAsProject(data, fname){
