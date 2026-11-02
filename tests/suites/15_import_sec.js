@@ -183,5 +183,32 @@ async function fresh(id, fn){
     // Guards: re-importing a reading that an older project saved without row or time does not add it twice.
     T.check('nd/legacy-reimport', data.nanodrop.length === n, data.nanodrop.length + ' vs ' + n);
   });
+  await fresh('sec-calibration-name', async (p, h) => {
+    await h.newProject('Synthetic SEC Calibration Name');
+    await h.addRun(F.unicorn('sec_Superose6_plates_u7_tab.csv', false)); // just a synthetic file to trigger SEC parsing
+    await p.waitForTimeout(500);
+
+    const runStep = (await h.timeline()).find(x => /^run:/.test(x.k));
+    if (runStep) await h.step(runStep.k);
+    await p.waitForTimeout(400);
+
+    // Expand the More Options section if it exists so SEC Panel is shown
+    await p.evaluate(() => { const e = document.getElementById('moreBtn'); if (e) e.click(); });
+    await p.waitForTimeout(400);
+
+    const colSelect = p.locator('#sec-col');
+    // Ensure element is visible
+    await colSelect.waitFor({state: 'visible'});
+
+    await colSelect.selectOption({value: 's6i'}); // 'Superose 6 Increase 10/300 GL'
+    // Fire a change event so the select triggers onSec
+    await colSelect.dispatchEvent('change');
+    await p.waitForTimeout(400);
+
+    const calname = await p.locator('#sec-calname').first().textContent();
+
+    T.check('sec/calibration-name-displayed', calname && calname.includes('Superose 6 Increase 10/300 GL'), 'SEC calibration preset full name is visible when option is truncated: ' + calname);
+  });
+
   T.done();
 })();
