@@ -20,6 +20,17 @@ const F = {gb: src('gb'), imac: src('his'), q: src('q'), sec: path.join(DATA, 's
 
   const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)/, / \./, /,,/, /\bnull\b/];
 
+
+  await T.t('uneven_fractions', async () => {
+    await p.click('text=All projects').catch(() => {}); await h.wait(600);
+    await h.newProject('Methods Uneven');
+    await h.addRun(path.join(DATA, 'chrom/fixture_frac_uneven.csv'));
+    await h.pool('F2-F4');
+    const m = await methods();
+    T.check('uneven_methods', !/collecting 2.0 mL fractions/.test(m), 'Methods asserts a single 2.0 mL fraction size for uneven fractions');
+    T.check('uneven_methods_range', /fractions of 1\.0 to 3\.0 mL/.test(m), 'Methods should state the range of fraction sizes: ' + m);
+  });
+
   await T.t('p1_imac_sec', async () => {
     await p.click('text=All projects').catch(() => {}); await h.wait(600);
     await h.newProject('Methods P1');

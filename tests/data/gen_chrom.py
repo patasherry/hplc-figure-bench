@@ -411,8 +411,19 @@ def time_formats():
              peaks=[], forbid=[], pool=None, time='2026-10-23T16:00:00.000Z'))
 
 
+
+def uneven_fractions():
+    x = np.round(np.arange(0, 20.0001, 0.05), 4)
+    y = signal(x, [(9.5, 0.5, 2000.0)])
+    ev = [(5.0, 'F1'), (6.0, 'F2'), (8.0, 'F3'), (11.0, 'F4'), (12.0, 'F5'), (14.0, 'F6'), (15.0, 'Waste')]
+    write_unicorn_csv(os.path.join(OUT, 'fixture_frac_uneven.csv'), [
+        ('UV', 'ml', 'mAU', x, y),
+        ('Fraction', 'ml', 'Fraction', ev, None)
+    ])
+    add(dict(file='fixture_frac_uneven.csv', note='uneven fractions: 1, 2, 3, 1, 2, 1 mL then waste', format='csv', kind='sec', step='Size exclusion', unit='mL', column='Superdex 200 Increase 10/300 GL', cv=24.0, flow=0.5, path_mm=2, frac=dict(n=6, first='F1', last='F6'), injection=0.0, peaks=[dict(ve=9.5, tol=0.1, must=True, note='main peak')], pool=None))
+
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, hplc_export, cross_format_files, time_formats): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, hplc_export, cross_format_files, time_formats, uneven_fractions): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()

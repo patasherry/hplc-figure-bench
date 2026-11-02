@@ -4327,7 +4327,10 @@ function guessGradient(r){
   return out.join(', then ').replace(/^./, c => c.toUpperCase()); }
 const guessCV = r => { if (r.cvLog > 0) return r.cvLog; const m = (guessColumn(r).match(/(\d+(?:\.\d+)?)\s*mL/) || [])[1]; if (m) return +m; if (isSec(r)) { const c = secCalFor(r); return c && +c.vt > 0 ? +c.vt : null; } return null; };
 function guessFrac(r){ const segs = fracSegments(r, uvOf(r).xs[uvOf(r).xs.length - 1]).filter(sg => !sg.waste).map(sg => sg.b - sg.a).filter(w => w > 0).sort((p, q) => p - q);
-  return segs.length >= 3 ? `${fmtAuto(segs[segs.length >> 1])} ${xUnit(r)}` : ''; }
+  if (segs.length < 3) return '';
+  const med = segs[segs.length >> 1], min = segs[0], max = segs[segs.length - 1];
+  if (max - min <= 0.1 * med) return `${fmtAuto(med)} ${xUnit(r)}`;
+  return `${fmtAuto(min)} to ${fmtAuto(max)} ${xUnit(r)}`; }
 /* each field: what the user typed, else what the file says */
 function runCond(r){
   const v = k => String(r[k] == null ? '' : r[k]).trim(), au = {mCol: guessColumn(r), mCV: (c => c ? String(+(+c).toPrecision(3)) : '')(guessCV(r)), mFlow: r.flowAuto ? fmt(r.flowAuto, r.flowAuto < 1 ? 2 : 1) : '', mTemp: '', mGrad: guessGradient(r), mFrac: guessFrac(r)};
@@ -4410,7 +4413,7 @@ function methodsText(){
     if (!sec) t += ft ? `. The protein was collected in the flow-through${grad ? `, and bound material was eluted with ${grad}` : c.mBufB ? ', and bound material was eluted with buffer B' : ''}` : grad ? ` and eluted with ${grad}` : c.mBufB ? ' and eluted with buffer B' : ` and eluted ${need('elution')}`;
     const T = c.mTemp && !tempAll ? deg(c.mTemp) : '';
     t += (T ? ` at ${T}` : '') + condCheck(r, 'mTemp');
-    t += c.mFrac ? `, collecting ${unitIf(c.mFrac, 'mL')} fractions` : ''; t += '.';
+    if (c.mFrac) { const f = unitIf(c.mFrac, 'mL'); t += `, collecting ${/ to /.test(f) ? `fractions of ${f}` : `${f} fractions`}`; } t += '.';
     if (c.mBufB && !sec) { const bm = bufMismatch(r, c); t += ` Buffer B was ${lc(c.mBufB)}${bm ? ` [differs from buffer A in ${bm}, check]` : ''}.`; }
     if (hasTxt(r.mOther)) t += ` ${v(r.mOther).replace(/^./, x => x.toUpperCase()).replace(/\.?$/, '.')}`;
     const pool = poolLabel(r), pr = poolRows(r), vol = pr && xUnit(r) === 'mL' && pr.vol > 0 ? ` (${fmt(pr.vol, 1)} mL)` : '';
