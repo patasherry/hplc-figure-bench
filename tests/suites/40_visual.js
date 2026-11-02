@@ -117,6 +117,22 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
       if (Date.now() - t0 > 420000) { T.check('time-budget', false, 'stopped early to stay under 8 minutes'); break; } }
     T.check(`${W}:no-page-errors`, !errs.length, errs.join(' | ')); /* nothing above threw in the page */
     await close(); }
+  await T.t('lane-titles', async () => {
+    const {p, close} = await open({width: 1400}), h = H(p); await h.newProject('Lanes');
+    await h.addRun(F.imac);
+    await p.setInputFiles(SEL.gelFile, [F.gel]); await h.wait(1500);
+    const laneTitles = await p.evaluate(() => {
+      const selects = Array.from(document.querySelectorAll('select[data-lk="assign"]'));
+      return selects.map(s => s.title);
+    });
+    T.check('lane-titles:has-title', laneTitles.length > 0 && laneTitles.every(t => t.length > 0), JSON.stringify(laneTitles));
+    const gelTitle = await p.evaluate(() => {
+      const g = document.querySelector('select[data-k="runId"]');
+      return g ? g.title : '';
+    });
+    T.check('lane-titles:gel-has-title', gelTitle && gelTitle.length > 0, gelTitle);
+    await close();
+  });
   /* hard chromatograms from the biochemist, if present: each alone, run figure must have no overlaps, no stacked labels */
   const CH = path.join(DATA, 'chrom'); if (fs.existsSync(CH) && Date.now() - t0 < 400000) { const files = fs.readdirSync(CH).filter(f => /\.(csv|zip|txt|xls|xlsx|res|asc)$/i.test(f)).slice(0, 8);
     const {p, close} = await open({width: 1400}), h = H(p); await h.newProject('Hard');

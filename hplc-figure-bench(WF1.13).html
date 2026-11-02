@@ -3983,6 +3983,18 @@ function prepAuto(g){
   g._prepA = {key, map}; return map;
 }
 const PREP_OPT = () => (prep.on ? '<option value="expr">Expression</option><option value="lysis">Lysis</option>' : '') + manSteps().map(m => `<option value="${m.id}">${esc(manObj(m).name)}</option>`).join('') + (prep.cleave ? '<option value="cleave">Dialysis and cleavage</option>' : '');
+function laneSelTitle(a, isTable){
+  if (a === 'marker') return 'Ladder';
+  if (a === '__mixed') return 'Split across runs (set per lane)';
+  if (a === '') return isTable ? 'Not shown with a run' : 'No run (gel on its own)';
+  if (a === 'expr') return 'Expression';
+  if (a === 'lysis') return 'Lysis';
+  if (a === 'cleave') return 'Dialysis and cleavage';
+  const rIdx = runs.findIndex(r => r.id === a);
+  if (rIdx >= 0) return isTable ? (rIdx + 1) + '. ' + shortRunName(runs[rIdx]) : runs[rIdx].name;
+  const m = manSteps().find(m => m.id === a);
+  return m && manObj(m).name ? manObj(m).name : a;
+}
 
 /* expression level (target band as a share of the induced lane) and solubility (soluble vs insoluble band) from the expression gel */
 const EXP_S = /^(s|sol|soluble|sup|supernatant)$/i, EXP_P = /^(p|insol|insoluble|pel|pellet)$/i;
@@ -4608,7 +4620,7 @@ function gelCardBody(g){
   const labs = gelLabels(g), asg = labs.map((_, i) => laneAssign(g, i)), samp = new Set(asg.filter(a => a !== 'marker'));
   const mixed = samp.size > 1, curA = mixed ? '__mixed' : ([...samp][0] || '');
   return `<div class="meta">${gelMeta(g)}</div>
-      <label class="f">Sample lanes go with<select id="lk${g.id}" data-k="runId">${mixed ? '<option value="__mixed" selected disabled>Split across runs (set per lane)</option>' : ''}<option value="" ${curA === '' ? 'selected' : ''}>No run (gel on its own)</option>${PREP_OPT().replace(`value="${curA}"`, `value="${curA}" selected`)}${runs.map(r => `<option value="${r.id}" ${curA === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>`;
+      <label class="f">Sample lanes go with<select id="lk${g.id}" data-k="runId" title="${esc(laneSelTitle(curA, false))}">${mixed ? '<option value="__mixed" selected disabled>Split across runs (set per lane)</option>' : ''}<option value="" ${curA === '' ? 'selected' : ''}>No run (gel on its own)</option>${PREP_OPT().replace(`value="${curA}"`, `value="${curA}" selected`)}${runs.map(r => `<option value="${r.id}" ${curA === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>`;
 }
 function renderKnown(){
   const el = $('#knownList'); if (!el) return; const L = Array.isArray(opt.known) ? opt.known : (opt.known = []);
@@ -4624,7 +4636,7 @@ function renderLaneTable(){
   const labs = gelLabels(g), short = t => t.length > 24 ? t.slice(0, 23) + '…' : t;
   el.innerHTML = labs.map((l, i) => { const a = laneAssign(g, i);
     const am = !(g.assign || [])[i] && a === '' && g._auto && g._auto.amb && g._auto.amb[i];
-    return `<div class="lrow${am ? ' amb' : ''}"${am ? ` title="${esc(l)} is a fraction in ${am.length} runs. Pick the run it came from, or set the runs' pooled fractions."` : ''}><span>${i + 1}</span><input type="text" id="ln${i}" data-lane="${i}" data-lk="label" value="${esc(l)}" aria-label="Lane ${i + 1} label"><select id="la${i}" data-lane="${i}" data-lk="assign" aria-label="Lane ${i + 1} belongs to"><option value="marker" ${a === 'marker' ? 'selected' : ''}>Ladder</option><option value="" ${a === '' ? 'selected' : ''}>Not shown with a run</option>${PREP_OPT().replace(`value="${a}"`, `value="${a}" selected`)}${runs.map((r, k) => `<option value="${r.id}" ${a === r.id ? 'selected' : ''}>${k + 1}. ${esc(short(shortRunName(r)))}</option>`).join('')}</select></div>`; }).join('');
+    return `<div class="lrow${am ? ' amb' : ''}"${am ? ` title="${esc(l)} is a fraction in ${am.length} runs. Pick the run it came from, or set the runs' pooled fractions."` : ''}><span>${i + 1}</span><input type="text" id="ln${i}" data-lane="${i}" data-lk="label" value="${esc(l)}" aria-label="Lane ${i + 1} label"><select id="la${i}" data-lane="${i}" data-lk="assign" aria-label="Lane ${i + 1} belongs to" title="${esc(laneSelTitle(a, true))}"><option value="marker" ${a === 'marker' ? 'selected' : ''}>Ladder</option><option value="" ${a === '' ? 'selected' : ''}>Not shown with a run</option>${PREP_OPT().replace(`value="${a}"`, `value="${a}" selected`)}${runs.map((r, k) => `<option value="${r.id}" ${a === r.id ? 'selected' : ''}>${k + 1}. ${esc(short(shortRunName(r)))}</option>`).join('')}</select></div>`; }).join('');
 }
 function onLane(el){
   const g = curGel(); if (!g) return; const i = +el.dataset.lane;
