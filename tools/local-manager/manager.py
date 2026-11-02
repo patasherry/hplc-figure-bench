@@ -590,47 +590,77 @@ def attached_text(body):
     return '\n\n'.join(parts)
 
 
+SRC = '<!-- science-src {} -->'  # on every reply: which inbox comment it answers, so the PC and cloud copies share what is done
+FIRST = 'for-claude-first'  # Claude Science findings go to Claude Code first: it merges most numeric fixes at the first try
+FIRST_HOURS = 24  # a finding no Claude worker has taken by then goes to Jules
+nomention = lambda t: str(t).replace('@', '@\u2060')  # quoting "@claude" must not call the Claude workflow again
+
+
+def science_done():
+    """Inbox comments already handled by either manager copy: named in a reply's marker, or linked from a filed issue."""
+    done = set()
+    for c in comments(SCIENCE):
+        done.update(re.findall(r'<!-- science-src (\d+) -->', c['body']))
+    for i in gh(f'repos/{REPO}/issues?state=all&labels=from-science&per_page=100'):
+        done.update(re.findall(rf'/issues/{SCIENCE}#issuecomment-(\d+)', i.get('body') or ''))
+    return done
+
+
+def science_file(title, body):
+    return gh(f'repos/{REPO}/issues', 'POST', {'title': title, 'body': body, 'labels': ['from-patrick', 'from-science', 'owner-approved', FIRST]})['number']
+
+
 def science_inbox(s):
-    """Each new comment Patrick posts on the inbox issue becomes one issue per finding, queued for Jules with his OK. A comment starting 'Note:' is left alone."""
+    """Each new comment Patrick posts on the inbox issue becomes one issue per finding, with his OK, for Claude Code first.
+    Skipped: comments starting 'Note:' and comments addressed to '@claude' (the Claude workflow answers those)."""
     if not SCIENCE:
         return
+    for i in issues(FIRST):  # nobody took it in a day (daily caps): Jules gets it
+        if (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(i['created_at'].replace('Z', '+00:00'))).total_seconds() > FIRST_HOURS*3600:
+            label(i['number'], add=['jules-queue'], remove=[FIRST]); log(f'#{i["number"]}: no Claude worker took it in {FIRST_HOURS} h, queued for Jules')
     seen = s.setdefault('science', {})
-    new = [c for c in comments(SCIENCE) if by_owner(c) and str(c['id']) not in seen and not re.match(r'^\W*file anyway:', c['body'], re.I)]
-    if not new:
-        return
-    mem = board_memory()
+    cs = comments(SCIENCE)
+    skip = lambda c: re.match(r'^\W*(note\b|file anyway:|@)', c['body'], re.I)
+    new = [c for c in cs if by_owner(c) and str(c['id']) not in seen and not skip(c)]
+    if new:
+        done = science_done()
+        new = [c for c in new if str(c['id']) not in done]
+        for c in cs:
+            if str(c['id']) in done:
+                seen[str(c['id'])] = 1
+    if new:
+        mem = board_memory()
     for c in new:
         seen[str(c['id'])] = 1
-        if re.match(r'^\W*note\b', c['body'], re.I):
-            continue
         lines, text = [], attached_text(c['body'])
         if text is None:
-            post(SCIENCE, f'I could not read the file attached to {c["html_url"]}. Paste its text into a new comment instead.' + SIGN.format(rv.MODEL))
+            post(SCIENCE, f'I could not read the file attached to {c["html_url"]}. Paste its text into a new comment instead.' + SRC.format(c['id']) + SIGN.format(rv.MODEL))
             continue
         for title, body in findings_of(text):
             d = dup_of({'title': title, 'change': body[:600]}, mem)
             if d:
-                lines.append(f'- "{title}": already covered by {d[0]} ({d[1] or "same work"}). Not filed again. Reply here with `File anyway: {title}` if it is different.')
+                lines.append(f'- "{nomention(title)}": already covered by {d[0]} ({nomention(d[1]) or "same work"}). Not filed again. Reply here with `File anyway: {nomention(title)}` if it is different.')
                 continue
             full = f'From Claude Science\'s independent audit, posted by Patrick on #{SCIENCE} ({c["html_url"]}). Posting it there is his OK, so it is owner-approved. Synthetic data only.\n\nA fix that changes a reported number needs a UI-level synthetic test that fails on main and passes on the branch (AGENTS.md).\n\n---\n\n{body}'
             if DRY:
                 log(f'[dry] would file "{title}"'); continue
-            n = gh(f'repos/{REPO}/issues', 'POST', {'title': title, 'body': full, 'labels': ['from-patrick', 'from-science', 'owner-approved', 'jules-queue']})['number']
+            n = science_file(title, full)
             mem['open'].append((f'#{n}', title + ' ' + body[:300]))
-            lines.append(f'- #{n} "{title}": queued for Jules.')
+            lines.append(f'- #{n} "{nomention(title)}": queued for Claude Code first (Jules after {FIRST_HOURS} h).')
             log(f'science finding filed as #{n}')
-        if lines:
-            post(SCIENCE, 'From your comment:\n' + '\n'.join(lines) + SIGN.format(rv.MODEL))
-    for c in comments(SCIENCE):  # "File anyway: <title>" overrides a duplicate call
+        post(SCIENCE, 'From your comment:\n' + ('\n'.join(lines) or '- nothing to file.') + SRC.format(c['id']) + SIGN.format(rv.MODEL))
+    for c in cs:  # "File anyway: <title>" overrides a duplicate call
         m = re.match(r'^\W*file anyway:\s*(.+)', c['body'], re.I)
         if not (m and by_owner(c)) or str(c['id']) in seen:
             continue
         seen[str(c['id'])] = 1
-        want = m.group(1).strip().lower()
-        src = next((b for cc in comments(SCIENCE) if by_owner(cc) for t, b in findings_of(attached_text(cc['body']) or '') if t.lower() == want), None)
+        if str(c['id']) in science_done():
+            continue
+        want = m.group(1).strip().replace('\u2060', '').lower()
+        src = next((b for cc in cs if by_owner(cc) for t, b in findings_of(attached_text(cc['body']) or '') if t.lower() == want), None)
         if src and not DRY:
-            n = gh(f'repos/{REPO}/issues', 'POST', {'title': m.group(1).strip(), 'body': f'From Claude Science, posted by Patrick on #{SCIENCE}, filed on his request although it looked like a duplicate. Owner-approved. Synthetic data only.\n\n---\n\n{src}', 'labels': ['from-patrick', 'from-science', 'owner-approved', 'jules-queue']})['number']
-            post(SCIENCE, f'Filed as #{n} as you asked.' + SIGN.format(rv.MODEL))
+            n = science_file(m.group(1).strip(), f'From Claude Science, posted by Patrick on #{SCIENCE} ({c["html_url"]}), filed on his request although it looked like a duplicate. Owner-approved. Synthetic data only.\n\n---\n\n{src}')
+            post(SCIENCE, f'Filed as #{n} as you asked.' + SRC.format(c['id']) + SIGN.format(rv.MODEL))
 
 
 # ---------- review gate: plain-code checks on every finished Jules PR, so the lead only sees PRs that pass ----------
@@ -825,7 +855,8 @@ def gate(s):
                 log(f'PR #{n} rebuilt clean as #{new}')
                 s['gated'][str(n)] = sha
                 continue
-        if probs and issue and not mine and not cop and s['sentback'].get(str(issue), 0) < MAX_SENDBACKS:
+        first_try = mine and 'as a first try for an audit finding' in (pr.get('body') or '')  # Claude went first on an audit finding: a failure goes on to Jules, not to the lead
+        if probs and issue and (not mine or first_try) and not cop and s['sentback'].get(str(issue), 0) < MAX_SENDBACKS:
             k = s['sentback'][str(issue)] = s['sentback'].get(str(issue), 0) + 1
             notes = '\n'.join(f'- {x}' for x in probs)
             body = gh(f'repos/{REPO}/issues/{issue}').get('body') or ''
@@ -932,8 +963,9 @@ def unlink_deps(wt):
 
 
 def claude_jobs(s):
-    for i in issues('for-claude-code'):
+    for i in issues(FIRST) + issues('for-claude-code'):
         n = i['number']
+        first = any(l['name'] == FIRST for l in i['labels'])
         if 'pull_request' in i or {'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']}:
             continue
         if not use(s, 'claude_jobs'):
@@ -943,7 +975,7 @@ def claude_jobs(s):
         log(f'#{n}: Claude Code job started (can take up to an hour)')
         if DRY:
             continue
-        label(n, add=['claude-code-running'], remove=['for-claude-code'])
+        label(n, add=['claude-code-running'], remove=['for-claude-code', FIRST])
         try:
             git('fetch', '-q', 'origin')
             if wt.exists():
@@ -952,7 +984,7 @@ def claude_jobs(s):
             WORK.mkdir(parents=True, exist_ok=True)
             git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
             link_deps(wt)
-            run(['claude', '-p', '--permission-mode', 'acceptEdits', '--allowedTools', CC_TOOLS], CC_JOB.format(who='Claude Code', why='Jules (another agent) could not finish it.', n=n, title=i['title'], body=(i.get('body') or '')[:12000]), timeout=3600, cwd=wt, stdin=True)
+            run(['claude', '-p', '--permission-mode', 'acceptEdits', '--allowedTools', CC_TOOLS], CC_JOB.format(who='Claude Code', why='It is a numeric fix from an independent audit, sent to you first.' if first else 'Jules (another agent) could not finish it.', n=n, title=i['title'], body=(i.get('body') or '')[:12000]), timeout=3600, cwd=wt, stdin=True)
             body_f = wt / 'PR_BODY.md'
             desc = body_f.read_text(encoding='utf-8', errors='replace') if body_f.exists() else '(Claude Code wrote no description.)'
             if body_f.exists():
@@ -966,13 +998,17 @@ def claude_jobs(s):
             auth = __import__('base64').b64encode(f'x-access-token:{rv.TOKEN}'.encode()).decode()
             git('-c', f'http.https://github.com/.extraheader=AUTHORIZATION: basic {auth}', 'push', '-q', '-f', 'origin', f'HEAD:refs/heads/{branch}', cwd=wt, timeout=600)
             pr = gh(f'repos/{REPO}/pulls', 'POST', {'title': f'{i["title"]} (#{n})', 'head': branch, 'base': 'main',
-                                                  'body': f'{CC_MARK}\nCloses #{n}. Made by **Claude Code on the owner\'s PC** (started by the local manager) after Jules could not finish it.\n\n{desc}'})
+                                                  'body': f'{CC_MARK}\nCloses #{n}. Made by **Claude Code on the owner\'s PC** (started by the local manager) {"as a first try for an audit finding" if first else "after Jules could not finish it"}.\n\n{desc}'})
             label(n, add=['claude-code-done'], remove=['claude-code-running'])
             post(n, f'Claude Code opened #{pr["number"]}. It goes through the Test suite and the automatic review like any PR.' + SIGN.format(rv.MODEL))
             log(f'#{n}: Claude Code opened PR #{pr["number"]}')
         except Exception as e:
-            label(n, add=['for-coordinator'], remove=['claude-code-running'])
-            post(n, f'**For the lead:** the Claude Code job on the owner\'s PC did not finish: {str(e)[:400]}' + SIGN.format(rv.MODEL))
+            if first:  # a first try that failed: Jules gets it, as any other job
+                label(n, add=['jules-queue'], remove=['claude-code-running'])
+                post(n, f'Claude Code tried this first and did not finish ({str(e)[:300]}). Queued for Jules.' + SIGN.format(rv.MODEL))
+            else:
+                label(n, add=['for-coordinator'], remove=['claude-code-running'])
+                post(n, f'**For the lead:** the Claude Code job on the owner\'s PC did not finish: {str(e)[:400]}' + SIGN.format(rv.MODEL))
             log(f'#{n}: Claude Code job failed: {e}')
         finally:
             try:
