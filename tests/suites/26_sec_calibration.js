@@ -2,7 +2,7 @@
 // Drives the UI: loads synthetic SEC run sec_inject2.csv, fills V0, Vt, and 4 standard MW and Ve values by hand.
 // Checks Kav values for standards and checks sample peak apparent MW against fitted line log(MW) vs Kav within 3%.
 
-const {open, H, suite, path, DATA} = require('../lib/harness');
+const {open, H, suite, path, DATA, src} = require('../lib/harness');
 
 const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').match(/-?\d+(\.\d+)?/); return m ? +m[0] : null; };
 
@@ -342,6 +342,44 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     await h2.wait(300);
     const m3 = await h2.methods();
     T.check('s200i_methods_has_10_300', /10\/300/.test(m3), `Methods: ${m3}`);
+
+    T.check('no page errors', !o.errs.length, o.errs.join(' | '));
+    await o.close();
+  });
+  // Issue #761: SEC mass estimate easy to find, size labels and column names
+  await T.t('sec_usability_fixes_761', async () => {
+    const o = await open(); const p = o.p, h = H(p);
+    await h.newProject('SEC 761');
+    await h.addRun(src('s200'));
+    await h.wait(400);
+
+    // 1. Peak label shows 'size: pick a column calibration' instead of minutes
+    const svgTexts = await p.$$eval('#paper svg text', els => els.map(e => e.textContent.trim()));
+    T.check('peak_label_uncalibrated_says_pick_calibration', svgTexts.some(t => t.includes('size: pick a column calibration')), `SVG texts: ${svgTexts.filter(t => /size|min|kDa/i.test(t)).join(', ')}`);
+    T.check('peak_label_not_silently_minutes', !svgTexts.some(t => /^\d+\.\d+\s*min$/.test(t)), `Found minute labels: ${svgTexts.filter(t => /min/.test(t)).join(', ')}`);
+
+    // 2. Apparent mass (kDa) is visible in peak integration table by default (not hidden behind 3 more columns)
+    const thTexts = await p.$$eval('#intTable th', els => els.filter(e => getComputedStyle(e).display !== 'none').map(e => e.textContent.trim()));
+    T.check('mass_column_visible_by_default', thTexts.includes('Apparent mass (kDa)'), `Visible headers: ${thTexts.join(', ')}`);
+
+    // 3. Quick fill contains Superdex 200 matching the S200 run under the graph
+    const qChips = await p.$$eval('#ssQuick .qchip', els => els.map(e => e.textContent.trim()));
+    T.check('quick_fill_has_s200', qChips.some(t => /Superdex 200/i.test(t)), `Quick fill chips: ${qChips.join(', ')}`);
+
+    // 4. Toast does not overlap peak integration table
+    await p.evaluate(() => {
+      const box = document.getElementById('toast');
+      const pill = document.createElement('div'); pill.className = 'pill'; pill.textContent = 'Loaded 1 ÄKTA run';
+      box.appendChild(pill); box.hidden = false;
+    });
+    await h.wait(200);
+    const toastBox = await p.$eval('#toast', e => e.getBoundingClientRect());
+    const tableBox = await p.$eval('#intTable', e => e.getBoundingClientRect());
+    const overlaps = (
+      toastBox.bottom > tableBox.top && toastBox.top < tableBox.bottom &&
+      toastBox.right > tableBox.left && toastBox.left < tableBox.right
+    );
+    T.check('toast_does_not_overlap_table', !overlaps, `Toast top ${toastBox.top} bottom ${toastBox.bottom}, Table top ${tableBox.top} bottom ${tableBox.bottom}`);
 
     T.check('no page errors', !o.errs.length, o.errs.join(' | '));
     await o.close();

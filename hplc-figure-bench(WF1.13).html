@@ -456,7 +456,9 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
 .spec #spec2.warn{color:var(--warn);white-space:normal}
 .note{font-size:12.5px;color:var(--muted);border:1px solid var(--line);background:var(--well);border-radius:var(--r);padding:8px 11px;line-height:1.45}
 .toast{pointer-events:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);display:grid;justify-items:center;gap:6px;z-index:10;width:max-content;max-width:min(560px,calc(100% - 32px))}
-.toast .pill{background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;box-shadow:var(--shadow);line-height:1.4;text-align:center}
+.toast .pill{background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;box-shadow:var(--shadow);line-height:1.4;text-align:center;transition:opacity .25s ease,transform .25s ease}
+.toast .pill.out{opacity:0;transform:translateY(6px)}
+body.proj:has(.intp:not([hidden])) .toast:not(.overlap){bottom:auto;top:calc(env(safe-area-inset-top,0px) + 54px)}
 @media (max-width:880px){
   .app{grid-template-columns:minmax(0,1fr);gap:16px}
   .panel{position:static;max-height:none;overflow:visible;background:var(--panel)}
@@ -1903,7 +1905,7 @@ const SEC_COLUMNS = {
   s200i: {name: 'Superdex 200 Increase 10/300 GL', vt: 24, re: /(?:200\s*inc|s200\s*i\b|sd200\s*i|200i|s200|sd ?200|superdex ?200)(?!.*(?<![\d.])(16|26|3\.2|5)[\/_\s-]*(600|300|150)(?!\d))/i},
   custom: {name: 'Other column', vt: '', re: null}};
 const SEC_ORDER = ['s200i3', 's75i3', 's200i5', 's75i5', 'hl26s75', 'hl26s200', 'hl16s75', 'hl16s200', 's6i', 's75i', 's200i'];
-function secColumnGuess(r){ const t = (r.colLog || '') + ' ' + (r.file || '') + ' ' + (r.method || '') + ' ' + (r.name || ''); return SEC_ORDER.find(k => SEC_COLUMNS[k].re.test(t)) || 'custom'; }
+function secColumnGuess(r){ const t = (r.mCol || '') + ' ' + (r.colLog || '') + ' ' + (r.file || '') + ' ' + (r.method || '') + ' ' + (r.name || ''); return SEC_ORDER.find(k => SEC_COLUMNS[k].re.test(t)) || 'custom'; }
 const SEC_STD_SETS = {
   biorad: {name: 'Bio-Rad gel filtration standard', stds: [['Thyroglobulin', 670], ['γ-globulin', 158], ['Ovalbumin', 44], ['Myoglobin', 17], ['Vitamin B12', 1.35, true]]},
   cyHMW: {name: 'Cytiva HMW calibration kit', stds: [['Thyroglobulin', 669], ['Ferritin', 440], ['Aldolase', 158], ['Conalbumin', 75], ['Ovalbumin', 44]]},
@@ -2277,7 +2279,7 @@ function buildOverlaySVG(ov){
       const col = o.peakColor === 'trace' ? p.t.color : '#000000', sh = +p.t.xshift || 0;
       p.t.peaks.forEach(pk => {
         const xx = pk.x + sh; if (xx < xlo || xx > xhi) return;
-        const i = peakApex(p.xs, p.yp, xx), ovFit = o.ovPeakText !== 'x' ? secFit(secCals().find(c => c.id === o.ovSecCal)) : null, raw = pk.label || (ovFit && ovFit.mw ? secLabel(secInfo(ovFit, p.xs[i]), o.ovPeakText) : '') || fmt(p.xs[i], numOr(o.peakDec, 2));
+        const i = peakApex(p.xs, p.yp, xx), ovFit = o.ovPeakText !== 'x' ? secFit(secCals().find(c => c.id === o.ovSecCal)) : null, raw = pk.label || (ovFit && ovFit.mw ? secLabel(secInfo(ovFit, p.xs[i]), o.ovPeakText) : (o.ovPeakText !== 'x' ? 'size: pick a column calibration' : '')) || fmt(p.xs[i], numOr(o.peakDec, 2));
         items.push({X: px(p.xs[i]), Y: py(p.yp[i]) - 3, raw, col});
       });
     });
@@ -2417,7 +2419,7 @@ function buildRunPlainSVG(run, ov){
   const nCond = ov.nest && COND_N ? Math.max(condL.length, COND_N) : condL.length, condH = nCond ? nCond*cf*1.2 + fs*0.5 : 0;
   const mB = tOut + 3 + fs + 4 + fs*1.25 + (calNote ? fs*0.95 : 0) + condH, mT = fs*0.7 + titleH + stdH + ndH, plotH0 = H - mB - mT;
   /* room above the tallest peak for its label, so the label never sits on the trace */
-  const poolCap = poolCaption(run), willLab = (secRun ? (!o.secStds && ['olig', 'mw'].includes(o.secLabel || 'mw') ? 've' : (o.secLabel || 'mw')) : o.intLabel) !== 'none' && (secRun || (run.integ || []).length), top = 4 + (willLab ? fs*1.1 : 0) + (poolCap ? fs*1.05 : 0);
+  const poolCap = poolCaption(run), willLab = (secRun ? (o.secLabel || 'mw') : o.intLabel) !== 'none' && (secRun || (run.integ || []).length), top = 4 + (willLab ? fs*1.1 : 0) + (poolCap ? fs*1.05 : 0);
   const usable = Math.max(10, plotH0 - band - top);
   let y0 = ylo - yr*band/usable - yr*0.02, y1 = yhi + yr*top/usable;
   y0 = numOr(run.ymin, y0); y1 = numOr(run.ymax, y1); if (!(y1 > y0)) y1 = y0 + 1;
@@ -2483,7 +2485,7 @@ function buildRunPlainSVG(run, ov){
         s.push(`<rect x="${r2(xc - w/2)}" y="${r2(B - sh)}" width="${r2(w)}" height="${r2(sh)}" fill="${l.color}" stroke="#ffffff" stroke-width="0.5"/>`); } });
     s.push('</g>');
   }
-  const labMode = secRun ? (!o.secStds && ['olig', 'mw'].includes(o.secLabel || 'mw') ? 've' : (run.isStd && o.secLabel === 'olig') ? 'mw' : (o.secLabel || 'mw')) : o.intLabel;
+  const labMode = secRun ? ((run.isStd && o.secLabel === 'olig') ? 'mw' : (o.secLabel || 'mw')) : o.intLabel;
   const iRows = (o.intFill || labMode !== 'none') ? integRows(run) : [];
   if (iRows.length && o.intFill) {
     s.push(`<g clip-path="url(#${idp}plot-area)">`);
@@ -2598,7 +2600,10 @@ function buildRunPlainSVG(run, ov){
       /* the V₀ line already names the void: no second label on the peak */
       if (showVoid && rw.sec && rw.sec.void && (labMode === 'mw' || labMode === 'olig')) return;
       if (labMode === 'mg') { const top = Math.max(...iRows.map(q => q.mg || 0)); if (!(rw.mg > 0) || rw.mg < 0.05*top) return; }
-      const t = labMode === 'mg' ? (rw.mg > 0 ? (isSec(run) ? `${fmt(rw.apex, 2)} ${xUnit(run)}, ${sig2(rw.mg)} mg` : `${sig2(rw.mg)} mg`) : rw.name) : labMode === 'area' ? `${fmtAuto(rw.area)} mAU·${xUnit(run)}` : labMode === 've' ? `${fmt(rw.apex, 2)} ${xUnit(run)}` : (labMode === 'mw' || labMode === 'olig') ? (secLabel(rw.sec, labMode) || `${fmt(rw.apex, 2)} ${xUnit(run)}`) : rw.name, X = px(rw.apex), w = t.length*fs*0.45;
+      const uncal = 'size: pick a column calibration';
+      const t = labMode === 'mg' ? (rw.mg > 0 ? (isSec(run) ? `${fmt(rw.apex, 2)} ${xUnit(run)}, ${sig2(rw.mg)} mg` : `${sig2(rw.mg)} mg`) : rw.name) : labMode === 'area' ? `${fmtAuto(rw.area)} mAU·${xUnit(run)}` : labMode === 've' ? `${fmt(rw.apex, 2)} ${xUnit(run)}` : (labMode === 'mw' || labMode === 'olig') ? (secLabel(rw.sec, labMode) || (placed.some(q => q.raw === uncal) ? '' : uncal)) : rw.name;
+      if (!t) return;
+      const X = px(rw.apex), w = t.length*fs*0.45;
       /* centered over the apex, or beside it when a neighbouring peak's flank would run through the text */
       const k = (xhi - xlo)/(R - L), hiIn = (a, b) => { let m = -Infinity; for (let i = Math.max(0, lowerBound(uv.xs, a)); i < uv.xs.length && uv.xs[i] <= b; i++) m = Math.max(m, uv.ys[i]); return m; };
       const yTr = uv.ys[nearestIdx(uv.xs, rw.apex)], base = Math.max(rw.apexY, yTr);
@@ -2612,7 +2617,7 @@ function buildRunPlainSVG(run, ov){
       const e2 = ext(), lift = Math.max(base, hiIn(xlo + (pick.x + e2[0] - L)*k, xlo + (pick.x + e2[1] - L)*k));
       let Y = Math.max(T + fs*0.8, py(lift) - 3), guard = 0; const cx0 = pick.x + (e2[0] + e2[1])/2;
       if (placed.some(q => Math.abs(q.x - cx0) < (q.w + ww)/2 + 1 && Math.abs(q.y - Y) < fs*0.85)) return;
-      placed.push({x: cx0, y: Y, w: ww}); s.push(`<text x="${r2(pick.x)}" y="${r2(Y)}"${pick.an !== 'middle' ? ` text-anchor="${pick.an}"` : ''}>${esc(tt)}</text>`);
+      placed.push({x: cx0, y: Y, w: ww, raw: tt}); s.push(`<text x="${r2(pick.x)}" y="${r2(Y)}"${pick.an !== 'middle' ? ` text-anchor="${pick.an}"` : ''}>${esc(tt)}</text>`);
       /* a label lifted clear of its peak gets a short leader down to the apex */
       const ay = py(base); if (ay - Y > fs*1.4) s.push(`<line x1="${r2(X)}" y1="${r2(Y + fs*0.25)}" x2="${r2(X)}" y2="${r2(ay - 1.5)}" stroke="#777777" stroke-width="0.4"/>`); });
     s.push('</g>');
@@ -4670,7 +4675,7 @@ function renderList(){
         ${f('mOther', 'Other details', 'e.g. 0.22 µm filtered')}</details>`; })()}
       ${r.inWf ? `<details class="cardtext"${r.poolCap || r.note ? ' open' : ''}><summary>Figure text</summary><label class="f">Title in figure<input type="text" id="sn${r.id}" data-k="stepName" value="${esc(r.stepName || '')}" placeholder="${esc(opt.wfTitle === 'name' ? r.name : guessStep(r) || r.name)}"></label>${r.grad && r.grad.xs && r.grad.xs.length ? `<label class="f">Right axis as concentration<input type="text" id="bb${r.id}" data-k="bufB" value="${esc(r.bufB || '')}" placeholder="${esc((a => a ? `auto: ${fmtAuto(a.a)} to ${fmtAuto(a.c)} ${a.u} ${a.name}` : 'e.g. 500 mM imidazole')(axisConc(Object.assign({}, r, {bufB: ''}))))}" title="Buffer B's strength, e.g. 500 mM imidazole. Left empty, it is read from the buffers under Run conditions"></label>` : ''}<label class="f">Pool caption<input type="text" id="pc${r.id}" data-k="poolCap" value="${esc(r.poolCap || '')}" placeholder="${esc(poolCaption(Object.assign({}, r, {poolCap: ''})) || 'none')}" title="Printed over the pooled fractions. Leave empty for the automatic one, type - for none"></label>${runs.filter(x => x.inWf).slice(-1)[0] !== r ? `<label class="f">Note on the arrow to the next step<input type="text" id="nt${r.id}" data-k="note" value="${esc(r.note || '')}" placeholder="e.g. SUMO protease, 4 °C overnight"></label>` : ''}</details>` : ''}
       ${PROJ ? `<details class="cardtext"><summary>Layout</summary><div class="cardopts">${cardType}</div>${r.inWf ? `<div class="cardopts wfsize"><label class="eye" title="Width of this run's panel in the workflow figure, relative to the others">Width in figure ×<input type="number" step="0.1" min="0.2" id="pw${r.id}" data-k="wfW" value="${numOr(r.wfW, 1)}" class="tiny"></label>${gelsFor(r).length ? `<label class="eye" title="Size of this run's gel in the workflow figure. It keeps the photo's proportions, and widens the panel if it needs room">Gel scale ×<input type="number" step="0.1" min="0.3" max="3" id="gz${r.id}" data-k="gelZ" value="${numOr(r.gelZ, 1)}" class="tiny"></label>` : ''}</div>` : ''}</details>` : r.inWf ? `<div class="cardopts wfsize"><label class="eye" title="Width of this run's panel in the workflow figure, relative to the others">Width in figure ×<input type="number" step="0.1" min="0.2" id="pw${r.id}" data-k="wfW" value="${numOr(r.wfW, 1)}" class="tiny"></label>${gelsFor(r).length ? `<label class="eye" title="Size of this run's gel in the workflow figure. It keeps the photo's proportions, and widens the panel if it needs room">Gel scale ×<input type="number" step="0.1" min="0.3" max="3" id="gz${r.id}" data-k="gelZ" value="${numOr(r.gelZ, 1)}" class="tiny"></label>` : ''}</div>` : ''}
-      ${opt.secStds && isSec(r) && secCals().length > 1 ? `<label class="f">Column calibration<select id="scal${r.id}" data-k="secCal">${secCals().map(c => `<option value="${c.id}" ${secCalFor(r).id === c.id ? 'selected' : ''}>${esc(c.name)} (${esc(c.unit)})</option>`).join('')}</select></label>` : ''}
+      ${isSec(r) ? `<label class="f">Column calibration<select id="scal${r.id}" data-k="secCal" title="Calibration used for apparent molecular weight and oligomer state">${secCals().map(c => `<option value="${c.id}" ${secCalFor(r).id === c.id ? 'selected' : ''}>${esc(c.name)} (${esc(c.unit)})</option>`).join('')}</select></label>` : ''}
     </div>`;
   }).join('');
   const gelCards = gels.map(g => `<div class="trace gelc" data-id="${g.id}" data-kind="gel">
@@ -5201,24 +5206,24 @@ $('#sumCsv').addEventListener('click', () => { const q = csvQuote, rows = sumRow
 /* integration table */
 function renderIntTable(run){
   const rows = integRows(run), pool = poolRows(run), hasMg = numOr(opt.eps, 0) > 0, gs = opt.intMethod === 'gauss', u = xUnit(run);
-  const sec = isSec(run), fit = sec ? secFit(secCalFor(run)) : null, hasKav = !!(fit && fit.useKav), hasMw = !!(fit && fit.mw), hasOl = hasMw && secMono() > 0;
+  const sec = isSec(run), fit = sec ? secFit(secCalFor(run)) : null, hasKav = !!(fit && fit.useKav), hasMw = !!(fit && fit.mw), showMw = sec || hasMw, hasOl = hasMw && secMono() > 0;
   /* A260/A280 at each peak when the run recorded both wavelengths */
   const c280 = run.uvs.find(u => /280/.test(u.name)), c260 = run.uvs.find(u => /260/.test(u.name)), rat = !!(c280 && c260);
   const baseAt = (c, x, a, b) => { if (opt.intBase === 'zero') return 0; const ia = nearestIdx(c.xs, a), ib = nearestIdx(c.xs, b); const xa = c.xs[ia], xb = c.xs[ib], ya = c.ys[ia], yb = c.ys[ib]; return ya + (yb - ya) * (x - xa) / ((xb - xa) || 1); };
   const ratAt = r => { if (!rat) return ''; const x = r.apex; const a = c260.ys[nearestIdx(c260.xs, x)] - baseAt(c260, x, r.a, r.b), b = c280.ys[nearestIdx(c280.xs, x)] - baseAt(c280, x, r.a, r.b); return b > 5 ? fmt(a/b, 2) : ''; };
-  const cols = 8 + (rat ? 1 : 0) + (hasMg ? 1 : 0) + (gs ? 2 : 0) + (hasKav ? 1 : 0) + (hasMw ? 1 : 0) + (hasOl ? 1 : 0);
-  const head = `<tr><th>Region</th><th>Start (${u})</th><th>End (${u})</th><th>${sec ? (u === 'min' ? 'Elution time' : 'Ve') : gs ? 'Center' : 'Apex'} (${u})</th>${hasKav ? '<th title="(Ve − V0)/(Vt − V0)">Kav</th>' : ''}${hasMw ? '<th>Apparent mass (kDa)</th>' : ''}${hasOl ? '<th title="Apparent MW divided by the monomer mass. SEC sizes are typically good to 10 to 20%, and shape shifts them, so treat this as a guide to the oligomer state">× monomer</th>' : ''}<th>Height (mAU)</th>${gs ? `<th>FWHM (${u})</th>` : ''}<th>Area (mAU·${u})</th><th>% of regions</th>${hasMg ? '<th>Protein (mg)</th>' : ''}${rat ? '<th title="Ratio of absorbance at 260 and 280 nm at the peak. Around 0.57 for pure protein, higher when nucleic acid or bound nucleotide is present">A₂₆₀/A₂₈₀</th>' : ''}${gs ? '<th>Fit R²</th>' : ''}<th></th></tr>`;
+  const cols = 8 + (rat ? 1 : 0) + (hasMg ? 1 : 0) + (gs ? 2 : 0) + (hasKav ? 1 : 0) + (showMw ? 1 : 0) + (hasOl ? 1 : 0);
+  const head = `<tr><th>Region</th><th>Start (${u})</th><th>End (${u})</th><th>${sec ? (u === 'min' ? 'Elution time' : 'Ve') : gs ? 'Center' : 'Apex'} (${u})</th>${hasKav ? '<th title="(Ve − V0)/(Vt − V0)">Kav</th>' : ''}${showMw ? '<th>Apparent mass (kDa)</th>' : ''}${hasOl ? '<th title="Apparent MW divided by the monomer mass. SEC sizes are typically good to 10 to 20%, and shape shifts them, so treat this as a guide to the oligomer state">× monomer</th>' : ''}<th>Height (mAU)</th>${gs ? `<th>FWHM (${u})</th>` : ''}<th>Area (mAU·${u})</th><th>% of regions</th>${hasMg ? '<th>Protein (mg)</th>' : ''}${rat ? '<th title="Ratio of absorbance at 260 and 280 nm at the peak. Around 0.57 for pure protein, higher when nucleic acid or bound nucleotide is present">A₂₆₀/A₂₈₀</th>' : ''}${gs ? '<th>Fit R²</th>' : ''}<th></th></tr>`;
   const body = rows.map((r, k) => { const ri = run.integ.indexOf(r.reg), si = r.sec || {};
     const mwCell = si.void ? 'void' : si.mw == null ? '' : `${si.extrap ? '~' : ''}${kdaRound(si.mw)}`, olCell = si.void || si.ratio == null ? '' : si.olig ? `${fmt(si.ratio, 1)}×` : `${fmt(si.ratio, 1)}× (below monomer)`;
     const tiny = r.gauss && rows.reduce((t, q) => t + Math.max(0, q.area || 0), 0)*0.01 > (r.area || 0);
     return `<tr${tiny ? ' class="xrow" title="A fitted component with under 1% of the area"' : si.extrap ? ' title="Outside the range of your standards, so the size is an extrapolation"' : ''}><td><span class="sw" style="background:${esc(run.color)};opacity:.45"></span>${r.name}</td>
       <td><input type="number" step="0.01" id="ia${k}" data-ri="${ri}" data-rk="a" value="${fmt(r.a, 2)}" aria-label="${r.name} start"></td>
       <td><input type="number" step="0.01" id="ib${k}" data-ri="${ri}" data-rk="b" value="${fmt(r.b, 2)}" aria-label="${r.name} end"></td>
-      <td>${fmt(r.apex, 2)}</td>${hasKav ? `<td>${si.kav == null ? '' : fmt(si.kav, 3)}</td>` : ''}${hasMw ? `<td>${mwCell}</td>` : ''}${hasOl ? `<td>${olCell}</td>` : ''}<td>${fmtAuto(r.height)}</td>${gs ? `<td>${fmt(r.fwhm, 2)}</td>` : ''}<td>${fmtAuto(r.area)}</td><td>${r.pct == null ? '' : fmt(r.pct, 1)}</td>
+      <td>${fmt(r.apex, 2)}</td>${hasKav ? `<td>${si.kav == null ? '' : fmt(si.kav, 3)}</td>` : ''}${showMw ? `<td>${mwCell || (sec && !hasMw ? '—' : '')}</td>` : ''}${hasOl ? `<td>${olCell}</td>` : ''}<td>${fmtAuto(r.height)}</td>${gs ? `<td>${fmt(r.fwhm, 2)}</td>` : ''}<td>${fmtAuto(r.area)}</td><td>${r.pct == null ? '' : fmt(r.pct, 1)}</td>
       ${hasMg ? `<td>${r.mg == null ? '' : fmt(r.mg, 2)}</td>` : ''}${rat ? `<td>${ratAt(r)}</td>` : ''}${gs ? `<td${r.r2 != null && r.r2 < 0.98 ? ' class="warnc" title="Below 0.98, so one Gaussian may not describe this peak. Split it, or use trapezoid areas"' : ''}>${r.r2 == null ? '' : fmt(r.r2, 3)}</td>` : ''}<td><button type="button" class="xbtn" data-rdel="${ri}" aria-label="Remove ${r.name}">×</button></td></tr>`; }).join('');
   const blank = n => '<td></td>'.repeat(n);
-  const pr = pool ? `<tr class="pool" title="UV area across the pooled fractions, same baseline as the regions"><td><span class="sw" style="background:${esc(opt.poolColor)}"></span>Pool ${esc(pool.label)}</td><td>${fmt(pool.a, 2)}</td><td>${fmt(pool.b, 2)}</td>${blank(1 + (hasKav ? 1 : 0) + (hasMw ? 1 : 0) + (hasOl ? 1 : 0) + 1)}${gs ? '<td></td>' : ''}<td>${fmtAuto(pool.area)}</td><td></td>${hasMg ? `<td>${pool.mg == null ? '' : fmt(pool.mg, 2)}</td>` : ''}${rat ? '<td></td>' : ''}${gs ? '<td></td>' : ''}<td></td></tr>` : '';
-  const note = sec && !hasMw && opt.secStds ? `<tr><td colspan="${cols}" class="empty-row">Add a column calibration under Size exclusion (SEC) to see apparent molecular weights and oligomer states.</td></tr>` : '';
+  const pr = pool ? `<tr class="pool" title="UV area across the pooled fractions, same baseline as the regions"><td><span class="sw" style="background:${esc(opt.poolColor)}"></span>Pool ${esc(pool.label)}</td><td>${fmt(pool.a, 2)}</td><td>${fmt(pool.b, 2)}</td>${blank(1 + (hasKav ? 1 : 0) + (showMw ? 1 : 0) + (hasOl ? 1 : 0) + 1)}${gs ? '<td></td>' : ''}<td>${fmtAuto(pool.area)}</td><td></td>${hasMg ? `<td>${pool.mg == null ? '' : fmt(pool.mg, 2)}</td>` : ''}${rat ? '<td></td>' : ''}${gs ? '<td></td>' : ''}<td></td></tr>` : '';
+  const note = sec && !hasMw ? `<tr><td colspan="${cols}" class="empty-row">Calibrate the column under Size exclusion (SEC) to see apparent molecular weights and oligomer states.</td></tr>` : '';
   const mgWhy = hasMg ? massWhy(run) : '', mgNote = mgWhy ? `<tr><td colspan="${cols}" class="empty-row">No protein mg: ${esc(mgWhy)}.</td></tr>` : hasMg && pathAssumed(run) ? `<tr><td colspan="${cols}" class="empty-row">Protein mg use an assumed UV path of ${esc(fmtAuto(numOr(opt.path, 2)))} mm. Enter the real path on the run card.</td></tr>` : '';
   $('#intTable').innerHTML = head + (body + pr || `<tr><td colspan="${cols}" class="empty-row">No regions yet. Drag across the chromatogram, or click Detect peaks.</td></tr>`) + note + mgNote;
   /* FWHM, fit quality and A260/A280 wait behind More columns */
@@ -6452,6 +6457,7 @@ const LABQ = {
     {n: 'HisTrap FF 1 mL, ÄKTA go, GS buffers', src: 'glnA/glnE (GSprep NiNTA 1), HsGS', set: {mCol: 'HisTrap FF 1 mL', mCV: '1', mFlow: '1', mFrac: '1', mInst: 'ÄKTA go', mBufA: NI_A_GS, mBufB: NI_B_GS}},
     {n: 'Reverse IMAC, HisTrap FF 1 mL, flow-through', src: 'HsGS (ORTHO HisTrap 1 mL)', set: {mCol: 'HisTrap FF 1 mL', mCV: '1', mFlow: '1', mFrac: '1', mInst: 'ÄKTA go', mBufA: NI_A_GS, mBufB: NI_B_GS, mOther: 'the cleaved protein was collected in the flow-through'}},
     {n: 'HiPrep 26/10 desalting into base buffer', src: 'HsGS, glnA/glnE', set: {mCol: 'HiPrep 26/10 Desalting', mBufA: LAB_BASE}},
+    {n: 'Superdex 200 Increase 10/300, base buffer', src: 'S200 Increase SEC', sec: true, set: {mCol: 'Superdex 200 Increase 10/300 GL', mCV: '24', mBufA: LAB_BASE, mLoad: 'the 0.22 µm spin-filtered pool (one loop volume)', mInst: 'ÄKTA go'}},
     {n: 'Superose 6 Increase 10/300, base buffer', src: 'Sup6 all-in-one SEC', sec: true, set: {mCol: 'Superose 6 Increase 10/300 GL', mCV: '24', mBufA: LAB_BASE, mLoad: 'the 0.22 µm spin-filtered pool (one loop volume)', mInst: 'ÄKTA go'}}],
   man: [
     {n: 'Ni-NTA batch, gravity elution', src: 'HsGS', set: {kind: 'batch', name: 'Ni-NTA batch', resin: '2 mL of 50% Ni-NTA slurry, 1 h rotating at 4 °C', buffer: NI_A_GS, wash: '75 mL of NiA (3 × 25 mL) on a gravity column', elution: '9 × 0.5 mL of NiB (4.5 mL)'}},
@@ -6503,6 +6509,7 @@ function applyQuick(kind, q){
   const auto = kind === 'run' ? (runCond(tgt).auto || {}) : {};
   Object.keys(q.set).forEach(k => { if (kind === 'run' && k === 'mCol' && auto.mCol && !String(tgt.mCol || '').trim() && auto.mCol.toLowerCase().split(/\s+/)[0] !== q.set.mCol.toLowerCase().split(/\s+/)[0]) { kept = auto.mCol; return; }
     prev[k] = tgt[k] === undefined ? '' : tgt[k]; tgt[k] = q.set[k]; });
+  if (kind === 'run' && q.sec && q.set.mCol) { const ck = Object.keys(SEC_COLUMNS).find(k => SEC_COLUMNS[k].re && SEC_COLUMNS[k].re.test(q.set.mCol)); if (ck) { const c = secCalFor(tgt); if (c && c.col !== ck) { c.col = ck; c.name = SEC_COLUMNS[ck].name; if (c.unit === 'mL') { c.vt = SEC_COLUMNS[ck].vt; c.v0 = Math.round(c.vt*0.36*100)/100; c.v0est = true; } } } }
   if (kept) setTimeout(() => toast(`Kept the column read from the run file (${kept}). Type a column on the card if the preset's is right.`), 0);
   quickUndo = {k: curStep, kind, n: q.n, prev}; if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1;
   gels.forEach(g => { g._prepA = null; }); if (kind === 'run') renderList(); render(); }
@@ -6732,7 +6739,8 @@ $('#copySvg').addEventListener('click', () => {
 function toast(msg){ const box = $('#toast'); if ([...box.children].some(c => c.textContent === msg)) return;
   const pill = document.createElement('div'); pill.className = 'pill'; pill.textContent = msg; box.appendChild(pill); box.hidden = false;
   while (box.children.length > 3) box.firstChild.remove();
-  setTimeout(() => { pill.remove(); if (!box.children.length) { box.hidden = true; box.classList.remove('overlap'); } }, Math.min(6000, 2600 + msg.length*25)); }
+  const dur = Math.min(4500, 1600 + msg.length*20);
+  setTimeout(() => { pill.classList.add('out'); setTimeout(() => { pill.remove(); if (!box.children.length) { box.hidden = true; box.classList.remove('overlap'); } }, 250); }, dur); }
 
 /* ---------- example data ---------- */
 function exampleTraces(){
