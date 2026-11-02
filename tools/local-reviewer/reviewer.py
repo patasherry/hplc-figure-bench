@@ -25,7 +25,7 @@ STATE = Path.home() / '.hfb-reviewer-state.json'
 POLL_MIN = 5
 MAX_DIFF = 60000  # characters of diff sent to the model; the rest is summarised as "truncated"
 
-cfg = json.loads(CONF.read_text(encoding='utf-8')) if CONF.exists() else {}
+cfg = json.loads(CONF.read_text(encoding='utf-8-sig')) if CONF.exists() else {}
 TOKEN = cfg.get('token') or os.environ.get('GITHUB_TOKEN', '')
 REPO = cfg.get('repo', 'patasherry/hplc-figure-bench')
 MODEL = cfg.get('model', 'qwen3:30b-a3b')
