@@ -74,20 +74,20 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       name: 'split allocation',
       setup: async (p, h, tl, ids) => {
         await setFrom(p, h, tl[2].k, ids[0]);
-        await p.fill('#ssFromNote', 'fractions B9-B12'); await p.dispatchEvent('#ssFromNote', 'change'); await h.wait(300);
-        await h.step(tl[1].k); await p.fill('#ssFromNote', 'fractions B5-B8'); await p.dispatchEvent('#ssFromNote', 'change'); await h.wait(300);
+        await p.evaluate(() => { const e = document.querySelector('#ssFromNote'); if(e) { e.value = 'fractions B9-B12'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(300);
+        await h.step(tl[1].k); await p.evaluate(() => { const e = document.querySelector('#ssFromNote'); if(e) { e.value = 'fractions B5-B8'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(300);
 
         await h.step(tl[1].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
-        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '1.42'); await p.dispatchEvent('#btw-conc', 'change');
-        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '2.0'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.evaluate(() => { const e = document.querySelector('#btw-conc'); if(e) { e.value = '1.42'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } });
+        await openFolds(p.locator('#btw-vOut')); await p.evaluate(() => { const e = document.querySelector('#btw-vOut'); if(e) { e.value = '2.0'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(400);
 
         await h.step(tl[2].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
-        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '1.42'); await p.dispatchEvent('#btw-conc', 'change');
-        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '1.5'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.evaluate(() => { const e = document.querySelector('#btw-conc'); if(e) { e.value = '1.42'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } });
+        await openFolds(p.locator('#btw-vOut')); await p.evaluate(() => { const e = document.querySelector('#btw-vOut'); if(e) { e.value = '1.5'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(400);
       },
       expectSvg: ['Final pool (C, Size exclusion): 2.84 mg', 'Final pool (E, Anion exchange): 2.13 mg'],
       expectMeth: [
-        'The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 to a Q 6 mL column (step 3, panel E).',
+        'From the IMAC pool, fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 to a Q 6 mL column (step 3, panel E).',
         'After size exclusion, concentration left 2.84 mg',
         'After anion exchange, concentration left 2.13 mg'
       ],
@@ -98,8 +98,8 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       setup: async (p, h, tl, ids) => {
         // Just linear SEC and AEX without wfFrom set (meaning linear recombination)
         await h.step(tl[1].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
-        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '2.0'); await p.dispatchEvent('#btw-conc', 'change');
-        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '5.0'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.evaluate(() => { const e = document.querySelector('#btw-conc'); if(e) { e.value = '2.0'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } });
+        await openFolds(p.locator('#btw-vOut')); await p.evaluate(() => { const e = document.querySelector('#btw-vOut'); if(e) { e.value = '5.0'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(400);
       },
       expectSvg: ['Final pool (E, Anion exchange):'], // AEX area determines final yield because no manual conc is given after AEX
       expectMeth: [],
@@ -110,11 +110,11 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       setup: async (p, h, tl, ids) => {
         await setFrom(p, h, tl[2].k, ids[0]); await h.wait(300);
         await h.step(tl[1].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
-        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '1.0'); await p.dispatchEvent('#btw-conc', 'change');
-        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '2.0'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.evaluate(() => { const e = document.querySelector('#btw-conc'); if(e) { e.value = '1.0'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } });
+        await openFolds(p.locator('#btw-vOut')); await p.evaluate(() => { const e = document.querySelector('#btw-vOut'); if(e) { e.value = '2.0'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(400);
         await h.step(tl[2].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
-        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', ''); await p.dispatchEvent('#btw-conc', 'change');
-        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '1.5'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.evaluate(() => { const e = document.querySelector('#btw-conc'); if(e) { e.value = ''; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } });
+        await openFolds(p.locator('#btw-vOut')); await p.evaluate(() => { const e = document.querySelector('#btw-vOut'); if(e) { e.value = '1.5'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(400);
       },
       expectSvg: ['Final pool (C, Size exclusion): 2.00 mg', 'Final pool (E, Anion exchange): 1.28 mg'],
       expectMeth: [],
@@ -125,11 +125,11 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       setup: async (p, h, tl, ids) => {
         await setFrom(p, h, tl[2].k, ids[0]); await h.wait(300);
         await h.step(tl[1].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
-        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '0'); await p.dispatchEvent('#btw-conc', 'change');
-        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '2.0'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.evaluate(() => { const e = document.querySelector('#btw-conc'); if(e) { e.value = '0'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } });
+        await openFolds(p.locator('#btw-vOut')); await p.evaluate(() => { const e = document.querySelector('#btw-vOut'); if(e) { e.value = '2.0'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(400);
         await h.step(tl[2].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
-        await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', ''); await p.dispatchEvent('#btw-conc', 'change');
-        await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '1.5'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+        await openFolds(p.locator('#btw-conc')); await p.evaluate(() => { const e = document.querySelector('#btw-conc'); if(e) { e.value = ''; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } });
+        await openFolds(p.locator('#btw-vOut')); await p.evaluate(() => { const e = document.querySelector('#btw-vOut'); if(e) { e.value = '1.5'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(400);
       },
       expectSvg: ['Final pool (C, Size exclusion): 0.00 mg', 'Final pool (E, Anion exchange): 1.28 mg'],
       expectMeth: [],
@@ -213,7 +213,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
     T.check('split-pool: multiple final yield lines', brTexts.length > 0, brTexts.map(x => x.t).join(' | '));
     const meth = await h.methods();
-    T.check('split-pool: methods text contains split', /split:/i.test(meth), meth);
+    T.check('split-pool: methods text contains split (now testing bug fix)', !/split:/i.test(meth) && /From the IMAC pool/i.test(meth), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
   await T.t('split-and-discard-yields', async () => {
@@ -250,7 +250,43 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
     T.check('split-discard: one final yield line', brTexts.length === 1, brTexts.map(x => x.t).join(' | '));
     const meth = await h.methods();
-    T.check('split-discard: methods text contains split', /split:/i.test(meth), meth);
+    T.check('split-discard: methods text contains split (now testing bug fix)', !/split:/i.test(meth), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
+
+  await T.t('branched methods text does not contain split', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), q: src('q')};
+    await h.newProject('Split bug regression');
+    await h.gb(F.gb);
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+    await h.addRun(F.sec);
+    await h.suggest();
+    await h.addRun(F.q);
+    await h.suggest();
+
+    // Create a branch from IMAC pool
+    const tl = (await h.timeline()).filter(x => x.k.startsWith('run:'));
+    const ids = tl.map(x => x.k.slice(4));
+    const setFrom = async (p, h, stepKey, value) => { await h.step(stepKey); await p.selectOption('#ssFrom', value); await p.waitForTimeout(500); };
+
+    // Set step 3 (Q) to come from IMAC (step 1)
+    await setFrom(p, h, tl[2].k, ids[0]);
+    await p.evaluate(() => { const e = document.querySelector('#ssFromNote'); if(e) { e.value = 'fractions B9-B12'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(300);
+
+    // Add note to step 2 (SEC)
+    await h.step(tl[1].k);
+    await p.evaluate(() => { const e = document.querySelector('#ssFromNote'); if(e) { e.value = 'fractions B5-B8'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(300);
+
+    const meth = await h.methods();
+    T.check('branched methods text does not contain split', !/split:/i.test(meth), meth);
+
+    // Test linear workflow regression
+    await setFrom(p, h, tl[2].k, ''); // Reset to linear
+    const linearMeth = await h.methods();
+    T.check('linear methods text has no split', !/split:/i.test(linearMeth), linearMeth);
+
+    await close();
+  });
 
   T.done(); })();
