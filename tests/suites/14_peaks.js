@@ -149,8 +149,54 @@ async function zoomPeak() {
   } finally { T.check('zoom_peak/no-page-errors', !errs.length, errs.join(' | ')); await close(); }
 }
 
+
+async function peakOverlapTest() {
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('overlap');
+    await h.addRun('tests/data/chrom/peak_overlap.csv');
+    await p.waitForTimeout(300);
+
+    const tests = [
+      { id: 'horiz', rot: false },
+      { id: 'vert', rot: true }
+    ];
+
+    for (const tst of tests) {
+      if (tst.rot) {
+        await setOpt(p, 'o-peakRot', '1');
+        await p.waitForTimeout(100);
+      } else {
+        await setOpt(p, 'o-peakRot', '');
+        await p.waitForTimeout(100);
+      }
+
+      await setOpt(p, 'o-prom', '0'); // make sure all peaks are detected
+      await setOpt(p, 'o-peakMax', '8');
+
+      await p.evaluate(() => {
+        const autoint = document.getElementById('p-autoint');
+        if (autoint) autoint.click();
+      });
+      await p.waitForTimeout(600); // wait for detect peaks to run
+
+      const overlaps = await h.overlaps();
+      // Look for overlaps between numbers
+      const overlapPairs = overlaps.filter(o => /^[0-9.]+\s*×\s*[0-9.]+$/.test(o));
+
+      T.check(`overlap-${tst.id}/no-overlap`, overlapPairs.length === 0, `Peak labels should not overlap (${tst.id}). overlaps: ` + overlapPairs.join(', '));
+    }
+  } catch (e) {
+    T.check('overlap/no-page-errors', false, e.message);
+  } finally {
+    T.check('overlap/no-page-errors', !errs.length, errs.join(' | '));
+    await close();
+  }
+}
+
 (async () => {
   await T.t('zoom_peak', zoomPeak);
+  await T.t('overlap', peakOverlapTest);
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }

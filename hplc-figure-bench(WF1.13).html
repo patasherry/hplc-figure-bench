@@ -2153,7 +2153,7 @@ function peakApex(xs, ys, x){
 }
 /* a label box steps up past the boxes already placed until it is clear. The steps are bounded, and with no clear spot at or below `top` it gets null and is not placed */
 function placeLabel(boxes, x1, x2, bot, h, top){
-  const hits = b => x1 < b.x2 && x2 > b.x1 && bot - h < b.y2 && bot > b.y1;
+  const hits = b => x1 < b.x2 + 2 && x2 + 2 > b.x1 && bot - h < b.y2 + 2 && bot + 2 > b.y1;
   let hb, guard = 0; while ((hb = boxes.find(hits)) && guard++ < 40) bot = hb.y1 - 1;
   if (bot - h < top || boxes.some(hits)) return null;
   boxes.push({x1, x2, y1: bot - h, y2: bot}); return bot;
@@ -2275,7 +2275,7 @@ function buildOverlaySVG(ov){
   s.push('</g>');
   const lblLeft = [];
   if (anyPeaks) {
-    const pf = fs*0.85, pcw = pf*0.56, boxes = [], items = [];
+    const pf = fs*0.85, pcw = pf*0.64, boxes = [], items = [];
     P.forEach(p => {
       const col = o.peakColor === 'trace' ? p.t.color : '#000000', sh = +p.t.xshift || 0;
       p.t.peaks.forEach(pk => {
@@ -2286,7 +2286,7 @@ function buildOverlaySVG(ov){
     });
     /* each label clears every trace under it, and gets a thin leader when that lifts it away from its own peak */
     const k = (xhi - xlo)/(R - L), topIn = (a, b) => { let m = -Infinity; P.forEach(p => { for (let i = Math.max(0, lowerBound(p.xs, a)); i < p.xs.length && p.xs[i] <= b; i++) if (p.yp[i] > m) m = p.yp[i]; }); return m; };
-    items.forEach(it => { it.w = o.peakRot ? pf : it.raw.length*pcw; it.h = o.peakRot ? it.raw.length*pcw : pf; const xd = xlo + (it.X - L)*k, m = topIn(xd - it.w/2*k, xd + it.w/2*k);
+    items.forEach(it => { it.w = o.peakRot ? pf * 1.1 : it.raw.length*pcw + 2; it.h = o.peakRot ? it.raw.length*pcw + 2 : pf * 1.1; const xd = xlo + (it.X - L)*k, m = topIn(xd - it.w/2*k, xd + it.w/2*k);
       it.Y0 = Math.max(T + it.h, Math.min(it.Y, isFinite(m) ? py(m) - 3 : it.Y)); });
     items.sort((a,b) => b.Y0 - a.Y0);
     const leaders = [];

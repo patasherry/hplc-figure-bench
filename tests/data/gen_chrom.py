@@ -412,6 +412,17 @@ def time_formats():
 
 
 
+def peak_overlap():
+    fn = 'peak_overlap.csv'
+    x = np.round(np.arange(0, 20.0001, 0.01), 4)
+    y = signal(x, [(10.0, 0.05, 100.0), (10.05, 0.05, 100.0), (10.1, 0.05, 100.0), (10.15, 0.05, 100.0), (10.2, 0.05, 100.0)])
+    ev = [(8.0, 'F1'), (12.0, 'Waste')]
+    write_unicorn_csv(os.path.join(OUT, fn), [
+        ('UV', 'ml', 'mAU', x, y),
+        ('Fraction', 'ml', 'Fraction', ev, None)
+    ])
+    add(dict(file=fn, note='Multiple very close peaks to test label overlap', format='csv', kind='sec', step='Size exclusion', unit='mL', column='Superdex 200 Increase 10/300 GL', cv=24.0, flow=0.5, path_mm=2, frac=dict(n=1, first='F1', last='F1'), injection=0.0, peaks=[], pool=None))
+
 def uneven_fractions():
     x = np.round(np.arange(0, 20.0001, 0.05), 4)
     y = signal(x, [(9.5, 0.5, 2000.0)])
@@ -423,7 +434,7 @@ def uneven_fractions():
     add(dict(file='fixture_frac_uneven.csv', note='uneven fractions: 1, 2, 3, 1, 2, 1 mL then waste', format='csv', kind='sec', step='Size exclusion', unit='mL', column='Superdex 200 Increase 10/300 GL', cv=24.0, flow=0.5, path_mm=2, frac=dict(n=6, first='F1', last='F6'), injection=0.0, peaks=[dict(ve=9.5, tol=0.1, must=True, note='main peak')], pool=None))
 
 if __name__ == '__main__':
-    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, hplc_export, cross_format_files, time_formats, uneven_fractions): f()
+    for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, hplc_export, cross_format_files, time_formats, uneven_fractions, peak_overlap): f()
     p = os.path.join(HERE, 'expected.json'); doc = json.load(open(p)) if os.path.exists(p) else {}
     doc['mg'] = MG; doc['lastfrac'] = LF
     doc['chrom'] = EXP; doc['chrom_note'] = __doc__.split('Conventions recorded in expected.json')[1].strip()

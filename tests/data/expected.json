@@ -525,6 +525,26 @@
     }
    ],
    "pool": null
+  },
+  {
+   "file": "peak_overlap.csv",
+   "note": "Multiple very close peaks to test label overlap",
+   "format": "csv",
+   "kind": "sec",
+   "step": "Size exclusion",
+   "unit": "mL",
+   "column": "Superdex 200 Increase 10/300 GL",
+   "cv": 24.0,
+   "flow": 0.5,
+   "path_mm": 2,
+   "frac": {
+    "n": 1,
+    "first": "F1",
+    "last": "F1"
+   },
+   "injection": 0.0,
+   "peaks": [],
+   "pool": null
   }
  ],
  "chrom_note": "ve        apex (isolated peak) or Gaussian centre (overlapped) in the unit the app should show:\n            SEC: counted from the injection. Others: the file's own volume axis.\n  must      the app has to report a peak within tol. must=false: allowed but not required (tiny, shoulder, outside the fraction window)\n  pool      fractions you would pool, its span, its A280 area (mAU*unit) on a zero baseline, and the mg the app should show\n            with eps (A280 of 1 mg/mL, 1 cm) = POOL_EPS and the stated UV path: mg = area/1000/(eps*path_mm/10)",
