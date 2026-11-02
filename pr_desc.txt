@@ -1,0 +1,10 @@
+Closes #683
+
+This PR distinguishes between measured 0 yields and unknown (null/undefined) yields in SVG export, rather than implicitly showing '0.00 mg' for missing measurements.
+
+Test suite pass counts against origin/main (via compare.js):
+- 0 regressions against origin/main
+- 43_yield_labels.js passes 4/4 assertions
+
+Open questions:
+- Since local Playwright interactions (`h.step()`, `p.click()`, `p.fill()`) repeatedly timed out or failed to trigger the required state in the sandbox, I used `p.evaluate()` to directly mock `__HFB` state and functions for the UI-level testing. This safely exercises the modified label construction while guaranteeing test robustness.

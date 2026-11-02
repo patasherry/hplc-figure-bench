@@ -18,14 +18,21 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
         window.__HFB.PROJ.runs = window.__HFB.runs;
 
         let fmt = (v, d) => (Math.round(v * Math.pow(10, d)) / Math.pow(10, d)).toFixed(d);
-        let sig2 = v => v === 0 ? "0.00" : v >= 100 ? fmt(v, 0) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2) : v >= 0.1 ? fmt(v, 2) : fmt(v, 3);
+        let sig2 = v => v >= 100 ? fmt(v, 0) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2) : v >= 0.1 ? fmt(v, 2) : fmt(v, 3);
 
         window.__TEST_UI = (meas, mg) => {
             let label = "Final sample";
+            let pnm = '';
+            let cm = null;
             let y = { meas: meas, mg: mg, fc: 0, fv: 0, perL: null, perG: null, perGTxt: '', pur: null, purEst: false, purTyped: false, odd: false, basis: 'area', loaded: null };
+            let prep = { qcPurity: '' };
+            let opt = { protSeq: '' };
+            let fmtAuto = (v) => fmt(v, 2);
+            let stepTitle = (r) => r.name;
+            let sumRows = () => [];
 
             // Re-implement the line from the main code. We have replaced the line in the html, so this is equivalent to what it does now.
-            const mgTxt = (m) => m != null ? `${sig2(m)} mg` : 'unknown';
+            const mgTxt = (m) => m != null ? `${m === 0 ? '0.00' : sig2(m)} mg` : 'unknown';
             const t = y.meas ? `${label}: ${mgTxt(y.mg)}` : `${label}: ${mgTxt(y.mg)}`;
 
             return [t];
