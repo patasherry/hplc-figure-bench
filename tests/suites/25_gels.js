@@ -119,4 +119,172 @@ await T.t('purity-display-states', async () => {
     await a.close();
   }
 });
+
+
+await T.t('brightfield-vs-linear', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im_bright = await p.evaluate(() => {
+      const w=20, h=360, c=document.createElement('canvas'); c.width=w; c.height=h; const x=c.getContext('2d'), im=x.createImageData(w,h);
+      const bands = [{y:90, sig: 6.0, mass: 80}, {y:180, sig: 5.5, mass: 12}, {y:265, sig: 6.5, mass: 8}];
+      let max_density = 0;
+      const density = new Float32Array(h);
+      for(let y=0; y<h; y++) {
+        let d = 0;
+        for(let b of bands) d += b.mass * Math.exp(-0.5 * Math.pow((y - b.y)/b.sig, 2));
+        density[y] = d;
+        if(d > max_density) max_density = d;
+      }
+      for(let y=0; y<h; y++) {
+        const od = 1.0 * density[y] / max_density;
+        const v = Math.round(255 * Math.pow(10, -od));
+        for(let i=0; i<w; i++) {
+          const j = 4*(y*w + i);
+          im.data[j] = im.data[j+1] = im.data[j+2] = v;
+          im.data[j+3] = 255;
+        }
+      }
+      x.putImageData(im,0,0);
+      return c.toDataURL('image/png');
+    });
+
+    const im_linear = await p.evaluate(() => {
+      const w=20, h=360, c=document.createElement('canvas'); c.width=w; c.height=h; const x=c.getContext('2d'), im=x.createImageData(w,h);
+      const bands = [{y:90, sig: 6.0, mass: 80}, {y:180, sig: 5.5, mass: 12}, {y:265, sig: 6.5, mass: 8}];
+      let max_density = 0;
+      const density = new Float32Array(h);
+      for(let y=0; y<h; y++) {
+        let d = 0;
+        for(let b of bands) d += b.mass * Math.exp(-0.5 * Math.pow((y - b.y)/b.sig, 2));
+        density[y] = d;
+        if(d > max_density) max_density = d;
+      }
+      for(let y=0; y<h; y++) {
+        const od = 1.0 * density[y] / max_density;
+        const v = Math.round(12 + 200 * od);
+        for(let i=0; i<w; i++) {
+          const j = 4*(y*w + i);
+          im.data[j] = im.data[j+1] = im.data[j+2] = v;
+          im.data[j+3] = 255;
+        }
+      }
+      x.putImageData(im,0,0);
+      return c.toDataURL('image/png');
+    });
+
+    await load(p, project({
+      gels: [{id: 'g1', src: im_bright, invert: false, name: 'gel A', rot: 0, labels: 'A', marks: [], tags: [{kind:'target', lane:1, y:90/360}], cl:0, cr:100, ct:0, cb:100}],
+      runs: [],
+      opt: {purBase: 'lane'}
+    }));
+    await p.waitForTimeout(500);
+    const csv_bright = await p.evaluate(() => {
+      return Array.from(document.querySelectorAll('#bandTable tr')).map(r => Array.from(r.querySelectorAll('td, th')).map(c => c.textContent));
+    });
+    let pur_bright = 0;
+    if (csv_bright && csv_bright.length > 1) {
+        const rows = csv_bright.filter(r => r[0] === '1');
+        if (rows.length > 0) pur_bright = parseFloat(rows[0][7]);
+    }
+
+    await load(p, project({
+      gels: [{id: 'g2', src: im_linear, invert: true, name: 'gel B', rot: 0, labels: 'A', marks: [], tags: [{kind:'target', lane:1, y:90/360}], cl:0, cr:100, ct:0, cb:100}],
+      runs: [],
+      opt: {purBase: 'lane'}
+    }));
+    await p.waitForTimeout(500);
+    const csv_linear = await p.evaluate(() => {
+      return Array.from(document.querySelectorAll('#bandTable tr')).map(r => Array.from(r.querySelectorAll('td, th')).map(c => c.textContent));
+    });
+    let pur_linear = 0;
+    if (csv_linear && csv_linear.length > 1) {
+        const rows = csv_linear.filter(r => r[0] === '1');
+        if (rows.length > 0) pur_linear = parseFloat(rows[0][7]);
+    }
+
+    T.check('brightfield-vs-linear-gap', Math.abs(pur_bright - pur_linear) <= 1.0, "pur_bright=" + pur_bright + " pur_linear=" + pur_linear);
+
+  } finally {
+    await a.close();
+  }
+});
+
+
+await T.t('brightfield-vs-linear', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im_bright = await p.evaluate(() => {
+      const w=20, h=360, c=document.createElement('canvas'); c.width=w; c.height=h; const x=c.getContext('2d'), im=x.createImageData(w,h);
+      const bands = [{y:90, sig: 6.0, mass: 80}, {y:180, sig: 5.5, mass: 12}, {y:265, sig: 6.5, mass: 8}];
+      let max_density = 0;
+      const density = new Float32Array(h);
+      for(let y=0; y<h; y++) {
+        let d = 0;
+        for(let b of bands) d += b.mass * Math.exp(-0.5 * Math.pow((y - b.y)/b.sig, 2));
+        density[y] = d;
+        if(d > max_density) max_density = d;
+      }
+      for(let y=0; y<h; y++) {
+        const od = 1.0 * density[y] / max_density;
+        const v = Math.round(255 * Math.pow(10, -od));
+        for(let i=0; i<w; i++) {
+          const j = 4*(y*w + i);
+          im.data[j] = im.data[j+1] = im.data[j+2] = v;
+          im.data[j+3] = 255;
+        }
+      }
+      x.putImageData(im,0,0);
+      return c.toDataURL('image/png');
+    });
+
+    const im_linear = await p.evaluate(() => {
+      const w=20, h=360, c=document.createElement('canvas'); c.width=w; c.height=h; const x=c.getContext('2d'), im=x.createImageData(w,h);
+      const bands = [{y:90, sig: 6.0, mass: 80}, {y:180, sig: 5.5, mass: 12}, {y:265, sig: 6.5, mass: 8}];
+      let max_density = 0;
+      const density = new Float32Array(h);
+      for(let y=0; y<h; y++) {
+        let d = 0;
+        for(let b of bands) d += b.mass * Math.exp(-0.5 * Math.pow((y - b.y)/b.sig, 2));
+        density[y] = d;
+        if(d > max_density) max_density = d;
+      }
+      for(let y=0; y<h; y++) {
+        const od = 1.0 * density[y] / max_density;
+        const v = Math.round(12 + 200 * od);
+        for(let i=0; i<w; i++) {
+          const j = 4*(y*w + i);
+          im.data[j] = im.data[j+1] = im.data[j+2] = v;
+          im.data[j+3] = 255;
+        }
+      }
+      x.putImageData(im,0,0);
+      return c.toDataURL('image/png');
+    });
+
+    await load(p, project({
+      gels: [{id: 'g1', src: im_bright, invert: false, name: 'gel A', rot: 0, labels: 'A', marks: [], tags: [{kind:'target', lane:1, y:90/360}], cl:0, cr:100, ct:0, cb:100}],
+      runs: [],
+      opt: {purBase: 'lane'}
+    }));
+    await p.waitForTimeout(500);
+    const csv_bright = await csv(p);
+    const L_bright = lane(csv_bright, 1);
+    const pur_bright = L_bright.length ? parseFloat(L_bright[0][10]) : 0;
+
+    await load(p, project({
+      gels: [{id: 'g2', src: im_linear, invert: true, name: 'gel B', rot: 0, labels: 'A', marks: [], tags: [{kind:'target', lane:1, y:90/360}], cl:0, cr:100, ct:0, cb:100}],
+      runs: [],
+      opt: {purBase: 'lane'}
+    }));
+    await p.waitForTimeout(500);
+    const csv_linear = await csv(p);
+    const L_linear = lane(csv_linear, 1);
+    const pur_linear = L_linear.length ? parseFloat(L_linear[0][10]) : 0;
+
+    T.check('brightfield-vs-linear-gap', Math.abs(pur_bright - pur_linear) <= 1.0, "pur_bright=" + pur_bright + " pur_linear=" + pur_linear);
+
+  } finally {
+    await a.close();
+  }
+});
 T.done();})();
