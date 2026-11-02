@@ -131,8 +131,15 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
         await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', ''); await p.dispatchEvent('#btw-conc', 'change');
         await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '1.5'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
       },
-      expectSvg: ['Final pool (C, Size exclusion): 0.00 mg', 'Final pool (E, Anion exchange): 1.28 mg'],
-      expectMeth: [],
+      expectSvg: [
+        'Final pool (C, Size exclusion): 0.00 mg His6-SUMO-standin, purity not measured by gel (from the A280 area)',
+        'Final pool (E, Anion exchange): 1.28 mg His6-SUMO-standin, purity not measured by gel (from the A280 area)'
+      ],
+      expectMeth: [
+        'After size exclusion, concentration left 0.00 mg (0.0 mg/mL in 2.0 mL).',
+        'The Anion exchange pool held 1.28 mg in 2.0 mL (0.64 mg/mL), by the A280 area of the pool (2 mm path [assumed, check], A280 of 2.36 for 1 mg/mL of the tagged form).',
+        'Its purity was not measured by gel.'
+      ],
       expectMethMissing: []
     }
   ];

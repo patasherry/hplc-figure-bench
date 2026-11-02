@@ -124,7 +124,8 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
       let f = await foot();
       T.check('crowded/example_no_warning', !/left off/.test(f.t) && !f.warn, f.t);
       await pg.setInputFiles('#file', {name: 'crowded_peaks.csv', mimeType: 'text/csv', buffer: Buffer.from(crowdedCsv())});
-      await hq.wait(900);
+      await pg.waitForSelector('#paper svg text', {state: 'visible'});
+      await hq.wait(100);
       const g = await pg.evaluate(labels => { const svg = document.querySelector('#paper svg'); if (!svg) return null; const sr = svg.getBoundingClientRect();
         const labs = [...svg.querySelectorAll('text')].filter(t => labels.includes(t.textContent.trim())).map(t => { const r = t.getBoundingClientRect(); return {t: t.textContent.trim(), top: r.top - sr.top, bot: r.bottom - sr.top, l: r.left - sr.left, r: r.right - sr.left}; });
         return {w: sr.width, h: sr.height, labs}; }, LABELS);
@@ -144,6 +145,22 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
       f = await foot();
       T.check('crowded/warning_clears', !/left off/.test(f.t) && !f.warn, f.t);
       T.check('crowded/no_page_errors', !q.errs.length, q.errs.join(' | '));
+    } finally { await q.close(); }
+  });
+
+
+  await T.t('crowded_overlap_failing_case', async () => {
+    // A synthetic overlap case that fails on main and passes after the rendering fix
+    const {crowdedCsv, LABELS} = require('../data/gen_crowded_peaks');
+    const q = await open(), hq = H(q.p), pg = q.p;
+    try {
+      await pg.click('#homeQuick'); await hq.wait(800);
+      await pg.setInputFiles('#file', {name: 'crowded_peaks.csv', mimeType: 'text/csv', buffer: Buffer.from(crowdedCsv())});
+      await pg.waitForSelector('#paper svg text', {state: 'visible'});
+      await hq.wait(100);
+
+      const ov = (await hq.overlaps()).filter(s => LABELS.some(L => s.includes(L)));
+      T.check('crowded_overlap_failing_case_dont_overlap', !ov.length, ov.join(', '));
     } finally { await q.close(); }
   });
 
@@ -184,6 +201,148 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
       const r1 = await first(); T.check('drag/reset-position', !!r1 && Math.abs(r1.x - a0.x) < 0.5 && Math.abs(r1.y - a0.y) < 0.5, `at ${r1 && r1.x},${r1 && r1.y}, was ${a0.x},${a0.y}`);
       const sv2 = await savedRun(); T.check('drag/reset-saved', !sv2.r.wfDx && !sv2.r.wfDy, `wfDx ${sv2.r.wfDx}, wfDy ${sv2.r.wfDy}`);
       T.check('drag/no_page_errors', !q.errs.length, q.errs.join(' | '));
+    } finally { await q.close(); }
+  });
+
+  // Publication readiness at journal widths (#662): checks that exported figures at single
+  // and double column presets have no text under 6 pt, and ticks and text don't overlap.
+  await T.t('publication_readiness_journal_widths', async () => {
+    const q = await open(), hq = H(q.p), pg = q.p;
+    try {
+      const download = async (selector, timeout = 10000) => {
+        const loc = pg.locator(selector);
+        await loc.scrollIntoViewIfNeeded();
+        const [dl] = await Promise.all([
+          pg.waitForEvent('download', { timeout }).catch(() => null),
+          loc.click()
+        ]);
+        if (!dl) return null;
+        const name = dl.suggestedFilename();
+        const tmpPath = path.join(path.resolve(__dirname, '../results'), name);
+        await dl.saveAs(tmpPath);
+        const buf = fs.readFileSync(tmpPath);
+        return { name, buf, str: buf.toString('utf8') };
+      };
+
+      const setPreset = async (val) => {
+        await pg.evaluate(v => {
+          const e = document.querySelector('#o-preset');
+          if (e) {
+            e.value = v;
+            e.dispatchEvent(new Event('change', {bubbles: true}));
+            e.dispatchEvent(new Event('input', {bubbles: true}));
+          }
+        }, val);
+        await hq.wait(300);
+      };
+
+      // 1. HPLC Overlay and NanoDrop in Quick mode
+      await pg.click('#homeQuick'); await hq.wait(600);
+      await setPreset('single');
+      const hplcSvg = await download('#saveSvg');
+      T.check('pub/hplc_single_svg', !!hplcSvg, 'HPLC overlay single SVG downloaded');
+      if (hplcSvg) {
+        const smallFonts = [...hplcSvg.str.matchAll(/font-size="([^"]+)"/g)]
+          .map(m => m[1].endsWith('%') ? 8 * (parseFloat(m[1]) / 100) : parseFloat(m[1]))
+          .filter(fs => fs < 5.99);
+        T.check('pub/hplc_single_min_font', smallFonts.length === 0, `small fonts: ${smallFonts.join(', ')}`);
+        const ov = await hq.overlaps();
+        T.check('pub/hplc_single_no_overlap', ov.length === 0, `overlaps: ${ov.join(', ')}`);
+      }
+      const hplcPng = await download('#savePng');
+      T.check('pub/hplc_single_png_600dpi', !!hplcPng && Math.abs(hplcPng.buf.readUInt32BE(16) - 2100) <= 2, `pngW: ${hplcPng && hplcPng.buf.readUInt32BE(16)}`);
+
+      // NanoDrop in Quick mode (where #figtabs is active)
+      await pg.setInputFiles('#file', [src('ndSpec')]);
+      await hq.wait(800);
+      const ndTab = pg.locator('#figtabs .figtab').filter({hasText: /nanodrop/i}).first();
+      if (await ndTab.count() > 0) {
+        await ndTab.click();
+        await hq.wait(400);
+      }
+      const ndSvg = await download('#saveSvg');
+      T.check('pub/nanodrop_single_svg', !!ndSvg, 'NanoDrop SVG downloaded');
+      if (ndSvg) {
+        const smallFonts = [...ndSvg.str.matchAll(/font-size="([^"]+)"/g)]
+          .map(m => m[1].endsWith('%') ? 8 * (parseFloat(m[1]) / 100) : parseFloat(m[1]))
+          .filter(fs => fs < 5.99);
+        T.check('pub/nanodrop_single_min_font', smallFonts.length === 0, `small fonts: ${smallFonts.join(', ')}`);
+      }
+      // Normalized NanoDrop checks subscript font-size 75%
+      await pg.evaluate(() => {
+        const el = document.querySelector('#o-ndNorm');
+        if (el) {
+          el.value = 'a280';
+          el.dispatchEvent(new Event('input', {bubbles: true}));
+          el.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+      });
+      await hq.wait(400);
+      const ndSvgNorm = await download('#saveSvg');
+      if (ndSvgNorm) {
+        T.check('pub/nanodrop_subscript_75pct', ndSvgNorm.str.includes('font-size="75%"'), 'NanoDrop subscript font-size 75%');
+      }
+
+      // 2. ÄKTA run chart and Workflow figure in project mode
+      const q2 = await open(), hq2 = H(q2.p), pg2 = q2.p;
+      try {
+        await hq2.newProject('Pub Test Project');
+        await hq2.addRun(src('his'));
+        await pg2.setInputFiles('#file', [src('ndSpec')]);
+        await hq2.wait(1000);
+
+        // Check ÄKTA run chart
+        const tl = await hq2.timeline();
+        const rStep = tl.find(x => /^run:/.test(x.k));
+        if (rStep) await hq2.step(rStep.k);
+        await hq2.wait(400);
+
+        // Turn on phases and standards to exercise phase & std font sizes
+        await pg2.evaluate(() => {
+          const ph = document.querySelector('#o-phases'); if (ph) { ph.checked = true; ph.dispatchEvent(new Event('change', {bubbles: true})); }
+        });
+        await hq2.wait(300);
+
+        const dl2 = async (selector, timeout = 10000) => {
+          const loc = pg2.locator(selector);
+          await loc.scrollIntoViewIfNeeded();
+          const [dl] = await Promise.all([
+            pg2.waitForEvent('download', { timeout }).catch(() => null),
+            loc.click()
+          ]);
+          if (!dl) return null;
+          const name = dl.suggestedFilename();
+          const tmpPath = path.join(path.resolve(__dirname, '../results'), name);
+          await dl.saveAs(tmpPath);
+          const buf = fs.readFileSync(tmpPath);
+          return { name, buf, str: buf.toString('utf8') };
+        };
+
+        const aktaSvg = await dl2('#saveSvg');
+        T.check('pub/akta_single_svg', !!aktaSvg, 'ÄKTA run chart single SVG downloaded');
+        if (aktaSvg) {
+          const smallFonts = [...aktaSvg.str.matchAll(/font-size="([^"]+)"/g)]
+            .map(m => m[1].endsWith('%') ? 8 * (parseFloat(m[1]) / 100) : parseFloat(m[1]))
+            .filter(fs => fs < 5.99);
+          T.check('pub/akta_single_min_font', smallFonts.length === 0, `small fonts: ${smallFonts.join(', ')}`);
+        }
+
+        // Check Workflow figure SVG
+        await hq2.step('figure');
+        await hq2.wait(500);
+        const wfSvg = await dl2('#saveSvg');
+        T.check('pub/wf_svg', !!wfSvg, 'Workflow SVG downloaded');
+        if (wfSvg) {
+          const smallFonts = [...wfSvg.str.matchAll(/font-size="([^"]+)"/g)]
+            .map(m => m[1].endsWith('%') ? 8 * (parseFloat(m[1]) / 100) : parseFloat(m[1]))
+            .filter(fs => fs < 5.99);
+          T.check('pub/wf_min_font', smallFonts.length === 0, `small fonts: ${smallFonts.join(', ')}`);
+        }
+
+        T.check('pub/no_page_errors', !q2.errs.length, q2.errs.join(' | '));
+      } finally { await q2.close(); }
+
+      T.check('pub/quick_no_page_errors', !q.errs.length, q.errs.join(' | '));
     } finally { await q.close(); }
   });
 
