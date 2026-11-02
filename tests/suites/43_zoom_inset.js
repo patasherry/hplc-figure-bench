@@ -83,12 +83,13 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       const regions = await p.evaluate(() => document.querySelectorAll('#intTable tbody tr').length);
       T.check('drag/integration-mode-default', regions > 0, `integration regions in table: ${regions}`);
 
-      // Turn on zoom mode
-      await setOpt(p, 'o-zoomMode', true); await h.wait(200);
+      // Shift drag acts as zoom mode without option
+      await p.keyboard.down('Shift');
       await p.mouse.move(b.left + b.width / 4, b.top + b.height / 2);
       await p.mouse.down();
       await p.mouse.move(b.left + b.width / 2, b.top + b.height / 2, {steps: 10});
       await p.mouse.up();
+      await p.keyboard.up('Shift');
       await h.wait(500);
 
       const newRegions = await p.evaluate(() => document.querySelectorAll('#intTable tbody tr').length);
@@ -99,6 +100,25 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       T.check('drag/zoom-mode-updates-window', xmin !== '' && xmax !== '', `xmin: ${xmin}, xmax: ${xmax}`);
 
     } catch (e) { T.check('drag/threw', false, String(e).slice(0, 300)); } finally { await close(); }
+  }
+  /* Workflow Figure wfZoom option */
+  {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await h.newProject('wf zoom inset');
+      await h.addRun(path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv')); await h.wait(500);
+      await p.click('#tl [data-step="figure"]'); await h.wait(500);
+      await setOpt(p, 'o-xmin', '22'); await setOpt(p, 'o-xmax', '28'); await h.wait(400);
+
+      T.check('wf/inset-appears-when-wfZoom-on/off-by-default', (await insetCount(p)) === 0, 'no inset by default');
+
+      const b = await p.evaluate(() => document.querySelector('#paper svg').getBoundingClientRect());
+      await p.mouse.click(b.left + b.width / 2, b.top + b.height / 2); await h.wait(400);
+      await p.evaluate(() => { const el = document.querySelector('#wfTool input[data-wfz="1"]'); if (el) { el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); } });
+      await h.wait(500);
+      T.check('wf/inset-appears-when-wfZoom-on', (await insetCount(p)) === 1, 'inset count is 1 after enabling wfZoom');
+      T.check('wf/no-errors', errs.length === 0, errs.join(' | '));
+    } catch (e) { T.check('wf/threw', false, String(e).slice(0, 300)); } finally { await close(); }
   }
   T.done();
 })();
