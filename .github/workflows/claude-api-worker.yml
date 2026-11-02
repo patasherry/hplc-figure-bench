@@ -61,16 +61,22 @@ jobs:
             for cand in $(gh api "repos/$REPO/issues?state=open&labels=for-claude-cloud&sort=created&direction=asc&per_page=20" --jq '.[].number'); do
               j=$(gh api repos/$REPO/issues/$cand); if ok "$j"; then n=$cand; break; fi; done
           fi
+          if [ -z "$n" ] && [ -z "$WANT" ]; then  # audit findings meant for Claude first, when the PC hasn't taken them in 2 hours
+            cut2=$(date -u -d '2 hours ago' +%FT%TZ)
+            for cand in $(gh api "repos/$REPO/issues?state=open&labels=for-claude-first&sort=created&direction=asc&per_page=20" --jq ".[] | select(.created_at < \"$cut2\") | .number"); do
+              j=$(gh api repos/$REPO/issues/$cand); if ok "$j"; then n=$cand; break; fi; done
+          fi
           if [ -z "$n" ] && [ -z "$WANT" ]; then
             cut=$(date -u -d '6 hours ago' +%FT%TZ)
             for cand in $(gh api "repos/$REPO/issues?state=open&labels=for-claude-code&sort=updated&direction=asc&per_page=20" --jq ".[] | select(.updated_at < \"$cut\") | .number"); do
               j=$(gh api repos/$REPO/issues/$cand); if ok "$j"; then n=$cand; break; fi; done
           fi
           if [ -z "$n" ]; then echo "No job to take."; exit 0; fi
+          first=$(gh api repos/$REPO/issues/$n --jq '[.labels[].name] | index("for-claude-first") != null')
           gh api repos/$REPO/issues/$n/labels -X POST -f 'labels[]=claude-cloud-running' >/dev/null
-          for l in for-claude-cloud for-claude-code jules-queue; do gh api -X DELETE repos/$REPO/issues/$n/labels/$l >/dev/null 2>&1 || true; done
+          for l in for-claude-cloud for-claude-code for-claude-first jules-queue; do gh api -X DELETE repos/$REPO/issues/$n/labels/$l >/dev/null 2>&1 || true; done
           gh api repos/$REPO/issues/$n/comments -f body="Taken by the Claude API worker on GitHub Actions (run ${{ github.run_id }}). Claude API worker claim $today." >/dev/null
-          echo "issue=$n" >> "$GITHUB_OUTPUT"
+          echo "issue=$n" >> "$GITHUB_OUTPUT"; echo "first=$first" >> "$GITHUB_OUTPUT"
           echo "Took #$n"
 
       - uses: actions/checkout@v4
@@ -114,10 +120,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.HFB_TOKEN }}
           N: ${{ steps.pick.outputs.issue }}
+          FIRST: ${{ steps.pick.outputs.first }}
           T: ${{ runner.temp }}
         run: |
           done_with() { gh api -X DELETE repos/$REPO/issues/$N/labels/claude-cloud-running >/dev/null 2>&1 || true; }
-          fail() { gh api repos/$REPO/issues/$N/comments -f body="$1" >/dev/null; gh api repos/$REPO/issues/$N/labels -X POST -f 'labels[]=for-coordinator' >/dev/null; done_with; exit 0; }
+          next=for-coordinator; [ "$FIRST" = true ] && next=jules-queue  # a first try on an audit finding goes on to Jules
+          fail() { gh api repos/$REPO/issues/$N/comments -f body="$1" >/dev/null; gh api repos/$REPO/issues/$N/labels -X POST -f "labels[]=$next" >/dev/null; done_with; exit 0; }
           git add -A -- . ':!tests/node_modules' ':!tests/results'
           files=$(git diff --cached --name-only)
           if [ -f "$T/blocked.md" ] || [ -z "$files" ]; then
@@ -135,7 +143,7 @@ jobs:
           Co-Authored-By: Claude <noreply@anthropic.com>"
           git push -q -f origin claude/issue-$N
           title=$(gh api repos/$REPO/issues/$N --jq .title)
-          { echo "Closes #$N"; echo; cat "$T/pr_body.md" 2>/dev/null || echo "(Claude wrote no description.)"; echo; echo "🤖 Generated with [Claude Code](https://claude.com/claude-code) by the Claude API worker (run ${{ github.run_id }})."; } > "$T/body.md"
+          { echo "Closes #$N"; [ "$FIRST" = true ] && echo "Made by the Claude API worker as a first try for an audit finding."; echo; cat "$T/pr_body.md" 2>/dev/null || echo "(Claude wrote no description.)"; echo; echo "🤖 Generated with [Claude Code](https://claude.com/claude-code) by the Claude API worker (run ${{ github.run_id }})."; } > "$T/body.md"
           pr=$(jq -n --arg t "$title" --rawfile b "$T/body.md" --arg h "claude/issue-$N" '{title:$t, head:$h, base:"main", body:$b}' | gh api repos/$REPO/pulls --input - --jq .number)
           gh api repos/$REPO/issues/$N/labels -X POST -f 'labels[]=claude-cloud-done' >/dev/null; done_with
           gh api repos/$REPO/issues/$N/comments -f body="The Claude API worker opened PR #$pr. It goes through the Test suite and the gate like any other." >/dev/null
