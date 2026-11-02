@@ -922,6 +922,7 @@ button,input,select,textarea{font-family:inherit}
         <label class="f">Column<select id="sec-col" data-sec="col"></select></label>
         <label class="f secstd">Calibration<select id="sec-cal" data-sec="cal" aria-label="Column calibration"></select></label>
       </div>
+      <p class="hint" id="sec-calname"></p>
       <div class="row3">
         <label class="f">Units<select id="sec-unit" data-sec="unit"><option value="mL">mL</option><option value="min">min</option></select></label>
         <label class="f">V₀ (void)<input type="number" step="0.01" id="sec-v0" data-sec="v0" placeholder="optional"></label>
@@ -5866,6 +5867,7 @@ function renderSec(){
   const c = activeCal(); if (!c) return; const L = secCals();
   $('#sec-cal').innerHTML = L.map(x => `<option value="${x.id}" ${x.id === c.id ? 'selected' : ''}>${esc(x.name)} (${esc(x.unit)})</option>`).join('');
   $('#sec-col').innerHTML = Object.entries(SEC_COLUMNS).map(([k, v]) => `<option value="${k}" ${k === c.col ? 'selected' : ''}>${esc(v.name)}</option>`).join('');
+  $('#sec-calname').textContent = c.name;
   $('#sec-set').innerHTML = Object.entries(SEC_STD_SETS).map(([k, v]) => `<option value="${k}" ${k === c.set ? 'selected' : ''}>${esc(v.name)}</option>`).join('');
   const put = (sel, v) => { const e = $(sel); if (e !== document.activeElement) e.value = v; }; put('#sec-unit', c.unit); put('#sec-v0', c.v0); put('#sec-vt', c.vt);
   $('#sec-v0note').textContent = c.v0est && c.v0 !== '' ? 'Typical V₀ for this column. Measure yours with blue dextran.' : '';
