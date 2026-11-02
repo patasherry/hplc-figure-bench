@@ -125,7 +125,7 @@ jobs:
           done_with() { gh api -X DELETE repos/$REPO/issues/$N/labels/claude-cloud-running >/dev/null 2>&1 || true; }
           next=for-coordinator; [ "$FIRST" = true ] && next=jules-queue  # a first try on an audit finding goes on to Jules
           fail() { gh api repos/$REPO/issues/$N/comments -f body="$1" >/dev/null; gh api repos/$REPO/issues/$N/labels -X POST -f "labels[]=$next" >/dev/null; done_with; exit 0; }
-          git add -A -- . ':!tests/node_modules' ':!tests/results'
+          git add -A
           files=$(git diff --cached --name-only)
           if [ -f "$T/blocked.md" ] || [ -z "$files" ]; then
             fail "The Claude API worker could not finish this (run ${{ github.run_id }}).
