@@ -1187,6 +1187,8 @@ def bg_worker(s, key):
             log(f'#{i["number"]}: {W["name"]} job lost in a restart, back to Jules')
     if jobs or DRY:
         return
+    if s.get('update_wanted'):  # an update is overdue: start no new job, so the manager can update between jobs
+        return
     busy = {n for k in _bg for n in _bg[k]}
     ok = lambda i: str(i['number']) not in tried and i['number'] not in busy and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
     cop_off = COPILOT_MODE == 'off' or max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
@@ -1918,9 +1920,21 @@ def self_update(s):
     if DRY or time.time() - s.get('pulled', 0) < 3600 or not (ROOT / '.git').exists():
         return
     if any(_bg[k] for k in _bg):  # a coding job runs as a child of this manager: a restart now would lose it, so update after it ends
+        if time.time() - s.get('pulled', 0) > 3 * 3600:
+            s['update_wanted'] = True  # overdue: no new coding job starts until the update is done
         return
-    s['pulled'] = time.time()
+    s['pulled'] = time.time(); s.pop('update_wanted', None)
     git = lambda *a: subprocess.run(['git', '-C', str(ROOT), *a], capture_output=True, text=True, timeout=120)
+    # the manager runs from main; another tool may have switched this folder to a branch. Go back to main when that is safe
+    br = git('rev-parse', '--abbrev-ref', 'HEAD').stdout.strip()
+    if br != 'main':
+        dirty = git('status', '--porcelain', '--untracked-files=no').stdout.strip()
+        if dirty:
+            log(f'self-update: this folder is on branch {br} with unsaved changes, so it was not updated. Use a separate folder for other tools (see AGENTS.md)')
+            return
+        git('checkout', '-q', 'main')
+        log(f'self-update: this folder was on branch {br}; switched back to main')
+    git('fetch', '-q', 'origin')
     before = git('rev-parse', 'HEAD').stdout.strip()
     r = git('pull', '--ff-only', '-q')
     if r.returncode:
