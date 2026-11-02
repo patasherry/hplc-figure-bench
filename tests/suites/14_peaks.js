@@ -154,5 +154,28 @@ async function zoomPeak() {
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }
+
+  await T.t('gaussian baseline fix', async () => {
+    const {p, errs, close} = await open();
+    const h = H(p);
+    try {
+      await h.newProject('gauss fix');
+      const csvContent = fs.readFileSync(path.join(DATA, 'fixture_gauss_resolved.csv'), 'utf8');
+      await h.addRun('gauss_res.csv', { type: 'text/csv', content: csvContent });
+
+      await setOpt(p, 'o-intMethod', 'gauss');
+      await setOpt(p, 'o-intBase', 'line');
+
+      await p.click('#pkAddAll');
+      await p.waitForTimeout(500);
+
+      const v = await p.evaluate(() => window.__HFB.runs.find(r => r.name === 'gauss_res').peaks.map(x => x.area));
+      T.check('Peak 1 area correctly recovered', Math.abs(v[0] - 375.994) < 1, `got ${v[0]}`);
+      T.check('Peak 2 area correctly recovered', Math.abs(v[1] - 300.795) < 1, `got ${v[1]}`);
+    } finally {
+      T.check('no page errors', !errs.length, errs.join(' | '));
+      await close();
+    }
+  });
   T.done();
 })();
