@@ -3,6 +3,8 @@
 Browser tests that drive the app through its UI (clicking, typing, dropping files) and check what it displays.
 They run in headless Chromium through Playwright.
 
+Before writing or editing browser tests, read [AGENT_TIPS.md](../docs/AGENT_TIPS.md) for harness usage patterns and common traps that stall automation (hidden controls inside projects, modal states, timing limits).
+
 ## Run it
 
 ```
@@ -20,31 +22,65 @@ node run.js 00_ 10_                # run specific suites passed as arguments
 - `node compare.js` runs all suites on your working copy and on `origin/main` baseline, writing `results/compare.md` listing regressions, fixes, and invariant failures. `BASE=<file or git ref>` sets a custom baseline.
 - Test logs and screenshots go to `results/` (not committed).
 
-After running tests, read the output of node failures.js, not the full logs.
+After running tests, read the output of `node failures.js`, not the full logs.
 
 ## Suites
 
 | File | Area | What it checks |
 |---|---|---|
-| `00_smoke.js` | Smoke | The page loads, a project opens, a run loads. Proves the harness works. |
-| `05_quick.js` | Quick-Figure | Quick-Figure mode: example chromatograms, trace dropping, SVG/PNG export without saving to project, clear state. |
-| `10_data_truth.js` | Data | Synthetic files with known answers: SEC detection, column, flow, UV path, fraction labels, peak volumes, pool area and mg, NanoDrop means. |
-| `11_unicorn_zip.js` | UNICORN 7 | Parses UNICORN 7 .zip archives, verifies fraction/injection labels, valid files, missing curves, and invalid archives. |
-| `12_genbank.js` | GenBank | Synthetic files with known answers: complement CDS, join/wrap locations, multiline qualifiers, case sensitivity, no ORIGIN, Windows line endings, gene/product fallback labels, SnapGene .dna export. |
-| `14_peaks.js` | Peaks | Peak integration with known answers: isolated, separated, overlapping, and sloped baseline peaks. Tests both Gaussian and trapezoidal integration with and without baseline subtraction. |
-| `15_import_sec.js` | Import and SEC | Synthetic UI checks for reviewed SEC peak matching, UNICORN decimal commas, UV-only UNICORN CSV exports, UNICORN 7 archives with a curve's points missing, 5/150 column identity, NanoDrop number formats and replicate retention. |
-| `16_nanodrop.js` | NanoDrop | NanoDrop exports and their numbers. Checks protein concentration values, r280, names, proper nucleic acid readings handling, and SD/means calculated properly against expected synthetic standins. |
-| `17_cross_format.js` | Cross-format | Synthetic files in different formats (dot-decimal, comma-delimited) confirming equivalent peak identity, area, height, and retention. |
-| `20_science.js` | Science | Summary table arithmetic (mole-based yields across tag removal), methods text, panel letters, SEC elution volumes, consistency after moving or removing steps. |
-| `21_methods.js` | Methods | The Methods and summary text says what the data says. |
-| `23_provenance.js` | Provenance | Tests provenance across concentration and yield paths (calculated, measured, transferred, manual). |
-| `25_gels.js` | Gels | Synthetic gel images: measurements unchanged by display contrast, bands counted once, purity at most 100%, invalid ladders withhold sizes, manual tags respected, caches refreshed. |
-| `28_sec_figure.js` | SEC | SEC figure and its MW axis. Checks x tick labels are elution volumes and peak MW matches the calibration fit. |
-| `30_robust.js` | Robustness | Bad inputs, a seeded 150-action fuzz test with invariants, save and reload (browser and cloud storage), export and import, speed budgets. |
-| `40_visual.js` | Visual | DOM and visual layout checks: text overlap, horizontal scrolling, toolbars covering titles, across window widths and themes. |
-| `42_figures.js` | Figures | Checks that figure settings reach the exported SVG and PNG (width, font, palette, axes, legend), and that crowded peak labels stay inside the figure with a warning when some cannot fit. |
-| `44_panel_more.js` | Side panel | Checks that rarely used settings start under a section's More options, that a changed setting stays visible after a reload, and that the settings search shows a match. |
-| `43_zoom_inset.js` | Zoom inset | The inset option on the HPLC overlay and ÄKTA run chart: two plot areas, main x ticks cover the whole run, inset ticks only the X window, all positions, off restores the figure, old saved settings load with it off. |
+| `00_preflight.js` | Preflight | Repository preflight check ensuring no untracked files, stray artifacts, or disallowed edits exist before opening a PR. |
+| `00_smoke.js` | Smoke | Basic smoke test: page loads, a project opens, and a chromatogram run loads, verifying harness connectivity. |
+| `05_quick.js` | Quick-Figure | Quick-Figure mode (`#quick`): example data generation, trace dropping, SVG/PNG export without saving to project, and state clearing. |
+| `10_data_truth.js` | Data Truth | Synthetic files with known answers: SEC detection, column model, flow rate, UV pathlength, fraction labels, peak volumes, pool area/mg, and NanoDrop means. |
+| `11_unicorn_zip.js` | UNICORN 7 | Parses UNICORN 7 `.zip` archives, verifying fraction/injection labels, curve extraction, missing curves, and archive corruption handling. |
+| `12_genbank.js` | GenBank | GenBank parsing across synthetic edge cases: complement CDS, joined/wrapped locations, multiline qualifiers, missing ORIGIN, CRLF endings, and SnapGene `.dna` exports. |
+| `14_peaks.js` | Peaks | Peak integration with known answers: isolated, separated, overlapping, and sloped baseline peaks using Gaussian and trapezoidal methods with baseline subtraction. |
+| `15_import_sec.js` | Import & SEC | Synthetic regression checks for SEC peak matching, UNICORN decimal commas, UV-only CSV exports, partial `.zip` curves, column identification, and NanoDrop number formatting. |
+| `16_nanodrop.js` | NanoDrop | NanoDrop spectrum/table parsing: protein concentration readings, $A_{280}/A_{260}$ ratios, sample names, nucleic acid handling, and SD/mean calculations. |
+| `17_cross_format.js` | Cross-Format | Cross-format validation (comma vs period decimals, delimiter variations) ensuring identical peak identity, retention, height, area, and integration. |
+| `18_hplc_load.js` | HPLC Load | Generic HPLC CSV/text chromatogram file loading via file input, verifying headers, columns, data rows, and numeric values. |
+| `20_science.js` | Science | Scientific arithmetic and consistency: summary table calculations (mole-based yields across tag cleavage), methods text, panel lettering, SEC elution volumes, and step reordering. |
+| `21_methods.js` | Methods | Verifies that generated Materials and Methods and summary text accurately reflect purification steps, buffers, and protein amounts. |
+| `22_protein.js` | Protein | Sequence property calculations (MW, extinction coefficient $\varepsilon_{280}$, pI, cleavage mass shifts) verified against independent computations across edge-case sequences. |
+| `23_provenance.js` | Provenance | Concentration and yield data provenance tracking (calculated UV area, measured NanoDrop, transferred, manual). |
+| `24_workflow_branches.js` | Workflow Branches | Parallel purification workflow branching (`wfFrom`): branching pipelines where one fraction or pool feeds multiple downstream steps with per-branch yields. |
+| `25_gels.js` | Gels | Synthetic SDS-PAGE gel images: densitometry invariance under contrast adjustments, single band counting, purity $\le 100\%$, ladder withholding, and manual tags. |
+| `26_sec_calibration.js` | SEC Calibration | SEC calibration standards: $K_{av}$ calculations, linear regression curve fitting ($\log M_w$ vs $K_{av}$), and sample peak apparent MW prediction. |
+| `27_sec_mass_calculation.js` | SEC Mass | Peak molecular weight calculations against SEC calibration curves, verifying mass estimations within expected tolerance. |
+| `28_sec_figure.js` | SEC Figure | SEC run chart and secondary MW axis: elution volume ticks, peak MW annotations matching calibration, and calibration standard curves. |
+| `30_robust.js` | Robustness | Malformed inputs, 150-action fuzz test with invariants, browser/cloud save and reload round trips, JSON export/import, and performance budgets. |
+| `31_wf_full.js` | Full Chromatogram | Full chromatogram display in workflow figures (`wfFull`): rendering whole chromatogram runs instead of cropped retention windows across steps. |
+| `40_visual.js` | Visual | Visual layout and DOM checks across desktop, tablet, and phone viewports: dark mode, panel lettering, toolbar overlap, and text contrast. |
+| `41_workflow_drag_hint.js` | Workflow Drag | Drag-and-drop panel positioning in the workflow figure: checks that selected panels show positional drag indicators and reset buttons. |
+| `42_figures.js` | Figures | Figure styling options reaching exported SVG and PNG (dimensions, font, palette, axes, legend, DPI) and crowded peak label collision handling. |
+| `43_ios_look.js` | iOS Look | Modern interface styling: rounded controls, toggle switches, segmented button groups, and CSS design tokens across themes. |
+| `43_zoom_inset.js` | Zoom Inset | Magnified zoom inset on HPLC and ÄKTA figures: expanded sub-window plot inset within or beside the main chromatogram. |
+| `44_panel_more.js` | Panel More | Side panel progressive disclosure: rarely used settings in "More options" disclosures, settings search filtering, and persistence of modified defaults. |
+| `45_yield_semantic.js` | Yield Semantics | Purification yield semantics: distinguished reporting for measured final samples vs last chromatography pools, including zero yields and unmeasured steps. |
+| `50_export.js` | Export | Complete export coverage: SVG, high-DPI PNG, multi-figure ZIP bundles, CSV peak/data exports, and complete project JSON. |
+| `60_perf.js` | Performance | Performance budgets: ensures UI rendering, file loading, and layout calculations complete within defined timing budgets. |
+| `99_band_overlap.js` | Band Overlap | Visual collision check between gel band mark prompt and floating UI toast notifications on narrow viewports. |
+| `test_nanodrop_units.js` | NanoDrop Units | Unit handling for NanoDrop imports: recognizes and normalizes ng/µL, µg/mL, and mg/mL concentration units. |
+| `test_sec_calibration_units.js` | SEC Calib Units | Backward compatibility for legacy SEC calibration data missing unit fields and standards arrays. |
+
+## Usability Scopes (`tests/ux/`)
+
+In addition to the unit and integration suites, `tests/ux/` provides end-to-end usability walkthroughs using Playwright:
+
+```
+node tests/ux/scope.js <scope_name> <output_folder>
+```
+
+Defined in `tests/ux/scopes.js`, these scopes walk simulated biochemist workflows (first visit, multi-step purification, layout adjustments and panel dragging, gel densitometry, SEC calibration, zoom insets, mobile widths, dark mode, and project persistence). Each step records visual artifacts and screen captures to detect UI regressions, overlaps, cutoffs, or unexpected horizontal scrollbars without touching production data.
+
+For writing new automated tests or UI interaction scripts, consult [docs/AGENT_TIPS.md](../docs/AGENT_TIPS.md) for critical guidance on avoiding traps like hidden DOM nodes inside projects, tab visibility rules, and harness shortcuts.
+
+## Developer Tools (`tests/tools/`)
+
+- `tests/tools/codemap.js`: Inspects `hplc-figure-bench(WF1.13).html` and outputs the current section markers and exact line ranges in Markdown table format, making it easy to refresh `docs/CODEMAP.md` as the application grows:
+  ```
+  node tests/tools/codemap.js
+  ```
 
 ## Rules for the suites
 
