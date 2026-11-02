@@ -130,7 +130,27 @@ async function peakFile(e) {
   }
 }
 
+// #398: a zoom window too narrow to search (under 7 points) falls back to the whole trace, keeping peaks inside the window
+async function zoomPeak() {
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await p.click('#homeQuick'); await p.waitForTimeout(800);  // overlay traces (with Detect peaks) live in Quick mode; in a project a CSV becomes a run
+    let csv = 'Time (min),UV (mAU)\n'; for (let i = 0; i <= 1000; i++) { const x = i/10; csv += x.toFixed(1) + ',' + (100*Math.exp(-((x-50)**2)/(2*4))).toFixed(3) + '\n'; }
+    await p.setInputFiles('#file', {name: 'zoom_peak.csv', mimeType: 'text/csv', buffer: Buffer.from(csv)});
+    await p.waitForTimeout(600);
+    const card = () => p.locator('.trace:not(.run)').filter({has: p.locator('input[value="zoom_peak"], input[value="zoom_peak.csv"]')}).first();
+    const chips = async () => (await card().locator('.chip input').evaluateAll(els => els.map(e => parseFloat(e.placeholder || e.value))));
+    T.check('zoom_peak/unzoomed', (await chips()).some(x => Math.abs(x - 50) < 0.3), 'peak at 50 found without zoom: ' + (await chips()));
+    await card().locator('[data-act=clear]').click();
+    await setOpt(p, 'o-xmin', '49.8'); await setOpt(p, 'o-xmax', '50.2'); await p.waitForTimeout(300);
+    await card().locator('[data-act=detect]').click(); await p.waitForTimeout(300);
+    const c = await chips();
+    T.check('zoom_peak/found-when-zoomed', c.some(x => Math.abs(x - 50) < 0.3), 'peak at 50 found inside a 5-point zoom window: [' + c + ']');
+  } finally { T.check('zoom_peak/no-page-errors', !errs.length, errs.join(' | ')); await close(); }
+}
+
 (async () => {
+  await T.t('zoom_peak', zoomPeak);
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }
