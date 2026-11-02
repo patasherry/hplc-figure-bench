@@ -580,6 +580,9 @@ def attached_text(body):
             except Exception as e:
                 log(f'science inbox: could not read {u}: {e}')
                 return None
+        fm = re.match(r'(?s)^(?:---\s*\n)?title:\s*["\']?(.+?)["\']?\s*\n(.*)$', t)  # a draft with a 'title:' front-matter line
+        if fm:
+            t = '# ' + fm.group(1).strip() + '\n\n' + fm.group(2).strip()
         if not re.match(r'#\s', t):  # make each file its own finding, titled by its file name if it has no heading
             t = '# ' + re.sub(r'[_-]+', ' ', u.rsplit('/', 1)[-1].rsplit('.', 1)[0]) + '\n\n' + t
         parts.append(re.sub(r'(?m)^# (?!#)', '# ', t, count=1))
