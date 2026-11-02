@@ -75,6 +75,56 @@ await T.t('cleavage-small-tag', async () => {
   }
 });
 
+await T.t('cleavage-contaminant-gates', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    // Case A: IMAC / SEC / SEC polish. Cleavage after SEC (index 1). Lane assigned to SEC (index 1).
+    // Expect post-cleavage contaminants NOT to be offered (it's not post-cleavage yet).
+    const pA = project(gel(im, {
+      labels: 'M, SEC pool',
+      marks: [{kda: 100, y: 0.2}, {kda: 75, y: 0.3}, {kda: 50, y: 0.4}, {kda: 37, y: 0.45}, {kda: 25, y: 0.55}, {kda: 10, y: 0.8}],
+      edits: {added:[{lane: 1, y: 0.53}], removed:[]},
+      assign: {1: 'r2'} // Assigned to SEC run
+    }), {
+      runs: [
+        {id: 'r1', stepName: 'IMAC', inWf: true},
+        {id: 'r2', stepName: 'SEC', inWf: true},
+        {id: 'r3', stepName: 'SEC polish', inWf: true}
+      ],
+      prep: {cleave: true, cleaveAfter: 'r2'},
+      knownOn: true,
+      knowns: ['His-Ulp1']
+    });
+    await load(p, pA);
+    let L_A = lane(await csv(p));
+    T.check('cleavage-gates.A-not-labelled', !L_A[0][12].includes('His-Ulp1'), 'Expected ~27 kDa band NOT to be His-Ulp1: ' + L_A[0][12]);
+
+    // Case C: SEC / SEC polish (no IMAC). Cleavage after SEC (index 0). Lane assigned to SEC polish (index 1).
+    // Expect post-cleavage contaminants TO be offered (it IS post-cleavage).
+    const pC = project(gel(im, {
+      labels: 'M, Polish pool',
+      marks: [{kda: 100, y: 0.2}, {kda: 75, y: 0.3}, {kda: 50, y: 0.4}, {kda: 37, y: 0.45}, {kda: 25, y: 0.55}, {kda: 10, y: 0.8}],
+      edits: {added:[{lane: 1, y: 0.53}], removed:[]},
+      assign: {1: 'r2'} // Assigned to SEC polish run
+    }), {
+      runs: [
+        {id: 'r1', stepName: 'SEC', inWf: true},
+        {id: 'r2', stepName: 'SEC polish', inWf: true}
+      ],
+      prep: {cleave: true, cleaveAfter: 'r1'},
+      knownOn: true,
+      knowns: ['His-Ulp1'],
+      purBase: 'lane'
+    });
+    await load(p, pC);
+    let L_C = lane(await csv(p));
+    T.check('cleavage-gates.C-is-labelled', L_C[0][12].includes('His-Ulp1'), 'Expected ~27 kDa band to be His-Ulp1: ' + L_C[0][12]);
+  } finally {
+    await a.close();
+  }
+});
+
 await T.t('purity-display-states', async () => {
   const a = await start(), p = a.p;
   try {
