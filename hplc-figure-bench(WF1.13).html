@@ -2957,9 +2957,10 @@ function detectBands(g, i, sensPct, gelMax){
       const prom = v - Math.max(lm, rm); if (prom < Math.max(DET.minAbs*0.6, v*DET.promRel, noise*DET.noiseK*0.6)) continue;
     }
     let l = y, r = y; while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > v*DET.tail) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > v*DET.tail) r++;
-    let area = 0; for (let j=l;j<=r;j++) area += sig[j];
+    let il = y, ir = y; while (il > 0 && sig[il-1] <= sig[il] && sig[il-1] > 0) il--; while (ir < h-1 && sig[ir+1] <= sig[ir] && sig[ir+1] > 0) ir++;
+    let area = 0; for (let j=il;j<=ir;j++) area += sig[j];
     let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
-    bands.push({row: y, h: v, area, l, r, hl, hr});
+    bands.push({row: y, h: v, area, l, r, hl, hr, il, ir});
   }
   /* shoulders: a weaker band on the flank of a stronger one has no peak of its own, only a dip in curvature */
   if (DET.shoulderK > 0) {
@@ -2973,7 +2974,7 @@ function detectBands(g, i, sensPct, gelMax){
       /* only on the flank of a clearly stronger, separately detected band: a smear has dips everywhere */
       if (!bands.some(b => !b.shoulder && b.h > DET.shRatio*sig[y] && Math.abs(b.row - y) <= DET.shDist*(b.hr - b.hl + 1))) continue;
       let hl = y, hr = y; while (hl > 0 && d2[hl-1] < 0) hl--; while (hr < h-1 && d2[hr+1] < 0) hr++;
-      bands.push({row: y, h: sig[y], area: 0, l: hl, r: hr, hl, hr, shoulder: true});
+      bands.push({row: y, h: sig[y], area: 0, l: hl, r: hr, hl, hr, il: hl, ir: hr, shoulder: true});
     }
     bands.sort((a, b) => a.row - b.row);
   }
@@ -2991,7 +2992,7 @@ function detectBands(g, i, sensPct, gelMax){
     });
     for (let k = bands.length - 1; k >= 0; k--) if (bands[k].drop || (bands[k].shoulder && !(bands[k].area > 0))) bands.splice(k, 1);
   }
-  bands.forEach(b => { if (b.area > 0) return; let a = 0; for (let j=b.l;j<=b.r;j++) a += sig[j]; b.area = a; });
+  bands.forEach(b => { if (b.area > 0) return; let a = 0; for (let j=b.il;j<=b.ir;j++) a += sig[j]; b.area = a; });
   /* saturation: a flat-topped band is wider at 97% of its height than a Gaussian can be */
   bands.forEach(b => { if (b.shoulder) return; let a = b.row, z = b.row; while (a > 0 && sig[a-1] >= 0.97*b.h) a--; while (z < h-1 && sig[z+1] >= 0.97*b.h) z++;
     b.sat = (z - a + 1)/Math.max(1, b.hr - b.hl + 1) > DET.satRatio && (b.hr - b.hl + 1) >= 5 && b.h >= 0.5*Math.max(gelMax || 0, mx); });
@@ -3003,12 +3004,12 @@ function detectBands(g, i, sensPct, gelMax){
 function bandAt(g, sig, yRot){
   const h = sig.length, c = g.crop, r0 = Math.round((yRot - c.t)/(c.b - c.t)*h - 0.5), w = Math.max(2, Math.round(h*0.008));
   let y = Math.min(h - 1, Math.max(0, r0)); for (let j=Math.max(0, r0 - w); j<=Math.min(h - 1, r0 + w); j++) if (sig[j] > sig[y]) y = j;
-  const v = sig[y]; let l = y, r = y, area = 0;
-  if (v > 0) { while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > v*0.05 && y - l < h*0.04) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > v*0.05 && r - y < h*0.04) r++; }
-  else { l = Math.max(0, y - 2); r = Math.min(h - 1, y + 2); }
-  for (let j=l;j<=r;j++) area += sig[j];
+  const v = sig[y]; let l = y, r = y, il = y, ir = y, area = 0;
+  if (v > 0) { while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > v*0.05 && y - l < h*0.04) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > v*0.05 && r - y < h*0.04) r++; while (il > 0 && sig[il-1] <= sig[il] && sig[il-1] > 0 && y - il < h*0.04) il--; while (ir < h-1 && sig[ir+1] <= sig[ir] && sig[ir+1] > 0 && ir - y < h*0.04) ir++; }
+  else { l = il = Math.max(0, y - 2); r = ir = Math.min(h - 1, y + 2); }
+  for (let j=il;j<=ir;j++) area += sig[j];
   let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
-  return {row: y, h: v, area, l, r, hl, hr, yRot: c.t + (y + 0.5)/h*(c.b - c.t), manual: true};
+  return {row: y, h: v, area, l, r, hl, hr, il, ir, yRot: c.t + (y + 0.5)/h*(c.b - c.t), manual: true};
 }
 function mwText(g, mw){
   if (mw == null) return '?'; const ks = g.marks.filter(k => k.kda > 0).map(m => m.kda); if (!ks.length) return '?';

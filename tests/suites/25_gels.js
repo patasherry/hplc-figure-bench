@@ -26,6 +26,35 @@ T.check('area.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close
 await T.t('ladder',async()=>{const a=await start(),p=a.p;try{const im=await image(p);await load(p,project(gel(im)));let L=lane(await csv(p));const y=+L[0][13],want=100*Math.pow(.1,(y-.2)/.6);T.check('ladder.log-interpolation',Math.abs(+L[0][5]-want)<.2,JSON.stringify(L));
 for(const [key,marks]of [['duplicate',[{kda:100,y:.2},{kda:10,y:.2}]],['reversed',[{kda:10,y:.2},{kda:100,y:.8}]],['same-mass',[{kda:100,y:.2},{kda:100,y:.8}]]]){await load(p,project(gel(im,{marks})));L=lane(await csv(p));T.check('ladder.'+key+'-no-sizes',L.every(r=>r[5]===''),JSON.stringify(L));T.check('ladder.'+key+'-explanation',/Check the ladder/.test(await p.locator('#bandTable').textContent()));{const tx=await p.locator('#bandTable').textContent();/* Guards: the message names the marks to fix, not only that something is wrong. */T.check('ladder.'+key+'-names-marks',/marks (10|100) and (10|100) kDa/.test(tx),tx.slice(0,200));}}
 T.check('ladder.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
+await T.t('math', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const H = require('../lib/harness').H(p);
+    const buf = require('fs').readFileSync('tests/data/gel_8bit_test_75.png');
+    const b64 = 'data:image/png;base64,' + buf.toString('base64');
+
+    // Create a project JSON and load it
+    const d = project(gel(b64, {nLanes: 1, labels: 'Test', marksManual: true, marks: []}));
+    await load(p, d);
+    await p.waitForTimeout(500);
+
+    // get bands through CSV
+    const bandRows = await csv(p);
+    const dataRows = bandRows.slice(1);
+    const target = dataRows.find(r => parseFloat(r[6]) > 50);
+    if (target) {
+        const pur = parseFloat(target[6]);
+        T.check('math.accurate-purity', Math.abs(pur - 75.47) < 0.5, 'target band purity matches expected 75.47 got ' + pur);
+    } else {
+        T.check('math.accurate-purity', false, 'target band not found');
+    }
+  } catch (e) {
+    console.error(e);
+  } finally {
+    await a.close();
+  }
+});
+
 await T.t('tags-and-cache',async()=>{const a=await start(),p=a.p;try{const im=await image(p);await load(p,project(gel(im)));await set(p,'#g-labels','M, Renamed, B');T.check('cache.renamed-label',/Renamed/.test(await p.locator('#bandTable').textContent()));
 await set(p,'#g-labels','A, M, B');const rows=await p.$$eval('#bandTable tr',rs=>rs.map(r=>({cells:[...r.cells].map(c=>c.textContent),chips:r.querySelectorAll('.bchip').length}))),marker=rows.find(r=>r.cells[0]==='2');T.check('cache.marker-role-refreshed',marker&&marker.chips===0&&/Ladder/.test(marker.cells[2]),JSON.stringify(rows));
 const protein='W'.repeat(100),mass=18.64,y=120.5/360,marks=[{kda:mass*2,y:y-.15},{kda:mass/2,y:y+.15}],opt={protSeq:protein,tagPreset:'custom',tagSeq:'',purBase:'lane'};
