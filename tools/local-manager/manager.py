@@ -558,6 +558,34 @@ def findings_of(body):
     return out
 
 
+ATTACH = re.compile(r'https://github\.com/user-attachments/files/\d+/[^\s)\]]+?\.(?:md|txt)\b')
+
+
+def attached_text(body):
+    """A comment that attaches .md or .txt files instead of pasting them: the files' text, joined as '# ' findings. None when a file can't be read."""
+    urls = ATTACH.findall(body)
+    if not urls:
+        return body
+    parts = []
+    for u in dict.fromkeys(urls):
+        try:
+            req = urllib.request.Request(u, headers={'User-Agent': 'hfb-manager'})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                t = r.read(200000).decode('utf-8', 'replace').strip()
+        except Exception:
+            try:  # attachments can need the owner's token
+                req = urllib.request.Request(u, headers={'User-Agent': 'hfb-manager', 'Authorization': f'token {rv.TOKEN}'})
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    t = r.read(200000).decode('utf-8', 'replace').strip()
+            except Exception as e:
+                log(f'science inbox: could not read {u}: {e}')
+                return None
+        if not re.match(r'#\s', t):  # make each file its own finding, titled by its file name if it has no heading
+            t = '# ' + re.sub(r'[_-]+', ' ', u.rsplit('/', 1)[-1].rsplit('.', 1)[0]) + '\n\n' + t
+        parts.append(re.sub(r'(?m)^# (?!#)', '# ', t, count=1))
+    return '\n\n'.join(parts)
+
+
 def science_inbox(s):
     """Each new comment Patrick posts on the inbox issue becomes one issue per finding, queued for Jules with his OK. A comment starting 'Note:' is left alone."""
     if not SCIENCE:
@@ -571,8 +599,11 @@ def science_inbox(s):
         seen[str(c['id'])] = 1
         if re.match(r'^\W*note\b', c['body'], re.I):
             continue
-        lines = []
-        for title, body in findings_of(c['body']):
+        lines, text = [], attached_text(c['body'])
+        if text is None:
+            post(SCIENCE, f'I could not read the file attached to {c["html_url"]}. Paste its text into a new comment instead.' + SIGN.format(rv.MODEL))
+            continue
+        for title, body in findings_of(text):
             d = dup_of({'title': title, 'change': body[:600]}, mem)
             if d:
                 lines.append(f'- "{title}": already covered by {d[0]} ({d[1] or "same work"}). Not filed again. Reply here with `File anyway: {title}` if it is different.')
@@ -592,7 +623,7 @@ def science_inbox(s):
             continue
         seen[str(c['id'])] = 1
         want = m.group(1).strip().lower()
-        src = next((b for cc in comments(SCIENCE) if by_owner(cc) for t, b in findings_of(cc['body']) if t.lower() == want), None)
+        src = next((b for cc in comments(SCIENCE) if by_owner(cc) for t, b in findings_of(attached_text(cc['body']) or '') if t.lower() == want), None)
         if src and not DRY:
             n = gh(f'repos/{REPO}/issues', 'POST', {'title': m.group(1).strip(), 'body': f'From Claude Science, posted by Patrick on #{SCIENCE}, filed on his request although it looked like a duplicate. Owner-approved. Synthetic data only.\n\n---\n\n{src}', 'labels': ['from-patrick', 'from-science', 'owner-approved', 'jules-queue']})['number']
             post(SCIENCE, f'Filed as #{n} as you asked.' + SIGN.format(rv.MODEL))
