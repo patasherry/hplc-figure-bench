@@ -571,6 +571,48 @@ ORIGIN
     T.check('9_gst_empty_tag.fusion_value', v2 !== null && v2 !== '' && Math.abs(num(v2) - fus) < 0.002 && Math.abs(num(v2) - 16.0546) > 0.01, `expected fusion ${fus.toFixed(4)}, got "${v2}"`);
   });
 
+
+  /* ================= 10. Tag size sync ================= */
+  await T.t('10_tag_sync', async () => {
+    // 1. New project; add the synthetic gel stand-in and select the gel step so the gel figure is shown.
+    await h.addRun(path.join(DATA, 'standins', 'gel_photo.jpg'));
+    await h.step('gel-0');
+    await h.wait(500);
+
+    // 2. Paste the 100-residue sequence above into #protSeq; leave #o-tagPreset at sumo.
+    const seq = "ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY";
+    await setProtSeq(seq);
+    await setOpt(p, 'tagPreset', 'sumo');
+    await h.wait(500);
+
+    // 3. Read the kDa cell of the Tag only row of #protTable.
+    const tbl = await getProtTable();
+    const tagOnlyRow = tbl.find(r => r.Form === 'Tag only');
+    const tagTableMass = num(tagOnlyRow.kDa);
+
+    // 4. Tick #o-cleaveDetect; type the Untagged kDa into #o-protKda.
+    const untaggedRow = tbl.find(r => r.Form === 'Untagged');
+    const untaggedMass = num(untaggedRow.kDa);
+    await p.evaluate(() => {
+      const c = document.querySelector('#o-cleaveDetect');
+      if (c && !c.checked) {
+        c.checked = true;
+        c.dispatchEvent(new Event('change', {bubbles: true}));
+      }
+    });
+    await h.wait(200);
+    await setOpt(p, 'protKda', String(untaggedMass));
+    await h.wait(500);
+
+    // 5. Parse the kDa after "free His-SUMO" out of #cleaveInfo.
+    const cleaveInfo = await p.textContent('#cleaveInfo');
+    const freeMatch = cleaveInfo.match(/free His-SUMO ([\d.]+) kDa/);
+    const freeMass = num(freeMatch ? freeMatch[1] : 0);
+
+    // 6. Assert the two agree within 0.15 kDa.
+    T.check('10_tag_sync.agree', Math.abs(tagTableMass - freeMass) <= 0.15, `expected table mass ${tagTableMass} and free mass ${freeMass} to agree within 0.15 kDa`);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();

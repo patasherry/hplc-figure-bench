@@ -3151,7 +3151,8 @@ const TAG_PRESETS = {his: ['His-tag', 2.2], sumo: ['His-SUMO', 12.5], gst: ['GST
 /* expected cleaved, uncleaved and free-tag sizes; protein size comes from the setting or from bands already marked as target / tagged */
 function cleavePlan(g){
   if (!opt.cleaveDetect) return null;
-  const T = numOr(opt.tagKda, (TAG_PRESETS[opt.tagPreset] || [])[1]); if (!(T > 0)) return null;
+  const FT = protForms()[2];
+  const T = numOr(opt.tagKda, FT ? FT.mass/1000 : (TAG_PRESETS[opt.tagPreset] || [])[1]); if (!(T > 0)) return null;
   const tagName = (TAG_PRESETS[opt.tagPreset] || ['tag'])[0] === 'tag' ? 'tag' : TAG_PRESETS[opt.tagPreset][0];
   let P = numOr(opt.protKda, null);
   if (!(P > 0) && g) { const med = a => { const q = a.slice().sort((u, v) => u - v), k = q.length >> 1; return q.length % 2 ? q[k] : (q[k-1] + q[k])/2; };
@@ -4595,7 +4596,7 @@ function render(){
   const r = curRun();
   if (r) { const a = runAuto(r); $('#o-xmin').placeholder = fmt(a.lo, 2); $('#o-xmax').placeholder = fmt(a.hi, 2); }
   else { $('#o-xmin').placeholder = 'auto'; $('#o-xmax').placeholder = 'auto'; }
-  if (kind === 'gel' && f) { const cp = cleavePlan(f.gel), el = $('#cleaveInfo'); $('#o-tagKda').placeholder = (TAG_PRESETS[opt.tagPreset] || [])[1] ? String(TAG_PRESETS[opt.tagPreset][1]) : 'kDa';
+  if (kind === 'gel' && f) { const cp = cleavePlan(f.gel), el = $('#cleaveInfo'), FT = protForms()[2], tDef = FT ? FT.mass/1000 : (TAG_PRESETS[opt.tagPreset] || [])[1]; $('#o-tagKda').placeholder = tDef > 0 ? fmt(tDef, 1) : 'kDa';
     el.textContent = cp ? `Looking for cleaved ${fmt(cp.P, 1)} kDa, uncleaved ${fmt(cp.P + cp.T, 1)} kDa and free ${cp.tagName} ${fmt(cp.T, 1)} kDa (±${numOr(opt.knownTol, 7)}%). Tags often run off their calculated size, so adjust the tag size to what you see on your gels.` : 'Enter the protein size, or mark its band as the target, and the expected sizes appear here.'; }
   $('#sumPanel').hidden = kind !== 'workflow' || !runs.some(r => r.inWf && (poolRows(r) || ndForRun(r))); if (kind === 'workflow') renderSumTable();
   const ip = $('#intPanel'); ip.hidden = kind !== 'run'; if (kind === 'run' && f) renderIntTable(f.run);
