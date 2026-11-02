@@ -187,6 +187,169 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
     } finally { await q.close(); }
   });
 
+  // Publication readiness at journal widths (#662): checks that exported figures at single
+  // and double column presets have no text under 6 pt, ticks and text don't overlap,
+  // and workflow width synchronizes with journal presets.
+  await T.t('publication_readiness_journal_widths', async () => {
+    const q = await open(), hq = H(q.p), pg = q.p;
+    try {
+      const download = async (selector, timeout = 10000) => {
+        const loc = pg.locator(selector);
+        await loc.scrollIntoViewIfNeeded();
+        const [dl] = await Promise.all([
+          pg.waitForEvent('download', { timeout }).catch(() => null),
+          loc.click()
+        ]);
+        if (!dl) return null;
+        const name = dl.suggestedFilename();
+        const tmpPath = path.join(path.resolve(__dirname, '../results'), name);
+        await dl.saveAs(tmpPath);
+        const buf = fs.readFileSync(tmpPath);
+        return { name, buf, str: buf.toString('utf8') };
+      };
+
+      const setPreset = async (val) => {
+        await pg.evaluate(v => {
+          const e = document.querySelector('#o-preset');
+          if (e) {
+            e.value = v;
+            e.dispatchEvent(new Event('change', {bubbles: true}));
+            e.dispatchEvent(new Event('input', {bubbles: true}));
+          }
+        }, val);
+        await hq.wait(300);
+      };
+
+      // 1. HPLC Overlay and NanoDrop in Quick mode
+      await pg.click('#homeQuick'); await hq.wait(600);
+      await setPreset('single');
+      const hplcSvg = await download('#saveSvg');
+      T.check('pub/hplc_single_svg', !!hplcSvg, 'HPLC overlay single SVG downloaded');
+      if (hplcSvg) {
+        const smallFonts = [...hplcSvg.str.matchAll(/font-size="([^"]+)"/g)]
+          .map(m => m[1].endsWith('%') ? 8 * (parseFloat(m[1]) / 100) : parseFloat(m[1]))
+          .filter(fs => fs < 5.99);
+        T.check('pub/hplc_single_min_font', smallFonts.length === 0, `small fonts: ${smallFonts.join(', ')}`);
+        const ov = await hq.overlaps();
+        T.check('pub/hplc_single_no_overlap', ov.length === 0, `overlaps: ${ov.join(', ')}`);
+      }
+      const hplcPng = await download('#savePng');
+      T.check('pub/hplc_single_png_600dpi', !!hplcPng && Math.abs(hplcPng.buf.readUInt32BE(16) - 2100) <= 2, `pngW: ${hplcPng && hplcPng.buf.readUInt32BE(16)}`);
+
+      // NanoDrop in Quick mode (where #figtabs is active)
+      await pg.setInputFiles('#file', [src('ndSpec')]);
+      await hq.wait(800);
+      const ndTab = pg.locator('#figtabs .figtab').filter({hasText: /nanodrop/i}).first();
+      if (await ndTab.count() > 0) {
+        await ndTab.click();
+        await hq.wait(400);
+      }
+      const ndSvg = await download('#saveSvg');
+      T.check('pub/nanodrop_single_svg', !!ndSvg, 'NanoDrop SVG downloaded');
+      if (ndSvg) {
+        const smallFonts = [...ndSvg.str.matchAll(/font-size="([^"]+)"/g)]
+          .map(m => m[1].endsWith('%') ? 8 * (parseFloat(m[1]) / 100) : parseFloat(m[1]))
+          .filter(fs => fs < 5.99);
+        T.check('pub/nanodrop_single_min_font', smallFonts.length === 0, `small fonts: ${smallFonts.join(', ')}`);
+      }
+      // Normalized NanoDrop checks subscript font-size 75%
+      await pg.evaluate(() => {
+        const el = document.querySelector('#o-ndNorm');
+        if (el) {
+          el.value = 'a280';
+          el.dispatchEvent(new Event('input', {bubbles: true}));
+          el.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+      });
+      await hq.wait(400);
+      const ndSvgNorm = await download('#saveSvg');
+      if (ndSvgNorm) {
+        T.check('pub/nanodrop_subscript_75pct', ndSvgNorm.str.includes('font-size="75%"'), 'NanoDrop subscript font-size 75%');
+      }
+
+      // 2. ÄKTA run chart and Workflow figure in project mode
+      const q2 = await open(), hq2 = H(q2.p), pg2 = q2.p;
+      try {
+        await hq2.newProject('Pub Test Project');
+        await hq2.addRun(src('his'));
+        await pg2.setInputFiles('#file', [src('ndSpec')]);
+        await hq2.wait(1000);
+
+        // Check ÄKTA run chart
+        const tl = await hq2.timeline();
+        const rStep = tl.find(x => /^run:/.test(x.k));
+        if (rStep) await hq2.step(rStep.k);
+        await hq2.wait(400);
+
+        // Turn on phases and standards to exercise phase & std font sizes
+        await pg2.evaluate(() => {
+          const ph = document.querySelector('#o-phases'); if (ph) { ph.checked = true; ph.dispatchEvent(new Event('change', {bubbles: true})); }
+        });
+        await hq2.wait(300);
+
+        const dl2 = async (selector, timeout = 10000) => {
+          const loc = pg2.locator(selector);
+          await loc.scrollIntoViewIfNeeded();
+          const [dl] = await Promise.all([
+            pg2.waitForEvent('download', { timeout }).catch(() => null),
+            loc.click()
+          ]);
+          if (!dl) return null;
+          const name = dl.suggestedFilename();
+          const tmpPath = path.join(path.resolve(__dirname, '../results'), name);
+          await dl.saveAs(tmpPath);
+          const buf = fs.readFileSync(tmpPath);
+          return { name, buf, str: buf.toString('utf8') };
+        };
+
+        const aktaSvg = await dl2('#saveSvg');
+        T.check('pub/akta_single_svg', !!aktaSvg, 'ÄKTA run chart single SVG downloaded');
+        if (aktaSvg) {
+          const smallFonts = [...aktaSvg.str.matchAll(/font-size="([^"]+)"/g)]
+            .map(m => m[1].endsWith('%') ? 8 * (parseFloat(m[1]) / 100) : parseFloat(m[1]))
+            .filter(fs => fs < 5.99);
+          T.check('pub/akta_single_min_font', smallFonts.length === 0, `small fonts: ${smallFonts.join(', ')}`);
+        }
+
+        // Check Workflow figure width synchronization with preset
+        await hq2.step('figure');
+        await hq2.wait(500);
+
+        // Set preset double (7 in): workflow PNG should be 4200 px wide
+        await pg2.evaluate(v => {
+          const e = document.querySelector('#o-preset');
+          if (e) {
+            e.value = v;
+            e.dispatchEvent(new Event('change', {bubbles: true}));
+            e.dispatchEvent(new Event('input', {bubbles: true}));
+          }
+        }, 'double');
+        await hq2.wait(400);
+        const wfPngDouble = await dl2('#savePng');
+        T.check('pub/wf_preset_double_width', !!wfPngDouble && Math.abs(wfPngDouble.buf.readUInt32BE(16) - 4200) <= 2, `wf double pngW: ${wfPngDouble && wfPngDouble.buf.readUInt32BE(16)}`);
+
+        // Set preset single (3.5 in) with stacked layout: workflow PNG should be 2100 px wide
+        await pg2.evaluate(v => {
+          const l = document.querySelector('#o-wfLayout');
+          if (l) { l.value = 'stack'; l.dispatchEvent(new Event('change', {bubbles: true})); }
+          const e = document.querySelector('#o-preset');
+          if (e) {
+            e.value = v;
+            e.dispatchEvent(new Event('change', {bubbles: true}));
+            e.dispatchEvent(new Event('input', {bubbles: true}));
+          }
+        }, 'single');
+        await hq2.wait(400);
+        const wfPngSingle = await dl2('#savePng');
+        T.check('pub/wf_preset_single_stack_width', !!wfPngSingle && Math.abs(wfPngSingle.buf.readUInt32BE(16) - 2100) <= 2, `wf single stack pngW: ${wfPngSingle && wfPngSingle.buf.readUInt32BE(16)}`);
+
+        T.check('pub/no_page_errors', !q2.errs.length, q2.errs.join(' | '));
+      } finally { await q2.close(); }
+
+      T.check('pub/quick_no_page_errors', !q.errs.length, q.errs.join(' | '));
+    } finally { await q.close(); }
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
