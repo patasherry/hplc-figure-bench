@@ -4400,7 +4400,7 @@ function methodsText(){
     if (tagNote) t += ` The tag was then removed (${lc(nt)}).`;
     const wfPar = wfParents(wf), ri = wf.indexOf(r), children = wf.filter((_, ci) => wfPar[ci] === ri);
     const discarded = runs.filter(c => wfFromOf(c) === r.id && !c.inWf);
-    if (children.length > 1 || (children.length > 0 && discarded.length > 0)) {
+    if (children.length > 1) {
       const parts = children.map((c, ci) => {
         const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
         const cLt = letterOf(c), sRef = cLt ? `step ${ck}, panel ${cLt}` : `step ${ck}`;
