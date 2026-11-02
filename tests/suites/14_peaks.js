@@ -123,6 +123,18 @@ async function peakFile(e) {
 
       T.check(`${id}/baseline-subtraction`, areaLine < areaZero, `Sloped baseline area with subtraction (${areaLine}) < area without subtraction (${areaZero})`);
     }
+    else if (e.type === 'issue790') {
+      const p1 = pk.find(p => Math.abs(p.ve - e.true_ve1) <= 0.05);
+      const p2 = pk.find(p => Math.abs(p.ve - e.true_ve2) <= 0.05);
+      T.check(`${id}/apex-1`, p1 != null, `Found peak 1 near ${e.true_ve1}`);
+      T.check(`${id}/apex-2`, p2 != null, `Found peak 2 near ${e.true_ve2}`);
+      if (p1) {
+        T.check(`${id}/area-1`, Math.abs(p1.area - e.true_area1) / e.true_area1 <= 0.01, `Peak 1 area ${p1.area} within 1% of true area ${e.true_area1}`);
+      }
+      if (p2) {
+        T.check(`${id}/area-2`, Math.abs(p2.area - e.true_area2) / e.true_area2 <= 0.01, `Peak 2 area ${p2.area} within 1% of true area ${e.true_area2}`);
+      }
+    }
 
   } finally {
     T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | '));
