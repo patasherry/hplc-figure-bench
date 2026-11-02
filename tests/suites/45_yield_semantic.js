@@ -60,6 +60,25 @@ async function fresh(id, fn){
 
     let html2 = await p.evaluate(() => document.querySelector('#paper').innerHTML);
     T.check('unknown_shows_pool', html2.includes('Final pool:') || html2.includes('Final pool ('), `SVG includes Final pool: ${html2.includes('Final pool:')}`);
+
+    // Case 3: Purity Zero vs Missing
+    await p.evaluate(() => {
+      const b = document.querySelector('#pr-qcPurity');
+      if (b) { b.value = '0% pure by gel'; b.dispatchEvent(new Event('input', {bubbles: true})); b.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.step('figure');
+    await h.wait(500);
+    html2 = await p.evaluate(() => document.querySelector('#paper').innerHTML);
+    T.check('purity_zero_shows_in_svg', html2.includes('0% pure'), `SVG includes 0% pure: ${html2.includes('0% pure')}`);
+
+    await p.evaluate(() => {
+      const b = document.querySelector('#pr-qcPurity');
+      if (b) { b.value = ''; b.dispatchEvent(new Event('input', {bubbles: true})); b.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.step('figure');
+    await h.wait(500);
+    html2 = await p.evaluate(() => document.querySelector('#paper').innerHTML);
+    T.check('purity_missing_not_shown_in_svg', !html2.includes('0% pure'), `SVG does not include 0% pure`);
   });
 
   T.done();
