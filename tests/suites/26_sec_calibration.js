@@ -346,5 +346,47 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     T.check('no page errors', !o.errs.length, o.errs.join(' | '));
     await o.close();
   });
+
+  await T.t('sec_geometry_warnings', async () => {
+    const o = await open(), p2 = o.p, h2 = H(p2);
+    p2.on('dialog', d => d.accept());
+    const openFolds = loc => loc.evaluate(e => {
+      let d = e.closest('details');
+      while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); }
+    });
+
+    await h2.newProject('SEC Geometry Warning Test');
+    // Using a real, synthetic fixture that initializes SEC properly
+    await h2.addRun(path.join(DATA, 'chrom/sec_semicolon_unicorn7.csv'));
+    let rs = (await h2.timeline()).find(x => /^run:/.test(x.k));
+    if (rs) await h2.step(rs.k);
+    if (await p2.isVisible('#moreBtn') && /More options/i.test(await p2.locator('#moreBtn').textContent().catch(() => ''))) {
+      await p2.click('#moreBtn').catch(() => {});
+      await h2.wait(300);
+    }
+    const sc1 = p2.locator('#o-secStds');
+    await openFolds(sc1);
+    if (!(await sc1.isChecked())) { await sc1.check({force: true}); await h2.wait(300); }
+
+    // Test geometry warning before typing any standards
+    await p2.locator('#sec-v0').fill('25'); await p2.locator('#sec-v0').dispatchEvent('change');
+    await p2.locator('#sec-vt').fill('24'); await p2.locator('#sec-vt').dispatchEvent('change');
+    await h2.wait(300);
+
+    const fitText1 = await p2.locator('#sec-fit').textContent();
+    T.check('geom_warn_no_stds', fitText1.includes('V₀ is not smaller than Vₜ'), `Expected V₀ >= Vₜ warning, got "${fitText1}"`);
+
+    // Test late elution warning with only one standard
+    await p2.locator('#sec-v0').fill('8'); await p2.locator('#sec-v0').dispatchEvent('change');
+    await p2.locator('#sec-vt').fill('16'); await p2.locator('#sec-vt').dispatchEvent('change');
+    await h2.wait(300);
+    await p2.locator('#ss-v0').fill('17'); await p2.locator('#ss-v0').dispatchEvent('change');
+    await h2.wait(300);
+
+    const fitText2 = await p2.locator('#sec-fit').textContent();
+    T.check('late_elution_one_std', fitText2.includes('elutes at or after Vₜ'), `Expected late elution warning, got "${fitText2}"`);
+
+    await o.close();
+  });
   T.done();
 })();

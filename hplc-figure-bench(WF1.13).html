@@ -1923,21 +1923,23 @@ function secCalFor(r){
 /* log10(MW) against Kav (or against elution volume when V0 and Vt are not set), least squares over the standards with a volume */
 function secFit(cal){
   if (!cal) return null; const v0 = numOr(cal.v0, NaN), vt = numOr(cal.vt, NaN); if (!opt.secStds) return {cal, n: 0, useKav: false, v0, vt, off: true}; const useKav = v0 > 0 && vt > v0;
-  const st = (cal.stds || []).filter(q => !q.off && +q.kda > 0 && q.ve !== '' && isFinite(+q.ve)); if (st.length < 2) return {cal, n: st.length, useKav, v0, vt};
-  const X = ve => useKav ? (ve - v0)/(vt - v0) : ve, xs = st.map(q => X(+q.ve)), ys = st.map(q => Math.log10(+q.kda)), n = xs.length;
+  const st = (cal.stds || []).filter(q => !q.off && +q.kda > 0 && q.ve !== '' && isFinite(+q.ve));
+  const pts = st.map(q => ({name: q.name, kda: +q.kda, ve: +q.ve, x: useKav ? (+q.ve - v0)/(vt - v0) : +q.ve}));
+  if (st.length < 2) return {cal, n: st.length, useKav, v0, vt, pts};
+  const X = ve => useKav ? (ve - v0)/(vt - v0) : ve, xs = pts.map(q => q.x), ys = st.map(q => Math.log10(+q.kda)), n = xs.length;
   const mx = xs.reduce((a, b) => a + b, 0)/n, my = ys.reduce((a, b) => a + b, 0)/n; let sxx = 0, sxy = 0, syy = 0;
-  xs.forEach((x, k) => { sxx += (x - mx)**2; sxy += (x - mx)*(ys[k] - my); syy += (ys[k] - my)**2; }); if (!(sxx > 0)) return {cal, n, useKav, v0, vt};
+  xs.forEach((x, k) => { sxx += (x - mx)**2; sxy += (x - mx)*(ys[k] - my); syy += (ys[k] - my)**2; }); if (!(sxx > 0)) return {cal, n, useKav, v0, vt, pts};
   const b = sxy/sxx, a = my - b*mx, r2 = syy > 0 ? (sxy*sxy)/(sxx*syy) : 1;
-  return {cal, n, useKav, v0, vt, a, b, r2, X, xlo: Math.min(...xs), xhi: Math.max(...xs), mw: ve => Math.pow(10, a + b*X(ve)), pts: st.map((q, k) => ({name: q.name, kda: +q.kda, ve: +q.ve, x: xs[k]}))};
+  return {cal, n, useKav, v0, vt, a, b, r2, X, xlo: Math.min(...xs), xhi: Math.max(...xs), mw: ve => Math.pow(10, a + b*X(ve)), pts};
 }
 /* volumes that cannot be right: a standard at or before the void, or at or after the bed volume */
 function secGeomWarn(fit){
-  if (!fit || !fit.pts) return ''; const v0 = fit.v0, vt = fit.vt, early = v0 > 0 ? fit.pts.filter(q => q.ve <= v0) : [], late = vt > 0 ? fit.pts.filter(q => q.ve >= vt) : [];
+  if (!fit) return ''; const v0 = fit.v0, vt = fit.vt, early = v0 > 0 && fit.pts ? fit.pts.filter(q => q.ve <= v0) : [], late = vt > 0 && fit.pts ? fit.pts.filter(q => q.ve >= vt) : [];
   if (v0 > 0 && vt > 0 && v0 >= vt) return ' V₀ is not smaller than Vₜ, so check both.';
   if (early.length) return ` ${early.map(q => q.name).join(', ')} elute${early.length === 1 ? 's' : ''} at or before V₀ (${fmt(v0, 2)}), so V₀ is probably too large.`;
   if (late.length) return ` ${late.map(q => q.name).join(', ')} elute${late.length === 1 ? 's' : ''} at or after Vₜ (${fmt(vt, 2)}). Check Vₜ or leave that standard out of the fit.`;
   /* standards close to V0 or Vt sit where the column barely resolves, and they bend the line */
-  const edge = fit.useKav ? fit.pts.filter(q => q.x < 0.1 || q.x > 0.9) : [];
+  const edge = fit.useKav && fit.pts ? fit.pts.filter(q => q.x < 0.1 || q.x > 0.9) : [];
   if (edge.length) return ` ${edge.map(q => `${q.name} (Kav ${fmt(q.x, 2)})`).join(', ')} ${edge.length === 1 ? 'is' : 'are'} near the edge of the column's range. Consider leaving ${edge.length === 1 ? 'it' : 'them'} out of the fit.`;
   return ''; }
 /* how far the fitted line misses the standards it was built from, as the worst % error in mass */
@@ -5885,7 +5887,7 @@ function renderSec(){
   const fromEl = $('#sec-from'), prevFrom = fromEl.value, fromHtml = src.length ? src.map(([id, nm]) => `<option value="${id}">${esc(nm)}${(runs.find(r => r.id === id) || {}).isStd ? ' (standards)' : ''}</option>`).join('') : '<option value="">No runs in these units</option>';
   if (fromEl._h !== fromHtml) { fromEl._h = fromHtml; fromEl.innerHTML = fromHtml; if (src.some(x => x[0] === prevFrom)) fromEl.value = prevFrom; }
   const fit = secFit(c);
-  $('#sec-fit').textContent = !fit || !fit.mw ? `Enter elution volumes for at least two standards (${fit ? fit.n : 0} so far), or read them from a standards run.`
+  $('#sec-fit').textContent = !fit || !fit.mw ? `Enter elution volumes for at least two standards (${fit ? fit.n : 0} so far), or read them from a standards run.${secGeomWarn(fit)}`
     : `Fit from ${fit.n} standards against ${fit.useKav ? 'Kav' : 'Ve'}: log MW = ${fmt(fit.a, 3)} ${fit.b < 0 ? '−' : '+'} ${fmt(Math.abs(fit.b), 3)}·${fit.useKav ? 'Kav' : 'Ve'}, R² = ${fmt(fit.r2, 4)}.${(w => w ? ` Largest miss: ${w.name} ${w.e > 0 ? '+' : '−'}${Math.round(Math.abs(w.e))}%.` : '')(secWorst(fit))}${fit.r2 < 0.97 ? ' The fit is loose, so check the volumes.' : ''}${secGeomWarn(fit)}`;
   $('#o-secMono').placeholder = numOr(opt.protKda, 0) > 0 ? `${opt.protKda} (from the gel settings)` : 'for oligomer state';
 }
