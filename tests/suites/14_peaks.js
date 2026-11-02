@@ -130,7 +130,26 @@ async function peakFile(e) {
   }
 }
 
+// #398 / #215: a zoom window must not hide a trace's peak (peaks are found on the whole trace, then kept if inside the window)
+async function zoomPeak() {
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('zoom peak');
+    let csv = 'Time (min),UV (mAU)\n'; for (let i = 0; i <= 1000; i++) { const x = i/10; csv += x.toFixed(1) + ',' + (100*Math.exp(-((x-50)**2)/(2*4))).toFixed(3) + '\n'; }
+    await p.setInputFiles('#file', {name: 'zoom_peak.csv', mimeType: 'text/csv', buffer: Buffer.from(csv)});
+    await p.waitForTimeout(600);
+    const chips = () => p.$$eval('.trace:not(.run) .chip input', els => els.map(e => parseFloat(e.placeholder)));
+    T.check('zoom_peak/unzoomed', (await chips()).some(x => Math.abs(x - 50) < 0.3), 'peak at 50 found without zoom: ' + (await chips()));
+    await p.click('.trace:not(.run) [data-act=clear]');
+    await setOpt(p, 'o-xmin', '49.8'); await setOpt(p, 'o-xmax', '50.2'); await p.waitForTimeout(300);
+    await p.click('.trace:not(.run) [data-act=detect]'); await p.waitForTimeout(300);
+    const c = await chips();
+    T.check('zoom_peak/found-when-zoomed', c.some(x => Math.abs(x - 50) < 0.3), 'peak at 50 found inside a 5-point zoom window: [' + c + ']');
+  } finally { T.check('zoom_peak/no-page-errors', !errs.length, errs.join(' | ')); await close(); }
+}
+
 (async () => {
+  await T.t('zoom_peak', zoomPeak);
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }
