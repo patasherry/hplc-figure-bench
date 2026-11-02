@@ -17,10 +17,6 @@ on:
         description: 'Issue number to work on (optional)'
         required: false
 
-concurrency:
-  group: claude-api-worker
-  cancel-in-progress: false
-
 permissions:
   contents: read
 
@@ -35,6 +31,9 @@ jobs:
     if: github.event_name != 'issues' || github.event.label.name == 'for-claude-cloud'
     runs-on: ubuntu-latest
     timeout-minutes: 100
+    concurrency:  # on the job, so the many label events that skip it never queue behind or cancel a real run
+      group: claude-api-worker
+      cancel-in-progress: false
     steps:
       - name: Pick and claim one job
         id: pick
