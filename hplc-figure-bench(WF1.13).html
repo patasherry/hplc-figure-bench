@@ -1960,7 +1960,7 @@ function condLineCount(r, W){ if (r.prep || !opt.runCond || opt.runCond === 'non
   return Math.min(16, runCondLines(r, opt.runCond).reduce((t, x) => t + wrapWords(x, room).length, 0)); }
 const uvWl = uv => ((((uv && uv.name) || '').match(/UV\s*(?:\d[\s_-]+)?(2[2-9]\d|3\d\d|4\d\d)(?!\d)/i) || ((uv && uv.name) || '').match(/(?:^|[^\d])(2[2-9]\d|3\d\d|4\d\d)(?!\d)/)) || [])[1] || '';
 function uvTitle(t, uv){ const w0 = WF_WL !== undefined ? WF_WL : uvWl(uv), wl = w0 ? [w0, w0] : null, base = /^(UV a|A)bsorbance \(mAU\)$/.test(t || '');
-  return base && wl ? `A<tspan font-size="70%" dy="0.3em">${wl[1]}</tspan><tspan dy="-0.3em"> (mAU)</tspan>` : esc(t); }
+  return base && wl ? `A<tspan font-size="75%" dy="0.3em">${wl[1]}</tspan><tspan dy="-0.3em"> (mAU)</tspan>` : esc(t); }
 const kdaRound = v => v >= 10 ? String(Math.round(v)) : fmtAuto(v);
 const kdaText = v => v >= 100 ? String(Math.round(v)) : v >= 10 ? fmt(v, v % 1 ? 1 : 0).replace(/\.0$/, '') : String(+(+v).toPrecision(3));
 const OLIGO = ['', 'monomer', 'dimer', 'trimer', 'tetramer', 'pentamer', 'hexamer', 'heptamer', 'octamer'];
@@ -2232,7 +2232,7 @@ function buildOverlaySVG(ov){
   y0 = numOr(o.ymin, y0); y1 = numOr(o.ymax, y1); if (!(y1 > y0)) y1 = y0 + 1;
 
   const yt = ticks(y0, y1, Math.max(3, Math.round(numOr(o.h,2.6)*1.8)));
-  const xt = ticks(xlo, xhi, Math.max(4, Math.round(numOr(o.w,3.5)*2)));
+  let xt = ticks(xlo, xhi, Math.max(4, Math.round(numOr(o.w,3.5)*2)));
   const ytl = yt.v.map(v => tkf(v, yt.dec));
   const mL = o.showY ? (tOut + 3 + Math.max(...ytl.map(s=>s.length))*cw + 5 + fs*1.2) : fs*0.8;
   const mB = tOut + 3 + fs + 4 + fs*1.25, mT = fs*0.7;
@@ -2240,6 +2240,7 @@ function buildOverlaySVG(ov){
   if (o.scalebar) { sbV = numOr(o.sbValue, niceStep((y1-y0)*0.2)); sbLab = fmtAuto(sbV) + (o.sbUnit ? ' ' + o.sbUnit : ''); mR += 10 + sbLab.length*cw; }
   /* keep a usable plot even when fonts or margins are too big for the figure size */
   const L = mL, R = Math.max(W - mR, mL + 24), T = mT, B = Math.max(H - mB, mT + 24);
+  xt = fitTicks(xt, xlo, xhi, Math.max(3, Math.round(numOr(o.w,3.5)*2)), R - L, cw, fs);
   const px = x => L + (x-xlo)/(xhi-xlo)*(R-L), py = y => B - (y-y0)/(y1-y0)*(B-T), invX = X => xlo + (X-L)/(R-L)*(xhi-xlo);
   const s = [S.head];
   if (o.bg) s.push(`<rect width="${r2(W)}" height="${r2(H)}" fill="#ffffff"/>`);
@@ -2509,7 +2510,7 @@ function buildRunPlainSVG(run, ov){
     s.push('</g>');
   }
   if (o.phases) {
-    s.push(`<g font-size="${r2(pf*0.9)}" fill="${RUN_COLORS.phase}">`);
+    s.push(`<g font-size="${r2(Math.max(6, pf*0.9))}" fill="${RUN_COLORS.phase}">`);
     run.phases.forEach(ph => { if (ph.x <= xlo || ph.x >= xhi) return; const X = r2(px(ph.x));
       s.push(`<line x1="${X}" y1="${r2(T)}" x2="${X}" y2="${r2(B - band)}" stroke="${RUN_COLORS.phase}" stroke-width="${r2(aw*0.8)}" stroke-dasharray="1.5 2"/>`);
       s.push(`<text transform="translate(${r2(px(ph.x) + 2)} ${r2(T + 2)}) rotate(90)">${esc(ph.label)}</text>`); });
@@ -2520,7 +2521,7 @@ function buildRunPlainSVG(run, ov){
       s.push(`<line x1="${X}" y1="${r2(T)}" x2="${X}" y2="${r2(B - band)}" stroke="#888888" stroke-width="${r2(aw*0.8)}" stroke-dasharray="3 2"/>`);
       s.push(`<text x="${r2(px(x) - 2)}" y="${r2(T + pf*0.95)}" text-anchor="end">${t}</text>`); });
     s.push('</g>'); }
-  if (showStd) { s.push(`<g font-size="${r2(pf*0.9)}" fill="#555555" text-anchor="middle">`); let lastX = -Infinity, lift = 0;
+  if (showStd) { s.push(`<g font-size="${r2(Math.max(6, pf*0.9))}" fill="#555555" text-anchor="middle">`); let lastX = -Infinity, lift = 0;
     sfit.pts.slice().sort((p, q) => p.ve - q.ve).forEach(q => { if (!(q.ve > xlo && q.ve < xhi)) return; const X = px(q.ve), tri = pf*0.55;
       lift = X - lastX < pf*2.6 && lift === 0 ? pf*0.95 : 0; lastX = X;
       s.push(`<path d="M${r2(X - tri*0.6)} ${r2(T - tri - 1)}L${r2(X + tri*0.6)} ${r2(T - tri - 1)}L${r2(X)} ${r2(T - 1)}Z" fill="#555555"/>`);
@@ -2633,9 +2634,10 @@ function buildCalSVG(cal){
   const seq = []; for (let e = -2; e <= 5; e++) [1, 2, 5].forEach(m => seq.push(m*Math.pow(10, e)));
   const mlo = Math.min(...ms), mhi = Math.max(...ms), tlo = seq.filter(v => v <= mlo*0.9).pop() || seq[0], thi = seq.find(v => v >= mhi*1.1) || seq[seq.length - 1];
   const lmin = Math.log10(tlo), lmax = Math.log10(thi), yTicks = seq.filter(v => v >= tlo - 1e-12 && v <= thi + 1e-12);
-  const xt = ticks(xlo, xhi, Math.max(3, Math.round(W/72*2)));
+  let xt = ticks(xlo, xhi, Math.max(3, Math.round(W/72*2)));
   const mL = tOut + 3 + Math.max(...yTicks.map(v => kdaText(v).length))*cw + 5 + fs*1.2, mB = tOut + 3 + fs + 4 + fs*1.25, mT = fs*0.9, mR = fs*0.8;
   const L = mL, R = Math.max(W - mR, L + 24), T = mT, B = Math.max(H - mB, T + 24);
+  xt = fitTicks(xt, xlo, xhi, Math.max(3, Math.round(W/72*2)), R - L, cw, fs);
   const px = x => L + (x - xlo)/(xhi - xlo)*(R - L), py = m => B - (Math.log10(m) - lmin)/(lmax - lmin)*(B - T);
   const s = [S.head]; if (o.bg) s.push(`<rect width="${r2(W)}" height="${r2(H)}" fill="#ffffff"/>`);
   const dir = o.ticksOut ? 1 : -1;
@@ -2652,7 +2654,7 @@ function buildCalSVG(cal){
   s.push('</g><g fill="#000000">');
   const xly = B + tOut + 3 + fs*0.78;
   xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(xly)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
-  s.push(`<text x="${r2((L + R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle">${fit.useKav ? 'K<tspan font-size="70%" dy="0.3em">av</tspan>' : cal.unit === 'min' ? 'Elution time (min)' : 'Elution volume (mL)'}</text>`);
+  s.push(`<text x="${r2((L + R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle">${fit.useKav ? 'K<tspan font-size="75%" dy="0.3em">av</tspan>' : cal.unit === 'min' ? 'Elution time (min)' : 'Elution volume (mL)'}</text>`);
   yTicks.forEach(v => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${kdaText(v)}</text>`));
   s.push(`<text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">Apparent mass (kDa)</text>`);
   s.push(`<text x="${r2(R)}" y="${r2(T + fs*0.6)}" text-anchor="end" font-size="${r2(fs*0.8)}">R² = ${fmt(fit.r2, 3)}</text>`);
@@ -3649,7 +3651,7 @@ function composeRuns(list, cfg){
     const realW = it => { const i = list.indexOf(it.r), z = zOf(it.r); return z > 1 ? pw[i] - fs*2.5 : Math.min(pw[i] - fs*2.5, (it.gw || wOf(it))*z); };
     const dry1 = items.filter(it => !sideOf(it)).map(it => gelPart(it.g, 0, 0, realW(it), gH, it.idx, false, {fit: true, win: it.win, fixedH: it.hb*zOf(it.r)}));
     const lm2 = Math.max(lm, ...dry1.map(d => d.labMode || 0)), vf2 = Math.min(isFinite(vfm) ? vfm : Infinity, ...dry1.filter(d => d.labMode === 2).map(d => d.vf));
-    const vfx = isFinite(vf2) ? Math.max(fs*0.35, vf2) : 0;
+    const vfx = isFinite(vf2) ? Math.max(6, vf2) : 0;
     const lh2 = Math.max(lh, ...items.filter(it => !sideOf(it)).map(it => gelPart(it.g, 0, 0, realW(it), gH, it.idx, false, {fit: true, win: it.win, fixedH: it.hb*zOf(it.r), labMode: lm2, vf: vfx}).labH || 0));
     const tam = Math.max(0, ...dry1.map(d => d.taMode || 0)); slotH = Math.min(Hc*0.45, fs*7); slotTop = lh2;
     items.forEach(it => shared.set(it.r.id + ':' + it.g.id, {win: it.win, fixedH: it.hb, wide: it.wide, labH: lh2, labMode: lm2, vf: vfx, taMode: tam}));
@@ -5836,7 +5838,7 @@ function buildNDSVG(only, info){
   let xt = ticks(xlo, xhi, 6); xt = fitTicks(xt, xlo, xhi, 6, R - L, cw, fs);
   const px = x => L + (x - xlo)/(xhi - xlo)*(R - L), py = y => B - (y - y0)/(y1 - y0)*(B - T), dir = o.ticksOut ? 1 : -1;
   const s = [S.head]; if (o.bg) s.push(`<rect width="${r2(W)}" height="${r2(H)}" fill="#ffffff"/>`);
-  [230, 260, 280, 340].forEach(w => { if (w < xlo || w > xhi) return; s.push(`<line x1="${r2(px(w))}" y1="${r2(T)}" x2="${r2(px(w))}" y2="${r2(B)}" stroke="#a0a0a0" stroke-width="${r2(aw*0.6)}" stroke-dasharray="2 2"/><text x="${r2(px(w))}" y="${r2(T - fs*0.3)}" text-anchor="middle" font-size="${r2(fs*0.72)}" fill="#6b6b6b">${w}</text>`); });
+  [230, 260, 280, 340].forEach(w => { if (w < xlo || w > xhi) return; s.push(`<line x1="${r2(px(w))}" y1="${r2(T)}" x2="${r2(px(w))}" y2="${r2(B)}" stroke="#a0a0a0" stroke-width="${r2(aw*0.6)}" stroke-dasharray="2 2"/><text x="${r2(px(w))}" y="${r2(T - fs*0.3)}" text-anchor="middle" font-size="${r2(Math.max(6, fs*0.75))}" fill="#6b6b6b">${w}</text>`); });
   info.forEach((t, i) => s.push(`<text x="${r2(L)}" y="${r2(fs*0.95 + i*fs*1.25)}"${i === 0 ? ' font-weight="bold"' : ''}>${esc(t)}</text>`));
   s.push(`<defs><clipPath id="ndclip"><rect x="${r2(L)}" y="${r2(T)}" width="${r2(R - L)}" height="${r2(B - T)}"/></clipPath></defs><g clip-path="url(#ndclip)">`);
   sp.forEach((smp, k) => { let d = ''; smp.spec.wl.forEach((w, i) => { if (w < xlo || w > xhi) return; d += (d ? 'L' : 'M') + r2(px(w)) + ' ' + r2(py(val(smp, i))); });
@@ -5846,7 +5848,7 @@ function buildNDSVG(only, info){
   xt.v.forEach(v => s.push(`<line x1="${r2(px(v))}" y1="${r2(B)}" x2="${r2(px(v))}" y2="${r2(B + dir*tl)}"/>`)); yt.v.forEach(v => s.push(`<line x1="${r2(L)}" y1="${r2(py(v))}" x2="${r2(L - dir*tl)}" y2="${r2(py(v))}"/>`)); s.push('</g>');
   s.push(`<g fill="#000000">`); xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(B + tOut + 3 + fs*0.85)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
   yt.v.forEach((v, i) => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${ytl[i]}</text>`));
-  s.push(`<text x="${r2((L + R)/2)}" y="${r2(H - fs*0.35)}" text-anchor="middle">Wavelength (nm)</text><text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">${norm ? 'Absorbance / A<tspan font-size="70%" dy="0.3em">280</tspan>' : 'Absorbance (10 mm)'}</text></g>`);
+  s.push(`<text x="${r2((L + R)/2)}" y="${r2(H - fs*0.35)}" text-anchor="middle">Wavelength (nm)</text><text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">${norm ? 'Absorbance / A<tspan font-size="75%" dy="0.3em">280</tspan>' : 'Absorbance (10 mm)'}</text></g>`);
   const lf = fs*0.82, maxC = Math.max(6, Math.floor((legW - fs*2.4)/(lf*0.52)));
   sp.forEach((smp, k) => { const yy = T + fs*0.6 + k*fs*1.3, nm = smp.name.length > maxC ? smp.name.slice(0, maxC - 1) + '…' : smp.name; s.push(`<line x1="${r2(R + fs*0.7)}" y1="${r2(yy - fs*0.3)}" x2="${r2(R + fs*1.8)}" y2="${r2(yy - fs*0.3)}" stroke="${pal[k % pal.length]}" stroke-width="${r2(lw*1.6)}"/><text x="${r2(R + fs*2.1)}" y="${r2(yy)}" font-size="${r2(lf)}">${esc(nm)}</text>`); });
   s.push('</svg>'); return {svg: s.join(''), geo: {W, H, nd: true}};
