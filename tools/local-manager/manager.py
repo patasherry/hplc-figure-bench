@@ -612,8 +612,11 @@ def gate_problems(pr, files, diff, rep):
     if own_fail:
         out.append('A check this PR adds fails on the PR itself: ' + '; '.join(own_fail[:3])[:500] + '. Make the test work through the UI.')
     fixes = rep.split('Checks this PR fixes', 1)[1].split('</details>', 1)[0] if 'Checks this PR fixes' in rep else ''
-    if APP_ in files and not re.search(r'^- \d\d_', fixes, re.M):
-        out.append('No check fails on main and passes on this PR, so nothing shows the fix works. Add a check that fails on main, for example one that reads the exact number or text the issue says is wrong.')
+    app_diff = [b for b in re.split(r'(?m)^diff --git ', diff) if b.startswith(f'a/{APP_}')]
+    app_lines = [l[1:] for b in app_diff for l in b.splitlines() if l.startswith(('+', '-')) and not l.startswith(('+++', '---'))]
+    is_num = any(re.search(r'\b(Math\.|parseFloat|parseInt|Number|csvSplit|match|replace|split|substring)\b|(?<=\w)\s*[+*/%]=?\s*(?=\w)|(?<=\w)\s*[-+*/%]=?\s*(?=\d)|(?<=\s)-\s*(?=\w)|(?<=\w)\s*-\s+(?=\w)|/.*?/', l) for l in app_lines)
+    if APP_ in files and is_num and not re.search(r'^- \d\d_', fixes, re.M):
+        out.append('No check fails on main and passes on this PR for this numerical/parsing change, so nothing shows the fix works. Add a check that fails on main, for example one that reads the exact number or text the issue says is wrong.')
     tests = [b for b in re.split(r'(?m)^diff --git ', diff) if b.startswith('a/tests/suites/')]
     removed = [l for b in tests for l in b.splitlines() if l.startswith('-') and not l.startswith('---') and re.search(r'T\.check\(|await T\.t\(', l)]
     added = {l[1:] for b in tests for l in b.splitlines() if l.startswith('+')}
