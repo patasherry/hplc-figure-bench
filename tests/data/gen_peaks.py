@@ -83,6 +83,15 @@ def gen_peaks():
     write_unicorn_csv(os.path.join(CHROM, 'peak_ratio.csv'), x, y5_280, ev, y260=y5_260)
     EXPECT.append(dict(file='peak_ratio.csv', type='ratio', pool='F12-F18', expected_ratio=0.57))
 
+    # 6. Issue 790: Two Gaussians on a zero background
+    c6_1 = 14.0; s6_1 = 0.5; h6_1 = 300.0
+    c6_2 = 16.0; s6_2 = 0.6; h6_2 = 200.0
+    area6_1 = h6_1 * s6_1 * np.sqrt(2 * np.pi) # 375.994
+    area6_2 = h6_2 * s6_2 * np.sqrt(2 * np.pi) # 300.795
+    y6 = signal(x, [(c6_1, s6_1, h6_1), (c6_2, s6_2, h6_2)])
+    write_unicorn_csv(os.path.join(CHROM, 'fixture_gauss_resolved.csv'), x, y6, ev)
+    EXPECT.append(dict(file='fixture_gauss_resolved.csv', type='issue790', pool='F13-F17', true_area1=area6_1, true_area2=area6_2, true_ve1=c6_1, true_ve2=c6_2))
+
     json.dump(EXPECT, open(os.path.join(OUT, 'expected_peaks.json'), 'w'), indent=1)
 
 if __name__ == '__main__':
