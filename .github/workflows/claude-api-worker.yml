@@ -1,7 +1,8 @@
 name: Claude API worker
 
 # A Claude Code coding worker that runs on GitHub Actions and is billed to Patrick's Anthropic API credits
-# (secret ANTHROPIC_API_KEY), not to his Claude plan. It takes one job per run: an issue labelled
+# (secret ANTHROPIC_API_KEY), not to his Claude plan. Without that secret it uses CLAUDE_CODE_OAUTH_TOKEN, which bills his
+# Claude plan and, once its limits are used up, his usage credits (if they apply to Actions runs). It takes one job per run: an issue labelled
 # for-claude-cloud, else a for-claude-code issue nobody has taken for 6 hours. Claude only edits files and
 # runs the suites. This workflow checks the changed files, pushes claude/issue-N with HFB_TOKEN (so the
 # Test suite runs on the PR) and opens the PR, which goes through the gate like any other.
@@ -39,10 +40,10 @@ jobs:
         id: pick
         env:
           GH_TOKEN: ${{ secrets.HFB_TOKEN }}
-          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          KEY: ${{ secrets.ANTHROPIC_API_KEY || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           WANT: ${{ github.event.inputs.issue || '' }}
         run: |
-          if [ -z "$KEY" ]; then echo "The ANTHROPIC_API_KEY secret is not set, so the worker does nothing."; exit 0; fi
+          if [ -z "$KEY" ]; then echo "Neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN is set, so the worker does nothing."; exit 0; fi
           if [ -z "$GH_TOKEN" ]; then echo "The HFB_TOKEN secret is not set, so the worker does nothing."; exit 0; fi
           today=$(date -u +%F)
           used=$(gh api -X GET search/issues -f q="repo:$REPO is:issue \"Claude API worker claim $today\" in:comments" --jq .total_count)
@@ -68,7 +69,7 @@ jobs:
           if [ -z "$n" ]; then echo "No job to take."; exit 0; fi
           gh api repos/$REPO/issues/$n/labels -X POST -f 'labels[]=claude-cloud-running' >/dev/null
           for l in for-claude-cloud for-claude-code jules-queue; do gh api -X DELETE repos/$REPO/issues/$n/labels/$l >/dev/null 2>&1 || true; done
-          gh api repos/$REPO/issues/$n/comments -f body="Taken by the Claude API worker on GitHub Actions (billed to Patrick's API credits, run ${{ github.run_id }}). Claude API worker claim $today." >/dev/null
+          gh api repos/$REPO/issues/$n/comments -f body="Taken by the Claude API worker on GitHub Actions (run ${{ github.run_id }}). Claude API worker claim $today." >/dev/null
           echo "issue=$n" >> "$GITHUB_OUTPUT"
           echo "Took #$n"
 
@@ -95,6 +96,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.ANTHROPIC_API_KEY == '' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
           github_token: ${{ secrets.HFB_TOKEN }}
           claude_args: '--model ${{ env.MODEL }} --max-turns ${{ env.MAX_TURNS }} --allowedTools "Bash,Read,Write,Edit,Glob,Grep"'
           prompt: |
