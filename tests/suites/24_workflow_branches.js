@@ -213,6 +213,9 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
     T.check('split-pool: multiple final yield lines', brTexts.length > 0, brTexts.map(x => x.t).join(' | '));
     const meth = await h.methods();
+    T.check('split-pool: methods text contains fully retained split phrasing', /From the/i.test(meth), meth);
+    // Expected to fail on PR because phrasing changed to 'From the [step] pool,'
+    T.check('split-pool: methods text contains fully retained split phrasing', /From the.*pool/i.test(meth), meth);
     T.check('split-pool: methods text contains split', /split:/i.test(meth), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
@@ -252,5 +255,21 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     const meth = await h.methods();
     T.check('split-discard: methods text contains split', !/split:/i.test(meth), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
+
+
+  await T.t('linear-workflow-no-split', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv')};
+    await h.newProject('Linear Workflow');
+    await h.gb(F.gb);
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+    await h.addRun(F.sec);
+    await h.suggest();
+    const meth = await h.methods();
+    T.check('linear workflow does not contain split', !/split/i.test(meth), meth);
+    T.check('no page errors', !errs.length, errs.join(' | '));
+    await close();
+  });
 
   T.done(); })();
