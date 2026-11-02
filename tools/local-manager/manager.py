@@ -540,6 +540,99 @@ def owner_replies(s):
         s['owner'][str(reply['id'])] = 1
 
 
+SCIENCE = cfg.get('science_inbox', 782)  # Patrick posts Claude Science's findings there, one per comment
+
+
+def findings_of(body):
+    """Split a pasted comment into (title, body) findings: one per top-level '# ' heading, else the whole comment, titled by its first heading or line."""
+    text = body.strip()
+    parts = re.split(r'(?m)^(?=# (?!#))', text) if len(re.findall(r'(?m)^# (?!#)', text)) > 1 else [text]
+    out = []
+    for p in (x.strip() for x in parts):
+        if not p:
+            continue
+        first = next((l for l in p.splitlines() if l.strip()), '')
+        title = re.sub(r'^#+\s*|\*\*|`', '', first).strip()
+        title = re.sub(r'^(issue|finding)\s*\d*\s*[:.\-–—]\s*', '', title, flags=re.I).strip()[:120] or 'Claude Science finding'
+        out.append((title, p))
+    return out
+
+
+ATTACH = re.compile(r'https://github\.com/user-attachments/files/\d+/[^\s)\]]+?\.(?:md|txt)\b')
+
+
+def attached_text(body):
+    """A comment that attaches .md or .txt files instead of pasting them: the files' text, joined as '# ' findings. None when a file can't be read."""
+    urls = ATTACH.findall(body)
+    if not urls:
+        return body
+    parts = []
+    for u in dict.fromkeys(urls):
+        try:
+            req = urllib.request.Request(u, headers={'User-Agent': 'hfb-manager'})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                t = r.read(200000).decode('utf-8', 'replace').strip()
+        except Exception:
+            try:  # attachments can need the owner's token
+                req = urllib.request.Request(u, headers={'User-Agent': 'hfb-manager', 'Authorization': f'token {rv.TOKEN}'})
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    t = r.read(200000).decode('utf-8', 'replace').strip()
+            except Exception as e:
+                log(f'science inbox: could not read {u}: {e}')
+                return None
+        t = t.replace('\r\n', '\n').replace('\r', '\n')
+        fm = re.match(r'(?s)^(?:---\s*\n)?(?:name|title):\s*["\']?(.+?)["\']?\s*\n(.*)$', t)  # a draft with a 'title:' front-matter line
+        if fm:
+            t = '# ' + fm.group(1).strip() + '\n\n' + fm.group(2).strip()
+        if not re.match(r'#\s', t):  # make each file its own finding, titled by its file name if it has no heading
+            t = '# ' + re.sub(r'[_-]+', ' ', u.rsplit('/', 1)[-1].rsplit('.', 1)[0]) + '\n\n' + t
+        parts.append(re.sub(r'(?m)^# (?!#)', '# ', t, count=1))
+    return '\n\n'.join(parts)
+
+
+def science_inbox(s):
+    """Each new comment Patrick posts on the inbox issue becomes one issue per finding, queued for Jules with his OK. A comment starting 'Note:' is left alone."""
+    if not SCIENCE:
+        return
+    seen = s.setdefault('science', {})
+    new = [c for c in comments(SCIENCE) if by_owner(c) and str(c['id']) not in seen and not re.match(r'^\W*file anyway:', c['body'], re.I)]
+    if not new:
+        return
+    mem = board_memory()
+    for c in new:
+        seen[str(c['id'])] = 1
+        if re.match(r'^\W*note\b', c['body'], re.I):
+            continue
+        lines, text = [], attached_text(c['body'])
+        if text is None:
+            post(SCIENCE, f'I could not read the file attached to {c["html_url"]}. Paste its text into a new comment instead.' + SIGN.format(rv.MODEL))
+            continue
+        for title, body in findings_of(text):
+            d = dup_of({'title': title, 'change': body[:600]}, mem)
+            if d:
+                lines.append(f'- "{title}": already covered by {d[0]} ({d[1] or "same work"}). Not filed again. Reply here with `File anyway: {title}` if it is different.')
+                continue
+            full = f'From Claude Science\'s independent audit, posted by Patrick on #{SCIENCE} ({c["html_url"]}). Posting it there is his OK, so it is owner-approved. Synthetic data only.\n\nA fix that changes a reported number needs a UI-level synthetic test that fails on main and passes on the branch (AGENTS.md).\n\n---\n\n{body}'
+            if DRY:
+                log(f'[dry] would file "{title}"'); continue
+            n = gh(f'repos/{REPO}/issues', 'POST', {'title': title, 'body': full, 'labels': ['from-patrick', 'from-science', 'owner-approved', 'jules-queue']})['number']
+            mem['open'].append((f'#{n}', title + ' ' + body[:300]))
+            lines.append(f'- #{n} "{title}": queued for Jules.')
+            log(f'science finding filed as #{n}')
+        if lines:
+            post(SCIENCE, 'From your comment:\n' + '\n'.join(lines) + SIGN.format(rv.MODEL))
+    for c in comments(SCIENCE):  # "File anyway: <title>" overrides a duplicate call
+        m = re.match(r'^\W*file anyway:\s*(.+)', c['body'], re.I)
+        if not (m and by_owner(c)) or str(c['id']) in seen:
+            continue
+        seen[str(c['id'])] = 1
+        want = m.group(1).strip().lower()
+        src = next((b for cc in comments(SCIENCE) if by_owner(cc) for t, b in findings_of(attached_text(cc['body']) or '') if t.lower() == want), None)
+        if src and not DRY:
+            n = gh(f'repos/{REPO}/issues', 'POST', {'title': m.group(1).strip(), 'body': f'From Claude Science, posted by Patrick on #{SCIENCE}, filed on his request although it looked like a duplicate. Owner-approved. Synthetic data only.\n\n---\n\n{src}', 'labels': ['from-patrick', 'from-science', 'owner-approved', 'jules-queue']})['number']
+            post(SCIENCE, f'Filed as #{n} as you asked.' + SIGN.format(rv.MODEL))
+
+
 # ---------- review gate: plain-code checks on every finished Jules PR, so the lead only sees PRs that pass ----------
 APP_ = 'hplc-figure-bench(WF1.13).html'
 ALLOWED = re.compile(r'^(hplc-figure-bench\(WF1\.13\)\.html|README\.md|tests/(suites|data|lib|ux)/|tests/README\.md|docs/)')
@@ -1542,7 +1635,7 @@ def board_memory(days=21):
     """What the project already has or has queued, for the advisers and the duplicate check: merged PRs, open work, and earlier board ideas with their fate."""
     since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)).isoformat()
     merged = [p for p in gh(f'repos/{REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=100') if (p.get('merged_at') or '') > since]
-    open_i = [i for i in gh(f'repos/{REPO}/issues?state=open&per_page=100') if 'pull_request' not in i and i['number'] not in (TRACK, BOARD)]
+    open_i = [i for i in gh(f'repos/{REPO}/issues?state=open&per_page=100') if 'pull_request' not in i and i['number'] not in (TRACK, BOARD, SCIENCE)]
     ideas = [i for i in gh(f'repos/{REPO}/issues?state=all&labels=from-board&sort=created&direction=desc&per_page=100') if 'pull_request' not in i]
     fate = lambda i: ('declined by Patrick' if any(l['name'] == 'owner-declined' for l in i['labels']) else
                       'closed as duplicate or not planned' if i.get('state_reason') == 'not_planned' else 'done' if i['state'] == 'closed' else 'open')
@@ -1584,7 +1677,7 @@ def board_context():
     goals = (ROOT / 'docs' / 'GOALS.md').read_text(encoding='utf-8', errors='replace')[:2500]
     mem = board_memory()
     merged = [p for p in gh(f'repos/{REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=60') if p.get('merged_at')][:20]
-    open_i = [i for i in gh(f'repos/{REPO}/issues?state=open&per_page=100') if i['number'] not in (TRACK, BOARD)]
+    open_i = [i for i in gh(f'repos/{REPO}/issues?state=open&per_page=100') if i['number'] not in (TRACK, BOARD, SCIENCE)]
     lab = lambda i: {l['name'] for l in i['labels']}
     pick = lambda *ls: [i for i in open_i if lab(i) & set(ls)]
     prs = [i for i in open_i if 'pull_request' in i]
@@ -2004,7 +2097,7 @@ def one_pass():
         log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
     else:
         heartbeat(s)
-    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('owner merge', owner_merge_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('science inbox', science_inbox), ('owner merge', owner_merge_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
