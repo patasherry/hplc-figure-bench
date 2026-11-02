@@ -20,7 +20,7 @@ The owner is a biochemistry graduate student who uses it for real lab data. Scie
 
 ## How the code is organized
 
-Read docs/CODEMAP.md first. Open only the lines you need from the HTML file.
+Read docs/CODEMAP.md first. Open only the lines you need from the HTML file. Before writing any browser test or inspection script, read docs/AGENT_TIPS.md: it lists the traps that stall agents (hidden controls, the home-screen-only new-project box, figure tabs hidden inside projects) and the harness helpers to use instead.
 
 - One `<style>` block, then one `<script>` block.
 - All JavaScript lives inside a single strict-mode IIFE: `(function(){ "use strict"; ... })();`. There are no modules, no build step, no package manager and no framework. Keep it that way.
