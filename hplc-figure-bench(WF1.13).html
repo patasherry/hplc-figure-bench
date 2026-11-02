@@ -4412,17 +4412,34 @@ function methodsText(){
     if (pool) t += ` Fractions ${pool.replace(/^Pool\s*/, '')}${vol} were pooled${nt && !tagNote ? (verb ? ` and ${lc(nt)}` : ` (next: ${nt})`) : ''}.`;
     if (tagNote) t += ` The tag was then removed (${lc(nt)}).`;
     const wfPar = wfParents(wf), ri = wf.indexOf(r), children = wf.filter((_, ci) => wfPar[ci] === ri);
-    if (children.length > 1) {
+    const isDiscarded = step => !step.inWf || step.discard === true;
+    const allSteps = runs.concat((prep.manual || []).map(manObj)).concat(Object.values(prep.btw || {}).map(ncObj));
+    const isChild = x => {
+      const parentId = wfFromOf(x);
+      if (parentId) return parentId === r.id;
+      // if it has no wfFrom, it only comes from this run if it's immediately after it in raw workflow order
+      // We can use wfParents for this on a slightly more complete list, but wait, runs array is linear
+      if (x.prep) return false; // a manual step could come from it but we check via wfFromOf anyway
+      const idx = runs.findIndex(rx => rx.id === x.id);
+      return idx > 0 && runs[idx-1].id === r.id;
+    }
+    // Also include branches that are in the data model but explicitly discarded
+    const discardedChildren = allSteps.filter(x => isDiscarded(x) && isChild(x));
+    if (children.length > 1 || (children.length === 1 && discardedChildren.length > 0)) {
       const parts = children.map((c, ci) => {
         const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
         const cLt = letterOf(c), sRef = cLt ? `step ${ck}, panel ${cLt}` : `step ${ck}`;
-        const fn = wfFromNoteOf(c), desc = fn ? lc(fn) : (ci === 0 ? 'one portion' : ci === children.length - 1 ? 'the remainder' : 'another portion');
+        const fn = wfFromNoteOf(c), desc = fn ? lc(fn) : (ci === 0 ? 'one portion' : ci === children.length - 1 && discardedChildren.length === 0 ? 'the remainder' : 'another portion');
         const vb = /fractions\b/i.test(desc) ? 'were applied to' : 'was applied to';
         return {desc, vb, col, sRef};
       });
       let splitTxt = ` The ${stepTitle(r)} pool was split: `;
-      if (parts.length === 2) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc} to ${parts[1].col} (${parts[1].sRef}).`;
-      else splitTxt += parts.map((p, idx) => idx === 0 ? `${p.desc} ${p.vb} ${p.col} (${p.sRef})` : idx === parts.length - 1 ? `and ${p.desc} to ${p.col} (${p.sRef}).` : `${p.desc} to ${p.col} (${p.sRef})`).join(', ');
+      if (parts.length === 1) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef})`;
+      else if (parts.length === 2) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc} to ${parts[1].col} (${parts[1].sRef})`;
+      else splitTxt += parts.map((p, idx) => idx === 0 ? `${p.desc} ${p.vb} ${p.col} (${p.sRef})` : idx === parts.length - 1 ? `and ${p.desc} to ${p.col} (${p.sRef})` : `${p.desc} to ${p.col} (${p.sRef})`).join(', ');
+
+      if (discardedChildren.length > 0) splitTxt += ' and the remainder was discarded.';
+      else splitTxt += '.';
       t += splitTxt;
     }
     if (pr && pr.measured && pr.src !== 'btw') { const epStr = pr.src === 'nd' ? epPhrase(ndEpsUsed(r)) : ''; t += pr.concentrated ? ` The pool was concentrated to ${fmtAuto(pr.measVol)} mL and measured at ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).` : ` The pool measured ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).`; }
