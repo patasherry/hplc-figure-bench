@@ -83,7 +83,7 @@ const IMAC = require('../data/gen_imac_missing');
 
     // Issue #442: valid zero values
     let t = await load('442_valid_zero.csv', hdr + '0,0\n1,0\n2,0\n3,0\n');
-    T.check('matrix/442_valid_zero/loads', t.some(x => /Loaded 1 trace/.test(x)), `toasts: ${t.join(' | ')}`);
+    T.check('matrix/442_valid_zero/loads', t.some(x => /Loaded 1 trace \(UV 280, mAU over 3 min\)/i.test(x)), `toasts: ${t.join(' | ')}`);
     T.check('matrix/442_valid_zero/nothing-left-out', !t.some(x => /left out/i.test(x)), `toasts: ${t.join(' | ')}`);
 
     // Issue #446: malformed rows rejected
@@ -109,7 +109,7 @@ const IMAC = require('../data/gen_imac_missing');
 
     // Issue #527: valid zeros and malformed
     t = await load('527_akta_valid.csv', akta + '0\t0\t0\t10\n1\t0\t1\t10\n2\t0\t2\t10\n3\t0\t3\t10\n');
-    T.check('matrix/527_akta_valid/loads', t.some(x => /Loaded 1 ÄKTA run/.test(x)), `toasts: ${t.join(' | ')}`);
+    T.check('matrix/527_akta_valid/loads', t.some(x => /Loaded 1 ÄKTA run \(UV 1_280, mAU over 3 ml\)/i.test(x)), `toasts: ${t.join(' | ')}`);
 
     t = await load('527_akta_malformed.csv', akta + '0\t0bad\t0\t10\n1\t0bad\t1\t10\n2\t0bad\t2\t10\n');
     T.check('matrix/527_akta_malformed/rejected', t.some(x => /527_akta_malformed\.csv/.test(x) && /no usable UV traces/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
