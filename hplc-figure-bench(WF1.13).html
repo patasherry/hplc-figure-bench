@@ -4427,11 +4427,11 @@ function methodsText(){
     /* For splits, check all runs that branch from this one, even those not in wf (discarded) */
     const allChildren = runs.filter(x => wfFromOf(x) === String(r.id) || (!wfFromOf(x) && runs.indexOf(x) === runs.indexOf(r) + 1));
     const isDiscarded = c => c.discard === true || !c.inWf;
-    const hasDiscarded = allChildren.some(isDiscarded) || (allChildren.length === 0 && wf.indexOf(r) < wf.length - 1); // fallback if it's not the last one but has no child in wf
+    const hasDiscarded = allChildren.some(isDiscarded);
 
-    if (children.length > 1 || (children.length === 1 && allChildren.some(isDiscarded))) {
+    if (children.length > 1 || (children.length === 1 && hasDiscarded)) {
       let splitTxt = ``;
-      if (!allChildren.some(isDiscarded)) {
+      if (!hasDiscarded) {
         // Fully retained splits - 'From the [step] pool, ' phrasing
         const parts = children.map((c, ci) => {
           const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
