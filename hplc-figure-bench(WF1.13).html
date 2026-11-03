@@ -5372,7 +5372,28 @@ async function loadFiles(files){
   const n = added.length + newRuns.length, lostMsg = lost.length ? `. Curves with no readable data points were left out: ${lost.join('; ')}. Export the result from UNICORN again to include them.` : '';
   const sk = added.filter(a => a.parsed.skipped), skipMsg = sk.length ? `. Left out ${sk.map(a => `${a.parsed.skipped} row${a.parsed.skipped > 1 ? 's' : ''} of ${a.name}`).join(', ')}: a row with an unreadable value splits the data, and only the longest unbroken block is kept. Check the file.` : '';
   if (bad.length) toast(`Could not read ${bad.join(', ')}. Use an ÄKTA (UNICORN) export or a text file with time and signal columns${(lostMsg + skipMsg) || '.'}`);
-  else if (n) toast((dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}` : `Loaded ${n} trace${n > 1 ? 's' : ''}`) + lostMsg + skipMsg);
+    else if (n) {
+    let msg = '';
+    if (n === 1 && !dup.length) {
+      if (newRuns.length === 1) {
+        const u = newRuns[0].uvs[0];
+        if (u) {
+          const rng = parseFloat(Math.abs(u.xs[u.xs.length - 1] - u.xs[0]).toPrecision(3));
+          msg = ` (${u.name}${u.yu ? `, ${u.yu}` : ''} over ${rng} ${newRuns[0].xu || ''})`;
+        }
+      } else if (added.length === 1) {
+        const tr = added[0].parsed;
+        if (tr && tr.cols && tr.rows && tr.rows.length) {
+          const mx = (tr.cols[tr.xc] || '').match(/\(([^)]+)\)/), my = (tr.cols[tr.yc] || '').match(/\(([^)]+)\)/);
+          const xu = mx ? mx[1] : '', yu = my ? my[1] : '';
+          const name = (tr.cols[tr.yc] || '').replace(/\s*\([^)]+\)$/, '');
+          const rng = parseFloat(Math.abs(tr.rows[tr.rows.length - 1][tr.xc] - tr.rows[0][tr.xc]).toPrecision(3));
+          msg = ` (${name}${yu ? `, ${yu}` : ''} over ${rng}${xu ? ` ${xu}` : ''})`;
+        }
+      }
+    }
+    toast((dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}${msg}` : `Loaded ${n} trace${n > 1 ? 's' : ''}${msg}`) + lostMsg + skipMsg);
+  }
   if (imgs.length) addGelFiles(imgs);
 }
 function addParsed(added, quiet){

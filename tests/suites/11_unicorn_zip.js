@@ -48,7 +48,7 @@ async function peaks(p, h){ const t = await h.peakTable(); if (!t.length) return
     T.check('flow input', flow === 0.5, `expected 0.5, got ${flow}`);
 
     const toasts = await h.toasts();
-    T.check('no error toast', !toasts.some(t => /error|failed/i.test(t)), toasts.join(', '));
+    T.check('no error toast', !toasts.some(t => /error|failed/i.test(t)), toasts.join(', ')); T.check('valid loads parsed-facts', toasts.some(t => /Loaded 1 ÄKTA run.*UV.*mAU over 30 ml/i.test(t)), toasts.join(', '));
 
     // Test for injection mark spatial positioning in the SVG:
     // The injection label 'Inj' is drawn if there is an injection event.
