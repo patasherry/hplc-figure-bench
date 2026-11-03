@@ -2741,15 +2741,17 @@ function processGel(g){
   const sc = Math.min(1, 1400/cw), ow = Math.max(2, Math.round(cw*sc)), oh = Math.max(2, Math.round(ch*sc));
   const c2 = document.createElement('canvas'); c2.width = ow; c2.height = oh; const x2 = c2.getContext('2d');
   x2.imageSmoothingQuality = 'high'; x2.drawImage(c1, cx, cy, cw, ch, 0, 0, ow, oh);
-  const img = x2.getImageData(0, 0, ow, oh), d = img.data, hist = new Uint32Array(256), dk = new Float32Array(ow*oh);
+  const img = x2.getImageData(0, 0, ow, oh), d = img.data, hist = new Uint32Array(256), dk = new Float32Array(ow*oh), dq = new Float32Array(ow*oh);
   const bl = +g.black, wh = Math.max(bl + 1, +g.white), k = 255/(wh - bl);
   for (let i=0;i<d.length;i+=4){
-    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++; dk[i/4] = g.invert ? gray : 255 - gray;
+    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++;
+    dk[i/4] = g.invert ? gray : 255 - gray;
+    dq[i/4] = g.invert ? gray : -Math.log10(Math.max(gray, 1)/255)*255;
     if (g.color) for (let j=0;j<3;j++){ let v = (d[i+j] - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; d[i+j] = g.invert ? 255 - v : v; }
     else { let v = (gray - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; if (g.invert) v = 255 - v; d[i] = d[i+1] = d[i+2] = v; }
   }
   x2.putImageData(img, 0, 0);
-  g.pix = {w: ow, h: oh, d: dk}; g._bands = null;
+  g.pix = {w: ow, h: oh, d: dk, q: dq}; g._bands = null;
   g.out = {url: c2.toDataURL('image/jpeg', 0.92), w: ow, h: oh}; g.hist = hist; g.crop = {l, r: rr, t, b};
 }
 /* ---------- auto crop: find the stained lanes, their spacing, and the top and bottom of the bands ---------- */
@@ -2931,7 +2933,8 @@ function laneTrack(g, i){
 function laneProfile(g, i){
   const P = g.pix, n = gelLabels(g).length, lw = P.w/n, tr = laneTrack(g, i);
   const pr = new Float64Array(P.h);
-  for (let y=0;y<P.h;y++){ const x0 = Math.max(0, Math.floor((i + DET.laneLo)*lw + tr[y])), x1 = Math.min(P.w, Math.ceil((i + DET.laneHi)*lw + tr[y])); let t = 0; const o = y*P.w; for (let x=x0;x<x1;x++) t += P.d[o + x]; pr[y] = x1 > x0 ? t/(x1 - x0) : 0; }
+  const q_data = P.q || P.d;
+  for (let y=0;y<P.h;y++){ const x0 = Math.max(0, Math.floor((i + DET.laneLo)*lw + tr[y])), x1 = Math.min(P.w, Math.ceil((i + DET.laneHi)*lw + tr[y])); let t = 0; const o = y*P.w; for (let x=x0;x<x1;x++) t += q_data[o + x]; pr[y] = x1 > x0 ? t/(x1 - x0) : 0; }
   const k = Math.max(1, Math.round(P.h*DET.smooth)), sm = new Float64Array(P.h);
   for (let y=0;y<P.h;y++){ let t = 0, c = 0; for (let j=Math.max(0,y-k); j<=Math.min(P.h-1,y+k); j++){ t += pr[j]; c++; } sm[y] = t/c; }
   /* rolling-minimum background, then smoothed, so broad smears and uneven staining are removed */

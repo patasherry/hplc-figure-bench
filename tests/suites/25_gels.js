@@ -141,4 +141,85 @@ await T.t('lane-run-full-name', async () => {
     T.check('lane-run-full-name.no-errors', !a.errs.length, a.errs.join('|'));
   } finally { await a.close(); }
 });
+
+await T.t('purity-absorbance', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const gels_images = await p.evaluate(() => {
+      const c1 = document.createElement('canvas'); c1.width = 300; c1.height = 360; const x1 = c1.getContext('2d'), im1 = x1.createImageData(300, 360);
+      const c2 = document.createElement('canvas'); c2.width = 300; c2.height = 360; const x2 = c2.getContext('2d'), im2 = x2.createImageData(300, 360);
+      const bands = [[90, 6.0, 0.8], [180, 5.5, 0.12], [265, 6.5, 0.08]];
+      let max_f = 0;
+      for (let y = 0; y < 360; y++) {
+        let f = 0;
+        for (let b of bands) f += (b[2] / (b[1] * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((y - b[0]) / b[1], 2));
+        if (f > max_f) max_f = f;
+      }
+
+      for (let y = 0; y < 360; y++) {
+        for (let a = 0; a < 300; a++) {
+          const lane = Math.floor(a / 100);
+          const dx = Math.abs(a % 100 - 50), w = Math.exp(-0.5 * Math.pow(dx / 24, 8));
+          let f = 0;
+          if (lane === 1) {
+            for (let b of bands) f += (b[2] / (b[1] * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((y - b[0]) / b[1], 2));
+          }
+          const od = (f / max_f) * 1.0 * w;
+
+          const greyA = Math.round(255 * Math.pow(10, -od));
+          const j = 4 * (300 * y + a);
+          im1.data[j] = im1.data[j+1] = im1.data[j+2] = Math.max(0, Math.min(255, greyA)); im1.data[j+3] = 255;
+
+          const greyB = Math.round(12 + 200 * od);
+          im2.data[j] = im2.data[j+1] = im2.data[j+2] = Math.max(0, Math.min(255, greyB)); im2.data[j+3] = 255;
+        }
+      }
+      x1.putImageData(im1, 0, 0); x2.putImageData(im2, 0, 0);
+      return [c1.toDataURL('image/png'), c2.toDataURL('image/png')];
+    });
+
+    // Test Gel A
+    await load(p, {
+      app: 'HPLC Figure Bench', version: 1, runs: [], traces: [], cur: 'g1',
+      gels: [
+        {
+          id: 'g1', name: 'synthetic gel A', image: gels_images[0], nLanes: 3, labels: 'M, A, B',
+          marksManual: true, marks: [{kda: 100, y: .2}, {kda: 10, y: .8}], black: 0, white: 255, autoLv: false, invert: false,
+          tags: [{kind: 'target', lane: 1, y: 90/360}]
+        }
+      ],
+      opt: {gelAutoCrop: false, bandSens: 5, purBase: 'lane', purRow: true, knownOn: false, tagPreset: 'custom', tagSeq: '', tidy13: true, tidy14: true}
+    });
+    let csv1 = await csv(p);
+    let L1 = lane(csv1, 2);
+    let target1 = L1.find(r => Math.abs(+r[13] - 0.25) < 0.05);
+
+    // Test Gel B
+    await load(p, {
+      app: 'HPLC Figure Bench', version: 1, runs: [], traces: [], cur: 'g2',
+      gels: [
+        {
+          id: 'g2', name: 'synthetic gel B', image: gels_images[1], nLanes: 3, labels: 'M, A, B',
+          marksManual: true, marks: [{kda: 100, y: .2}, {kda: 10, y: .8}], black: 0, white: 255, autoLv: false, invert: true,
+          tags: [{kind: 'target', lane: 1, y: 90/360}]
+        }
+      ],
+      opt: {gelAutoCrop: false, bandSens: 5, purBase: 'lane', purRow: true, knownOn: false, tagPreset: 'custom', tagSeq: '', tidy13: true, tidy14: true}
+    });
+    let csv2 = await csv(p);
+    let L2 = lane(csv2, 2);
+    let target2 = L2.find(r => Math.abs(+r[13] - 0.25) < 0.05);
+
+    T.check('purity-absorbance.found-bands', !!target1 && !!target2, 'Target band not found: ' + JSON.stringify(L1) + ' | ' + JSON.stringify(L2));
+    if (target1 && target2) {
+      let p1 = parseFloat(target1[10]);
+      let p2 = parseFloat(target2[10]);
+      T.check('purity-absorbance.match', Math.abs(p1 - p2) <= 1.0, 'Gel A (brightfield): ' + p1 + '%, Gel B (linear): ' + p2 + '%');
+    }
+
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
