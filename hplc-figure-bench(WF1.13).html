@@ -5775,7 +5775,8 @@ function ndConcRaw(s){ const dil = numOr(s.dil, 1) || 1;
   if (E && s.a280 != null) return {v: s.a280/E.e*dil, unit: 'mg/mL', src: E.src === 'set' ? 'your A280' : `${E.src} ε`, kda: E.kda};
   if (s.conc != null) return {v: s.conc*dil, unit: 'mg/mL', src: 'instrument'};
   return {v: s.a280*dil, unit: 'mg/mL', src: '1 Abs = 1 mg/mL'}; }
-const ndPoolVol = r => { const p = r && poolRows(r); return p && xUnit(r) === 'mL' ? p.vol : null; };
+/* minutes become mL with the flow, as in massOf and poolRows; no flow gives no volume */
+const ndPoolVol = r => { const p = r && poolRows(r); if (!p) return null; return xUnit(r) === 'mL' ? p.vol : xUnit(r) === 'min' && uvFlow(r) > 0 ? p.vol*uvFlow(r) : null; };
 /* one step: replicate readings averaged within a stage (the pool, and the final sample after concentration or dialysis) */
 function ndStats(ss){ const v = ss.map(s => ndConc(s).v).filter(x => x != null); if (!v.length) return null; const m = v.reduce((a, b) => a + b, 0)/v.length;
   const sd = v.length > 1 ? Math.sqrt(v.reduce((t, x) => t + (x - m)**2, 0)/(v.length - 1)) : null; return {m, sd, n: v.length, cv: sd != null && m ? 100*sd/m : null}; }

@@ -315,5 +315,32 @@ async function fresh(id, fn){
     T.check('nd/unit-review/saved', JSON.stringify(nd.map(s => [s.name, s.conc, s.unitWarn || ''])) === JSON.stringify([['Molar head', 12.5, 'pmol/µL'], ['Molar col', 8, 'µM'], ['Mass mg', 2, ''], ['Mass ug', 1.5, '']]), JSON.stringify(nd.map(s => [s.name, s.conc, s.unitWarn])));
   });
 
+  // #846: on a minutes axis the pool volume left blank is the pool width times the flow, as for the UV mass.
+  // Pool F1-F6 runs 17 to 23 min; at 2.5 mL/min that is 15 mL, and readings of 1.3, 1.4, 1.5 mg/mL give 1.40 x 15 = 21.00 mg.
+  // Without a flow there is no volume to use, so the amount stays blank.
+  for (const flow of ['2.5', '']) await fresh('pool-volume-minutes-' + (flow ? 'flow' : 'no-flow'), async (p, h) => {
+    const id = 'nd/pool-volume-minutes/' + (flow ? 'flow' : 'no-flow');
+    await h.newProject('Minutes pool ' + (flow || 'no flow'));
+    await h.addRun('data/chrom/hplc_min_flow_missing_u7.csv');
+    await h.pool('F1-F6');
+    if (flow) { const f = p.locator('.trace.run.sel [data-k=mFlow]').first();
+      await f.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } });
+      await f.fill(flow); await f.dispatchEvent('change'); await p.waitForTimeout(400); }
+    await h.step('final');
+    await p.setInputFiles(SEL.nd, F.nd('minutes-pool.tsv', [['Pool 1', 1.3, 1.3], ['Pool 2', 1.4, 1.4], ['Pool 3', 1.5, 1.5]], false));
+    await p.locator(SEL.row).nth(2).waitFor();
+    for (let i = 0; i < 3; i++) { const row = p.locator(SEL.row).nth(i); await row.locator(SEL.edit).click(); await row.locator(SEL.run).selectOption({index: 1}); }
+    const stats = await p.locator(SEL.poolStats).first().textContent(), mass = (await p.locator(SEL.mass).first().textContent()).trim(),
+      vol = await p.locator(SEL.poolVolume).first().getAttribute('placeholder');
+    T.check(id + '/statistics', stats === '1.40 ± 0.10 mg/mL, n 3', stats);
+    if (flow) {
+      T.check(id + '/volume', vol === '15.0', `expected 15.0 mL (6 min x 2.5 mL/min), got placeholder ${vol}`);
+      T.check(id + '/mass', mass === '21.00 mg', `expected 21.00 mg (1.40 mg/mL x 15 mL), got "${mass}"`);
+    } else {
+      T.check(id + '/volume', vol === 'pool', `expected no volume without a flow, got placeholder ${vol}`);
+      T.check(id + '/mass', mass === '', `expected no mass without a flow, got "${mass}"`);
+    }
+  });
+
   T.done();
 })();
