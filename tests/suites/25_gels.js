@@ -141,4 +141,73 @@ await T.t('lane-run-full-name', async () => {
     T.check('lane-run-full-name.no-errors', !a.errs.length, a.errs.join('|'));
   } finally { await a.close(); }
 });
-T.done();})();
+T.done();
+await T.t('brightfield-absorbance',async()=>{const a=await start(),p=a.p;try{
+await p.evaluate(async()=>{
+  const c = document.createElement('canvas'); c.width = 300; c.height = 360; const x = c.getContext('2d'), imA = x.createImageData(300, 360), imB = x.createImageData(300, 360);
+  const bands = [[90, 6.0, 80], [180, 5.5, 12], [265, 6.5, 8]];
+
+  // OD functions for each row
+  const OD = new Float64Array(360);
+  let maxOD = 0;
+  for (let y = 0; y < 360; y++) {
+    let od = 0;
+    for (const [mu, sigma, pct] of bands) {
+      // Scale to target max OD 1.0 (approximate target scale)
+      od += (pct / 80) * 1.0 * Math.exp(-0.5 * ((y - mu)/sigma)**2);
+    }
+    OD[y] = od;
+    if (od > maxOD) maxOD = od;
+  }
+
+  for (let y = 0; y < 360; y++) {
+    for (let a = 0; a < 300; a++) {
+      const j = 4 * (300 * y + a);
+
+      // Gel A: brightfield
+      const vA = Math.round(Math.max(0, 255 * Math.pow(10, -OD[y])));
+      imA.data[j] = imA.data[j+1] = imA.data[j+2] = vA; imA.data[j+3] = 255;
+
+      // Gel B: linear
+      const vB = Math.round(Math.max(0, 12 + 200 * OD[y] / maxOD));
+      imB.data[j] = imB.data[j+1] = imB.data[j+2] = vB; imB.data[j+3] = 255;
+    }
+  }
+  x.putImageData(imA, 0, 0); const imgA = c.toDataURL('image/png');
+  x.putImageData(imB, 0, 0); const imgB = c.toDataURL('image/png');
+
+  window._testGelA = imgA;
+  window._testGelB = imgB;
+});
+
+const imgA = await p.evaluate(() => window._testGelA);
+const imgB = await p.evaluate(() => window._testGelB);
+
+const prj = project(gel(imgA, {id: 'gA', name: 'Gel A', invert: false}), {gels: [
+  gel(imgA, {id: 'gA', name: 'Gel A', invert: false, nLanes: 1, labels: 'A', marks: [], tags: [{kind: 'target', lane: 0, y: 90/360}], assign: []}),
+  gel(imgB, {id: 'gB', name: 'Gel B', invert: true, nLanes: 1, labels: 'B', marks: [], tags: [{kind: 'target', lane: 0, y: 90/360}], assign: []})
+], cur: 'gA'});
+
+await load(p, prj);
+
+// Download CSV for gel A
+const waitA = p.waitForEvent('download');
+await p.evaluate(()=>document.querySelector('#bandCsv').click());
+const dA = await waitA, sA = fs.readFileSync(await dA.path(),'utf8');
+const rowA = sA.split('\n').slice(1).find(r => r.split(',')[1] === '0'); const pctA = rowA ? rowA.split(',')[10] : '0';
+
+// Switch to gel B
+await p.evaluate(() => { const e = document.querySelector('#projGel'); if(e){ e.value = 'gB'; e.dispatchEvent(new Event('change')); } });
+await p.waitForTimeout(300);
+
+// Download CSV for gel B
+const waitB = p.waitForEvent('download');
+await p.evaluate(()=>document.querySelector('#bandCsv').click());
+const dB = await waitB, sB = fs.readFileSync(await dB.path(),'utf8');
+const rowB = sB.split('\n').slice(1).find(r => r.split(',')[1] === '0'); const pctB = rowB ? rowB.split(',')[10] : '0';
+
+T.check('brightfield-absorbance.same-purity', Math.abs(parseFloat(pctA) - parseFloat(pctB)) <= 1.0, `Gel A (brightfield): ${pctA}, Gel B (linear): ${pctB}`);
+
+}finally{await a.close();}});
+
+})();
