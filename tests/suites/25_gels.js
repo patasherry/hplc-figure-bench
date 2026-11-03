@@ -138,6 +138,14 @@ await T.t('lane-run-full-name', async () => {
     const val = await p.$$eval('#la1 option', os => (os.find(o => /^2\. /.test(o.textContent)) || {}).value);
     await p.selectOption('#la1', val); await p.waitForTimeout(500);
     T.check('lane-run-full-name.select-title', await p.getAttribute('#la1', 'title') === nm('B'), String(await p.getAttribute('#la1', 'title')));
+
+    const prepTitle = await p.evaluate(() => {
+      const lk = document.querySelector('[id^="lk"]');
+      if (!lk) return null;
+      const o = Array.from(lk.options).find(x => x.value === 'expr');
+      return o ? o.title : null;
+    });
+    T.check('lane-run-full-name.prep-option-title', prepTitle === 'Expression', String(prepTitle));
     T.check('lane-run-full-name.no-errors', !a.errs.length, a.errs.join('|'));
   } finally { await a.close(); }
 });

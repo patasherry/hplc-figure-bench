@@ -3989,7 +3989,7 @@ function prepAuto(g){
     labs.forEach((l, i) => { if (expG && (EXP_U.test(l) || EXP_I.test(l) || EXP_X.test(l))) map[i] = 'expr'; else if (prep.lysLanes && prep.lysis && LYS_X.test(l)) map[i] = 'lysis'; }); }
   g._prepA = {key, map}; return map;
 }
-const PREP_OPT = () => (prep.on ? '<option value="expr">Expression</option><option value="lysis">Lysis</option>' : '') + manSteps().map(m => `<option value="${m.id}">${esc(manObj(m).name)}</option>`).join('') + (prep.cleave ? '<option value="cleave">Dialysis and cleavage</option>' : '');
+const PREP_OPT = () => (prep.on ? '<option value="expr" title="Expression">Expression</option><option value="lysis" title="Lysis">Lysis</option>' : '') + manSteps().map(m => `<option value="${m.id}" title="${esc(manObj(m).name)}">${esc(manObj(m).name)}</option>`).join('') + (prep.cleave ? '<option value="cleave" title="Dialysis and cleavage">Dialysis and cleavage</option>' : '');
 
 /* expression level (target band as a share of the induced lane) and solubility (soluble vs insoluble band) from the expression gel */
 const EXP_S = /^(s|sol|soluble|sup|supernatant)$/i, EXP_P = /^(p|insol|insoluble|pel|pellet)$/i;
@@ -4618,7 +4618,7 @@ function gelCardBody(g){
   const labs = gelLabels(g), asg = labs.map((_, i) => laneAssign(g, i)), samp = new Set(asg.filter(a => a !== 'marker'));
   const mixed = samp.size > 1, curA = mixed ? '__mixed' : ([...samp][0] || '');
   return `<div class="meta">${gelMeta(g)}</div>
-      <label class="f">Sample lanes go with<select id="lk${g.id}" data-k="runId">${mixed ? '<option value="__mixed" selected disabled>Split across runs (set per lane)</option>' : ''}<option value="" ${curA === '' ? 'selected' : ''}>No run (gel on its own)</option>${PREP_OPT().replace(`value="${curA}"`, `value="${curA}" selected`)}${runs.map(r => `<option value="${r.id}" ${curA === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>`;
+      <label class="f">Sample lanes go with<select id="lk${g.id}" data-k="runId"${(() => { const rk = runs.findIndex(r => r.id === curA); if (rk >= 0) return ` title="${esc(runs[rk].name)}"`; if (curA === 'expr') return ' title="Expression"'; if (curA === 'lysis') return ' title="Lysis"'; if (curA === 'cleave') return ' title="Dialysis and cleavage"'; const m = manSteps().find(x => x.id === curA); if (m) return ` title="${esc(manObj(m).name)}"`; return ''; })()}>${mixed ? '<option value="__mixed" selected disabled>Split across runs (set per lane)</option>' : ''}<option value="" ${curA === '' ? 'selected' : ''}>No run (gel on its own)</option>${PREP_OPT().replace(`value="${curA}"`, `value="${curA}" selected`)}${runs.map(r => `<option value="${r.id}" title="${esc(r.name)}" ${curA === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>`;
 }
 function renderKnown(){
   const el = $('#knownList'); if (!el) return; const L = Array.isArray(opt.known) ? opt.known : (opt.known = []);
@@ -4634,12 +4634,12 @@ function renderLaneTable(){
   const labs = gelLabels(g), short = t => t.length > 24 ? t.slice(0, 23) + '…' : t;
   el.innerHTML = labs.map((l, i) => { const a = laneAssign(g, i);
     const am = !(g.assign || [])[i] && a === '' && g._auto && g._auto.amb && g._auto.amb[i];
-    return `<div class="lrow${am ? ' amb' : ''}"${am ? ` title="${esc(l)} is a fraction in ${am.length} runs. Pick the run it came from, or set the runs' pooled fractions."` : ''}><span>${i + 1}</span><input type="text" id="ln${i}" data-lane="${i}" data-lk="label" value="${esc(l)}" aria-label="Lane ${i + 1} label"><select id="la${i}" data-lane="${i}" data-lk="assign" aria-label="Lane ${i + 1} belongs to"${(() => { const rk = runs.findIndex(r => r.id === a); return rk >= 0 ? ` title="${esc(runs[rk].name)}"` : ''; })()}><option value="marker" ${a === 'marker' ? 'selected' : ''}>Ladder</option><option value="" ${a === '' ? 'selected' : ''}>Not shown with a run</option>${PREP_OPT().replace(`value="${a}"`, `value="${a}" selected`)}${runs.map((r, k) => `<option value="${r.id}" title="${esc(r.name)}" ${a === r.id ? 'selected' : ''}>${k + 1}. ${esc(short(shortRunName(r)))}</option>`).join('')}</select></div>`; }).join('');
+    return `<div class="lrow${am ? ' amb' : ''}"${am ? ` title="${esc(l)} is a fraction in ${am.length} runs. Pick the run it came from, or set the runs' pooled fractions."` : ''}><span>${i + 1}</span><input type="text" id="ln${i}" data-lane="${i}" data-lk="label" value="${esc(l)}" aria-label="Lane ${i + 1} label"><select id="la${i}" data-lane="${i}" data-lk="assign" aria-label="Lane ${i + 1} belongs to"${(() => { const rk = runs.findIndex(r => r.id === a); if (rk >= 0) return ` title="${esc(runs[rk].name)}"`; if (a === 'expr') return ' title="Expression"'; if (a === 'lysis') return ' title="Lysis"'; if (a === 'cleave') return ' title="Dialysis and cleavage"'; const m = manSteps().find(x => x.id === a); if (m) return ` title="${esc(manObj(m).name)}"`; return ''; })()}><option value="marker" ${a === 'marker' ? 'selected' : ''}>Ladder</option><option value="" ${a === '' ? 'selected' : ''}>Not shown with a run</option>${PREP_OPT().replace(`value="${a}"`, `value="${a}" selected`)}${runs.map((r, k) => `<option value="${r.id}" title="${esc(r.name)}" ${a === r.id ? 'selected' : ''}>${k + 1}. ${esc(short(shortRunName(r)))}</option>`).join('')}</select></div>`; }).join('');
 }
 function onLane(el){
   const g = curGel(); if (!g) return; const i = +el.dataset.lane;
   if (el.dataset.lk === 'label') { const labs = gelLabels(g); labs[i] = el.value.replace(/,/g, ' '); g.labels = labs.join(', '); $('#g-labels').value = g.labels; render(); return; }
-  g.assign = g.assign || []; g.assign[i] = el.value; { const r = runs.find(x => x.id === el.value); if (r) el.title = r.name; else el.removeAttribute('title'); } renderList(); render();
+  g.assign = g.assign || []; g.assign[i] = el.value; { const r = runs.find(x => x.id === el.value); if (r) el.title = r.name; else if (el.value === 'expr') el.title = 'Expression'; else if (el.value === 'lysis') el.title = 'Lysis'; else if (el.value === 'cleave') el.title = 'Dialysis and cleavage'; else { const m = manSteps().find(x => x.id === el.value); if (m) el.title = manObj(m).name; else el.removeAttribute('title'); } } renderList(); render();
 }
 function renderList(){
   const runCards = runs.map((r, idx) => {
@@ -4729,7 +4729,7 @@ list.addEventListener('input', e => {
   else if (k === 'wfW') t[k] = Math.min(10, Math.max(0.2, numOr(el.value, 1)));
   else if (k === 'gelZ') t[k] = Math.min(3, Math.max(0.3, numOr(el.value, 1)));
   else if (k === 'scale') t[k] = numOr(el.value, 1);
-  else if (k === 'runId' && t.src) { const asg = gelLabels(t).map((_, i) => laneAssign(t, i)); t.runId = el.value; t.assign = asg.map(a => a === 'marker' ? 'marker' : el.value); if (curGel() === t) renderLaneTable(); }
+  else if (k === 'runId' && t.src) { const asg = gelLabels(t).map((_, i) => laneAssign(t, i)); t.runId = el.value; t.assign = asg.map(a => a === 'marker' ? 'marker' : el.value); if (curGel() === t) renderLaneTable(); { const r = runs.find(x => x.id === el.value); if (r) el.title = r.name; else if (el.value === 'expr') el.title = 'Expression'; else if (el.value === 'lysis') el.title = 'Lysis'; else if (el.value === 'cleave') el.title = 'Dialysis and cleavage'; else { const m = manSteps().find(x => x.id === el.value); if (m) el.title = manObj(m).name; else el.removeAttribute('title'); } } }
   else t[k] = el.value;
   if (k === 'name' || COND_KEYS.includes(k)) syncImacCondWarnings(t, el.closest('.trace'));
   if (k === 'crop') { t.xmin = t.xmax = ''; }
