@@ -141,4 +141,72 @@ await T.t('lane-run-full-name', async () => {
     T.check('lane-run-full-name.no-errors', !a.errs.length, a.errs.join('|'));
   } finally { await a.close(); }
 });
+
+await T.t('cleavage-gates', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+
+    // Case A
+    await load(p, project(
+      gel(im, {
+        labels: 'M, SEC pool',
+        marks: [{kda: 100, y: 0.1}, {kda: 75, y: 0.2}, {kda: 50, y: 0.3}, {kda: 27, y: 120.5/360}, {kda: 15, y: 0.7}, {kda: 10, y: 0.9}],
+        assign: ['', 'r2'],
+        tags: []
+      }),
+      {
+        runs: [
+          {id: 'r1', stepName: 'IMAC', inWf: true},
+          {id: 'r2', stepName: 'SEC', inWf: true},
+          {id: 'r3', stepName: 'SEC polish', inWf: true}
+        ],
+        prep: { cleave: true, cleaveAfter: 'r2' },
+        knownOn: true
+      }
+    ));
+    await p.evaluate(() => {
+        document.querySelector('#o-knownOn').checked = true;
+        document.querySelector('#o-knownOn').dispatchEvent(new Event('change', {bubbles: true}));
+    });
+    await p.waitForTimeout(100);
+
+    let csvA = await csv(p);
+    let laneA = lane(csvA, 2);
+    let labelsA = laneA.length ? laneA[0][9] : '';
+    T.check('cleavage-gates.A-is-not-labelled', !labelsA.includes('His-Ulp1'), 'Expected ~27 kDa band NOT to be His-Ulp1: ' + labelsA);
+
+    // Case C
+    await load(p, project(
+      gel(im, {
+        labels: 'M, Polish pool',
+        marks: [{kda: 100, y: 0.1}, {kda: 75, y: 0.2}, {kda: 50, y: 0.3}, {kda: 27, y: 120.5/360}, {kda: 15, y: 0.7}, {kda: 10, y: 0.9}],
+        assign: ['', 'r2'],
+        tags: []
+      }),
+      {
+        runs: [
+          {id: 'r1', stepName: 'SEC', inWf: true},
+          {id: 'r2', stepName: 'SEC polish', inWf: true}
+        ],
+        prep: { cleave: true, cleaveAfter: 'r1' },
+        knownOn: true
+      }
+    ));
+    await p.evaluate(() => {
+        document.querySelector('#o-knownOn').checked = true;
+        document.querySelector('#o-knownOn').dispatchEvent(new Event('change', {bubbles: true}));
+    });
+    await p.waitForTimeout(100);
+
+    let csvC = await csv(p);
+    let laneC = lane(csvC, 2);
+    let labelsC = laneC.length ? laneC[0][9] : '';
+    T.check('cleavage-gates.C-is-labelled', labelsC.includes('His-Ulp1'), 'Expected ~27 kDa band to be His-Ulp1: ' + labelsC);
+
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();

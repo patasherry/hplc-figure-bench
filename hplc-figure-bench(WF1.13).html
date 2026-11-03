@@ -3110,8 +3110,8 @@ function laneCtx(g, i){
   const imacLab = /wash|elu|imac|\bni\b|nickel|his[\s.-]*trap|^e\d+\b|eluate/i.test(lab), proteome = /^(lys|crude|sup|pel|load|input|ft\b|flow|cleared|total|sol|insol|induc|uninduc|pre)/i.test(lab);
   const postLab = a === 'cleave' || /cleav|ulp|tev|digest|after|post|\bcut\b|reverse|ortho|\brimac\b/i.test(lab);
   const imacL = imacLab && !postLab;
-  const iImac = wf.findIndex(x => typ(x) === 'IMAC'), iRev = wf.findIndex(x => typ(x) === 'Reverse IMAC'), k = r ? wf.indexOf(r) : -1;
-  const cut = iRev >= 0 ? iRev : iImac >= 0 ? iImac + 1 : -1;
+  const iImac = wf.findIndex(x => typ(x) === 'IMAC'), k = r ? wf.indexOf(r) : -1;
+  const c0 = cutAfterIndex(); const cut = c0 >= 0 ? c0 + 1 : (iImac >= 0 ? iImac + 1 : -1);
   return {has: !!r || imacLab || postLab, proteome,
     ecoli: !proteome && (imacL || (r && typ(r) === 'IMAC') || (k >= 0 && iImac >= 0 && k <= iImac) || (k === 0 && iImac < 0)),
     post: !proteome && (postLab || (k >= 0 && cut >= 0 && k >= cut))};
@@ -3139,9 +3139,12 @@ function knownFor(g, laneI, b){
     if (!g._fe || g._fe.k !== g.marks.map(m => m.kda + ':' + m.y).join(',')) { const r = ladderResid(g), e = r ? r.map(x => x.e).sort((p, q) => p - q) : []; g._fe = {k: g.marks.map(m => m.kda + ':' + m.y).join(','), v: e.length ? e[e.length >> 1] : 0}; }
     const ln = gelBands(g)[laneI], ws = ln ? ln.bands.map(x => x.hr - x.hl).sort((p, q) => p - q) : [], wMed = ws.length ? ws[ws.length >> 1] : 0;
     const distinct = !b.shoulder && !b.sat && !(wMed > 0 && (b.hr - b.hl) > 2.5*wMed) && !gelSaturatedIdx(g).has(laneI);
-    if (!out.length && inLadder && distinct && !(g._fe.v > 10) && !own.some(m => Math.abs(Math.log(b.mw/m)) <= lt)) {
+    if (!out.length && inLadder && distinct && !(g._fe.v > 10)) {
+      const isOwn = own.some(m => Math.abs(Math.log(b.mw/m)) <= lt);
+      const rr = runs.find(x => x.id === laneAssign(g, laneI)), form = ndForm(rr);
       (Array.isArray(opt.known) ? opt.known : []).forEach(k => { if (!k.on || !(+k.kda > 0)) return; const c = knownCtx(k);
         if (c !== 'any' && !(c === 'post' ? cx.post : cx.ecoli)) return;
+        if (isOwn && !(form === 'untagged' && (k.kind === 'contam' || k.kind === 'freetag'))) return;
         const d = dist(k); if (d <= lt) out.push({k, d}); });
     }
   }
