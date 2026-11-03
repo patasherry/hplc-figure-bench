@@ -389,6 +389,36 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     T.check('p7.basis_umol', /µmol|umol/i.test(basisTxt), `basis text: ${basisTxt.slice(0, 150)}`);
   });
 
+
+  await T.t('p8_workflow_compact_labels', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Compact labels');
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+
+    // add conc step via UI buttons
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="conc"]').click()); await h.wait(500);
+
+    // Use page.evaluate to set values because page.fill timeouts were mentioned
+    await p.evaluate(() => {
+        const c = document.querySelector('#btw-conc');
+        if (c) { c.value = '2.10'; c.dispatchEvent(new Event('input', {bubbles: true})); c.dispatchEvent(new Event('change', {bubbles: true})); }
+        const v = document.querySelector('#btw-vOut');
+        if (v) { v.value = '2'; v.dispatchEvent(new Event('input', {bubbles: true})); v.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.wait(500);
+
+    const timelineHtml = await p.evaluate(() => {
+        const item = Array.from(document.querySelectorAll('#tl .tl-card, #tl .tl-item, #tl div, #tl li')).find(c => c.textContent.includes('Concentrated') && c.textContent.includes('Conc.'));
+        return item ? item.textContent : '';
+    });
+
+    T.check('p8.has_conc', timelineHtml.includes('Conc. 2.10 mg/mL'), 'Expected "Conc. 2.10 mg/mL" in timeline card, got: ' + timelineHtml);
+    T.check('p8.has_vol', timelineHtml.includes('Vol. 2.0 mL'), 'Expected "Vol. 2.0 mL" in timeline card, got: ' + timelineHtml);
+    T.check('p8.has_total', timelineHtml.includes('Total 4.20 mg') || timelineHtml.includes('Total 4.2 mg'), 'Expected "Total 4.20 mg" or "Total 4.2 mg" in timeline card, got: ' + timelineHtml);
+  });
+
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
