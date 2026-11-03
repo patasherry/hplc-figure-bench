@@ -143,6 +143,67 @@ async function peakFile(e) {
 }
 
 // #398: a zoom window too narrow to search (under 7 points) falls back to the whole trace, keeping peaks inside the window
+
+async function overlapPeakLabels() {
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await h.newProject('overlap');
+    let csv = 'Time (min),UV (mAU)\n';
+    csv += '0,0\n1,0\n1.1,10\n1.12,0\n1.15,10\n1.3,0\n2,0\n';
+    const filepath = path.join(DATA, 'chrom', 'overlap.csv');
+    fs.writeFileSync(filepath, csv);
+    await h.addRun(filepath);
+    await p.waitForTimeout(600);
+
+    // click detect peaks
+    await p.evaluate(() => {
+        const b = document.getElementById('detectAll');
+        if (b) { b.click(); }
+    });
+
+    // increase prominence?
+    await p.evaluate(() => {
+        const p_el = document.getElementById('o-prom');
+        if (p_el) { p_el.value = '0'; p_el.dispatchEvent(new Event('input', {bubbles:true})); p_el.dispatchEvent(new Event('change', {bubbles:true})); }
+    });
+    await p.waitForTimeout(600);
+
+    // Enable vertical rotation
+    await p.evaluate(() => {
+        const check = document.getElementById('o-peakRot');
+        if (check) { check.click(); }
+    });
+    await p.waitForTimeout(600);
+
+    const labels = await p.evaluate(() => {
+       const texts = Array.from(document.querySelectorAll('svg text'));
+       return texts.filter(t => t.getAttribute('fill') === '#1a1a1a' || t.getAttribute('fill') === '#000000')
+           .map(t => {
+           const r = t.getBoundingClientRect();
+           return {text: t.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom};
+       });
+    });
+
+    // check overlaps
+    let overlap = false;
+    for (let i = 0; i < labels.length; i++) {
+       for (let j = i + 1; j < labels.length; j++) {
+           if (labels[i].text === 'overlap' || labels[j].text === 'overlap') continue;
+           const l1 = labels[i], l2 = labels[j];
+           if (!(l1.right < l2.left || l1.left > l2.right || l1.bottom < l2.top || l1.top > l2.bottom)) {
+               overlap = true;
+           }
+       }
+    }
+
+    T.check('overlap_labels/found', labels.length >= 3, 'Found at least 2 peak labels (plus trace name)');
+    T.check('overlap_labels/no-overlap', !overlap, 'Peak labels do not overlap');
+
+  } finally {
+    await close();
+  }
+}
+
 async function zoomPeak() {
   const {p, errs, close} = await open(), h = H(p);
   try {
@@ -163,6 +224,7 @@ async function zoomPeak() {
 
 (async () => {
   await T.t('zoom_peak', zoomPeak);
+  await T.t('overlap_peak_labels', overlapPeakLabels);
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }
