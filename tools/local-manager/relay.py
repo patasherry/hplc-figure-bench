@@ -307,3 +307,20 @@ def outstanding(comment_bodies):
 
 def request_count(comment_bodies):
     return len({m.group(1) for b in comment_bodies for m in MARK_RE.finditer(b)})
+
+
+# ---------- Direction board route (docs/RELAY.md, "Board route") ----------
+BOARD_MARK = '<!-- relay-board -->'  # on the first request of a board-raised issue: later requests and the expiry fallback read it
+
+
+def is_strong(scores, n_advisers, go):
+    """True when every adviser scored the proposal at `go` or above (scores: list of numbers, one per adviser who voted)."""
+    return len(scores) >= max(2, n_advisers) and min(scores) >= go
+
+
+def board_route(scores, n_advisers, go, relayed, cap):
+    """'queue' or 'relay' for an adopted proposal. Strong proposals and anything past the per-round cap go to the work queue;
+    the rest go to the relay. `relayed` is how many proposals this round have already taken the relay."""
+    if is_strong(scores, n_advisers, go) or relayed >= cap:
+        return 'queue'
+    return 'relay'

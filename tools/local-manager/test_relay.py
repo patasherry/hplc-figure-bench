@@ -129,4 +129,24 @@ assert rl.pick_ranges(APP, 'nothing', 40) is None
 b1, b2 = rl.MARK.format('7-ab12', 'abc1234567'), rl.MARK.format('7-cd34', 'fff')
 assert rl.outstanding([b1, 'x', b2]) == {'7-ab12': {'base': 'abc1234567'}, '7-cd34': {'base': 'fff'}}
 assert list(rl.outstanding([b1, b2, rl.DONE.format('7-ab12')])) == ['7-cd34'] and rl.request_count([b1, b2, b1]) == 2
+# board route: the pure routing decision (go = 4, three advisers, cap = 2)
+go, cap = 4, 2
+assert rl.is_strong([4, 5, 4], 3, go) and not rl.is_strong([5, 5, 3], 3, go)
+assert not rl.is_strong([5], 3, go) and not rl.is_strong([5, 5], 3, go)  # fewer scores than advisers is not strong
+assert rl.board_route([5, 4, 4], 3, go, 0, cap) == 'queue'  # every adviser at or above go: the queue
+assert rl.board_route([5, 4, 3], 3, go, 0, cap) == 'relay'  # one adviser below: the relay
+assert rl.board_route([5, 4, 3], 3, go, 1, cap) == 'relay'
+assert rl.board_route([5, 4, 3], 3, go, 2, cap) == 'queue'  # past the per-round cap: the queue again
+assert rl.board_route([5, 4, 4], 3, go, 2, cap) == 'queue' and rl.board_route([3, 3, 3], 3, go, 0, 0) == 'queue'
+# a simulated round of four split proposals: exactly `cap` take the relay, in order
+n = 0
+routes = []
+for sc in ([3, 4, 5], [2, 4, 4], [5, 5, 5], [3, 3, 4], [4, 3, 4]):
+    r = rl.board_route(sc, 3, go, n, cap)
+    n += r == 'relay'
+    routes.append(r)
+assert routes == ['relay', 'relay', 'queue', 'queue', 'queue'], routes
+# the board marker is not mistaken for a request or its closing marker
+assert rl.MARK_RE.search(rl.BOARD_MARK) is None and rl.DONE_RE.search(rl.BOARD_MARK) is None
+assert rl.outstanding([rl.BOARD_MARK + '\n' + rl.MARK.format('7-ab12', 'abc1234567')]) == {'7-ab12': {'base': 'abc1234567'}}
 print('ok')
