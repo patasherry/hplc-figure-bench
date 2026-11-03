@@ -113,6 +113,15 @@ Check 4 reads the file, not a sha, because unrelated merges change the sha witho
 - **stale (3 or 4):** the request is withdrawn and a fresh one is cut from main as it is now, counted against the same limit.
 - **expired:** a request older than `relay_expire_hours` is withdrawn with a note; a response to it counts as an unknown id.
 
+## Board route
+
+The Direction board (#222) can raise a request itself, so Patrick does not have to label anything.
+
+- **Which proposals:** an adopted proposal that is not *strong*. Strong means every adviser scored it at `board_go_score` (4) or more; those keep the old path (`jules-queue` and `board-approved`). A split proposal is created with `from-board` and `relay-from-board` and **without** `jules-queue`. Its body is unchanged (votes and debate), because the request is cut from it. The body needs a `relay-lines:` range or a line number, as for any request.
+- **Cap:** at most `board_relay_max` (2) per round, in rank order. Proposals past the cap go to `jules-queue` as before.
+- **Trust:** the owner check of `needs-relay` is unchanged. For `relay-from-board` the manager accepts the issue only if it also carries `from-board` and the newest `relay-from-board` label event was made by the account the manager posts under. The request comment starts with "The board raised this one because the advisers' scores were split" and names the issue and the board. Everything after that (block, six checks, filing) is the same.
+- **Fallback:** the relay is a preference, not a gate. If the request expires (`relay_expire_hours`) unanswered, the manager drops `relay-from-board`, adds `jules-queue` and says so in the withdrawal comment. The same happens at once when the issue names no line range to cut an excerpt from.
+
 ## Settings
 
 In the manager's settings file; all optional.
@@ -122,6 +131,8 @@ In the manager's settings file; all optional.
 | `relay_label` | `needs-relay` | label Patrick puts on an issue to ask for a request |
 | `relay_expire_hours` | 12 | hours a request stays valid |
 | `relay_max_rounds` | 2 | further requests per issue after the first (insufficient or stale) |
+| `board_relay_label` | `relay-from-board` | label the board puts on a split proposal to route it to the relay |
+| `board_relay_max` | 2 | board-raised requests per board round |
 | `relay_context_lines` | 40 | lines added each side of a named `relay-lines` range (and of a bare line number when no function encloses it) |
 
 ## Worked example

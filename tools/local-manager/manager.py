@@ -667,6 +667,8 @@ def science_inbox(s):
 
 # ---------- offline relay: a question Patrick carries to an agent with no repository access, and its answer back (docs/RELAY.md) ----------
 RELAY_LABEL = cfg.get('relay_label', 'needs-relay')  # Patrick puts this on an issue to ask for a request block
+RELAY_BOARD = cfg.get('board_relay_label', 'relay-from-board')  # the board puts this on a from-board issue whose advisers' scores were split
+BOARD_RELAY_MAX = cfg.get('board_relay_max', 2)  # board-raised requests per round; the rest go to jules-queue
 RELAY_PENDING = 'relay-pending'  # on issues with an open request, so the PC and cloud copies find them without sharing state
 RELAY_HOURS, RELAY_ROUNDS, RELAY_CTX = cfg.get('relay_expire_hours', 12), cfg.get('relay_max_rounds', 2), cfg.get('relay_context_lines', 40)
 
@@ -684,12 +686,27 @@ def relay_labelled_by_owner(n):
     return bool(ev) and (ev[-1].get('actor') or {}).get('login') == OWNER
 
 
-def relay_send(n, issue, app_text, base, ranges):
+_me = []
+
+
+def relay_labelled_by_board(n, issue):
+    """True for a board-raised issue: it carries from-board and the manager's own account applied the board relay label last. A human adding the label by hand under another account does not pass."""
+    if 'from-board' not in {l['name'] for l in issue['labels']}:
+        return False
+    if not _me:
+        _me.append(gh('user')['login'])
+    ev = [e for e in gh(f'repos/{REPO}/issues/{n}/events?per_page=100') if e.get('event') == 'labeled' and (e.get('label') or {}).get('name') == RELAY_BOARD]
+    return bool(ev) and (ev[-1].get('actor') or {}).get('login') == _me[0]
+
+
+def relay_send(n, issue, app_text, base, ranges, board=False):
     rid = rl.new_id(n)
+    why = (f"**The board raised this one because the advisers' scores were split.** Issue #{n} was adopted on the Direction board (#{BOARD}) without every adviser backing it strongly, "
+           'so it comes here for a bigger reasoning budget before it goes to the work queue.\n\n' + rl.BOARD_MARK + '\n') if board else ''
     body = re.sub(r'^.*relay-lines:.*$', '', issue.get('body') or '', flags=re.M).strip()[:6000]
     exp = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=RELAY_HOURS)
     req = rl.build_request(rid, base, app_text, n, exp, issue['title'], body or issue['title'], ranges)
-    post(n, f'**Relay request `{rid}`.** Paste the block below into the offline agent as its whole prompt, then paste its reply back here as a comment. Valid until {rl.iso(exp)}.\n\n'
+    post(n, why + f'**Relay request `{rid}`.** Paste the block below into the offline agent as its whole prompt, then paste its reply back here as a comment. Valid until {rl.iso(exp)}.\n\n'
             + rl.MARK.format(rid, base) + '\n````\n' + req + '\n````' + SIGN.format(rv.MODEL))
     log(f'relay request {rid} posted on #{n}')
     return rid
@@ -705,20 +722,31 @@ def relay_ranges_of(cs, rid):
 
 def relay(s):
     """Emit a request for each issue Patrick labelled needs-relay, then collect his pasted responses, validate them and file or answer."""
-    for i in issues(RELAY_LABEL):
+    seen = set()
+    for i, board in [(i, False) for i in issues(RELAY_LABEL)] + [(i, True) for i in issues(RELAY_BOARD)]:
         n = i['number']
+        lab = RELAY_BOARD if board else RELAY_LABEL
+        if n in seen:
+            continue
+        seen.add(n)
         try:
-            if not relay_labelled_by_owner(n):
+            if board:
+                if not relay_labelled_by_board(n, i):
+                    log(f'relay: #{n} carries {RELAY_BOARD} but it is not a from-board issue labelled by the manager. Nothing posted.'); continue
+            elif not relay_labelled_by_owner(n):
                 log(f'relay: #{n} carries {RELAY_LABEL} but Patrick did not add it. Nothing posted.'); continue
             if rl.outstanding([c['body'] for c in comments(n)]):
-                label(n, remove=[RELAY_LABEL]); continue  # already asked (e.g. the other copy got there first)
+                label(n, remove=[lab]); continue  # already asked (e.g. the other copy got there first)
             app, base = relay_app()
             ranges = rl.pick_ranges(app, i.get('body'), RELAY_CTX)
+            if not ranges and board:  # nothing to cut an excerpt from: the relay is a preference, so the work goes to the queue
+                post(n, 'The issue names no line range, so no relay request can be cut from it. It went to the normal work queue instead.' + SIGN.format(rv.MODEL))
+                label(n, add=['jules-queue'], remove=[lab]); continue
             if not ranges:
                 post(n, f'I need a range to cut the excerpt from. Add a line `relay-lines: <from>-<to>` or a line number ("line 1234") to the issue body, then label it `{RELAY_LABEL}` again.' + SIGN.format(rv.MODEL))
                 label(n, remove=[RELAY_LABEL]); continue
-            relay_send(n, i, app, base, ranges)
-            label(n, add=[RELAY_PENDING], remove=[RELAY_LABEL])
+            relay_send(n, i, app, base, ranges, board)
+            label(n, add=[RELAY_PENDING], remove=[lab])
         except Exception as e:
             log(f'relay: #{n} request failed: {e}')
     for i in issues(RELAY_PENDING):
@@ -732,12 +760,17 @@ def relay_collect(n, issue):
     cs = comments(n)
     bodies = [c['body'] for c in cs]
     reqs = rl.outstanding(bodies)
+    board = any(rl.BOARD_MARK in b for b in bodies)  # raised by the Direction board: later requests say so, and expiry falls back to the queue
     now = dt.datetime.now(dt.timezone.utc)
     for rid in list(reqs):  # expiry
         c = next((c for c in cs if f'<!-- relay-req {rid} ' in c['body']), None)
         m = re.search(r'^expires: (\S+)', c['body'], re.M) if c else None
         if m and rl.parse_iso(m.group(1)) < now:
-            post(n, f'Request `{rid}` expired ({m.group(1)}) and is withdrawn. Label the issue `{RELAY_LABEL}` for a fresh one.' + rl.DONE.format(rid) + SIGN.format(rv.MODEL))
+            if board:  # the relay is a preference, not a gate: an unanswered board request must not strand the work
+                post(n, f'Request `{rid}` expired ({m.group(1)}) and is withdrawn. Nobody answered, so this issue went to the normal work queue (`jules-queue`) instead.' + rl.DONE.format(rid) + SIGN.format(rv.MODEL))
+                label(n, add=['jules-queue'], remove=[RELAY_BOARD])
+            else:
+                post(n, f'Request `{rid}` expired ({m.group(1)}) and is withdrawn. Label the issue `{RELAY_LABEL}` for a fresh one.' + rl.DONE.format(rid) + SIGN.format(rv.MODEL))
             log(f'relay request {rid} expired'); del reqs[rid]
     handled = {int(x) for b in bodies for x in rl.SRC_RE.findall(b)}
     app = base = None
@@ -758,7 +791,7 @@ def relay_collect(n, issue):
             ranges = relay_ranges_of(cs, rid) or rl.pick_ranges(app, issue.get('body'), RELAY_CTX)
             if rl.request_count(bodies) < 1 + RELAY_ROUNDS and ranges and not DRY:
                 post(n, f'Stale: {b.msg}. Request `{rid}` is withdrawn and a fresh one follows, cut from main as it is now. Nothing was filed.' + rl.DONE.format(rid) + sig + SIGN.format(rv.MODEL))
-                new = relay_send(n, issue, app, base, ranges); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
+                new = relay_send(n, issue, app, base, ranges, board); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
             else:
                 post(n, f'Stale: {b.msg}. Request `{rid}` is withdrawn and the limit of {RELAY_ROUNDS} fresh requests is used up, so I stop here. Nothing was filed.' + rl.DONE.format(rid) + sig + SIGN.format(rv.MODEL))
             log(f'relay #{n}: stale response to {rid}'); continue
@@ -776,7 +809,7 @@ def relay_collect(n, issue):
         elif rl.request_count(bodies) < 1 + RELAY_ROUNDS and not DRY:
             ranges = rl.ranges_from_need(app, r['need'], RELAY_CTX) or relay_ranges_of(cs, rid)
             post(n, f'`{rid}` came back as insufficient: {nomention(r["need"])[:600]}\n\nA second request follows.' + done)
-            new = relay_send(n, issue, app, base, ranges); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
+            new = relay_send(n, issue, app, base, ranges, board); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
         else:
             post(n, f'`{rid}` came back as insufficient and the limit of {RELAY_ROUNDS} further requests is used up, so I stop here. Needed: {nomention(r["need"])[:600]}' + done)
     if not reqs:
@@ -1949,17 +1982,22 @@ def board_round(s, topic=''):
     if dups:
         lines += ['**Not adopted, already done or queued:** ' + '; '.join(dups), '']
         log(f'board: skipped {len(dups)} duplicate proposals')
+    relayed = 0
     for r in agreed[:max(0, min(AUTO_MAX, AUTO_QUEUE - queued))]:
         p = ranked[r - 1]
         args = '\n'.join(f'- {t}' for t in debate_of(p)) or '- (no arguments recorded)'
         votes = '\n'.join(f'- {n}: {sc}/5, {why}' for n, sc, why in scores[p['id']])
-        strong = len(scores[p['id']]) >= max(2, len(who)) and min(x[1] for x in scores[p['id']]) >= BOARD_GO  # all three advisers back it strongly: no need to wait for Patrick
+        sc = [x[1] for x in scores[p['id']]]
+        strong = rl.is_strong(sc, len(who), BOARD_GO)  # all three advisers back it strongly: no need to wait for Patrick
+        to_relay = rl.board_route(sc, len(who), BOARD_GO, relayed, BOARD_RELAY_MAX) == 'relay'  # split scores: a request for the offline relay instead of the queue
+        relayed += to_relay
         if not DRY:
-            i = gh(f'repos/{REPO}/issues', 'POST', {'title': p['title'], 'labels': ['jules-queue'] + (['board-approved'] if strong else []) + ['from-board'],
+            i = gh(f'repos/{REPO}/issues', 'POST', {'title': p['title'], 'labels': ([RELAY_BOARD] if to_relay else ['jules-queue']) + (['board-approved'] if strong else []) + ['from-board'],
                    'body': f'{p["why"]}\n\n**Change:** {p["change"]}\n\n**Evidence:** {p["evidence"]}\n\n**Risk to avoid:** {p["risk"]}\n\n'
                            f'### Why the advisers chose it\n{votes}\n\n<details><summary>The debate</summary>\n\n{args}\n\n</details>\n\n'
                            f'Proposed by {p["by"]} on the Direction board (#{BOARD}) and adopted after debate: all three advisers backed it' +
-                           (f', each with {BOARD_GO} or more, so it was queued without waiting for Patrick. If it changes a reported number, the lead checks the science before merging.' if strong else '.') + ' Follow AGENTS.md.'})
+                           (f', each with {BOARD_GO} or more, so it was queued without waiting for Patrick. If it changes a reported number, the lead checks the science before merging.' if strong else '.') +
+                           (f' The advisers\' scores were split, so the manager will post an offline relay request for Patrick (docs/RELAY.md); if nobody answers in {RELAY_HOURS} h it goes to the work queue.' if to_relay else '') + ' Follow AGENTS.md.'})
             b['made'][str(r)] = i['number']
     if b['made']:
         lines += ['**Adopted after the debate** (all three backed them): ' + ', '.join(f'{r} → #{n}' for r, n in b['made'].items()) +
