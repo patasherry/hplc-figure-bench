@@ -189,6 +189,100 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
 
   // Publication readiness at journal widths (#662): checks that exported figures at single
   // and double column presets have no text under 6 pt, and ticks and text don't overlap.
+
+  await T.t('y_axis_tick_labels_spacing', async () => {
+    const q = await open(), hq = H(q.p), pg = q.p;
+    try {
+      await hq.newProject('Tick Test Project');
+
+      const tracePath = require('path').join(__dirname, '../data/chrom/synthetic.csv');
+      const absPath = require('path').resolve(tracePath);
+      await hq.addRun([absPath]);
+      await hq.wait(1000);
+
+      await pg.evaluate(() => {
+        const el = document.getElementById('o-preset');
+        if (el) { el.value = 'poster'; el.dispatchEvent(new Event('change', {bubbles: true})); }
+      });
+      await hq.wait(600);
+
+      await hq.step('figure');
+      await hq.wait(500);
+
+      const yTicksInfo = await pg.evaluate(() => {
+        const svg = document.querySelector('#paper svg');
+        if (!svg) return { err: 'No SVG' };
+
+        const fs = parseFloat(svg.getAttribute('font-size')) || 24;
+        const texts = Array.from(svg.querySelectorAll('text')).filter(t => !isNaN(parseFloat(t.textContent.trim()))).map(t => ({x: parseFloat(t.getAttribute('x')), y: parseFloat(t.getAttribute('y')), text: t.textContent}));
+
+        if (texts.length < 2) return { err: 'Not enough numeric texts. Got: ' + Array.from(svg.querySelectorAll('text')).map(t => t.textContent).join('|') };
+
+        const xGroups = {};
+        for (const t of texts) {
+          const x = t.x;
+          if (!xGroups[x]) xGroups[x] = [];
+          xGroups[x].push(t);
+        }
+
+        let maxYTickGroup = [];
+        for (const x in xGroups) {
+          if (xGroups[x].length > maxYTickGroup.length) maxYTickGroup = xGroups[x];
+        }
+
+        if (maxYTickGroup.length < 2) return { err: 'Not enough ticks after grouping' };
+        maxYTickGroup.sort((a, b) => a.y - b.y);
+
+        let minGap = Infinity;
+        for (let i = 1; i < maxYTickGroup.length; i++) {
+          const gap = maxYTickGroup[i].y - maxYTickGroup[i-1].y;
+          if (gap < minGap) minGap = gap;
+        }
+
+        return { fs, minGap, ticks: maxYTickGroup.length };
+      });
+
+      T.check('tick_labels/no_error', !yTicksInfo.err, yTicksInfo.err);
+      if (!yTicksInfo.err) {
+         T.check('tick_labels/no_overlap_poster', yTicksInfo.minGap >= yTicksInfo.fs, `min gap ${yTicksInfo.minGap} vs font size ${yTicksInfo.fs}`);
+      }
+
+      await pg.evaluate(() => {
+        const el = document.getElementById('o-preset');
+        if (el) { el.value = 'single'; el.dispatchEvent(new Event('change', {bubbles: true})); }
+      });
+      await hq.wait(600);
+
+      const singleInfo = await pg.evaluate(() => {
+        const svg = document.querySelector('#paper svg');
+        const fs = parseFloat(svg.getAttribute('font-size')) || 8;
+        const texts = Array.from(svg.querySelectorAll('text')).filter(t => !isNaN(parseFloat(t.textContent.trim()))).map(t => ({x: parseFloat(t.getAttribute('x')), y: parseFloat(t.getAttribute('y')), text: t.textContent}));
+        const xGroups = {};
+        for (const t of texts) {
+          const x = t.x;
+          if (!xGroups[x]) xGroups[x] = [];
+          xGroups[x].push(t);
+        }
+        let maxYTickGroup = [];
+        for (const x in xGroups) {
+          if (xGroups[x].length > maxYTickGroup.length) maxYTickGroup = xGroups[x];
+        }
+        maxYTickGroup.sort((a, b) => a.y - b.y);
+        let minGap = Infinity;
+        for (let i = 1; i < maxYTickGroup.length; i++) {
+          const gap = maxYTickGroup[i].y - maxYTickGroup[i-1].y;
+          if (gap < minGap) minGap = gap;
+        }
+        return { fs, minGap };
+      });
+
+      T.check('tick_labels/single_no_overlap', singleInfo.minGap >= singleInfo.fs, `single min gap ${singleInfo.minGap} vs font size ${singleInfo.fs}`);
+
+    } finally {
+      await q.close();
+    }
+  });
+
   await T.t('publication_readiness_journal_widths', async () => {
     const q = await open(), hq = H(q.p), pg = q.p;
     try {
