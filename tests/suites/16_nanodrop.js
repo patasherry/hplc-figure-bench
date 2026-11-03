@@ -342,5 +342,45 @@ async function fresh(id, fn){
     }
   });
 
+
+  await fresh('uv-mass-coefficient', async (p, h) => {
+    await h.newProject('UV Mass Coefficient');
+    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.step('final');
+    await p.evaluate(() => { document.querySelector('.trace.run').click(); });
+    await h.pool('all');
+
+    await p.waitForTimeout(300);
+    // Set sequence via evaluate
+    await p.evaluate(() => {
+        const e = document.getElementById('protSeq');
+        if (e) {
+          e.value = 'MSDKIIHLTDDSFDTDVLKADGAILVDFWAEWCGPCKMIAPILDEIADEYQGKLTVAKLNIDQNPGTAPKYGIRGIPTLLLFKNGEVAATKVGALSKGQLKEFLDANLA';
+          e.dispatchEvent(new Event('input', {bubbles: true}));
+          e.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+        document.getElementById('protUse').click();
+    });
+    await p.waitForTimeout(300);
+
+    const sumHtmlUntagged = await p.locator('#sumTable').innerHTML();
+    const untaggedTitleCheck = sumHtmlUntagged.includes('for the untagged form');
+    T.check('nd/uv-mass-coefficient/untagged', untaggedTitleCheck, 'Expected untagged coefficient in header title');
+
+    // Change to SUMO tag
+    await p.evaluate(() => {
+        const el = document.getElementById('o-tagPreset');
+        if (el) {
+            el.value = 'sumo';
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await p.waitForTimeout(300);
+
+    const sumHtmlTagged = await p.locator('#sumTable').innerHTML();
+    const taggedTitleCheck = sumHtmlTagged.includes('for the tagged form');
+    T.check('nd/uv-mass-coefficient/tagged', taggedTitleCheck, 'Expected tagged coefficient in header title');
+  });
+
   T.done();
 })();
