@@ -1,0 +1,22 @@
+Baseline: hplc-figure-bench(WF1.13).html at origin/main
+== baseline
+00_preflight.js                    pass   1  fail   0  1s
+00_smoke.js                        pass   4  fail   0  5s
+05_quick.js                        pass  10  fail   0  46s
+10_data_truth.js                   pass 358  fail   3  336s
+11_unicorn_zip.js                  pass  18  fail   0  23s
+12_genbank.js                      pass  42  fail   0  51s
+14_peaks.js                        pass  24  fail   0  70s
+15_import_sec.js                   pass  52  fail   0  67s
+16_nanodrop.js                     pass 105  fail   0  132s
+17_cross_format.js                 pass  19  fail   0  22s
+18_hplc_load.js                    pass  44  fail   0  22s
+20_science.js                      pass 156  fail   0  159s
+21_methods.js                      pass  22  fail   0  81s
+22_protein.js                      pass  69  fail   0  367s
+23_provenance.js                   pass  11  fail   0  76s
+24_workflow_branches.js            pass  52  fail   0  157s
+25_gels.js                         pass  48  fail   0  29s
+26_sec_calibration.js              pass  66  fail   0  66s
+27_sec_mass_calculation.js         pass   4  fail   0  8s
+28_sec_figure.js                   pass   6  fail   0  10s

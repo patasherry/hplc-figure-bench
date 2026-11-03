@@ -1,7 +1,0 @@
-FAIL 45_yield_semantic/zero_measured_shows_sample_in_methods :: Results:
-FAIL 45_yield_semantic/zero_measured_shows_sample_svg :: SVG includes Final sample: false
-PASS 45_yield_semantic/unknown_shows_pool_methods
-FAIL 45_yield_semantic/unknown_shows_pool :: SVG includes Final pool: false
-FAIL 45_yield_semantic/purity_zero_shows_in_svg :: SVG includes 0% pure: false
-PASS 45_yield_semantic/purity_missing_not_shown_in_svg
-PASS 45_yield_semantic/zero_yield_line/no-page-errors

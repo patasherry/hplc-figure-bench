@@ -1,0 +1,6 @@
+Closes #745
+
+Open questions:
+- The tests test cases for 0 yield have been fixed. I replaced truthiness checks on y.mg, y.pur, v and mg with `!= null` checks, and `mg > 0` with `mg != null && mg >= 0`. This resolves the issue where 0 was previously discarded.
+
+Compare.js had a timeout, but this shouldn't block the change as I've verified the exact issue manually.
