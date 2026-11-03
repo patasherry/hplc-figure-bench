@@ -11,5 +11,8 @@ Adds a `title` attribute to lane selection dropdowns (both the individual lane a
   - Result on `main` (displayed incorrect value): Title string check `lane-run-full-name.prep-option-title` fails with `null` as `<option>` has no title attribute for `expr`.
   - Result on PR branch (expected displayed value): `lane-run-full-name.prep-option-title` correctly returns `'Expression'` ensuring the label will be distinguishable on hover.
 
+## Open questions
+- The repeated logic for calculating the select title might be hard to maintain if more prep steps are added. If future maintenance becomes an issue, refactoring into a dedicated helper would be the logical next step.
+
 ## Code Map coverage
 - The figure controls binding is handled in `#laneTable` rendering and PREP_OPT option mapping strings in the generic script.
