@@ -329,6 +329,73 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
     } finally { await q.close(); }
   });
 
+
+
+
+  await T.t('y_tick_overlap', async () => {
+    const q = await open(); const qh = H(q.p);
+    try {
+      await q.p.click('#homeQuick');
+      await qh.wait(800);
+
+      // We need a tall UV trace on Quick page.
+      // There are default examples when Quick mode opens.
+      // We can just change the ymax and preset.
+
+      // single
+      await q.p.evaluate(() => {
+        const e = document.querySelector('#o-preset');
+        e.value = 'single';
+        e.dispatchEvent(new Event('change', {bubbles: true}));
+        e.dispatchEvent(new Event('input', {bubbles: true}));
+        const e2 = document.querySelector('#o-ymax');
+        e2.value = '370';
+        e2.dispatchEvent(new Event('change', {bubbles: true}));
+        e2.dispatchEvent(new Event('input', {bubbles: true}));
+      });
+      await qh.wait(500);
+
+      let singleGap = await q.p.evaluate(() => {
+        const texts = [...document.querySelectorAll('#paper svg text')].filter(t => t.textContent.trim().match(/^[0-9]+$/));
+        if (!texts.length) return 8;
+        const xs = texts.map(t => parseFloat(t.getAttribute('x')));
+        const counts = xs.reduce((a, c) => { a[c] = (a[c] || 0) + 1; return a; }, {});
+        const x = parseFloat(Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b));
+        const ys = texts.filter(t => Math.abs(parseFloat(t.getAttribute('x')) - x) < 0.1).map(t => parseFloat(t.getAttribute('y'))).sort((a, b) => a - b);
+        let minGap = Infinity;
+        for (let i = 1; i < ys.length; i++) {
+          minGap = Math.min(minGap, Math.abs(ys[i] - ys[i-1]));
+        }
+        return minGap;
+      });
+      T.check('pub/y_tick_single', singleGap >= 8, `minGap: ${singleGap}`);
+
+      // poster
+      await q.p.evaluate(() => {
+        const e = document.querySelector('#o-preset');
+        e.value = 'poster';
+        e.dispatchEvent(new Event('change', {bubbles: true}));
+        e.dispatchEvent(new Event('input', {bubbles: true}));
+      });
+      await qh.wait(500);
+
+      let posterGap = await q.p.evaluate(() => {
+        const texts = [...document.querySelectorAll('#paper svg text')].filter(t => t.textContent.trim().match(/^[0-9]+$/));
+        if (!texts.length) return 24;
+        const xs = texts.map(t => parseFloat(t.getAttribute('x')));
+        const counts = xs.reduce((a, c) => { a[c] = (a[c] || 0) + 1; return a; }, {});
+        const x = parseFloat(Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b));
+        const ys = texts.filter(t => Math.abs(parseFloat(t.getAttribute('x')) - x) < 0.1).map(t => parseFloat(t.getAttribute('y'))).sort((a, b) => a - b);
+        let minGap = Infinity;
+        for (let i = 1; i < ys.length; i++) {
+          minGap = Math.min(minGap, Math.abs(ys[i] - ys[i-1]));
+        }
+        return minGap;
+      });
+      T.check('pub/y_tick_poster', posterGap >= 24, `minGap: ${posterGap}`);
+    } finally { await q.close(); }
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
