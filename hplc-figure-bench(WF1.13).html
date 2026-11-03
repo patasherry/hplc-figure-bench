@@ -4430,11 +4430,15 @@ function methodsText(){
         const cLt = letterOf(c), sRef = cLt ? `step ${ck}, panel ${cLt}` : `step ${ck}`;
         const fn = wfFromNoteOf(c), desc = fn ? lc(fn) : (ci === 0 ? 'one portion' : ci === children.length - 1 ? 'the remainder' : 'another portion');
         const vb = /fractions\b/i.test(desc) ? 'were applied to' : 'was applied to';
-        return {desc, vb, col, sRef};
+        /* a branch that is not a column (a manual step, tag removal) has no step number or column: name it and its panel */
+        if (c.prep) { const s = `${desc} ${/fractions\b/i.test(desc) ? 'were' : 'was'} used for ${lc(stepTitle(c))}${cLt ? ` (panel ${cLt})` : ''}`; return {other: true, full: s, short: s}; }
+        return {full: `${desc} ${vb} ${col} (${sRef})`, short: `${desc} to ${col} (${sRef})`};
       });
+      /* the verb is left out only after a part that said "applied to" */
+      const ph = parts.map((p, idx) => idx === 0 || parts[idx - 1].other || p.other ? p.full : p.short);
       let splitTxt = ` The ${stepTitle(r)} pool was split: `;
-      if (parts.length === 2) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc} to ${parts[1].col} (${parts[1].sRef}).`;
-      else splitTxt += parts.map((p, idx) => idx === 0 ? `${p.desc} ${p.vb} ${p.col} (${p.sRef})` : idx === parts.length - 1 ? `and ${p.desc} to ${p.col} (${p.sRef}).` : `${p.desc} to ${p.col} (${p.sRef})`).join(', ');
+      if (parts.length === 2) splitTxt += `${ph[0]} and ${ph[1]}.`;
+      else splitTxt += ph.map((s, idx) => idx === parts.length - 1 ? `and ${s}.` : s).join(', ');
       t += splitTxt;
     }
     if (pr && pr.measured && pr.src !== 'btw') { const epStr = pr.src === 'nd' ? epPhrase(ndEpsUsed(r)) : ''; t += pr.concentrated ? ` The pool was concentrated to ${fmtAuto(pr.measVol)} mL and measured at ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).` : ` The pool measured ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).`; }

@@ -260,4 +260,24 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     T.check('split-discard: methods text contains split', !/split:/i.test(meth), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
+  /* a branch that is not a column (here batch binding) is named in the split sentence, not called "the column (step 0)" (#704) */
+  await T.t('split-to-manual-step', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    await h.newProject('Split to a manual step');
+    await h.gb(src('gb'));
+    await h.addRun(src('his')); await h.pool('T1-T6');
+    await h.addRun(path.join(DATA, 'science/sec_inject2.csv')); await h.suggest();
+    const ids = (await h.timeline()).filter(x => x.k.startsWith('run:')).map(x => x.k.slice(4));
+    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep="man:batch"]'); await h.wait(400);
+    const man = (await h.timeline()).find(x => x.k.startsWith('man:'));
+    const lin = await h.methods();
+    T.check('split-manual: a linear workflow says nothing about a split', !!man && !/split/i.test(lin), lin);
+    await setFrom(p, h, man.k, ids[0]);
+    const meth = await h.methods();
+    T.check('split-manual: methods says the IMAC pool was split', /The IMAC pool was split: /.test(meth), meth);
+    T.check('split-manual: the column branch keeps its column wording', /split: one portion was applied to an? .*column \(step 2, panel [A-Z]\)/.test(meth), meth);
+    T.check('split-manual: the batch branch is named, not called a column', /and the remainder was used for batch binding \(panel [A-Z]\)\./.test(meth), meth);
+    T.check('split-manual: no step 0 and no unnamed column', !/\(step 0\b/.test(meth) && !/remainder to the column/.test(meth), meth);
+    T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
+
   T.done(); })();
