@@ -88,7 +88,7 @@ need: |                     (verdict: insufficient)
 === END RESPONSE ===
 ```
 
-`answer:` and `need:` are followed by text indented two spaces. The `(verdict: ...)` notes are for the reader; the parser ignores the rest of the key line. A field still holding a `<placeholder>` counts as missing.
+`answer:` and `need:` are followed by text in any indentation (flush left, spaces or tabs); the text runs up to the next line that starts with a field name (`id`, `base`, `verdict`, `summary`, `changes-a-reported-number`, `patch`, `test`, `answer`, `need`) and the common indent is removed. The `(verdict: ...)` notes are for the reader; the parser ignores the rest of the key line. A field still holding a `<placeholder>` counts as missing.
 
 ## Validation
 
