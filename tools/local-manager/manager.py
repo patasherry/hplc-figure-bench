@@ -646,6 +646,7 @@ def science_inbox(s):
                 log(f'[dry] would file "{title}"'); continue
             n = science_file(title, full)
             mem['open'].append((f'#{n}', title + ' ' + body[:300]))
+            mem.setdefault('titles', {})[f'#{n}'] = title
             lines.append(f'- #{n} "{nomention(title)}": queued for Claude Code first (Jules after {FIRST_HOURS} h).')
             log(f'science finding filed as #{n}')
         post(SCIENCE, 'From your comment:\n' + ('\n'.join(lines) or '- nothing to file.') + SRC.format(c['id']) + SIGN.format(rv.MODEL))
@@ -1677,6 +1678,7 @@ def board_memory(days=21):
                       'closed as duplicate or not planned' if i.get('state_reason') == 'not_planned' else 'done' if i['state'] == 'closed' else 'open')
     return {'merged': [(f'PR #{p["number"]}', p['title']) for p in merged],
             'open': [(f'#{i["number"]}', i['title'] + ' ' + (i.get('body') or '')[:300]) for i in open_i],
+            'titles': {f'#{i["number"]}': i['title'] for i in open_i},
             'ideas': [(f'#{i["number"]}', i['title'], fate(i)) for i in ideas]}
 
 
@@ -1689,18 +1691,28 @@ Candidates:
 Return ONE JSON object: {{"duplicate": true or false, "of": "#N or PR #N", "why": "one short sentence"}}"""
 
 
-def dup_of(p, mem):
-    """The existing item a board proposal repeats, or None. Cheap word overlap first; Gemini Flash Lite confirms close calls only."""
+def dup_close(p, mem):
+    """Candidates worth a closer look: word overlap >= 0.45, scored against the title alone as well as title plus body (a long body must not hide a clear match), plus any open issue the proposal cites as #N. Returns (close, best score)."""
     pw = words(p.get('title', '') + ' ' + p.get('change', ''))
     if not pw:
-        return None
+        return [], 0
+    titles = mem.get('titles', {})
     pool = [(k, t) for k, t in mem['merged']] + [(k, t) for k, t in mem['open']] + [(k, f'{t} ({f})') for k, t, f in mem['ideas'] if f != 'open']
-    scored = sorted(((len(pw & words(t)) / max(1, min(len(pw), len(words(t)))), k, t) for k, t in pool), reverse=True)
+    ov = lambda t: len(pw & words(t)) / max(1, min(len(pw), len(words(t))))
+    scored = sorted(((max(ov(t), ov(titles[k])) if k in titles else ov(t), k, t) for k, t in pool), reverse=True)
     close = [(k, t) for sc, k, t in scored[:5] if sc >= 0.45]
+    cited = {'#' + n for n in re.findall(r'#(\d+)', ' '.join(str(p.get(f, '')) for f in ('evidence', 'why')))}
+    close += [(k, t) for sc, k, t in scored if k in cited and k in titles and (k, t) not in close]
+    return close, (scored[0][0] if scored else 0)
+
+
+def dup_of(p, mem):
+    """The existing item a board proposal repeats, or None. Cheap word overlap first; Gemini Flash Lite confirms close calls only."""
+    close, best = dup_close(p, mem)
     if not close:
         return None
     if not GEMINI_KEY:
-        return (close[0][0], 'nearly the same words') if scored[0][0] >= 0.8 else None
+        return (close[0][0], 'nearly the same words') if best >= 0.8 else None
     try:
         r = helper_json(ask_gemini(DUP_Q.format(title=p.get('title', ''), change=p.get('change', '')[:600], cands='\n'.join(f'- {k}: {t[:200]}' for k, t in close)), ['gemini-flash-lite-latest', 'gemini-flash-latest'])) or {}
     except Exception:
