@@ -191,6 +191,26 @@ const files = {
     T.check('paste.two_records_first_only', st.includes('pCOMP') && !st.includes('pSECOND') && st.includes('1,000 bp') && /first of 2 records/.test(await lastToast()), `status: ${st}, toasts: ${await lastToast()}`);
   });
 
+  /* 12. 5' partial marker on each strand (#847): on the complement strand the 5' end is the higher coordinate, so '>' marks
+     a 5' partial CDS and its first codon is internal (kept as is); '<' marks a 3' partial CDS whose initiator still reads M */
+  const rc = s => s.split('').reverse().map(c => ({A: 'T', T: 'A', G: 'C', C: 'G'})[c]).join('');
+  const gbRec = (name, loc, orf, rev) => { const len = 600, a = rev ? 100 : 1, plus = rev ? rc(orf) : orf;
+    const seq = ('GC'.repeat(len)).slice(0, a - 1) + plus + ('GC'.repeat(len)).slice(0, len - (a - 1) - plus.length), lines = [];
+    for (let i = 0; i < len; i += 60) lines.push(String(i + 1).padStart(9) + ' ' + seq.slice(i, i + 60).toLowerCase().match(/.{1,10}/g).join(' '));
+    return `LOCUS       ${name}  ${len} bp    DNA     circular SYN 01-JAN-2000\nDEFINITION  Synthetic test plasmid.\nFEATURES             Location/Qualifiers\n     CDS             ${loc}\n                     /label="testORF"\n                     /transl_table=11\nORIGIN\n${lines.join('\n')}\n//\n`; };
+  const orfOf = first => first + 'GCTGAAAAATCTACCAACCAG'.repeat(14) + 'TAA'; /* 100 codons: start, (AEKSTNQ)x14, stop */
+  const firstRes = async (name, loc, first, rev) => { const P = await open(), hh = H(P.p); P.p.on('dialog', d => d.accept());
+    try { await hh.newProject('GenBank ' + name);
+      await P.p.click('#tl [data-step=construct]'); await P.p.waitForTimeout(300); if (await P.p.$eval('#gbPasteBox', e => e.hidden)) await P.p.click('#gbPaste');
+      await P.p.fill('#gbText', gbRec(name, loc, orfOf(first), rev)); await P.p.click('#gbPasteGo'); await P.p.waitForTimeout(1000);
+      return await P.p.$eval('#protSeq', e => e.value.replace(/\s/g, '')); } finally { await P.close(); } };
+  await T.t('partial5_strand', async () => {
+    const A = await firstRes('pREV5P', 'complement(100..>399)', 'GTG', true), B = await firstRes('pREV3P', 'complement(<100..399)', 'TTG', true), F = await firstRes('pFWD5P', '<1..300', 'GTG', false);
+    T.check('partial5.complement_5p_partial_keeps_codon', A.length === 99 && A[0] === 'V', `complement(100..>399), first codon GTG: expected V, got ${A[0]} (${A.length} residues)`);
+    T.check('partial5.complement_3p_partial_initiator_M', B.length === 99 && B[0] === 'M', `complement(<100..399), first codon TTG: expected M, got ${B[0]} (${B.length} residues)`);
+    T.check('partial5.forward_5p_partial_keeps_codon', F.length === 99 && F[0] === 'V', `<1..300, first codon GTG: expected V, got ${F[0]} (${F.length} residues)`);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
