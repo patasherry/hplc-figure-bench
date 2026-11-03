@@ -20,13 +20,14 @@ Run:  python tools\\local-manager\\manager.py          (keeps running)
       python tools\\local-manager\\manager.py --once   (one pass)
       python tools\\local-manager\\manager.py --dry    (one pass, prints what it would do, changes nothing)
 """
-import base64, datetime as dt, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.request
+import base64, datetime as dt, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools' / 'local-reviewer'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import reviewer as rv  # noqa: E402  (shares the token, model and GitHub helper)
+import relay as rl  # noqa: E402  (offline relay protocol: pure text, docs/RELAY.md)
 
 cfg, REPO, gh = rv.cfg, rv.REPO, rv.gh
 BOARD = cfg.get('board_issue', 222)
@@ -662,6 +663,124 @@ def science_inbox(s):
         if src and not DRY:
             n = science_file(m.group(1).strip(), f'From Claude Science, posted by Patrick on #{SCIENCE} ({c["html_url"]}), filed on his request although it looked like a duplicate. Owner-approved. Synthetic data only.\n\n---\n\n{src}')
             post(SCIENCE, f'Filed as #{n} as you asked.' + SRC.format(c['id']) + SIGN.format(rv.MODEL))
+
+
+# ---------- offline relay: a question Patrick carries to an agent with no repository access, and its answer back (docs/RELAY.md) ----------
+RELAY_LABEL = cfg.get('relay_label', 'needs-relay')  # Patrick puts this on an issue to ask for a request block
+RELAY_PENDING = 'relay-pending'  # on issues with an open request, so the PC and cloud copies find them without sharing state
+RELAY_HOURS, RELAY_ROUNDS, RELAY_CTX = cfg.get('relay_expire_hours', 12), cfg.get('relay_max_rounds', 2), cfg.get('relay_context_lines', 40)
+
+
+def relay_app():
+    """(text of the app at main, first 10 chars of main's sha)."""
+    meta = gh(f'repos/{REPO}/contents/{urllib.parse.quote(rl.APP)}?ref=main')
+    text = base64.b64decode(gh(f'repos/{REPO}/git/blobs/{meta["sha"]}')['content']).decode('utf-8')
+    return text, gh(f'repos/{REPO}/commits/main')['sha'][:10]
+
+
+def relay_labelled_by_owner(n):
+    """True when the newest time the relay label went on this issue, Patrick did it. The manager never posts a request he did not ask for."""
+    ev = [e for e in gh(f'repos/{REPO}/issues/{n}/events?per_page=100') if e.get('event') == 'labeled' and (e.get('label') or {}).get('name') == RELAY_LABEL]
+    return bool(ev) and (ev[-1].get('actor') or {}).get('login') == OWNER
+
+
+def relay_send(n, issue, app_text, base, ranges):
+    rid = rl.new_id(n)
+    body = re.sub(r'^.*relay-lines:.*$', '', issue.get('body') or '', flags=re.M).strip()[:6000]
+    exp = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=RELAY_HOURS)
+    req = rl.build_request(rid, base, app_text, n, exp, issue['title'], body or issue['title'], ranges)
+    post(n, f'**Relay request `{rid}`.** Paste the block below into the offline agent as its whole prompt, then paste its reply back here as a comment. Valid until {rl.iso(exp)}.\n\n'
+            + rl.MARK.format(rid, base) + '\n````\n' + req + '\n````' + SIGN.format(rv.MODEL))
+    log(f'relay request {rid} posted on #{n}')
+    return rid
+
+
+def relay_ranges_of(cs, rid):
+    """The excerpt ranges of an earlier request, read back from its comment."""
+    for c in cs:
+        if f'<!-- relay-req {rid} ' in c['body']:
+            return [(int(a), int(b)) for a, b in re.findall(r'^excerpt: .*?:(\d+)-(\d+)$', c['body'], re.M)]
+    return []
+
+
+def relay(s):
+    """Emit a request for each issue Patrick labelled needs-relay, then collect his pasted responses, validate them and file or answer."""
+    for i in issues(RELAY_LABEL):
+        n = i['number']
+        try:
+            if not relay_labelled_by_owner(n):
+                log(f'relay: #{n} carries {RELAY_LABEL} but Patrick did not add it. Nothing posted.'); continue
+            if rl.outstanding([c['body'] for c in comments(n)]):
+                label(n, remove=[RELAY_LABEL]); continue  # already asked (e.g. the other copy got there first)
+            app, base = relay_app()
+            ranges = rl.pick_ranges(app, i.get('body'), RELAY_CTX)
+            if not ranges:
+                post(n, f'I need a range to cut the excerpt from. Add a line `relay-lines: <from>-<to>` or a line number ("line 1234") to the issue body, then label it `{RELAY_LABEL}` again.' + SIGN.format(rv.MODEL))
+                label(n, remove=[RELAY_LABEL]); continue
+            relay_send(n, i, app, base, ranges)
+            label(n, add=[RELAY_PENDING], remove=[RELAY_LABEL])
+        except Exception as e:
+            log(f'relay: #{n} request failed: {e}')
+    for i in issues(RELAY_PENDING):
+        try:
+            relay_collect(i['number'], i)
+        except Exception as e:
+            log(f'relay: #{i["number"]} collect failed: {e}')
+
+
+def relay_collect(n, issue):
+    cs = comments(n)
+    bodies = [c['body'] for c in cs]
+    reqs = rl.outstanding(bodies)
+    now = dt.datetime.now(dt.timezone.utc)
+    for rid in list(reqs):  # expiry
+        c = next((c for c in cs if f'<!-- relay-req {rid} ' in c['body']), None)
+        m = re.search(r'^expires: (\S+)', c['body'], re.M) if c else None
+        if m and rl.parse_iso(m.group(1)) < now:
+            post(n, f'Request `{rid}` expired ({m.group(1)}) and is withdrawn. Label the issue `{RELAY_LABEL}` for a fresh one.' + rl.DONE.format(rid) + SIGN.format(rv.MODEL))
+            log(f'relay request {rid} expired'); del reqs[rid]
+    handled = {int(x) for b in bodies for x in rl.SRC_RE.findall(b)}
+    app = base = None
+    for c in cs:
+        if not by_owner(c) or c['id'] in handled or rl.RESP_HEAD not in c['body'] or rl.REQ_HEAD in c['body']:
+            continue
+        sig = rl.SRC.format(c['id'])
+        if app is None:
+            app, base = relay_app()
+        try:
+            r = rl.validate(c['body'], reqs, app)
+        except rl.Bad as b:
+            if b.kind == 'reply':
+                post(n, f'Response not accepted: {b.msg}. Nothing was filed.' + sig + SIGN.format(rv.MODEL)); log(f'relay #{n}: rejected: {b.msg}'); continue
+            mid = re.search(r'^id:\s*(\S+)', c['body'], re.M)
+            rid = mid.group(1) if mid else ''
+            reqs.pop(rid, None)
+            ranges = relay_ranges_of(cs, rid) or rl.pick_ranges(app, issue.get('body'), RELAY_CTX)
+            if rl.request_count(bodies) < 1 + RELAY_ROUNDS and ranges and not DRY:
+                post(n, f'Stale: {b.msg}. Request `{rid}` is withdrawn and a fresh one follows, cut from main as it is now. Nothing was filed.' + rl.DONE.format(rid) + sig + SIGN.format(rv.MODEL))
+                new = relay_send(n, issue, app, base, ranges); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
+            else:
+                post(n, f'Stale: {b.msg}. Request `{rid}` is withdrawn and the limit of {RELAY_ROUNDS} fresh requests is used up, so I stop here. Nothing was filed.' + rl.DONE.format(rid) + sig + SIGN.format(rv.MODEL))
+            log(f'relay #{n}: stale response to {rid}'); continue
+        rid, v = r['id'], r['verdict']
+        reqs.pop(rid, None)
+        done = rl.DONE.format(rid) + sig + SIGN.format(rv.MODEL)
+        if v == 'patch':
+            if DRY:
+                log(f'[dry] would file relay patch "{r["summary"]}"'); continue
+            m = gh(f'repos/{REPO}/issues', 'POST', {'title': r['summary'][:200], 'body': rl.filed_body(r, n, rid), 'labels': ['from-relay', 'owner-approved', FIRST]})['number']
+            post(n, f'Response `{rid}` passed all six checks (the patch context is in the app at current main). Filed as #{m}, queued for Claude Code first. The patch is not applied.' + done); log(f'relay #{n}: patch filed as #{m}')
+        elif v == 'answer':
+            late = '' if r['base'] == base else f'\n\n_(Written against main {r["base"]}; main is now {base}, so check it against the current code.)_'
+            post(n, f'**Relay answer to `{rid}`:** {nomention(r["summary"])}\n\n{nomention(r["answer"])}{late}' + done)
+        elif rl.request_count(bodies) < 1 + RELAY_ROUNDS and not DRY:
+            ranges = rl.ranges_from_need(app, r['need'], RELAY_CTX) or relay_ranges_of(cs, rid)
+            post(n, f'`{rid}` came back as insufficient: {nomention(r["need"])[:600]}\n\nA second request follows.' + done)
+            new = relay_send(n, issue, app, base, ranges); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
+        else:
+            post(n, f'`{rid}` came back as insufficient and the limit of {RELAY_ROUNDS} further requests is used up, so I stop here. Needed: {nomention(r["need"])[:600]}' + done)
+    if not reqs:
+        label(n, remove=[RELAY_PENDING])
 
 
 # ---------- review gate: plain-code checks on every finished Jules PR, so the lead only sees PRs that pass ----------
@@ -2145,7 +2264,7 @@ def one_pass():
         log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
     else:
         heartbeat(s)
-    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('science inbox', science_inbox), ('owner merge', owner_merge_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('science inbox', science_inbox), ('relay', relay),('owner merge', owner_merge_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
