@@ -4424,18 +4424,45 @@ function methodsText(){
     if (pool) t += ` Fractions ${pool.replace(/^Pool\s*/, '')}${vol} were pooled${nt && !tagNote ? (verb ? ` and ${lc(nt)}` : ` (next: ${nt})`) : ''}.`;
     if (tagNote) t += ` The tag was then removed (${lc(nt)}).`;
     const wfPar = wfParents(wf), ri = wf.indexOf(r), children = wf.filter((_, ci) => wfPar[ci] === ri);
-    if (children.length > 1) {
-      const parts = children.map((c, ci) => {
-        const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
-        const cLt = letterOf(c), sRef = cLt ? `step ${ck}, panel ${cLt}` : `step ${ck}`;
-        const fn = wfFromNoteOf(c), desc = fn ? lc(fn) : (ci === 0 ? 'one portion' : ci === children.length - 1 ? 'the remainder' : 'another portion');
-        const vb = /fractions\b/i.test(desc) ? 'were applied to' : 'was applied to';
-        return {desc, vb, col, sRef};
-      });
-      let splitTxt = ` The ${stepTitle(r)} pool was split: `;
-      if (parts.length === 2) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc} to ${parts[1].col} (${parts[1].sRef}).`;
-      else splitTxt += parts.map((p, idx) => idx === 0 ? `${p.desc} ${p.vb} ${p.col} (${p.sRef})` : idx === parts.length - 1 ? `and ${p.desc} to ${p.col} (${p.sRef}).` : `${p.desc} to ${p.col} (${p.sRef})`).join(', ');
+    /* For splits, check all runs that branch from this one, even those not in wf (discarded) */
+    const allChildren = runs.filter(x => wfFromOf(x) === String(r.id) || (!wfFromOf(x) && runs.indexOf(x) === runs.indexOf(r) + 1));
+    const isDiscarded = c => c.discard === true || !c.inWf;
+    const hasDiscarded = allChildren.some(isDiscarded) || (allChildren.length === 0 && wf.indexOf(r) < wf.length - 1); // fallback if it's not the last one but has no child in wf
+
+    if (children.length > 1 || (children.length === 1 && allChildren.some(isDiscarded))) {
+      let splitTxt = ``;
+      if (!allChildren.some(isDiscarded)) {
+        // Fully retained splits - 'From the [step] pool, ' phrasing
+        const parts = children.map((c, ci) => {
+          const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
+          const cLt = letterOf(c), sRef = cLt ? `step ${ck}, panel ${cLt}` : `step ${ck}`;
+          const fn = wfFromNoteOf(c), desc = fn ? lc(fn) : (ci === 0 ? 'one portion' : ci === children.length - 1 ? 'the remainder' : 'another portion');
+          const vb = /fractions\b/i.test(desc) ? 'were applied to' : 'was applied to';
+          return {desc, vb, col, sRef};
+        });
+        splitTxt += ` From the ${stepTitle(r)} pool, `;
+        if (parts.length === 2) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc} to ${parts[1].col} (${parts[1].sRef}).`;
+        else splitTxt += parts.map((p, idx) => idx === 0 ? `${p.desc} ${p.vb} ${p.col} (${p.sRef})` : idx === parts.length - 1 ? `and ${p.desc} to ${p.col} (${p.sRef}).` : `${p.desc} to ${p.col} (${p.sRef})`).join(', ');
+      } else {
+        // Has a discarded branch
+        const parts = children.map((c, ci) => {
+          const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
+          const cLt = letterOf(c), sRef = cLt ? `step ${ck}, panel ${cLt}` : `step ${ck}`;
+          const fn = wfFromNoteOf(c), desc = fn ? lc(fn) : (ci === 0 ? 'one portion' : ci === children.length - 1 ? 'another portion' : 'another portion'); // No remainder here
+          const vb = /fractions\b/i.test(desc) ? 'were applied to' : 'was applied to';
+          return {desc, vb, col, sRef};
+        });
+        splitTxt = ` The ${stepTitle(r)} pool was split: `;
+        if (parts.length > 0) {
+            if (parts.length === 1) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and the remainder was discarded.`;
+            else splitTxt += parts.map((p, idx) => idx === 0 ? `${p.desc} ${p.vb} ${p.col} (${p.sRef})` : idx === parts.length - 1 ? `${p.desc} to ${p.col} (${p.sRef})` : `${p.desc} to ${p.col} (${p.sRef})`).join(', ') + ` and the remainder was discarded.`;
+        } else {
+            splitTxt = ` The ${stepTitle(r)} pool was split and the remainder was discarded.`; // Fallback, though likely unused if children.length > 0
+        }
+      }
       t += splitTxt;
+    } else if (children.length === 1 && allChildren.length === 1) {
+       // normal continuation, no explicit split logic
     }
     if (pr && pr.measured && pr.src !== 'btw') { const epStr = pr.src === 'nd' ? epPhrase(ndEpsUsed(r)) : ''; t += pr.concentrated ? ` The pool was concentrated to ${fmtAuto(pr.measVol)} mL and measured at ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).` : ` The pool measured ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).`; }
     else if (pr && pr.measured && pr.src === 'btw') t += ' Its concentration was adjusted.';
