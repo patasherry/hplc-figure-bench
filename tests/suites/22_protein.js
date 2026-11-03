@@ -571,6 +571,54 @@ ORIGIN
     T.check('9_gst_empty_tag.fusion_value', v2 !== null && v2 !== '' && Math.abs(num(v2) - fus) < 0.002 && Math.abs(num(v2) - 16.0546) > 0.01, `expected fusion ${fus.toFixed(4)}, got "${v2}"`);
   });
 
+
+  /* ================= 10. Issue #793: Tag cleavage consistency ================= */
+  await T.t('10_cleavage_consistency', async () => {
+    // 1. New project; add the synthetic gel stand-in and select the gel step so the gel figure is shown.
+    await h.newProject('cleavage_consistency');
+    await h.addRun(path.join(DATA, 'gels', 'ladder_four_bands_smear.csv'));
+
+
+    // 2. Paste the 100-residue sequence above into #protSeq; leave #o-tagPreset at sumo.
+    const seq = 'ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY';
+    await setProtSeq(seq);
+    await h.wait(500);
+
+    // 3. Read the kDa cell of the Tag only row of #protTable.
+    const tbl = await getProtTable();
+    const tagOnlyRow = tbl.find(r => /^tag only$/i.test(r.Form || r.form || ''));
+    T.check('10_cleavage_consistency.tag_only_row_exists', !!tagOnlyRow, 'Tag only row found');
+    const tagKDaFromTable = tagOnlyRow ? num(tagOnlyRow.kDa) : null;
+    T.check('10_cleavage_consistency.table_tag_kda', tagKDaFromTable !== null, `Got kDa from table: ${tagKDaFromTable}`);
+
+    // 4. Tick #o-cleaveDetect; type the Untagged kDa into #o-protKda.
+    const untaggedRow = tbl.find(r => /^untagged$/i.test(r.Form || r.form || ''));
+    const untaggedKDa = untaggedRow ? untaggedRow.kDa : '';
+
+    // Using simple evaluation to interact with DOM directly and skip the page.fill timeout
+    await p.evaluate((val) => {
+        const e = document.getElementById('o-protKda');
+        if (e) { e.value = val; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); }
+        const c = document.getElementById('o-cleaveDetect');
+        if (c && !c.checked) c.click();
+    }, String(untaggedKDa).replace(/[^0-9.]/g, ''));
+    await h.wait(500);
+
+    // 5. Parse the kDa after "free His-SUMO" out of #cleaveInfo.
+    const cleaveInfoText = await p.evaluate(() => document.getElementById('cleaveInfo').textContent);
+    const m = cleaveInfoText.match(/free His-SUMO (\d+(\.\d+)?) kDa/);
+    const tagKDaFromCleaveInfo = m ? num(m[1]) : null;
+    T.check('10_cleavage_consistency.cleaveinfo_tag_kda', tagKDaFromCleaveInfo !== null, `Got kDa from cleaveInfo: ${tagKDaFromCleaveInfo}`);
+
+    // 6. Assert the two agree within 0.15 kDa.
+    if (tagKDaFromTable !== null && tagKDaFromCleaveInfo !== null) {
+      const diff = Math.abs(tagKDaFromTable - tagKDaFromCleaveInfo);
+      T.check('10_cleavage_consistency.agreement', diff <= 0.15, `Table (${tagKDaFromTable}) and cleaveInfo (${tagKDaFromCleaveInfo}) agree within 0.15 kDa (diff: ${diff})`);
+    } else {
+      T.check('10_cleavage_consistency.agreement', false, 'Missing values to compare');
+    }
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
