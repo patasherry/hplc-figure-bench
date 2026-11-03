@@ -329,6 +329,80 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
     } finally { await q.close(); }
   });
 
+
+  await T.t('y-axis_tick_labels_overlap_prevention', async () => {
+    const q = await open(), hq = H(q.p), pg = q.p;
+    try {
+      await hq.newProject('Overlap Check');
+
+      const fileBuffer = Buffer.from(
+        "Fraction,ml,mAU\n0,0,0\n0,5,370\n0,10,0"
+      );
+      await pg.setInputFiles('#file', { name: 'synthetic.csv', mimeType: 'text/csv', buffer: fileBuffer });
+      await hq.wait(1000);
+
+      const tl = await hq.timeline();
+      const rStep = tl.find(x => /^run:/.test(x.k));
+      if (rStep) await hq.step(rStep.k);
+      await hq.wait(600);
+
+      const checkGaps = async (presetName, expectedFs) => {
+        await pg.evaluate((p) => {
+          const e = document.querySelector('#o-preset');
+          if (e) {
+            e.value = p;
+            e.dispatchEvent(new Event('change', {bubbles: true}));
+            e.dispatchEvent(new Event('input', {bubbles: true}));
+          }
+        }, presetName);
+        await hq.wait(600);
+
+        const yt = await pg.evaluate(() => {
+          const svg = document.querySelector('#paper svg');
+          if (!svg) return [];
+          const texts = Array.from(svg.querySelectorAll('text'));
+          const byX = {};
+          for (const t of texts) {
+            if (!t.hasAttribute('x') || !t.hasAttribute('y')) continue;
+            if (!/^[\-\.\d]+$/.test(t.textContent.trim().replace(/\u2212/g, '-'))) continue;
+            const x = t.getAttribute('x');
+            if (!byX[x]) byX[x] = [];
+            byX[x].push(parseFloat(t.getAttribute('y') || 0));
+          }
+
+          let maxYCount = 0;
+          let yValues = [];
+          for (const x in byX) {
+            if (byX[x].length > maxYCount) {
+              maxYCount = byX[x].length;
+              yValues = byX[x];
+            }
+          }
+
+          return yValues.sort((a,b) => a-b);
+        });
+
+        let minGap = Infinity;
+        for (let i = 1; i < yt.length; i++) {
+          const gap = yt[i] - yt[i-1];
+          if (gap < minGap) minGap = gap;
+        }
+
+        const fontSizeStr = await pg.evaluate(() => {
+          const e = document.querySelector('#o-preset');
+          return e ? (e.value === 'poster' ? 24 : (e.value === 'single' ? 8 : 12)) : 24;
+        });
+        const fontSize = parseFloat(fontSizeStr) || expectedFs;
+
+        T.check(`y-axis tick label minimum gap >= font size (${presetName})`, minGap >= fontSize, `min gap ${minGap.toFixed(1)} < font size ${fontSize} (${presetName})`);
+      };
+
+      await checkGaps('poster', 24);
+      await checkGaps('single', 8);
+
+    } finally { await q.close(); }
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
