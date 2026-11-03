@@ -2996,7 +2996,7 @@ function detectBands(g, i, sensPct, gelMax){
     });
     for (let k = bands.length - 1; k >= 0; k--) if (bands[k].drop || (bands[k].shoulder && !(bands[k].area > 0))) bands.splice(k, 1);
   }
-  bands.forEach(b => { if (b.area > 0) return; let a = 0; for (let j=b.l;j<=b.r;j++) a += sig[j]; b.area = a; });
+  bands.forEach(b => { if (b.area > 0) return; let lA = b.row, rA = b.row; while (lA > 0 && sig[lA-1] <= sig[lA]) lA--; while (rA < h-1 && sig[rA+1] <= sig[rA]) rA++; let a = 0; for (let j=lA;j<=rA;j++) a += sig[j]; b.area = a; });
   /* saturation: a flat-topped band is wider at 97% of its height than a Gaussian can be */
   bands.forEach(b => { if (b.shoulder) return; let a = b.row, z = b.row; while (a > 0 && sig[a-1] >= 0.97*b.h) a--; while (z < h-1 && sig[z+1] >= 0.97*b.h) z++;
     b.sat = (z - a + 1)/Math.max(1, b.hr - b.hl + 1) > DET.satRatio && (b.hr - b.hl + 1) >= 5 && b.h >= 0.5*Math.max(gelMax || 0, mx); });
