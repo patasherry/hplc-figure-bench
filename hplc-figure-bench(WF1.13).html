@@ -2235,7 +2235,9 @@ function buildOverlaySVG(ov){
   let y0 = ylo - yr*0.03; let y1 = yhi + (yhi - y0)*padPts/Math.max(1, plotH0 - padPts);
   y0 = numOr(o.ymin, y0); y1 = numOr(o.ymax, y1); if (!(y1 > y0)) y1 = y0 + 1;
 
-  const yt = ticks(y0, y1, Math.max(3, Math.round(numOr(o.h,2.6)*1.8)));
+  const n = Math.max(3, Math.round(numOr(o.h,2.6)*1.8));
+  let yt = ticks(y0, y1, n);
+  yt = fitTicks(yt, y0, y1, n, plotH0, 0, fs*1.28);
   let xt = ticks(xlo, xhi, Math.max(4, Math.round(numOr(o.w,3.5)*2)));
   const ytl = yt.v.map(v => tkf(v, yt.dec));
   const mL = o.showY ? (tOut + 3 + Math.max(...ytl.map(s=>s.length))*cw + 5 + fs*1.2) : fs*0.8;
@@ -2428,7 +2430,10 @@ function buildRunPlainSVG(run, ov){
   let y0 = ylo - yr*band/usable - yr*0.02, y1 = yhi + yr*top/usable;
   y0 = numOr(run.ymin, y0); y1 = numOr(run.ymax, y1); if (!(y1 > y0)) y1 = y0 + 1;
 
-  const yt = ticks(y0, y1, Math.max(3, Math.round(H/72*1.8)));
+  const plotH = Math.max(H - mB, mT + 24) - mT;
+  const n = Math.max(3, Math.round(H/72*1.8));
+  let yt = ticks(y0, y1, n);
+  yt = fitTicks(yt, y0, y1, n, plotH, 0, fs*1.28);
   /* the strip under the trace holds fraction labels, not data, so no y values are printed there */
   if (band && (run.ymin ?? '') === '') { const keep = yt.v.filter(v => v >= ylo - yr*0.05); if (keep.length >= 2) yt.v = keep; }
   let xt = ticks(xlo, xhi, Math.max(3, Math.round(W/72*2)));
@@ -5864,7 +5869,9 @@ function buildNDSVG(only, info){
   const val = (s, i) => norm && s.a280 ? s.spec.ab[i]/s.a280 : s.spec.ab[i];
   const xs = sp.flatMap(s => s.spec.wl), xlo = Math.max(numOr(o.ndFrom, 240), Math.min(...xs)), xhi = Math.min(350, Math.max(...xs));
   const ys = sp.flatMap(s => s.spec.ab.map((v, i) => s.spec.wl[i] >= xlo && s.spec.wl[i] <= xhi ? val(s, i) : null).filter(v => v != null)), y0 = Math.min(0, ...ys), y1 = Math.max(...ys)*1.06 || 1;
-  const legW = Math.min(W*0.38, Math.max(...sp.map(s => s.name.length))*fs*0.47 + fs*2.4), yt = ticks(y0, y1, Math.max(3, Math.round(H/72*1.8))), ytl = yt.v.map(v => fmt(v, yt.dec));
+  const legW = Math.min(W*0.38, Math.max(...sp.map(s => s.name.length))*fs*0.47 + fs*2.4), yt_n = Math.max(3, Math.round(H/72*1.8));
+  let yt = ticks(y0, y1, yt_n); yt = fitTicks(yt, y0, y1, yt_n, H - (tOut + 3 + fs + 4 + fs*1.25) - (fs*1.2 + info.length*fs*1.25), 0, fs*1.28);
+  const ytl = yt.v.map(v => fmt(v, yt.dec));
   const L = tOut + 3 + Math.max(...ytl.map(t => t.length))*cw + 5 + fs*1.2, R = W - legW, T = fs*1.2 + info.length*fs*1.25, B = H - (tOut + 3 + fs + 4 + fs*1.25);
   let xt = ticks(xlo, xhi, 6); xt = fitTicks(xt, xlo, xhi, 6, R - L, cw, fs);
   const px = x => L + (x - xlo)/(xhi - xlo)*(R - L), py = y => B - (y - y0)/(y1 - y0)*(B - T), dir = o.ticksOut ? 1 : -1;

@@ -187,6 +187,66 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
     } finally { await q.close(); }
   });
 
+  // Check y-axis tick label overlap at poster preset (#837)
+  await T.t('y_axis_poster_ticks', async () => {
+    const q = await open(), hq = H(q.p), pg = q.p;
+    try {
+      await pg.click('#homeQuick'); await hq.wait(600);
+
+      const csvStr = 'UV\n1.0,0\n2.0,370\n';
+      await pg.setInputFiles('#file', {name: 'synthetic.csv', mimeType: 'text/csv', buffer: Buffer.from(csvStr)});
+      await hq.wait(1500);
+
+      // single preset (fs 8)
+      await pg.evaluate(() => {
+        const e = document.querySelector('#o-preset');
+        if (e) {
+          e.value = 'single';
+          e.dispatchEvent(new Event('change', {bubbles: true}));
+          e.dispatchEvent(new Event('input', {bubbles: true}));
+        }
+      });
+      await hq.wait(500);
+      let gap = await pg.evaluate(() => {
+        const els = [...document.querySelectorAll('#paper svg text')].filter(el => {
+          const fs = el.getAttribute('font-size') || el.style.fontSize;
+          return fs === '8' && !isNaN(parseFloat(el.textContent));
+        });
+        if (els.length < 2) return 999;
+        const ys = els.map(el => parseFloat(el.getAttribute('y') || 0)).sort((a,b)=>a-b);
+        let minGap = 999;
+        for (let i = 1; i < ys.length; i++) minGap = Math.min(minGap, ys[i] - ys[i-1]);
+        return minGap;
+      });
+      T.check('poster/single_ticks', gap >= 8, `gap ${gap} >= fs 8`);
+
+      // poster preset (fs 24)
+      await pg.evaluate(() => {
+        const e = document.querySelector('#o-preset');
+        if (e) {
+          e.value = 'poster';
+          e.dispatchEvent(new Event('change', {bubbles: true}));
+          e.dispatchEvent(new Event('input', {bubbles: true}));
+        }
+      });
+      await hq.wait(500);
+      gap = await pg.evaluate(() => {
+        const els = [...document.querySelectorAll('#paper svg text')].filter(el => {
+          const fs = el.getAttribute('font-size') || el.style.fontSize;
+          return fs === '24' && !isNaN(parseFloat(el.textContent));
+        });
+        if (els.length < 2) return 999;
+        const ys = els.map(el => parseFloat(el.getAttribute('y') || 0)).sort((a,b)=>a-b);
+        let minGap = 999;
+        for (let i = 1; i < ys.length; i++) {
+          if (ys[i] - ys[i-1] > 0) minGap = Math.min(minGap, ys[i] - ys[i-1]);
+        }
+        return minGap;
+      });
+      T.check('poster/poster_ticks', gap >= 24, `gap ${gap} >= fs 24`);
+    } finally { await q.close(); }
+  });
+
   // Publication readiness at journal widths (#662): checks that exported figures at single
   // and double column presets have no text under 6 pt, and ticks and text don't overlap.
   await T.t('publication_readiness_journal_widths', async () => {
