@@ -12,16 +12,17 @@ const { open, H, suite, src, path, fs, DATA } = require('../lib/harness');
     await h.addRun([gelPath]);
     await h.wait(1000);
 
-    // Switch to protein view using evaluate (page.click timed out earlier)
+    // Switch to protein view using DOM clicks, not window.__HFB
+    // As seen in 22_protein.js
     await p.evaluate(() => {
-        const hfb = window.__HFB;
-        if (hfb) hfb.setMode('prot');
+        const btn = document.querySelector('#hdr [data-s=prot]');
+        if (btn) btn.click();
     });
     await h.wait(500);
 
     const seq = "ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY";
 
-    // Fill the #protSeq textarea using p.evaluate to avoid Playwright's actionability checks blocking it
+    // Fill the #protSeq textarea using DOM events (allowed)
     await p.evaluate((seq) => {
         const el = document.querySelector('#protSeq');
         if (el) {
@@ -53,10 +54,10 @@ const { open, H, suite, src, path, fs, DATA } = require('../lib/harness');
 
     if (!untaggedRow || !tagOnlyRow) throw new Error('Could not find Untagged or Tag only row. Table: ' + JSON.stringify(protTable));
 
-    // Return to gel view
+    // Return to gel view using DOM click
     await p.evaluate(() => {
-        const hfb = window.__HFB;
-        if (hfb) hfb.setMode('');
+        const btn = document.querySelector('#hdr [data-s=""]');
+        if (btn) btn.click();
     });
     await h.wait(500);
 
@@ -74,7 +75,7 @@ const { open, H, suite, src, path, fs, DATA } = require('../lib/harness');
     });
     await h.wait(200);
 
-    // Fill protein kDa using evaluate to avoid Playwright timeouts
+    // Fill protein kDa using DOM events
     await p.evaluate((kda) => {
         const el = document.querySelector('#o-protKda');
         if (el) {
