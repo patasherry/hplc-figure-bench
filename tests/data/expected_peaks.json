@@ -42,10 +42,10 @@
  },
  {
   "file": "fixture_gauss_resolved.csv",
-  "type": "issue790",
+  "type": "issue785",
   "pool": "F13-F17",
-  "true_area1": 375.99424119465004,
-  "true_area2": 300.79539295572005,
+  "true_area1": 376.0,
+  "true_area2": 301.0,
   "true_ve1": 14.0,
   "true_ve2": 16.0
  }

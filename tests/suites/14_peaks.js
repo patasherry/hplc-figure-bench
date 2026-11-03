@@ -123,7 +123,7 @@ async function peakFile(e) {
 
       T.check(`${id}/baseline-subtraction`, areaLine < areaZero, `Sloped baseline area with subtraction (${areaLine}) < area without subtraction (${areaZero})`);
     }
-    else if (e.type === 'issue790') {
+    else if (e.type === 'issue790' || e.type === 'issue785') {
       const p1 = pk.find(p => Math.abs(p.ve - e.true_ve1) <= 0.05);
       const p2 = pk.find(p => Math.abs(p.ve - e.true_ve2) <= 0.05);
       T.check(`${id}/apex-1`, p1 != null, `Found peak 1 near ${e.true_ve1}`);
