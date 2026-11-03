@@ -571,6 +571,89 @@ ORIGIN
     T.check('9_gst_empty_tag.fusion_value', v2 !== null && v2 !== '' && Math.abs(num(v2) - fus) < 0.002 && Math.abs(num(v2) - 16.0546) > 0.01, `expected fusion ${fus.toFixed(4)}, got "${v2}"`);
   });
 
+
+  /* ================= 10. Tag mass sync with cleavage check ================= */
+  await T.t('10_tag_mass_sync', async () => {
+    await h.newProject('10_tag_mass_sync');
+
+    const seq = "ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY";
+
+    await h.addRun(path.join(DATA, 'chrom', 'imac_HisTrap_FF_1mL_step_u7.csv'));
+    await p.waitForTimeout(300);
+
+    // open preparation
+    await p.click('.tl-addopts .opt:has-text("Preparation")').catch(() => p.evaluate(() => {
+      const tb = Array.from(document.querySelectorAll('.tl-addopts .opt')).find(o => o.textContent.includes('Preparation'));
+      if (tb) { tb.click(); }
+    }));
+    await p.waitForTimeout(300);
+
+    const setOpt = async (p, k, v) => {
+      await p.evaluate(({k, v}) => {
+        const el = document.querySelector(`[data-opt="${k}"]`);
+        if (el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+      }, {k, v});
+    };
+
+    await setOpt(p, 'tagSeq', '');
+    await p.evaluate((seq) => {
+      const el = document.querySelector('#protSeq');
+      if (el) { el.value = seq; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+    }, seq);
+
+    await p.selectOption('#o-tagPreset', 'sumo').catch(() => p.evaluate(() => {
+      const el = document.querySelector('#o-tagPreset');
+      if (el) { el.value = 'sumo'; el.dispatchEvent(new Event('change', {bubbles: true})); }
+    }));
+
+    await p.waitForTimeout(1000);
+
+    const getProtTable = async () => {
+      const table = await h.peakTable('#protTable');
+      if (table.length === 0) return [];
+      const headers = table[0];
+      return table.slice(1).map(row => {
+        const obj = {};
+        headers.forEach((h, i) => obj[h] = row[i]);
+        return obj;
+      });
+    };
+    const tbl = await getProtTable();
+    const tagRow = tbl.find(r => /^Tag only$/i.test(r.Form || r.form || ''));
+    T.check('10_tag_mass_sync.tag_row_exists', !!tagRow, 'Tag only row should exist');
+    const tagOnlyKda = parseFloat(tagRow ? tagRow.kDa : '0');
+
+
+    await h.addRun(path.join(DATA, 'standins', 'gel_photo.jpg'));
+    await p.waitForTimeout(300);
+    await p.evaluate(() => {
+      const el = document.querySelector('.tl-head[data-step="gel"]');
+      if (el) { el.click(); }
+    });
+    await p.waitForTimeout(300);
+
+    await p.evaluate(() => {
+      const el = document.querySelector('#o-cleaveDetect');
+      if (el && !el.checked) { el.click(); }
+    });
+
+    const untaggedRow = tbl.find(r => /^Untagged$/i.test(r.Form || r.form || ''));
+    const untaggedKdaText = untaggedRow ? untaggedRow.kDa : '0';
+
+    await p.fill('#o-protKda', untaggedKdaText).catch(() => p.evaluate((untaggedKdaText) => {
+      const el = document.querySelector('#o-protKda');
+      if (el) { el.value = untaggedKdaText; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+    }, untaggedKdaText));
+    await p.waitForTimeout(500);
+
+    const cleaveInfoText = await p.evaluate(() => document.querySelector('#cleaveInfo').textContent || '');
+    const match = cleaveInfoText.match(/free His-SUMO ([\d\.]+) kDa/);
+    T.check('10_tag_mass_sync.cleave_info_has_tag', !!match, `cleaveInfo should have free His-SUMO size: ${cleaveInfoText}`);
+    const cleaveTagKda = match ? Number(match[1]) : 0;
+
+    T.check('10_tag_mass_sync.tag_mass_agrees', Math.abs(tagOnlyKda - cleaveTagKda) <= 0.15, `Tag only row (${tagOnlyKda}) vs cleave check (${cleaveTagKda})`);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
