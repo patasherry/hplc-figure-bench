@@ -123,4 +123,52 @@ await T.t('purity-display-states', async () => {
     await a.close();
   }
 });
+
+await T.t('purity-log-vs-linear', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const ims = await p.evaluate(async () => {
+      const w = 40, h = 360;
+      function OD(y) {
+        const g1 = 1.0 * Math.exp(-0.5 * Math.pow((y - 90)/6.0, 2));
+        const g2 = (12/80 * 6.0/5.5) * Math.exp(-0.5 * Math.pow((y - 180)/5.5, 2));
+        const g3 = (8/80 * 6.0/6.5) * Math.exp(-0.5 * Math.pow((y - 265)/6.5, 2));
+        return g1 + g2 + g3;
+      }
+      let maxOD = 0;
+      for (let y = 0; y < h; y++) {
+        const val = OD(y);
+        if (val > maxOD) maxOD = val;
+      }
+      const cA = document.createElement('canvas'); cA.width = w; cA.height = h;
+      const cB = document.createElement('canvas'); cB.width = w; cB.height = h;
+      const ctxA = cA.getContext('2d'); const ctxB = cB.getContext('2d');
+      const imgA = ctxA.createImageData(w, h); const imgB = ctxB.createImageData(w, h);
+      for (let y = 0; y < h; y++) {
+        const od = OD(y);
+        const greyA = Math.round(255 * Math.pow(10, -od));
+        const greyB = Math.round(12 + 200 * (od / maxOD));
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          imgA.data[i] = imgA.data[i+1] = imgA.data[i+2] = Math.max(0, Math.min(255, greyA));
+          imgA.data[i+3] = 255;
+          imgB.data[i] = imgB.data[i+1] = imgB.data[i+2] = Math.max(0, Math.min(255, greyB));
+          imgB.data[i+3] = 255;
+        }
+      }
+      ctxA.putImageData(imgA, 0, 0); ctxB.putImageData(imgB, 0, 0);
+      return { A: cA.toDataURL('image/jpeg', 1.0), B: cB.toDataURL('image/jpeg', 1.0) };
+    });
+
+    await load(p, project(gel(ims.A, { invert: false, labels: 'M, Target', tags: [{kind: 'target', lane: 1, y: 90/360}] })));
+    let csvA = await csv(p); let L_A = lane(csvA, 2); let purA = L_A.length ? parseFloat(L_A[0][10]) : 0;
+
+    await load(p, project(gel(ims.B, { invert: true, labels: 'M, Target', tags: [{kind: 'target', lane: 1, y: 90/360}] })));
+    let csvB = await csv(p); let L_B = lane(csvB, 2); let purB = L_B.length ? parseFloat(L_B[0][10]) : 0;
+
+    T.check('purity-log-vs-linear.agree', Math.abs(purA - purB) <= 1.0, `purA: ${purA}, purB: ${purB}`);
+  } finally {
+    await a.close();
+  }
+});
 T.done();})();
