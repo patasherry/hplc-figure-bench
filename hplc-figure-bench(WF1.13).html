@@ -2964,7 +2964,7 @@ function detectBands(g, i, sensPct, gelMax){
     let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
     let al = hl, ar = hr; while (al > 0 && sig[al-1] <= sig[al] && sig[al-1] > 0) al--; while (ar < h-1 && sig[ar+1] <= sig[ar] && sig[ar+1] > 0) ar++;
     let area = 0; for (let j=al;j<=ar;j++) area += sig[j];
-    bands.push({row: y, h: v, area, l, r, hl, hr, al, ar});
+    bands.push({row: y, h: v, area, l: al, r: ar, hl, hr});
   }
   /* shoulders: a weaker band on the flank of a stronger one has no peak of its own, only a dip in curvature */
   if (DET.shoulderK > 0) {
@@ -2979,7 +2979,7 @@ function detectBands(g, i, sensPct, gelMax){
       if (!bands.some(b => !b.shoulder && b.h > DET.shRatio*sig[y] && Math.abs(b.row - y) <= DET.shDist*(b.hr - b.hl + 1))) continue;
       let hl = y, hr = y; while (hl > 0 && d2[hl-1] < 0) hl--; while (hr < h-1 && d2[hr+1] < 0) hr++;
       let al = hl, ar = hr; while (al > 0 && sig[al-1] <= sig[al] && sig[al-1] > 0) al--; while (ar < h-1 && sig[ar+1] <= sig[ar] && sig[ar+1] > 0) ar++;
-      bands.push({row: y, h: sig[y], area: 0, l: hl, r: hr, hl, hr, al, ar, shoulder: true});
+      bands.push({row: y, h: sig[y], area: 0, l: al, r: ar, hl, hr, shoulder: true});
     }
     bands.sort((a, b) => a.row - b.row);
   }
@@ -2999,9 +2999,7 @@ function detectBands(g, i, sensPct, gelMax){
   }
   bands.forEach(b => {
     if (b.area > 0) return;
-    let al = b.al !== undefined ? b.al : (b.hl || b.l);
-    let ar = b.ar !== undefined ? b.ar : (b.hr || b.r);
-    let a = 0; for (let j=al;j<=ar;j++) a += sig[j]; b.area = a;
+    let a = 0; for (let j=b.l;j<=b.r;j++) a += sig[j]; b.area = a;
   });
   /* saturation: a flat-topped band is wider at 97% of its height than a Gaussian can be */
   bands.forEach(b => { if (b.shoulder) return; let a = b.row, z = b.row; while (a > 0 && sig[a-1] >= 0.97*b.h) a--; while (z < h-1 && sig[z+1] >= 0.97*b.h) z++;
@@ -3023,7 +3021,7 @@ function bandAt(g, sig, yRot){
   } else { l = Math.max(0, y - 2); r = Math.min(h - 1, y + 2); al = l; ar = r; }
   for (let j=al;j<=ar;j++) area += sig[j];
   let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
-  return {row: y, h: v, area, l, r, hl, hr, al, ar, yRot: c.t + (y + 0.5)/h*(c.b - c.t), manual: true};
+  return {row: y, h: v, area, l: al, r: ar, hl, hr, yRot: c.t + (y + 0.5)/h*(c.b - c.t), manual: true};
 }
 function mwText(g, mw){
   if (mw == null) return '?'; const ks = g.marks.filter(k => k.kda > 0).map(m => m.kda); if (!ks.length) return '?';
