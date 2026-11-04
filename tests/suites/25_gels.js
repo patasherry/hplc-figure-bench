@@ -138,6 +138,8 @@ await T.t('lane-run-full-name', async () => {
     const val = await p.$$eval('#la1 option', os => (os.find(o => /^2\. /.test(o.textContent)) || {}).value);
     await p.selectOption('#la1', val); await p.waitForTimeout(500);
     T.check('lane-run-full-name.select-title', await p.getAttribute('#la1', 'title') === nm('B'), String(await p.getAttribute('#la1', 'title')));
+    await p.selectOption('#la1', 'marker'); await p.waitForTimeout(500);
+    T.check('lane-run-full-name.select-title-marker', await p.getAttribute('#la1', 'title') === 'Ladder', String(await p.getAttribute('#la1', 'title')));
     T.check('lane-run-full-name.no-errors', !a.errs.length, a.errs.join('|'));
   } finally { await a.close(); }
 });
