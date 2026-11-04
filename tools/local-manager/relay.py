@@ -31,9 +31,9 @@ test:                       (required when verdict is patch)
 ```
 
 answer: |                   (verdict: answer)
-  <your answer, indented two spaces>
+  <your answer>
 need: |                     (verdict: insufficient)
-  <the functions or line ranges you need, indented two spaces>
+  <the functions or line ranges you need>
 === END RESPONSE ==='''
 
 ROLE = '''You are reviewing part of a single-file HTML application that produces
@@ -169,8 +169,12 @@ response-format: |
 FIELDS = ('id', 'base', 'verdict', 'summary', 'changes-a-reported-number')
 
 
+FIELD_RE = r'(?:id|base|verdict|summary|changes-a-reported-number|patch|test|answer|need)'
+
+
 def _block(s, key):
-    m = re.search(r'^' + key + r':[^\n]*\|[^\n]*\n((?:[ \t]+[^\n]*\n?|\n(?=[ \t]))*)', s, re.M)
+    """Text after 'key: |' up to the next known field name at the start of a line (or the end), common indent removed. Flush-left, spaces or tabs all work."""
+    m = re.search(r'^' + key + r':[^\n]*\|[^\n]*\n(.*?)(?=^' + FIELD_RE + r':|\Z)', s, re.M | re.S)
     if not m:
         return None
     t = m.group(1).rstrip()

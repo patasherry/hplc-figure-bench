@@ -149,4 +149,19 @@ assert routes == ['relay', 'relay', 'queue', 'queue', 'queue'], routes
 # the board marker is not mistaken for a request or its closing marker
 assert rl.MARK_RE.search(rl.BOARD_MARK) is None and rl.DONE_RE.search(rl.BOARD_MARK) is None
 assert rl.outstanding([rl.BOARD_MARK + '\n' + rl.MARK.format('7-ab12', 'abc1234567')]) == {'7-ab12': {'base': 'abc1234567'}}
+# block scalars parse the same whatever the indent
+def blk(key, lines, pad):
+    return rl.RESP_HEAD + '\nid: 7-ab12\nbase: abc1234567\nverdict: ' + ('answer' if key == 'answer' else 'insufficient') + \
+        '\nsummary: s\nchanges-a-reported-number: no\n\n' + key + ': |\n' + ''.join(pad + l + '\n' for l in lines) + rl.RESP_END
+BODY = ['The sum is doubled once.', 'It reads values via either:', '', 'and then halves them.']
+for key in ('answer', 'need'):
+    want = '\n'.join(BODY)
+    for pad in ('', '  ', '    ', '\t'):
+        got = rl.parse_response(blk(key, BODY, pad))[key]
+        assert got == want, (key, repr(pad), got)
+    # a real field name at line start ends the block
+    t = blk(key, BODY, '').replace(rl.RESP_END, 'test: nothing\n' + rl.RESP_END)
+    assert rl.parse_response(t)[key] == want, key
+assert 'indented two spaces' not in rl.RESPONSE_FORMAT
+
 print('ok')
