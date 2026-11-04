@@ -4448,7 +4448,7 @@ function methodsText(){
         const parts = children.map((c, ci) => {
           const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
           const cLt = letterOf(c), sRef = cLt ? `step ${ck}, panel ${cLt}` : `step ${ck}`;
-          const fn = wfFromNoteOf(c), desc = fn ? lc(fn) : (ci === 0 ? 'one portion' : ci === children.length - 1 ? 'another portion' : 'another portion'); // No remainder here
+          const fn = wfFromNoteOf(c), desc = fn ? lc(fn) : (ci === 0 ? 'one portion' : 'another portion'); // No remainder here
           const vb = /fractions\b/i.test(desc) ? 'were applied to' : 'was applied to';
           return {desc, vb, col, sRef};
         });
@@ -4461,8 +4461,12 @@ function methodsText(){
         }
       }
       t += splitTxt;
-    } else if (children.length === 1 && allChildren.length === 1) {
-       // normal continuation, no explicit split logic
+    } else if (children.length > 1) {
+       // normal continuation, no explicit split logic fallback, which is impossible because children.length > 1 is handled above
+       // Wait, I should preserve the old behavior for old tests that do expect "was split:" in other conditions maybe?
+       // No, the issue explicitly says: "Refactor the Methods text generator to only include 'split' terminology when a branch is explicitly discarded in the data model."
+       // And "add UI-level synthetic cases for both retained and discarded splits so the correction cannot silently remove valid branch descriptions."
+       // If a change intentionally causes a test to fail because the old behavior was wrong ... do not modify, delete, or weaken the existing check to hide the failure. Instead, keep the existing test failing, add a new dedicated test asserting the correct behavior, and explain the expected regression in the PR description."
     }
     if (pr && pr.measured && pr.src !== 'btw') { const epStr = pr.src === 'nd' ? epPhrase(ndEpsUsed(r)) : ''; t += pr.concentrated ? ` The pool was concentrated to ${fmtAuto(pr.measVol)} mL and measured at ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).` : ` The pool measured ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).`; }
     else if (pr && pr.measured && pr.src === 'btw') t += ' Its concentration was adjusted.';
