@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT / 'tools' / 'local-reviewer'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import reviewer as rv  # noqa: E402  (shares the token, model and GitHub helper)
 import relay as rl  # noqa: E402  (offline relay protocol: pure text, docs/RELAY.md)
+import routing as rt  # noqa: E402  (which queued issues go to Antigravity: pure functions)
 
 cfg, REPO, gh = rv.cfg, rv.REPO, rv.gh
 BOARD = cfg.get('board_issue', 222)
@@ -1236,7 +1237,9 @@ def copilot_cli_job(s, i, retry):
 # ---------- Antigravity agent (Gemini API): a third coding worker that needs no PC ----------
 AG_MARK = '<!-- antigravity-job -->'
 AG_AGENT = cfg.get('antigravity_agent', 'antigravity-preview-09-2026')
-AG_AT_ONCE = cfg.get('antigravity_at_once', 2)
+AG_AT_ONCE = cfg.get('antigravity_at_once', 4)
+AG_PER_PASS = cfg.get('antigravity_per_pass', 2)  # jobs handed over in one pass
+AG_MAX_TRIES = cfg.get('antigravity_max_tries', 2)  # attempts per issue before it stays with Jules
 AG_WHEN_QUEUE = cfg.get('antigravity_when_queue', 2)  # hand a job over while at least this many wait for Jules
 AG_TOKENS = cfg.get('antigravity_max_tokens', 1500000)  # the app file alone is large; 400k ran out before the first job finished
 AG_JOB = """You are the Google Antigravity agent working on issue #{n} of HPLC Figure Bench, a public GitHub repository.
@@ -1287,7 +1290,7 @@ def antigravity(s):
         except Exception as e:
             log(f'#{n}: Antigravity status check failed: {str(e)[:200]}')
             if time.time() - job['at'] > 3 * 3600:
-                label(int(n), add=[job.get('src', 'jules-queue')], remove=['antigravity-running']); a.pop(n); s.setdefault('ag_tried', {})[n] = time.time()
+                label(int(n), add=[job.get('src', 'jules-queue')], remove=['antigravity-running']); a.pop(n); s.setdefault('ag_tried', {})[n] = rt.tries(s['ag_tried'].get(n)) + 1
                 log(f'#{n}: Antigravity job lost ({e}), back to Jules')
             continue
         st = it.get('status', '')
@@ -1305,47 +1308,52 @@ def antigravity(s):
             desc = txt.rsplit('===PR BODY START===', 1)[1].split('===PR BODY END===', 1)[0].strip() if '===PR BODY START===' in txt else '(No description.)'
             if not diff.strip():
                 raise RuntimeError('no diff in its answer')
-            pr = apply_agent_diff(int(n), job['title'], diff, f'{AG_MARK}\nCloses #{n}. Made by the **Google Antigravity agent** (Gemini API), started by the local manager.\n\n{desc}', f'antigravity/issue-{n}', 'the Google Antigravity agent')
+            pr = apply_agent_diff(int(n), job['title'], diff, f'{AG_MARK}\nCloses #{n}. Made by the **Google Antigravity agent** (Gemini API), started by the local manager.\n\nJob kind: {job.get("kind") or rt.kind(job["title"])}\n\n{desc}', f'antigravity/issue-{n}', 'the Google Antigravity agent')
             label(int(n), add=['antigravity-done'], remove=['antigravity-running'])
             post(int(n), f'Antigravity opened #{pr}. It goes through the Test suite and the automatic review like any PR.' + SIGN.format(rv.MODEL))
             log(f'#{n}: Antigravity opened PR #{pr}')
         except Exception as e:
-            s.setdefault('ag_tried', {})[n] = time.time()
-            back = job.get('src', 'jules-queue')
+            s.setdefault('ag_tried', {})[n] = rt.tries(s['ag_tried'].get(n)) + 1
+            more = s['ag_tried'][n] < AG_MAX_TRIES and job.get('src', 'jules-queue') == 'jules-queue'
+            back = job.get('src', 'jules-queue')  # a second try stays in the queue, where Antigravity can take it again; after the last one the job is Jules'
             label(int(n), add=[back], remove=['antigravity-running'])
-            post(int(n), f'The Antigravity job did not produce a usable change ({str(e)[:300]}), so the job goes back to `{back}`.' + SIGN.format(rv.MODEL))
+            post(int(n), f'The Antigravity job did not produce a usable change ({str(e)[:300]}), so the job goes back to `{back}`' + (' (Antigravity may try once more).' if more else '.') + SIGN.format(rv.MODEL))
             log(f'#{n}: Antigravity job failed: {e}')
     for i in issues('antigravity-running'):  # labelled, but the manager has no job for it (its memory was lost): put it back
         if str(i['number']) not in a:
             label(i['number'], add=['jules-queue'], remove=['antigravity-running'])
             log(f'#{i["number"]}: Antigravity job not tracked any more, back to Jules')
     # hand out: first jobs that wait for a worker that isn't there (Copilot while it is paused, Claude Code while the PC is off), then Jules' backlog
-    ok = lambda i: str(i['number']) not in s.get('ag_tried', {}) and str(i['number']) not in a and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
+    tried = s.get('ag_tried', {})
+    ok = lambda i, m=1: str(i['number']) not in a and rt.eligible(i, tried, m)  # other workers' jobs get one try; Jules' queue gets AG_MAX_TRIES
     cop_off = COPILOT_MODE == 'off' or max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
     waiting = ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
               ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] if CLOUD else [])
-    queue = [i for i in issues('jules-queue') if ok(i) and not {'needs-owner', 'from-patrick'} & {l['name'] for l in i['labels']}]
+    # from-patrick (Claude Science findings) is allowed: science_inbox moves a finding from for-claude-first to jules-queue only after FIRST_HOURS, so the Claude window has lapsed
+    queue = [i for i in issues('jules-queue') if ok(i, AG_MAX_TRIES)]
     if not waiting and len(queue) >= AG_WHEN_QUEUE:
-        waiting = [(sorted(queue, key=lambda x: x['number'])[-1], 'jules-queue')]  # the newest: Jules takes the oldest first
-    if len(a) >= AG_AT_ONCE or not waiting or s.get('ag_off_until', 0) > time.time() or DRY:
+        waiting = [(i, 'jules-queue') for i in rt.pick(queue, tried, AG_PER_PASS, AG_MAX_TRIES)]  # app-changing first, Jules keeps the light ones
+    room = min(AG_PER_PASS, AG_AT_ONCE - len(a))
+    if room <= 0 or not waiting or s.get('ag_off_until', 0) > time.time() or DRY:
         return
-    i, src = waiting[0]
-    if not use(s, 'antigravity'):
-        return
-    n = i['number']
-    try:
-        it = gem_api('interactions', 'POST', {'agent': AG_AGENT, 'environment': 'remote', 'background': True,
-                                              'agent_config': {'type': 'antigravity', 'max_total_tokens': AG_TOKENS},
-                                              'input': AG_JOB.format(n=n, repo=REPO, name=REPO.split('/')[1], title=i['title'], body=(i.get('body') or '')[:12000])})
-    except Exception as e:
-        s['count']['antigravity'] -= 1
-        s['ag_off_until'] = time.time() + 6 * 3600
-        return log(f'Antigravity not available ({str(e)[:200]}), paused for 6 hours')
-    a[str(n)] = {'id': it['id'], 'at': time.time(), 'title': i['title'], 'src': src}
-    label(n, add=['antigravity-running'], remove=[src])
-    why = {'for-copilot': 'Copilot is paused', 'for-claude-code': "Claude Code needs Patrick's PC, which is off"}.get(src, f'Jules has {len(queue)} jobs waiting')
-    post(n, f'Handed to the **Google Antigravity agent** through the Gemini API ({why}). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
-    log(f'#{n}: handed to Antigravity')
+    for i, src in waiting[:room]:
+        if not use(s, 'antigravity'):
+            return
+        n = i['number']
+        try:
+            it = gem_api('interactions', 'POST', {'agent': AG_AGENT, 'environment': 'remote', 'background': True,
+                                                  'agent_config': {'type': 'antigravity', 'max_total_tokens': AG_TOKENS},
+                                                  'input': AG_JOB.format(n=n, repo=REPO, name=REPO.split('/')[1], title=i['title'], body=(i.get('body') or '')[:12000])})
+        except Exception as e:
+            s['count']['antigravity'] -= 1
+            s['ag_off_until'] = time.time() + 6 * 3600
+            return log(f'Antigravity not available ({str(e)[:200]}), paused for 6 hours')
+        kind = rt.kind(i['title'])
+        a[str(n)] = {'id': it['id'], 'at': time.time(), 'title': i['title'], 'src': src, 'kind': kind}
+        label(n, add=['antigravity-running'], remove=[src])
+        why = {'for-copilot': 'Copilot is paused', 'for-claude-code': "Claude Code needs Patrick's PC, which is off"}.get(src, f'Jules has {len(queue)} jobs waiting')
+        post(n, f'Handed to the **Google Antigravity agent** through the Gemini API ({why}; {kind} job). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
+        log(f'#{n}: handed to Antigravity ({kind}, attempt {rt.tries(tried.get(str(n))) + 1})')
 
 
 def apply_agent_diff(n, title, diff, body, branch, who):
