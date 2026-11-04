@@ -124,6 +124,65 @@ await T.t('purity-display-states', async () => {
   }
 });
 
+await T.t('purity-log-vs-linear', async () => {
+  const a = await start(), p = a.p;
+  try {
+    // Background white, band pixels grey = 255*10^(-OD(y)), invert: false
+    const imA = await p.evaluate(() => {
+      const c=document.createElement('canvas');c.width=300;c.height=360;const x=c.getContext('2d'),im=x.createImageData(300,360);
+      for(let y=0;y<360;y++)for(let a=0;a<300;a++){
+        const lane=Math.floor(a/100), dx=Math.abs(a%100-50), w=Math.exp(-.5*(dx/24)**8);
+        const bands=lane===1 ? [[90,1.0,6],[180,0.15,5.5],[265,0.1,6.5]] : [];
+        let od = bands.reduce((s,[mu,pk,z])=>s+pk*Math.exp(-.5*((y-mu)/z)**2),0)*w;
+        const v = Math.round(255 * Math.pow(10, -od));
+        const j=4*(300*y+a);im.data[j]=im.data[j+1]=im.data[j+2]=v;im.data[j+3]=255;
+      }
+      x.putImageData(im,0,0);return c.toDataURL('image/png');
+    });
+    // Background dark, band pixels grey = 12 + 200*OD(y)/max(OD), invert: true
+    const imB = await p.evaluate(() => {
+      const c=document.createElement('canvas');c.width=300;c.height=360;const x=c.getContext('2d'),im=x.createImageData(300,360);
+      for(let y=0;y<360;y++)for(let a=0;a<300;a++){
+        const lane=Math.floor(a/100), dx=Math.abs(a%100-50), w=Math.exp(-.5*(dx/24)**8);
+        const bands=lane===1 ? [[90,1.0,6],[180,0.15,5.5],[265,0.1,6.5]] : [];
+        let od = bands.reduce((s,[mu,pk,z])=>s+pk*Math.exp(-.5*((y-mu)/z)**2),0)*w;
+        const v = Math.round(12 + 200 * od);
+        const j=4*(300*y+a);im.data[j]=im.data[j+1]=im.data[j+2]=v;im.data[j+3]=255;
+      }
+      x.putImageData(im,0,0);return c.toDataURL('image/png');
+    });
+
+    // Render the same three-band lane twice, as two gels in one project
+    // 1. gel A, brightfield
+    const gelA = gel(imA, {id: 'g1', name: 'gel A', invert: false, labels: 'M, A, B', tags:[{kind:'target',lane:1,y:90/360}], marks:[{kda:100,y:.1},{kda:10,y:.9}]});
+
+    // 2. gel B, linear
+    const gelB = gel(imB, {id: 'g2', name: 'gel B', invert: true, labels: 'M, A, B', tags:[{kind:'target',lane:1,y:90/360}], marks:[{kda:100,y:.1},{kda:10,y:.9}]});
+
+    await load(p, project(gelA, {gels: [gelA, gelB], cur: 'g1'}));
+    const beforeA = await csv(p);
+
+    await load(p, project(gelB));
+    await p.waitForTimeout(300);
+    const beforeB = await csv(p);
+
+    const L_A = lane(beforeA);
+    const L_B = lane(beforeB);
+
+    T.check('purity-log-vs-linear.has-target', L_A.length > 0 && L_B.length > 0);
+
+    if (L_A.length > 0 && L_B.length > 0) {
+      const purA = +L_A[0][10];
+      const purB = +L_B[0][10];
+      T.check('purity-log-vs-linear.purity-match', Math.abs(purA - purB) <= 1, `${purA} vs ${purB}`);
+    }
+
+    T.check('purity-log-vs-linear.no-errors', !a.errs.length, a.errs.join('|'));
+  } finally {
+    await a.close();
+  }
+});
+
 // Guards #767/#719: the lane list shortens long run names, so the full name must stay available (option and select title).
 await T.t('lane-run-full-name', async () => {
   const a = await open(), p = a.p;
