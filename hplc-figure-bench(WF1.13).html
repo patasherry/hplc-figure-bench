@@ -588,7 +588,12 @@ button,input,select,textarea{font-family:inherit}
           <option value="hismbp">His-MBP</option><option value="trx">His-Trx</option><option value="gfp">GFP</option><option value="custom">Other</option></select></label>
         <label class="f">Tag end<select id="o-tagPos" data-opt="tagPos"><option value="N">N-terminal</option><option value="C">C-terminal</option></select></label>
       </div>
-      <label class="f">Tag sequence<textarea id="tagSeq" data-opt="tagSeq" rows="2" spellcheck="false"></textarea></label>
+
+      <div class="row">
+        <label class="f">Tag sequence<textarea id="tagSeq" data-opt="tagSeq" rows="2" spellcheck="false"></textarea></label>
+        <label class="f" title="The extinction coefficient (A280 of a 1 mg/mL solution, 1 cm path) currently used for all concentration and yield estimates. If a sequence is loaded, it comes from the table below, otherwise it is the custom value set here.">Used extinction coefficient<input type="number" step="any" min="0" id="o-eps" data-opt="eps" placeholder="e.g. 0.92"></label>
+      </div>
+
       <p class="hint warnc" id="protNote" hidden></p>
       <div class="tablewrap"><table class="itab" id="protTable"></table></div>
       <p class="hint" id="protEps"></p>
@@ -909,12 +914,14 @@ button,input,select,textarea{font-family:inherit}
             <option value="none">None</option>
           </select>
         </label>
+
+      <div class="row">
         <label class="f">Peak finding prominence (%)<input type="number" id="o-intProm" data-opt="intProm" min="0.5" step="0.5"></label>
         <label class="f">UV flow cell path (mm)<input type="number" step="any" min="0.1" id="o-path" data-opt="path"></label>
       </div>
-      <label class="f">A280 of a 1 mg/mL solution (1 cm), for mass estimates<input type="number" step="any" min="0" id="o-eps" data-opt="eps" placeholder="optional, e.g. 0.92"></label>
       <label class="check"><input type="checkbox" id="o-intFill" data-opt="intFill">Shade integrated areas</label>
       <p class="hint">Drag across the chromatogram to integrate a region, or click Detect peaks under the figure. Gaussian fit splits overlapping peaks over one shared baseline. ÄKTA pure and start UV cells are 2 mm.</p>
+
     </section>
 
     <section class="grp optsec" id="secPanel" data-for="run workflow overlay cal">
@@ -5982,7 +5989,7 @@ document.querySelectorAll('#panel > .grp').forEach(sec => { const h = sec.queryS
 /* ---------- More options inside each section (open or closed remembered), and the settings search ---------- */
 /* rarely changed settings: moved, never removed, so every id and label stays. A setting changed from its default opens its More options. */
 const ADV = {'sub:rwin': ['o-fracEvery', 'o-runPad'], 'sub:rgel': ['o-gelAlign', 'o-gelGap', 'o-gelSide', 'o-linkFrom', 'o-laneMark', 'o-laneAlpha', 'gelSizeReset', 'gelOffReset'], 'sub:rpool': ['o-poolColor'],
-  'Peak integration': ['o-intProm', 'o-path', 'o-eps', 'o-intFill'], 'Processing': ['o-baseline', 'o-smooth'], 'Peak labels': ['o-peakRot', 'o-peakDec', 'o-prom', 'o-peakColor', 'o-peakMax'],
+  'Peak integration': ['o-intProm', 'o-path', 'o-intFill'], 'Processing': ['o-baseline', 'o-smooth'], 'Peak labels': ['o-peakRot', 'o-peakDec', 'o-prom', 'o-peakColor', 'o-peakMax'],
   'Window': ['o-zoomInsetPos', 'o-zoomInsetSize'], 'Axes': ['o-ticksOut', 'o-y2grad', 'o-y2cond', 'o-sbValue', 'o-sbUnit'], 'Figure style': ['o-lw', 'o-font', 'o-bg'], 'Layout': ['o-stack'],
   'sub:gcrop': ['o-gelAutoCrop', 'o-gelFrame'], 'sub:gbands': ['o-tagTol', 'o-bandSens', 'o-purBase', 'o-tagCounts'], 'sub:gknown': ['o-knownTol', 'o-knownMin', 'o-knownCount']};
 const moreBoxes = [];
