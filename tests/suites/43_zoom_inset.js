@@ -120,5 +120,23 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       T.check('wf/no-errors', errs.length === 0, errs.join(' | '));
     } catch (e) { T.check('wf/threw', false, String(e).slice(0, 300)); } finally { await close(); }
   }
+    /* Zoom inset Y-axis label check */
+  {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await p.click('#homeQuick'); await h.wait(900);
+      await setOpt(p, 'o-xmin', '5'); await setOpt(p, 'o-xmax', '8'); await h.wait(400);
+      await setOpt(p, 'o-zoomInset', true); await h.wait(600);
+
+      const ylabelUnit = await p.evaluate(() => {
+        const texts = [...document.querySelectorAll('#paper svg [data-plot="inset"] text[transform*="rotate(-90)"]')];
+        const unit = texts.find(t => t.textContent.includes('mAU') || t.textContent.includes('AU'));
+        return unit ? unit.textContent.trim() : null;
+      });
+      T.check('overlay/inset-ylabel', !!ylabelUnit && ylabelUnit.includes('mAU'), `Y-axis unit found on inset: ${ylabelUnit}`);
+
+      T.check('ylabel/no-errors', errs.length === 0, errs.join(' | '));
+    } catch (e) { T.check('ylabel/threw', false, String(e).slice(0, 300)); } finally { await close(); }
+  }
   T.done();
 })();
