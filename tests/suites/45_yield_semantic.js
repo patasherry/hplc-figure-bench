@@ -17,13 +17,38 @@ async function fresh(id, fn){
     await h.newProject('Zero vs unknown yield semantic tests');
     await h.gb(path.join(DATA, 'standins', 'pET28-SUMO-standin.gb'));
     await h.addRun(path.join(DATA, 'chrom', 'sec_semicolon_unicorn7.csv'));
-    await h.pool('A2-A6');
+
+    await p.evaluate(() => {
+        let el = document.querySelector('.trace.run.sel [data-k="shade"]');
+        if (el) { el.value = 'A2-A6'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.wait(400);
+
+    // Call detect to ensure a peak is found and area is populated
+    await p.evaluate(() => {
+        let btn = document.querySelector('.run-panel [data-detect]');
+        if (btn) btn.click();
+    });
+    await h.wait(500);
+
+    // Set path length to calculate mgA
+    await p.evaluate(() => {
+        let path = document.querySelector('.run-panel [data-k="path"]');
+        if (path) { path.value = '2'; path.dispatchEvent(new Event('input', {bubbles: true})); path.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.wait(500);
+
+    await p.evaluate(() => {
+        let pc = document.querySelector('.run-panel [data-k="poolConc"]');
+        if (pc) { pc.value = '1'; pc.dispatchEvent(new Event('input', {bubbles: true})); pc.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.wait(200);
 
     await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
     await p.evaluate(() => document.querySelector('#tl [data-addstep="man:other"]').click()); await h.wait(500);
-    await setField('#man-name', 'Final buffer exchange');
-    await setField('#man-conc', '0');
-    await setField('#man-vol', '10');
+    await p.evaluate(() => { let el = document.querySelector('#man-name'); if (el) { el.value = 'Final buffer exchange'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(150);
+    await p.evaluate(() => { let el = document.querySelector('#man-conc'); if (el) { el.value = '0'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(150);
+    await p.evaluate(() => { let el = document.querySelector('#man-vol'); if (el) { el.value = '10'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(150);
 
     await h.step('figure');
     await p.evaluate(() => {
@@ -49,7 +74,7 @@ async function fresh(id, fn){
     await p.click(`#tl [data-step="${manStep}"]`);
     await h.wait(400);
 
-    await setField('#man-conc', ''); // Unknown!
+    await p.evaluate(() => { let el = document.querySelector('#man-conc'); if (el) { el.value = ''; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } }); await h.wait(150); // Unknown!
 
     await h.step('figure');
     await h.wait(500);
