@@ -143,4 +143,141 @@ await T.t('lane-run-full-name', async () => {
     T.check('lane-run-full-name.no-errors', !a.errs.length, a.errs.join('|'));
   } finally { await a.close(); }
 });
+
+await T.t('purity-log-vs-linear', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const imA = await image(p, 'synth', {
+      background: '#ffffff',
+      bands: [
+        { y: 90, sig: 6.0, od: 0.08 },
+        { y: 180, sig: 5.5, od: 0.12 },
+        { y: 265, sig: 6.5, od: 1.0 }
+      ],
+      invert: false
+    });
+
+    const imB = await image(p, 'synth', {
+      background: '#0c0c0c', // 12
+      bands: [
+        { y: 90, sig: 6.0, od: 0.08, linear: true, scale: 200 },
+        { y: 180, sig: 5.5, od: 0.12, linear: true, scale: 200 },
+        { y: 265, sig: 6.5, od: 1.0, linear: true, scale: 200 }
+      ],
+      invert: true
+    });
+
+    // Instead of using 'synth' image generator directly, we can inject a simpler test based on the instructions
+    // "Render the **same** three-band lane twice, as two gels in one project:
+    // 1. gel A, brightfield: background white, band pixels `grey = 255*10^(-OD(y))`, `invert: false`.
+    // 2. gel B, linear: background dark, band pixels `grey = 12 + 200*OD(y)/max(OD)`, `invert: true`.
+    // Use the band shapes above with the target band at peak OD 1.0. Read the target band's "% of lane"
+    // for each gel and assert the two agree within 1 point."
+
+    // We can evaluate in browser to generate the specific images, since they're just synthetic.
+    const [dUrlA, dUrlB] = await p.evaluate(() => {
+      function od(y) {
+        let val = 0;
+        val += 0.08 * Math.exp(-0.5 * Math.pow((y - 90)/6.0, 2));
+        val += 0.12 * Math.exp(-0.5 * Math.pow((y - 180)/5.5, 2));
+        val += 1.0 * Math.exp(-0.5 * Math.pow((y - 265)/6.5, 2));
+        return val;
+      }
+
+      const w = 40, h = 360;
+      const cA = document.createElement('canvas'); cA.width = w; cA.height = h; const xA = cA.getContext('2d');
+      const cB = document.createElement('canvas'); cB.width = w; cB.height = h; const xB = cB.getContext('2d');
+
+      const idA = xA.createImageData(w, h), dA = idA.data;
+      const idB = xB.createImageData(w, h), dB = idB.data;
+
+      for (let y = 0; y < h; y++) {
+        const v = od(y);
+        const gA = Math.round(255 * Math.pow(10, -v));
+        const gB = Math.round(12 + 200 * v); // max(OD) is 1.0 based on construction where max band is 1.0 + slight tail overlap
+        for (let x = 0; x < w; x++) {
+          const idx = (y * w + x) * 4;
+          dA[idx] = dA[idx+1] = dA[idx+2] = Math.max(0, Math.min(255, gA)); dA[idx+3] = 255;
+          dB[idx] = dB[idx+1] = dB[idx+2] = Math.max(0, Math.min(255, gB)); dB[idx+3] = 255;
+        }
+      }
+      xA.putImageData(idA, 0, 0); xB.putImageData(idB, 0, 0);
+      return [cA.toDataURL('image/png'), cB.toDataURL('image/png')];
+    });
+
+    await load(p, project(gel({width: 40, height: 360, src: dUrlA}, {invert: false, labels: 'A', marks: [{kda: 100, y: 0.1}, {kda: 10, y: 0.9}]})));
+    let csvA = await p.evaluate(() => {
+      const a = [];
+      document.querySelectorAll('#bandTable tbody tr').forEach(tr => {
+        a.push(Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim()));
+      });
+      return a;
+    });
+
+    await load(p, project(gel({width: 40, height: 360, src: dUrlB}, {invert: true, labels: 'B', marks: [{kda: 100, y: 0.1}, {kda: 10, y: 0.9}]})));
+    let csvB = await p.evaluate(() => {
+      const a = [];
+      document.querySelectorAll('#bandTable tbody tr').forEach(tr => {
+        a.push(Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim()));
+      });
+      return a;
+    });
+
+    // index 7 is % of lane in bandTable (or find by checking header)
+    const purA = parseFloat(csvA.find(r => parseFloat(r[7]) > 50)?.[7] || 0);
+    const purB = parseFloat(csvB.find(r => parseFloat(r[7]) > 50)?.[7] || 0);
+
+    T.check('purity.same-for-log-and-linear', Math.abs(purA - purB) < 1.0, `A=${purA}, B=${purB}`);
+  } finally {
+    await a.close();
+  }
+});
+
+
+await T.t('purity-absolute-brightfield', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const [dUrl] = await p.evaluate(() => {
+      function od(y) {
+        let val = 0;
+        val += 0.08 * Math.exp(-0.5 * Math.pow((y - 90)/6.0, 2));
+        val += 0.12 * Math.exp(-0.5 * Math.pow((y - 180)/5.5, 2));
+        val += 1.0 * Math.exp(-0.5 * Math.pow((y - 265)/6.5, 2));
+        return val;
+      }
+      const w = 40, h = 360;
+      const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+      const id = x.createImageData(w, h), d = id.data;
+      for (let y = 0; y < h; y++) {
+        const v = od(y);
+        const g = Math.round(255 * Math.pow(10, -v));
+        for (let x = 0; x < w; x++) {
+          const idx = (y * w + x) * 4;
+          d[idx] = d[idx+1] = d[idx+2] = Math.max(0, Math.min(255, g)); d[idx+3] = 255;
+        }
+      }
+      x.putImageData(id, 0, 0);
+      return [c.toDataURL('image/png')];
+    });
+
+    await load(p, project(gel({width: 40, height: 360, src: dUrl}, {invert: false, labels: 'A', marks: [{kda: 100, y: 0.1}, {kda: 10, y: 0.9}]})));
+
+    const csvData = await csv(p);
+    let maxPur = 0;
+    for (let i = 1; i < csvData.length; i++) {
+      const r = csvData[i];
+      for (const cell of r) {
+        const val = parseFloat(cell);
+        if (!isNaN(val) && val > 50 && val <= 100) {
+            if (val > maxPur) maxPur = val;
+        }
+      }
+    }
+    const pur = maxPur;
+
+    T.check('purity.brightfield-absolute', Math.abs(pur - 78.7) < 0.5, `Got: ${pur}`);
+  } finally {
+    await a.close();
+  }
+});
 T.done();})();
