@@ -4423,18 +4423,30 @@ function methodsText(){
     const nt = String(r.note || '').trim().replace(/\.$/, ''), verb = /^[A-Za-z]+(ed|en)\b/.test(nt), tagNote = !prep.cleave && PROT_NOTE.test(nt) && !PROT_NOT.test(nt);
     if (pool) t += ` Fractions ${pool.replace(/^Pool\s*/, '')}${vol} were pooled${nt && !tagNote ? (verb ? ` and ${lc(nt)}` : ` (next: ${nt})`) : ''}.`;
     if (tagNote) t += ` The tag was then removed (${lc(nt)}).`;
-    const wfPar = wfParents(wf), ri = wf.indexOf(r), children = wf.filter((_, ci) => wfPar[ci] === ri);
-    if (children.length > 1) {
+    const wfPar = wfParents(wf), ri = wf.indexOf(r), activeChildren = wf.filter((_, ci) => wfPar[ci] === ri);
+    const rIdx = runs.indexOf(r);
+    const discardedChildren = runs.filter((x, xi) => (!x.inWf || x.discard) && (String(wfFromOf(x)) === String(r.id) || (!wfFromOf(x) && x.rFrom === r.id)));
+    const children = [...activeChildren, ...discardedChildren];
+    if (activeChildren.length > 1 || (activeChildren.length > 0 && discardedChildren.length > 0)) {
       const parts = children.map((c, ci) => {
+        if (!c.inWf || c.discard) return { discarded: true };
         const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
         const cLt = letterOf(c), sRef = cLt ? `step ${ck}, panel ${cLt}` : `step ${ck}`;
         const fn = wfFromNoteOf(c), desc = fn ? lc(fn) : (ci === 0 ? 'one portion' : ci === children.length - 1 ? 'the remainder' : 'another portion');
         const vb = /fractions\b/i.test(desc) ? 'were applied to' : 'was applied to';
-        return {desc, vb, col, sRef};
+        return {desc, vb, col, sRef, discarded: false};
       });
       let splitTxt = ` The ${stepTitle(r)} pool was split: `;
-      if (parts.length === 2) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc} to ${parts[1].col} (${parts[1].sRef}).`;
-      else splitTxt += parts.map((p, idx) => idx === 0 ? `${p.desc} ${p.vb} ${p.col} (${p.sRef})` : idx === parts.length - 1 ? `and ${p.desc} to ${p.col} (${p.sRef}).` : `${p.desc} to ${p.col} (${p.sRef})`).join(', ');
+      const activeParts = parts.filter(p => !p.discarded);
+      const discardedCount = parts.filter(p => p.discarded).length;
+      if (activeParts.length === 1 && discardedCount > 0) {
+        splitTxt = ` The ${stepTitle(r)} pool was split: ${activeParts[0].desc} ${activeParts[0].vb} ${activeParts[0].col} (${activeParts[0].sRef}) and the remainder was discarded.`;
+      } else if (activeParts.length === 2 && discardedCount === 0) {
+        splitTxt += `${activeParts[0].desc} ${activeParts[0].vb} ${activeParts[0].col} (${activeParts[0].sRef}) and ${activeParts[1].desc} to ${activeParts[1].col} (${activeParts[1].sRef}).`;
+      } else if (activeParts.length > 0) {
+        splitTxt += activeParts.map((p, idx) => idx === 0 ? `${p.desc} ${p.vb} ${p.col} (${p.sRef})` : idx === activeParts.length - 1 ? (discardedCount === 0 ? `and ${p.desc} to ${p.col} (${p.sRef}).` : `${p.desc} to ${p.col} (${p.sRef})`) : `${p.desc} to ${p.col} (${p.sRef})`).join(', ');
+        if (discardedCount > 0) splitTxt += `, and the remainder was discarded.`;
+      }
       t += splitTxt;
     }
     if (pr && pr.measured && pr.src !== 'btw') { const epStr = pr.src === 'nd' ? epPhrase(ndEpsUsed(r)) : ''; t += pr.concentrated ? ` The pool was concentrated to ${fmtAuto(pr.measVol)} mL and measured at ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).` : ` The pool measured ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).`; }
