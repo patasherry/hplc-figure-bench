@@ -3152,7 +3152,8 @@ const TAG_PRESETS = {his: ['His-tag', 2.2], sumo: ['His-SUMO', 12.5], gst: ['GST
 /* expected cleaved, uncleaved and free-tag sizes; protein size comes from the setting or from bands already marked as target / tagged */
 function cleavePlan(g){
   if (!opt.cleaveDetect) return null;
-  const T = numOr(opt.tagKda, (TAG_PRESETS[opt.tagPreset] || [])[1]); if (!(T > 0)) return null;
+  const FT = protForms()[2];
+  const T = numOr(opt.tagKda, FT ? FT.mass/1000 : (TAG_PRESETS[opt.tagPreset] || [])[1]); if (!(T > 0)) return null;
   const tagName = (TAG_PRESETS[opt.tagPreset] || ['tag'])[0] === 'tag' ? 'tag' : TAG_PRESETS[opt.tagPreset][0];
   let P = numOr(opt.protKda, null);
   if (!(P > 0) && g) { const med = a => { const q = a.slice().sort((u, v) => u - v), k = q.length >> 1; return q.length % 2 ? q[k] : (q[k-1] + q[k])/2; };
