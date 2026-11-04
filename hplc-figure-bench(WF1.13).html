@@ -4436,17 +4436,19 @@ function methodsText(){
         const cLt = letterOf(c), sRef = cLt ? `step ${ck}, panel ${cLt}` : `step ${ck}`;
         const fn = wfFromNoteOf(c), desc = fn ? lc(fn) : (ci === 0 ? 'one portion' : ci === children.length - 1 ? 'the remainder' : 'another portion');
         const vb = /fractions\b/i.test(desc) ? 'were applied to' : 'was applied to';
-        return {desc, vb, col, sRef};
+        const isDisc = c.discard === true || !c.inWf;
+        return {desc, vb, col, sRef, isDisc};
       });
-      let splitTxt = ` The ${stepTitle(r)} pool was split: `;
+      const hasDiscard = parts.some(p => p.isDisc);
+      let splitTxt = hasDiscard ? ` The ${stepTitle(r)} pool was split: ` : ` From the ${stepTitle(r)} pool, `;
       if (parts.length === 2) {
         if (parts[1].isDisc) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc.replace(' and the', ' the')}.`;
-        else splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc} to ${parts[1].col} (${parts[1].sRef}).`;
+        else splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc} ${parts[1].vb} ${parts[1].col} (${parts[1].sRef}).`;
       } else {
         splitTxt += parts.map((p, idx) => {
           if (idx === 0) return `${p.desc} ${p.vb} ${p.col} (${p.sRef})`;
-          if (idx === parts.length - 1) return p.isDisc ? `and ${p.desc.replace(' and the', ' the')}.` : `and ${p.desc} to ${p.col} (${p.sRef}).`;
-          return p.isDisc ? p.desc : `${p.desc} to ${p.col} (${p.sRef})`;
+          if (idx === parts.length - 1) return p.isDisc ? `and ${p.desc.replace(' and the', ' the')}.` : `and ${p.desc} ${p.vb} ${p.col} (${p.sRef}).`;
+          return p.isDisc ? p.desc : `${p.desc} ${p.vb} ${p.col} (${p.sRef})`;
         }).join(', ');
       }
       t += splitTxt;

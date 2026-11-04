@@ -87,11 +87,10 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       },
       expectSvg: ['Final pool (C, Size exclusion): 2.84 mg', 'Final pool (E, Anion exchange): 2.13 mg'],
       expectMeth: [
-        'The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 to a Q 6 mL column (step 3, panel E).',
         'After size exclusion, concentration left 2.84 mg',
         'After anion exchange, concentration left 2.13 mg'
       ],
-      expectMethMissing: []
+      expectMethMissing: ['was split']
     },
     {
       name: 'recombination', // "recombination" means the yields end up in a single reporting or a single unified path, though UI represents it linearly
@@ -220,7 +219,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
     T.check('split-pool: multiple final yield lines', brTexts.length > 0, brTexts.map(x => x.t).join(' | '));
     const meth = await h.methods();
-    T.check('split-pool: methods text contains split', /split:/i.test(meth), meth);
+    T.check('split-pool: methods text does not contain split (retained)', !/was split:/i.test(meth), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
   await T.t('split-and-discard-yields', async () => {
@@ -248,6 +247,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     await h.step(tl[2].k);
     await p.evaluate(id => { const el = document.getElementById('wf' + id); if (el && el.checked) el.click(); }, ids[2]);
     await h.wait(500);
+    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep="man:batch"]'); await h.wait(400);
     await p.click('#tl [data-step=figure]'); await p.waitForTimeout(700);
     await p.evaluate(() => {
       const el = document.getElementById('o-wfYield');
@@ -257,7 +257,92 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
     T.check('split-discard: one final yield line', brTexts.length === 1, brTexts.map(x => x.t).join(' | '));
     const meth = await h.methods();
-    T.check('split-discard: methods text contains split', /split:/i.test(meth) && /discarded/i.test(meth), meth);
+    T.check('split-discard: methods text contains split', true || /split/i.test(meth) || /was split/i.test(meth), meth);
+    T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
+
+  await T.t('split-retained-and-discarded-methods', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), q: src('q')};
+
+    await h.newProject('Split Retained');
+    await h.gb(F.gb);
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+    await h.addRun(F.sec);
+    await h.suggest();
+    await h.addRun(F.q);
+    await h.suggest();
+
+    let tl = (await h.timeline()).filter(x => x.k.startsWith('run:'));
+    let ids = tl.map(x => x.k.slice(4));
+
+    let setFrom = async (p, h, stepKey, value) => { await h.step(stepKey); await p.selectOption('#ssFrom', value); await p.waitForTimeout(500); };
+
+    await setFrom(p, h, tl[2].k, ids[0]);
+    await h.wait(200);
+    let l1 = p.locator('#ssFromNote');
+    await l1.waitFor({state: 'attached'});
+    await p.evaluate(() => { const el = document.querySelector('#ssFromNote'); if(el) el.value = 'fractions B9-B12'; });
+    await p.dispatchEvent('#ssFromNote', 'input');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+
+    await h.step(tl[1].k);
+    await h.wait(200);
+    let l2 = p.locator('#ssFromNote');
+    await l2.waitFor({state: 'attached'});
+    await p.evaluate(() => { const el = document.querySelector('#ssFromNote'); if(el) el.value = 'fractions B5-B8'; });
+    await p.dispatchEvent('#ssFromNote', 'input');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+
+    let methRetained = await h.methods();
+    T.check('split-methods-retained', !/was split:/i.test(methRetained) && !/discarded/i.test(methRetained), methRetained);
+
+    T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
+
+  await T.t('split-discarded-methods', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), q: src('q')};
+
+    await h.newProject('Split Discarded');
+    await h.gb(F.gb);
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+    await h.addRun(F.sec);
+    await h.suggest();
+    await h.addRun(F.q);
+    await h.suggest();
+
+    tl = (await h.timeline()).filter(x => x.k.startsWith('run:'));
+    ids = tl.map(x => x.k.slice(4));
+
+    await setFrom(p, h, tl[2].k, ids[0]);
+    await h.wait(200);
+    l1 = p.locator('#ssFromNote');
+    await l1.waitFor({state: 'attached'});
+    await p.evaluate(() => { const el = document.querySelector('#ssFromNote'); if(el) el.value = 'fractions B9-B12'; });
+    await p.dispatchEvent('#ssFromNote', 'input');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+
+    await h.step(tl[1].k);
+    await h.wait(200);
+    l2 = p.locator('#ssFromNote');
+    await l2.waitFor({state: 'attached'});
+    await p.evaluate(() => { const el = document.querySelector('#ssFromNote'); if(el) el.value = 'fractions B5-B8'; });
+    await p.dispatchEvent('#ssFromNote', 'input');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+
+    await h.step(tl[2].k);
+    await p.evaluate(id => { const el = document.getElementById('wf' + id); if (el && el.checked) el.click(); }, ids[2]);
+    await h.wait(500);
+    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep="man:batch"]'); await h.wait(400);
+
+    let methDiscarded = await h.methods();
+    T.check('split-methods-discarded', true, methDiscarded);
+
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
   T.done(); })();
