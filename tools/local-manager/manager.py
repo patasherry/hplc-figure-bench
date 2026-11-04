@@ -739,11 +739,11 @@ def relay(s):
             if rl.outstanding([c['body'] for c in comments(n)]):
                 label(n, remove=[lab]); continue  # already asked (e.g. the other copy got there first)
             app, base = relay_app()
-            ranges = rl.pick_ranges(app, i.get('body'), RELAY_CTX)
-            if not ranges and board:  # nothing to cut an excerpt from: the relay is a preference, so the work goes to the queue
-                post(n, 'The issue names no line range, so no relay request can be cut from it. It went to the normal work queue instead.' + SIGN.format(rv.MODEL))
+            if board and rt.is_light(i['title']):  # a light job gains little from a bigger reasoning budget: the normal queue
+                post(n, 'This is a light job, so it did not need the offline relay. It went to the normal work queue (`jules-queue`) instead.' + SIGN.format(rv.MODEL))
                 label(n, add=['jules-queue'], remove=[lab]); continue
-            if not ranges:
+            ranges = rl.pick_ranges(app, i.get('body'), RELAY_CTX)  # a board issue with no location still goes out, without an excerpt: the agent names what it needs (round 2)
+            if not ranges and not board:
                 post(n, f'I need a range to cut the excerpt from. Add a line `relay-lines: <from>-<to>` or a line number ("line 1234") to the issue body, then label it `{RELAY_LABEL}` again.' + SIGN.format(rv.MODEL))
                 label(n, remove=[RELAY_LABEL]); continue
             relay_send(n, i, app, base, ranges, board)
@@ -790,7 +790,7 @@ def relay_collect(n, issue):
             rid = mid.group(1) if mid else ''
             reqs.pop(rid, None)
             ranges = relay_ranges_of(cs, rid) or rl.pick_ranges(app, issue.get('body'), RELAY_CTX)
-            if rl.request_count(bodies) < 1 + RELAY_ROUNDS and ranges and not DRY:
+            if rl.request_count(bodies) < 1 + RELAY_ROUNDS and (ranges or board) and not DRY:
                 post(n, f'Stale: {b.msg}. Request `{rid}` is withdrawn and a fresh one follows, cut from main as it is now. Nothing was filed.' + rl.DONE.format(rid) + sig + SIGN.format(rv.MODEL))
                 new = relay_send(n, issue, app, base, ranges, board); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
             else:
@@ -1821,11 +1821,7 @@ Discussion:
 {talk}"""
 
 
-STOP = set('a an the and or of to in on for with by from is are be it its this that as at into not no do does add make use show fix'.split())
-
-
-def words(t):
-    return {w for w in re.findall(r'[a-z0-9]+', str(t).lower().replace('-', ' ')) if len(w) > 2 and w not in STOP}
+from dupcheck import words, dup_close  # noqa: E402,F401  (the board's duplicate prefilter: pure functions, tested by test_dup.py)
 
 
 def board_memory(days=21):
@@ -1849,21 +1845,6 @@ Change: {change}
 Candidates:
 {cands}
 Return ONE JSON object: {{"duplicate": true or false, "of": "#N or PR #N", "why": "one short sentence"}}"""
-
-
-def dup_close(p, mem):
-    """Candidates worth a closer look: word overlap >= 0.45, scored against the title alone as well as title plus body (a long body must not hide a clear match), plus any open issue the proposal cites as #N. Returns (close, best score)."""
-    pw = words(p.get('title', '') + ' ' + p.get('change', ''))
-    if not pw:
-        return [], 0
-    titles = mem.get('titles', {})
-    pool = [(k, t) for k, t in mem['merged']] + [(k, t) for k, t in mem['open']] + [(k, f'{t} ({f})') for k, t, f in mem['ideas'] if f != 'open']
-    ov = lambda t: len(pw & words(t)) / max(1, min(len(pw), len(words(t))))
-    scored = sorted(((max(ov(t), ov(titles[k])) if k in titles else ov(t), k, t) for k, t in pool), reverse=True)
-    close = [(k, t) for sc, k, t in scored[:5] if sc >= 0.45]
-    cited = {'#' + n for n in re.findall(r'#(\d+)', ' '.join(str(p.get(f, '')) for f in ('evidence', 'why')))}
-    close += [(k, t) for sc, k, t in scored if k in cited and k in titles and (k, t) not in close]
-    return close, (scored[0][0] if scored else 0)
 
 
 def dup_of(p, mem):
@@ -1997,7 +1978,7 @@ def board_round(s, topic=''):
         votes = '\n'.join(f'- {n}: {sc}/5, {why}' for n, sc, why in scores[p['id']])
         sc = [x[1] for x in scores[p['id']]]
         strong = rl.is_strong(sc, len(who), BOARD_GO)  # all three advisers back it strongly: no need to wait for Patrick
-        to_relay = rl.board_route(sc, len(who), BOARD_GO, relayed, BOARD_RELAY_MAX) == 'relay'  # split scores: a request for the offline relay instead of the queue
+        to_relay = rl.board_route(sc, len(who), BOARD_GO, relayed, BOARD_RELAY_MAX, rt.is_light(p['title'])) == 'relay'  # split scores: a request for the offline relay instead of the queue
         relayed += to_relay
         if not DRY:
             i = gh(f'repos/{REPO}/issues', 'POST', {'title': p['title'], 'labels': ([RELAY_BOARD] if to_relay else ['jules-queue']) + (['board-approved'] if strong else []) + ['from-board'],

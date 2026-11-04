@@ -38,4 +38,14 @@ qm = [iss(n, 'Fix item %d' % n) for n in range(40, 46)]
 assert len(rt.pick(qm, {}, 2)) == 2 and [i['number'] for i in rt.pick(qm, {}, 2)] == [45, 44]
 assert rt.pick(qm, {}, 0) == []
 assert rt.kind('Fix x') == 'app-changing' and rt.kind('Test x') == 'light'
+
+# board routing: contested + app-changing goes to the relay; contested + light and unanimous go to the queue; the cap holds
+import relay as rl
+go, cap = 4, 2
+contested, unanimous = [5, 4, 3], [5, 4, 4]
+route = lambda sc, title, done=0: rl.board_route(sc, 3, go, done, cap, rt.is_light(title))
+assert route(contested, 'Widen the legend box') == 'relay'
+assert route(contested, 'Test the legend box') == 'queue'
+assert route(unanimous, 'Widen the legend box') == 'queue' and route(unanimous, 'Test the legend box') == 'queue'
+assert route(contested, 'Widen the legend box', cap) == 'queue'
 print('test_routing: all asserts passed')
