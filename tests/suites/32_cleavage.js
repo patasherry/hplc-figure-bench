@@ -64,7 +64,6 @@ const path = require('path');
     const match = cleaveInfoText.match(/([\d.]+) kDa/g);
     const freeTagKda = match && match.length >= 3 ? num(match[2]) : null;
 
-    // Check will fail because cleaveInfo text won't update properly in this test
     T.check('cleavage_consistency.match', tagOnlyKda != null && freeTagKda != null && Math.abs(tagOnlyKda - freeTagKda) <= 0.15, `expected cleaved check tag size (${freeTagKda}) to match protein table tag size (${tagOnlyKda}) text: ${cleaveInfoText}`);
   });
 
