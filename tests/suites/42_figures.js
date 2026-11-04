@@ -331,5 +331,84 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
 
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
+
+  await T.t('poster-y-gap', async () => {
+    const q = await open(), hq = H(q.p), pg = q.p;
+    try {
+      await hq.newProject('FigTest');
+      await pg.click('#navFig');
+      await hq.wait(500);
+
+      await pg.selectOption('#wfPreset', 'poster');
+      await pg.evaluate(() => document.querySelector('#wfPreset').dispatchEvent(new Event('change')));
+      await hq.wait(500);
+
+      const tempPath = path.join(RES, 'temp_run.csv');
+      fs.writeFileSync(tempPath, 'Time,Absorbance\n0,0\n1,370\n2,0');
+
+      await pg.click('#navWf');
+      await hq.wait(200);
+      await hq.addRun([tempPath]);
+      await hq.wait(1000);
+
+      await pg.click('#navFig');
+      await hq.wait(1000);
+
+      const gapsPoster = await pg.evaluate(() => {
+        const texts = Array.from(document.querySelectorAll('#paper svg text'));
+        const byX = {};
+        texts.forEach(t => {
+          const text = t.textContent;
+          if (!isNaN(parseFloat(text)) && text.trim() !== '') {
+            const x = t.getAttribute('x');
+            if (!byX[x]) byX[x] = [];
+            byX[x].push(parseFloat(t.getAttribute('y')));
+          }
+        });
+        let minGap = Infinity;
+        for (const x in byX) {
+          if (byX[x].length > 2) {
+            byX[x].sort((a,b) => a-b);
+            for (let i = 1; i < byX[x].length; i++) {
+              minGap = Math.min(minGap, byX[x][i] - byX[x][i-1]);
+            }
+          }
+        }
+        return minGap;
+      });
+
+      T.check('gap-poster', gapsPoster >= 24, `Y-axis ticks overlap in poster mode! Gap ${gapsPoster} < FontSize 24`);
+
+      await pg.selectOption('#wfPreset', 'single');
+      await pg.evaluate(() => document.querySelector('#wfPreset').dispatchEvent(new Event('change')));
+      await hq.wait(1000);
+
+      const gapsSingle = await pg.evaluate(() => {
+        const texts = Array.from(document.querySelectorAll('#paper svg text'));
+        const byX = {};
+        texts.forEach(t => {
+          const text = t.textContent;
+          if (!isNaN(parseFloat(text)) && text.trim() !== '') {
+            const x = t.getAttribute('x');
+            if (!byX[x]) byX[x] = [];
+            byX[x].push(parseFloat(t.getAttribute('y')));
+          }
+        });
+        let minGap = Infinity;
+        for (const x in byX) {
+          if (byX[x].length > 2) {
+            byX[x].sort((a,b) => a-b);
+            for (let i = 1; i < byX[x].length; i++) {
+              minGap = Math.min(minGap, byX[x][i] - byX[x][i-1]);
+            }
+          }
+        }
+        return minGap;
+      });
+
+      T.check('gap-single', gapsSingle >= 8, `Y-axis ticks overlap in single mode! Gap ${gapsSingle} < FontSize 8`);
+    } finally { await q.close(); }
+  });
+
   T.done();
 })();
