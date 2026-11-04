@@ -455,7 +455,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
 .spec span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(60ch,100%)}
 .spec #spec2.warn{color:var(--warn);white-space:normal}
 .note{font-size:12.5px;color:var(--muted);border:1px solid var(--line);background:var(--well);border-radius:var(--r);padding:8px 11px;line-height:1.45}
-.toast{pointer-events:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);display:grid;justify-items:center;gap:6px;z-index:10;width:max-content;max-width:min(560px,calc(100% - 32px))}
+.toast{pointer-events:none;position:fixed;top:16px;bottom:auto;left:50%;transform:translateX(-50%);display:grid;justify-items:center;gap:6px;z-index:10;width:max-content;max-width:min(560px,calc(100% - 32px))}
 .toast .pill{background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;box-shadow:var(--shadow);line-height:1.4;text-align:center}
 @media (max-width:880px){
   .app{grid-template-columns:minmax(0,1fr);gap:16px}
@@ -464,7 +464,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
   .stage > *{order:-1;min-width:0}
   .stage > .intp{order:1}
   .toast .pill{border-radius:12px}
-  .toast.overlap{bottom:calc(env(safe-area-inset-bottom,0px) + 72px)}
+  .toast.overlap{top:72px}
   /* on a phone the figure keeps its printed size and scrolls sideways, instead of shrinking past legibility */
   .paper{padding:10px;min-height:0;overflow-x:auto;justify-content:flex-start}
   .canvas-body{padding:10px}
