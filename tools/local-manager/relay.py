@@ -31,9 +31,9 @@ test:                       (required when verdict is patch)
 ```
 
 answer: |                   (verdict: answer)
-  <your answer, indented two spaces>
+  <your answer>
 need: |                     (verdict: insufficient)
-  <the functions or line ranges you need, indented two spaces>
+  <the functions or line ranges you need>
 === END RESPONSE ==='''
 
 ROLE = '''You are reviewing part of a single-file HTML application that produces
@@ -134,9 +134,17 @@ def numbered(app_text, a, b):
     return '\n'.join(f'  {i}: {lines[i-1]}' for i in range(a, b + 1))
 
 
+NO_EXCERPT = ('excerpt-status: none. No excerpt could be cut because the issue names no location in the app.\n'
+              'You cannot see the code. Do not guess a patch.\n')
+NO_EXCERPT_RULE = ('You have no excerpt, so you cannot see the code. Reply with verdict: insufficient and, in need,\n'
+                   '    name the functions or line ranges you want to see.')
+
+
 def build_request(rid, base, app_text, issue, expires, task, question, ranges):
-    ex = '\n'.join(f'excerpt: {APP}:{a}-{b}\n{numbered(app_text, a, b)}\n' for a, b in ranges)
-    rules = '\n'.join('  - ' + r for r in RULES)
+    """With ranges: the numbered excerpts. With none (a board-raised issue that names no location): no excerpt body, an
+    'excerpt-status: none' line and one extra rule asking for verdict: insufficient with the functions wanted."""
+    ex = '\n'.join(f'excerpt: {APP}:{a}-{b}\n{numbered(app_text, a, b)}\n' for a, b in ranges) if ranges else NO_EXCERPT
+    rules = '\n'.join('  - ' + r for r in (RULES if ranges else RULES + [NO_EXCERPT_RULE]))
     fmt = '\n'.join('  ' + l for l in RESPONSE_FORMAT.split('\n'))
     ind = lambda t: '\n'.join('  ' + l for l in (t or '').strip().split('\n'))
     one_line = ' '.join((task or '').split())[:200]
@@ -169,8 +177,12 @@ response-format: |
 FIELDS = ('id', 'base', 'verdict', 'summary', 'changes-a-reported-number')
 
 
+FIELD_RE = r'(?:id|base|verdict|summary|changes-a-reported-number|patch|test|answer|need)'
+
+
 def _block(s, key):
-    m = re.search(r'^' + key + r':[^\n]*\|[^\n]*\n((?:[ \t]+[^\n]*\n?|\n(?=[ \t]))*)', s, re.M)
+    """Text after 'key: |' up to the next known field name at the start of a line (or the end), common indent removed. Flush-left, spaces or tabs all work."""
+    m = re.search(r'^' + key + r':[^\n]*\|[^\n]*\n(.*?)(?=^' + FIELD_RE + r':|\Z)', s, re.M | re.S)
     if not m:
         return None
     t = m.group(1).rstrip()
@@ -318,9 +330,9 @@ def is_strong(scores, n_advisers, go):
     return len(scores) >= max(2, n_advisers) and min(scores) >= go
 
 
-def board_route(scores, n_advisers, go, relayed, cap):
-    """'queue' or 'relay' for an adopted proposal. Strong proposals and anything past the per-round cap go to the work queue;
-    the rest go to the relay. `relayed` is how many proposals this round have already taken the relay."""
-    if is_strong(scores, n_advisers, go) or relayed >= cap:
+def board_route(scores, n_advisers, go, relayed, cap, light=False):
+    """'queue' or 'relay' for an adopted proposal. Strong proposals, light ones (routing.is_light) and anything past the per-round
+    cap go to the work queue; contested app-changing ones go to the relay. `relayed` is how many proposals this round already took it."""
+    if light or is_strong(scores, n_advisers, go) or relayed >= cap:
         return 'queue'
     return 'relay'

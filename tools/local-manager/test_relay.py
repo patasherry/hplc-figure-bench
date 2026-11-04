@@ -149,4 +149,42 @@ assert routes == ['relay', 'relay', 'queue', 'queue', 'queue'], routes
 # the board marker is not mistaken for a request or its closing marker
 assert rl.MARK_RE.search(rl.BOARD_MARK) is None and rl.DONE_RE.search(rl.BOARD_MARK) is None
 assert rl.outstanding([rl.BOARD_MARK + '\n' + rl.MARK.format('7-ab12', 'abc1234567')]) == {'7-ab12': {'base': 'abc1234567'}}
+# block scalars parse the same whatever the indent
+def blk(key, lines, pad):
+    return rl.RESP_HEAD + '\nid: 7-ab12\nbase: abc1234567\nverdict: ' + ('answer' if key == 'answer' else 'insufficient') + \
+        '\nsummary: s\nchanges-a-reported-number: no\n\n' + key + ': |\n' + ''.join(pad + l + '\n' for l in lines) + rl.RESP_END
+BODY = ['The sum is doubled once.', 'It reads values via either:', '', 'and then halves them.']
+for key in ('answer', 'need'):
+    want = '\n'.join(BODY)
+    for pad in ('', '  ', '    ', '\t'):
+        got = rl.parse_response(blk(key, BODY, pad))[key]
+        assert got == want, (key, repr(pad), got)
+    # a real field name at line start ends the block
+    t = blk(key, BODY, '').replace(rl.RESP_END, 'test: nothing\n' + rl.RESP_END)
+    assert rl.parse_response(t)[key] == want, key
+assert 'indented two spaces' not in rl.RESPONSE_FORMAT
+
+# ---- no-excerpt request (a board-raised issue that names no location). Fixtures have their own names: nothing above is rebound.
+exp_at = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+req_with = rl.build_request('7-ab12', 'abc1234567', APP, 7, exp_at, 'Why double?', 'Is the factor of two right?', [(1, 4)])
+req_none = rl.build_request('7-ab12', 'abc1234567', APP, 7, exp_at, 'Why double?', 'Is the factor of two right?', [])
+for blockq in (req_with, req_none):  # both are well-formed and carry the response grammar
+    assert blockq.startswith(rl.REQ_HEAD) and blockq.endswith(rl.REQ_END) and rl.RESP_HEAD in blockq and rl.RESP_END in blockq
+    assert 'response-format: |' in blockq and 'verdict: patch | answer | insufficient' in blockq
+assert '  2:   const t = a + b;' in req_with and 'excerpt: ' + rl.APP + ':1-4' in req_with
+assert 'excerpt-status' not in req_with and 'verdict: insufficient\n    and name' in req_with and rl.NO_EXCERPT_RULE not in req_with
+assert 'excerpt: ' not in req_none and '  2: ' not in req_none and 'excerpt-status: none' in req_none
+assert rl.NO_EXCERPT_RULE.split('\n')[0] in req_none and 'verdict: insufficient' in rl.NO_EXCERPT_RULE
+assert req_with.split('task:')[0] == req_none.split('task:')[0]  # the header above task: is identical
+assert req_none.split('question:')[0] == req_with.split('question:')[0]
+assert rl.outstanding([rl.MARK.format('7-ab12', 'abc1234567') + '\n````\n' + req_none + '\n````']) == {'7-ab12': {'base': 'abc1234567'}}
+# round 2: a bare function name in need resolves to its whole span
+assert rl.ranges_from_need(APP, 'please show betaMean', 40) == [(5, 9)]
+assert rl.ranges_from_need(APP, 'the function `deltaTail()`', 40) == [(11, 13)]
+# board route with the light flag
+assert rl.board_route([5, 4, 3], 3, go, 0, cap, light=False) == 'relay'  # contested + app-changing
+assert rl.board_route([5, 4, 3], 3, go, 0, cap, light=True) == 'queue'  # contested + light
+assert rl.board_route([5, 4, 4], 3, go, 0, cap, light=False) == 'queue' and rl.board_route([5, 4, 4], 3, go, 0, cap, light=True) == 'queue'  # unanimous
+assert rl.board_route([5, 4, 3], 3, go, cap, cap, light=False) == 'queue'  # cap respected
+
 print('ok')

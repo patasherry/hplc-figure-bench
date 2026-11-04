@@ -88,7 +88,7 @@ need: |                     (verdict: insufficient)
 === END RESPONSE ===
 ```
 
-`answer:` and `need:` are followed by text indented two spaces. The `(verdict: ...)` notes are for the reader; the parser ignores the rest of the key line. A field still holding a `<placeholder>` counts as missing.
+`answer:` and `need:` are followed by text in any indentation (flush left, spaces or tabs); the text runs up to the next line that starts with a field name (`id`, `base`, `verdict`, `summary`, `changes-a-reported-number`, `patch`, `test`, `answer`, `need`) and the common indent is removed. The `(verdict: ...)` notes are for the reader; the parser ignores the rest of the key line. A field still holding a `<placeholder>` counts as missing.
 
 ## Validation
 
@@ -117,10 +117,11 @@ Check 4 reads the file, not a sha, because unrelated merges change the sha witho
 
 The Direction board (#222) can raise a request itself, so Patrick does not have to label anything.
 
-- **Which proposals:** an adopted proposal that is not *strong*. Strong means every adviser scored it at `board_go_score` (4) or more; those keep the old path (`jules-queue` and `board-approved`). A split proposal is created with `from-board` and `relay-from-board` and **without** `jules-queue`. Its body is unchanged (votes and debate), because the request is cut from it. The body needs a `relay-lines:` range or a line number, as for any request.
+- **Which proposals:** an adopted proposal that is not *strong* **and** is app-changing. Strong means every adviser scored it at `board_go_score` (4) or more; those keep the old path (`jules-queue` and `board-approved`). A contested but light proposal (`routing.is_light`, the Jules leader's `LIGHT` test) also keeps the old path. A contested app-changing proposal is created with `from-board` and `relay-from-board` and **without** `jules-queue`. Its body is unchanged (votes and debate), because the request is cut from it.
+- **No location:** board proposals are prose and rarely name a line. A board-raised issue with no `relay-lines:` range or line number still gets a request, with no excerpt: the block carries `excerpt-status: none` and a rule telling the agent it cannot see the code and should reply `verdict: insufficient`, naming the functions or line ranges it needs. The second round resolves those (`ranges_from_need`), within `relay_max_rounds`. The hand-labelled `needs-relay` path still asks Patrick for a range.
 - **Cap:** at most `board_relay_max` (2) per round, in rank order. Proposals past the cap go to `jules-queue` as before.
 - **Trust:** the owner check of `needs-relay` is unchanged. For `relay-from-board` the manager accepts the issue only if it also carries `from-board` and the newest `relay-from-board` label event was made by the account the manager posts under. The request comment starts with "The board raised this one because the advisers' scores were split" and names the issue and the board. Everything after that (block, six checks, filing) is the same.
-- **Fallback:** the relay is a preference, not a gate. If the request expires (`relay_expire_hours`) unanswered, the manager drops `relay-from-board`, adds `jules-queue` and says so in the withdrawal comment. The same happens at once when the issue names no line range to cut an excerpt from.
+- **Fallback:** the relay is a preference, not a gate. If the request expires (`relay_expire_hours`) unanswered, the manager drops `relay-from-board`, adds `jules-queue` and says so in the withdrawal comment. The same happens at once for a board-raised issue whose title is light.
 
 ## Settings
 
