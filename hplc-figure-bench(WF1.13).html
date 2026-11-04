@@ -2967,7 +2967,7 @@ function detectBands(g, i, sensPct, gelMax){
       let rm = v; j = y; while (j < h - 1) { j++; if (sig[j] > v) break; if (sig[j] < rm) rm = sig[j]; }
       const prom = v - Math.max(lm, rm); if (prom < Math.max(DET.minAbs*0.6, v*DET.promRel, noise*DET.noiseK*0.6)) continue;
     }
-    let l = y, r = y; while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > v*DET.tail) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > v*DET.tail) r++;
+    let l = y, r = y; while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > 0) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > 0) r++;
     let area = 0; for (let j=l;j<=r;j++) area += sig[j];
     let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
     bands.push({row: y, h: v, area, l, r, hl, hr});
