@@ -164,4 +164,25 @@ for key in ('answer', 'need'):
     assert rl.parse_response(t)[key] == want, key
 assert 'indented two spaces' not in rl.RESPONSE_FORMAT
 
+# a request with no ranges (a board issue that names no location): still a request, no excerpt body, asks for insufficient
+q0 = rl.build_request('7-ab12', 'abc1234567', APP, 7, t, 'Tidy the legend', 'Make the legend easier to read.', [])
+assert q0.startswith(rl.REQ_HEAD) and q0.endswith(rl.REQ_END) and 'id: 7-ab12' in q0 and 'issue: 7' in q0 and 'expires: 2026-01-01T00:00:00Z' in q0
+assert 'excerpt:' not in q0 and '  1: ' not in q0 and 'excerpt-status: none' in q0
+assert 'verdict: insufficient' in q0 and 'name the functions' in q0 and rl.RESP_HEAD in q0 and rl.RESP_END in q0
+assert rl.NO_EXCERPT_RULE in q0.replace('\n    ', '\n    ')  # the extra rule sits in the rules list
+# the same request with ranges is unchanged: it carries every original rule, none of the no-excerpt text, and the excerpt exactly as before
+assert rl.NO_EXCERPT_RULE not in q and 'excerpt-status' not in q
+assert ''.join('  - ' + r + '\n' for r in rl.RULES) in q + '\n'
+assert 'excerpt: ' + rl.APP + ':1-4\n' + rl.numbered(APP, 1, 4) + '\n\nrules:\n' in q
+# everything outside the excerpt and rules sections is identical with and without ranges
+assert q.split('task:')[0] == q0.split('task:')[0]
+# a no-excerpt request is still outstanding-trackable and its second round reads functions from the answer
+assert rl.outstanding([rl.MARK.format('7-ab12', 'abc1234567'), q0]) == {'7-ab12': {'base': 'abc1234567'}}
+assert (5, 9) in rl.ranges_from_need(APP, 'I need betaMean', 1)
+
+# board routing also needs the job to be app-changing: contested + light goes to the queue
+assert rl.board_route([5, 4, 3], 3, go, 0, cap, light=False) == 'relay'  # contested, app-changing
+assert rl.board_route([5, 4, 3], 3, go, 0, cap, light=True) == 'queue'  # contested, light
+assert rl.board_route([5, 4, 4], 3, go, 0, cap, light=False) == 'queue' and rl.board_route([5, 4, 4], 3, go, 0, cap, light=True) == 'queue'  # uncontested
+
 print('ok')

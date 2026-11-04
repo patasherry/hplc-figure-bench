@@ -38,4 +38,12 @@ qm = [iss(n, 'Fix item %d' % n) for n in range(40, 46)]
 assert len(rt.pick(qm, {}, 2)) == 2 and [i['number'] for i in rt.pick(qm, {}, 2)] == [45, 44]
 assert rt.pick(qm, {}, 0) == []
 assert rt.kind('Fix x') == 'app-changing' and rt.kind('Test x') == 'light'
+# the board's relay decision combines contested (not strong) with app-changing (not light), using the same is_light
+def board_goes(scores, title):
+    go = 4
+    strong = len(scores) >= 3 and min(scores) >= go
+    return 'queue' if strong or rt.is_light(title) else 'relay'
+assert board_goes([5, 4, 3], 'Fix the invented widget width') == 'relay'  # contested + app-changing
+assert board_goes([5, 4, 3], 'Add a failing test for the invented widget') == 'queue'  # contested + light
+assert board_goes([5, 4, 4], 'Fix the invented widget width') == 'queue' and board_goes([5, 4, 4], 'Test the invented widget') == 'queue'  # uncontested
 print('test_routing: all asserts passed')

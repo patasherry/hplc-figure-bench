@@ -740,10 +740,12 @@ def relay(s):
                 label(n, remove=[lab]); continue  # already asked (e.g. the other copy got there first)
             app, base = relay_app()
             ranges = rl.pick_ranges(app, i.get('body'), RELAY_CTX)
-            if not ranges and board:  # nothing to cut an excerpt from: the relay is a preference, so the work goes to the queue
-                post(n, 'The issue names no line range, so no relay request can be cut from it. It went to the normal work queue instead.' + SIGN.format(rv.MODEL))
+            if board and rt.is_light(i['title']):  # contested but light: the relay is for hard work, so it goes to the queue
+                post(n, 'This is a light job, so it needs no relay request. It went to the normal work queue instead.' + SIGN.format(rv.MODEL))
                 label(n, add=['jules-queue'], remove=[lab]); continue
-            if not ranges:
+            if not ranges and board:
+                ranges = []  # no location in a board proposal: the first request has no excerpt and asks which code is needed (rl.build_request)
+            if ranges is None:
                 post(n, f'I need a range to cut the excerpt from. Add a line `relay-lines: <from>-<to>` or a line number ("line 1234") to the issue body, then label it `{RELAY_LABEL}` again.' + SIGN.format(rv.MODEL))
                 label(n, remove=[RELAY_LABEL]); continue
             relay_send(n, i, app, base, ranges, board)
@@ -1997,7 +1999,7 @@ def board_round(s, topic=''):
         votes = '\n'.join(f'- {n}: {sc}/5, {why}' for n, sc, why in scores[p['id']])
         sc = [x[1] for x in scores[p['id']]]
         strong = rl.is_strong(sc, len(who), BOARD_GO)  # all three advisers back it strongly: no need to wait for Patrick
-        to_relay = rl.board_route(sc, len(who), BOARD_GO, relayed, BOARD_RELAY_MAX) == 'relay'  # split scores: a request for the offline relay instead of the queue
+        to_relay = rl.board_route(sc, len(who), BOARD_GO, relayed, BOARD_RELAY_MAX, rt.is_light(p['title'])) == 'relay'  # split scores: a request for the offline relay instead of the queue
         relayed += to_relay
         if not DRY:
             i = gh(f'repos/{REPO}/issues', 'POST', {'title': p['title'], 'labels': ([RELAY_BOARD] if to_relay else ['jules-queue']) + (['board-approved'] if strong else []) + ['from-board'],

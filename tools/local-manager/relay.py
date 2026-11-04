@@ -134,9 +134,18 @@ def numbered(app_text, a, b):
     return '\n'.join(f'  {i}: {lines[i-1]}' for i in range(a, b + 1))
 
 
+NO_EXCERPT = '''excerpt-status: none. The issue names no location, so no source lines could be cut.
+  You cannot see the code. Do not guess at it.
+'''
+NO_EXCERPT_RULE = ('No source lines are included. Reply with verdict: insufficient and, in need,\n    name the functions (for example ndPoolVol) or line ranges (for example 120-180)\n    you want to read. A second request will carry them.')
+
+
 def build_request(rid, base, app_text, issue, expires, task, question, ranges):
-    ex = '\n'.join(f'excerpt: {APP}:{a}-{b}\n{numbered(app_text, a, b)}\n' for a, b in ranges)
-    rules = '\n'.join('  - ' + r for r in RULES)
+    if ranges:
+        ex = '\n'.join(f'excerpt: {APP}:{a}-{b}\n{numbered(app_text, a, b)}\n' for a, b in ranges)
+    else:
+        ex = NO_EXCERPT  # a board-raised issue that names no location: the first round only asks which code is needed
+    rules = '\n'.join('  - ' + r for r in (RULES if ranges else RULES + [NO_EXCERPT_RULE]))
     fmt = '\n'.join('  ' + l for l in RESPONSE_FORMAT.split('\n'))
     ind = lambda t: '\n'.join('  ' + l for l in (t or '').strip().split('\n'))
     one_line = ' '.join((task or '').split())[:200]
@@ -322,9 +331,9 @@ def is_strong(scores, n_advisers, go):
     return len(scores) >= max(2, n_advisers) and min(scores) >= go
 
 
-def board_route(scores, n_advisers, go, relayed, cap):
-    """'queue' or 'relay' for an adopted proposal. Strong proposals and anything past the per-round cap go to the work queue;
-    the rest go to the relay. `relayed` is how many proposals this round have already taken the relay."""
-    if is_strong(scores, n_advisers, go) or relayed >= cap:
+def board_route(scores, n_advisers, go, relayed, cap, light=False):
+    """'queue' or 'relay' for an adopted proposal. Strong proposals, light ones (routing.is_light(title)) and anything past the per-round cap
+    go to the work queue; contested app-changing ones go to the relay. `relayed` is how many proposals this round have already taken the relay."""
+    if is_strong(scores, n_advisers, go) or light or relayed >= cap:
         return 'queue'
     return 'relay'
