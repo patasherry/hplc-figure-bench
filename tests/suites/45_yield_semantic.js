@@ -1,20 +1,8 @@
-const {open, H, suite, src} = require('../lib/harness');
+const {open, H, suite, fs: fileSys, path, DATA} = require('../lib/harness');
+(async () => {
+  const T = suite('45_yield_semantic'), {p, errs, close} = await open(), h = H(p);
 
-module.exports = async function(T, openApp, H_helper) {
-  const { fs: fileSys, path, DATA } = require('../lib/harness');
-  const isDirect = !T;
-  if (isDirect) {
-    T = suite('45_yield_semantic');
-    openApp = open;
-    H_helper = H;
-  }
-
-  const runTest = async () => {
-    const app = await openApp();
-    const p = app.p;
-    const h = H_helper(p);
-
-    await T.t('zero_yield_line', async () => {
+  await T.t('zero_yield_line', async () => {
       await h.newProject('Zero vs unknown yield semantic tests');
       await h.gb(path.join(DATA, 'standins', 'pET28-SUMO-standin.gb'));
       await h.addRun([path.join(DATA, 'chrom', 'sec_semicolon_unicorn7.csv')]);
@@ -81,19 +69,9 @@ module.exports = async function(T, openApp, H_helper) {
       T.check('unknown_shows_pool_methods', !res2.includes('0.00 mg') && !res2.includes('0.0 mg'), `Unknown text type: ${res2}`);
 
       T.check('unknown_shows_pool_svg', true, '');
-    });
+  });
 
-    T.check('no-page-errors', !app.errs.length, app.errs.join(' | '));
-    await app.close();
-
-    if (isDirect) {
-      T.done();
-    }
-  };
-
-  await runTest();
-};
-
-if (require.main === module) {
-  module.exports(null, open, H);
-}
+  T.check('no page errors', !errs.length, errs.join(' | '));
+  await close();
+  T.done();
+})();
