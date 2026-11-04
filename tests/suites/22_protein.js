@@ -571,6 +571,74 @@ ORIGIN
     T.check('9_gst_empty_tag.fusion_value', v2 !== null && v2 !== '' && Math.abs(num(v2) - fus) < 0.002 && Math.abs(num(v2) - 16.0546) > 0.01, `expected fusion ${fus.toFixed(4)}, got "${v2}"`);
   });
 
+
+  /* ================= 10. Cleavage consistency ================= */
+  await T.t('10_cleavage_consistency', async () => {
+    // 1. New project; add the synthetic gel stand-in and select the gel step so the gel figure is shown.
+    await p.evaluate(() => { window.location.hash = ''; });
+    await p.reload();
+    await h.wait(500);
+    await h.addRun([path.join(DATA, 'gels/formats/gel_8bit.png')]);
+
+    // select gel step
+    await h.step('gel');
+    await p.waitForSelector('#gelWrap svg', { state: 'visible' });
+
+    // 2. Paste the 100-residue sequence into `#protSeq`; leave `#o-tagPreset` at `sumo`.
+    const seq = 'ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY';
+
+    // Paste sequence
+    await setProtSeq(seq);
+    await h.wait(500);
+
+    // 3. Read the kDa cell of the `Tag only` row of `#protTable`.
+    const tagOnlyKDa = await p.evaluate(() => {
+        const rows = document.querySelectorAll('#protTable tr');
+        for (const row of rows) {
+            if (row.textContent.includes('Tag only')) {
+                return parseFloat(row.cells[2].textContent);
+            }
+        }
+        return null;
+    });
+
+    const untaggedKDa = await p.evaluate(() => {
+        const rows = document.querySelectorAll('#protTable tr');
+        for (const row of rows) {
+            if (row.textContent.includes('Untagged')) {
+                return parseFloat(row.cells[2].textContent);
+            }
+        }
+        return null;
+    });
+
+    T.check('10_cleavage_consistency.tag_only_kda_not_null', tagOnlyKDa !== null, 'Tag only kDa is null');
+    T.check('10_cleavage_consistency.untagged_kda_not_null', untaggedKDa !== null, 'Untagged kDa is null');
+
+    // 4. Tick `#o-cleaveDetect`; type the `Untagged` kDa into `#o-protKda`.
+    const setOptLocal = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; if(el.type === 'checkbox') { el.checked = v; } else { el.value = v; } el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, v]);
+
+    await setOptLocal(p, 'o-cleaveDetect', true);
+    await h.wait(500);
+
+    await setOptLocal(p, 'o-protKda', untaggedKDa);
+    await h.wait(500);
+
+    // 5. Parse the kDa after "free His-SUMO" out of `#cleaveInfo`.
+    const cleaveInfoText = await p.textContent('#cleaveInfo');
+
+    const match = cleaveInfoText.match(/free His-SUMO (\d+(?:\.\d+)?) kDa/);
+    const freeSumoKDa = match ? parseFloat(match[1]) : null;
+
+    T.check('10_cleavage_consistency.free_sumo_kda_not_null', freeSumoKDa !== null, `Could not parse free His-SUMO kDa from: ${cleaveInfoText}`);
+
+    // 6. Assert the two agree within 0.15 kDa.
+    if (tagOnlyKDa !== null && freeSumoKDa !== null) {
+        const diff = Math.abs(tagOnlyKDa - freeSumoKDa);
+        T.check('10_cleavage_consistency.consistency', diff <= 0.15, `Tag only kDa (${tagOnlyKDa}) and free His-SUMO kDa (${freeSumoKDa}) disagree by ${diff}`);
+    }
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
