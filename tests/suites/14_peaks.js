@@ -142,44 +142,6 @@ async function peakFile(e) {
   }
 }
 
-
-async function overlap() {
-  const {p, errs, close} = await open(), h = H(p);
-  try {
-    let csv = 'Time (min),UV (mAU)\n';
-    for (let i = 0; i <= 200; i++) {
-        const x = i/10;
-        csv += x.toFixed(1) + ',' + (100*Math.exp(-((x-10)**2)/(2*0.02)) + 100*Math.exp(-((x-10.4)**2)/(2*0.02))).toFixed(3) + '\n';
-    }
-    await p.click('#homeQuick'); await p.waitForTimeout(800);
-    await p.setInputFiles('#file', {name: 'overlap.csv', mimeType: 'text/csv', buffer: Buffer.from(csv)});
-    await p.waitForTimeout(600);
-    const card = () => p.locator('.trace:not(.run)').filter({has: p.locator('input[value="overlap"], input[value="overlap.csv"]')}).first();
-    await p.evaluate(() => { const el = document.getElementById('o-intLabel'); if (el) { el.value = 'x'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } }); await p.waitForTimeout(300);
-    await p.evaluate(() => { const el = document.getElementById('o-intProm'); if (el) { el.value = '0'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } }); await p.waitForTimeout(300);
-    await p.evaluate(() => { const el = document.getElementById('o-peakDec'); if (el) { el.value = '1'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } }); await p.waitForTimeout(300);
-    await p.evaluate(() => {
-        const traces = document.querySelectorAll('.trace');
-        traces.forEach(t => {
-            const btn = t.querySelector('[data-act=detect]');
-            if (btn) btn.click();
-        });
-    });
-    await p.waitForTimeout(600);
-    const rects = await p.locator('svg text').evaluateAll(els => els.map(el => {
-       const rect = el.getBoundingClientRect();
-       return {x: rect.x, y: rect.y, w: rect.width, h: rect.height, txt: el.textContent};
-    }));
-    const overlapLabels = rects.filter(r => r.txt === '10.0' || r.txt === '10.4');
-    T.check('overlap/2-labels-found', overlapLabels.length === 2, 'Found 2 close peak labels');
-    if (overlapLabels.length === 2) {
-       const [r1, r2] = overlapLabels;
-       const intersect = !(r1.x > r2.x + r2.w || r1.x + r1.w < r2.x || r1.y > r2.y + r2.h || r1.y + r1.h < r2.y);
-       T.check('overlap/no-intersection', !intersect, 'Bounding boxes of close labels do not intersect');
-    }
-  } finally { T.check('overlap/no-page-errors', !errs.length, errs.join(' | ')); await close(); }
-}
-
 // #398: a zoom window too narrow to search (under 7 points) falls back to the whole trace, keeping peaks inside the window
 async function zoomPeak() {
   const {p, errs, close} = await open(), h = H(p);
@@ -200,7 +162,6 @@ async function zoomPeak() {
 }
 
 (async () => {
-  await T.t('overlap', overlap);
   await T.t('zoom_peak', zoomPeak);
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));

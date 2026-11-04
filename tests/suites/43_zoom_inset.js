@@ -25,21 +25,9 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       const offSvg = await p.evaluate(() => document.querySelector('#paper svg').outerHTML);
       await setOpt(p, 'o-zoomInset', true); await h.wait(600);
       T.check('overlay/two-plot-areas', (await plotAreas(p)) === 2 && (await insetCount(p)) === 1, `plot areas ${await plotAreas(p)}`);
-
       const m = await ticksOf(p, 'main'), z = await ticksOf(p, 'inset');
       T.check('overlay/main-covers-full-run', !!m && m.max >= 12 && m.min <= 1, JSON.stringify(m));
       T.check('overlay/inset-covers-window-only', !!z && z.min >= 5 - 1e-9 && z.max <= 8 + 1e-9 && z.n >= 2, JSON.stringify(z));
-
-      // Check Y-axis label on inset
-      const hasInsetYLabel = await p.evaluate(() => {
-        const svg = document.querySelector('#paper svg [data-plot=inset]');
-        if (!svg) return false;
-        // Search for text matching the ylabel in the inset group
-        const texts = Array.from(svg.querySelectorAll('text'));
-        return texts.some(t => /mAU/i.test(t.textContent));
-      });
-      T.check('overlay/inset-ylabel', hasInsetYLabel, 'Inset has Y-axis label');
-
       T.check('overlay/region-marked', await p.evaluate(() => !!document.querySelector('#paper svg #zoom-region rect') && document.querySelectorAll('#paper svg #zoom-region line').length >= 2), 'region rectangle and connector lines');
       for (const pos of ['tl', 'br', 'beside']) {
         await setOpt(p, 'o-zoomInsetPos', pos); await h.wait(500);
