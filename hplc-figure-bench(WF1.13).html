@@ -4423,7 +4423,7 @@ function methodsText(){
     const nt = String(r.note || '').trim().replace(/\.$/, ''), verb = /^[A-Za-z]+(ed|en)\b/.test(nt), tagNote = !prep.cleave && PROT_NOTE.test(nt) && !PROT_NOT.test(nt);
     if (pool) t += ` Fractions ${pool.replace(/^Pool\s*/, '')}${vol} were pooled${nt && !tagNote ? (verb ? ` and ${lc(nt)}` : ` (next: ${nt})`) : ''}.`;
     if (tagNote) t += ` The tag was then removed (${lc(nt)}).`;
-    const wfPar = wfParents(wf), ri = wf.indexOf(r), children = wf.filter((_, ci) => wfPar[ci] === ri);
+    const allR = runs.concat(manSteps().map(m => manObj(m))); const children = allR.filter(x => wfFromOf(x) === r.id && (x.inWf || Object.keys(x).includes("file")));
     if (children.length > 1) {
       const parts = children.map((c, ci) => {
         const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
@@ -4433,8 +4433,16 @@ function methodsText(){
         return {desc, vb, col, sRef};
       });
       let splitTxt = ` The ${stepTitle(r)} pool was split: `;
-      if (parts.length === 2) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc} to ${parts[1].col} (${parts[1].sRef}).`;
-      else splitTxt += parts.map((p, idx) => idx === 0 ? `${p.desc} ${p.vb} ${p.col} (${p.sRef})` : idx === parts.length - 1 ? `and ${p.desc} to ${p.col} (${p.sRef}).` : `${p.desc} to ${p.col} (${p.sRef})`).join(', ');
+      if (parts.length === 2) {
+        if (parts[1].isDisc) splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc.replace(' and the', ' the')}.`;
+        else splitTxt += `${parts[0].desc} ${parts[0].vb} ${parts[0].col} (${parts[0].sRef}) and ${parts[1].desc} to ${parts[1].col} (${parts[1].sRef}).`;
+      } else {
+        splitTxt += parts.map((p, idx) => {
+          if (idx === 0) return `${p.desc} ${p.vb} ${p.col} (${p.sRef})`;
+          if (idx === parts.length - 1) return p.isDisc ? `and ${p.desc.replace(' and the', ' the')}.` : `and ${p.desc} to ${p.col} (${p.sRef}).`;
+          return p.isDisc ? p.desc : `${p.desc} to ${p.col} (${p.sRef})`;
+        }).join(', ');
+      }
       t += splitTxt;
     }
     if (pr && pr.measured && pr.src !== 'btw') { const epStr = pr.src === 'nd' ? epPhrase(ndEpsUsed(r)) : ''; t += pr.concentrated ? ` The pool was concentrated to ${fmtAuto(pr.measVol)} mL and measured at ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).` : ` The pool measured ${fmtAuto(pr.conc)} mg/mL by NanoDrop (${sig2(pr.mg)} mg${epStr}).`; }
