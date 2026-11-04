@@ -148,5 +148,5 @@ jobs:
           if [ -n "$id" ]; then gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@report.md >/dev/null
           else gh api "repos/$REPO/issues/$PR/comments" -F body=@report.md >/dev/null; fi
       - name: Fail on regressions
-        if: steps.sum.outputs.regressions != '0' || steps.sum.outputs.missing != '0'
+        if: steps.sum.outputs.regressions != '0' || (steps.sum.outputs.missing != '0' && needs.suite.result != 'cancelled')
         run: exit 1
