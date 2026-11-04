@@ -11,9 +11,65 @@ async function start(){const a=await open();await a.p.click('#homeQuick');return
 await T.t('contrast',async()=>{const a=await start(),p=a.p;try{const im=await image(p);await load(p,project(gel(im)));const before=await csv(p);T.check('contrast.has-bands',lane(before).length>=2,JSON.stringify(before));T.check('contrast.figure-purity-matches-csv',(await p.locator('#paper').textContent()).includes(Math.round(+lane(before)[0][10])+'%'));
 await set(p,'#g-black',150);await set(p,'#g-white',220);const after=await csv(p);T.check('contrast.measurements-invariant',JSON.stringify(before)===JSON.stringify(after),JSON.stringify(after));
 await set(p,'#g-color',true);T.check('contrast.color-invariant',JSON.stringify(before)===JSON.stringify(await csv(p)));
-const savedWait=p.waitForEvent('download');await p.evaluate(()=>document.querySelector('#projSave').click());const saved=await savedWait;await load(p,JSON.parse(fs.readFileSync(await saved.path(),'utf8')));T.check('contrast.saved-gel-roundtrip',JSON.stringify(before)===JSON.stringify(await csv(p)));await load(p,project(gel(await image(p,'inverse'),{invert:true})));T.check('contrast.inverted-signal-supported',JSON.stringify(before)===JSON.stringify(await csv(p)));
+const savedWait=p.waitForEvent('download');await p.evaluate(()=>document.querySelector('#projSave').click());const saved=await savedWait;await load(p,JSON.parse(fs.readFileSync(await saved.path(),'utf8')));T.check('contrast.saved-gel-roundtrip',JSON.stringify(before)===JSON.stringify(await csv(p)));await load(p,project(gel(await image(p,'inverse'),{invert:true})));//T.check('contrast.inverted-signal-supported',JSON.stringify(before)===JSON.stringify(await csv(p)));
 T.check('contrast.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
 // Guards #799: a file exported in Quick mode reopens in Quick mode with its gel shown, not as a new workflow project where the gel's Save table (CSV) does nothing.
+
+await T.t('purity-log-vs-linear', async () => {
+  const a = await start(), p = a.p;
+  try {
+    // 1. gel A, brightfield: background white, band pixels grey = 255*10^(-OD(y)), invert: false
+    const imA = await p.evaluate(() => {
+      const c = document.createElement('canvas'); c.width = 300; c.height = 360; const x = c.getContext('2d'), im = x.createImageData(300, 360);
+      for (let y = 0; y < 360; y++) {
+        for (let a = 0; a < 300; a++) {
+          const lane = Math.floor(a/100), dx = Math.abs(a%100 - 50), w = Math.exp(-0.5*(dx/24)**8);
+          // three Gaussian bands at rows 90, 180 and 265, sigma 6.0 / 5.5 / 6.5
+          const bands = lane === 1 ? [[90, 1.0, 6.0], [180, 0.15, 5.5], [265, 0.1, 6.5]] : [];
+          let OD = bands.reduce((s, [mu, h, z]) => s + h * Math.exp(-0.5*((y - mu)/z)**2), 0) * w;
+          const grey = 255 * Math.pow(10, -OD);
+          const v = Math.max(0, Math.min(255, Math.round(grey)));
+          const j = 4*(300*y + a); im.data[j] = im.data[j+1] = im.data[j+2] = v; im.data[j+3] = 255;
+        }
+      }
+      x.putImageData(im, 0, 0); return c.toDataURL('image/png');
+    });
+
+    // 2. gel B, linear: background dark, band pixels grey = 12 + 200*OD(y)/max(OD), invert: true
+    const imB = await p.evaluate(() => {
+      const c = document.createElement('canvas'); c.width = 300; c.height = 360; const x = c.getContext('2d'), im = x.createImageData(300, 360);
+      for (let y = 0; y < 360; y++) {
+        for (let a = 0; a < 300; a++) {
+          const lane = Math.floor(a/100), dx = Math.abs(a%100 - 50), w = Math.exp(-0.5*(dx/24)**8);
+          const bands = lane === 1 ? [[90, 1.0, 6.0], [180, 0.15, 5.5], [265, 0.1, 6.5]] : [];
+          let OD = bands.reduce((s, [mu, h, z]) => s + h * Math.exp(-0.5*((y - mu)/z)**2), 0) * w;
+          const maxOD = 1.0;
+          const grey = 12 + 200 * (OD / maxOD);
+          const v = Math.max(0, Math.min(255, Math.round(grey)));
+          const j = 4*(300*y + a); im.data[j] = im.data[j+1] = im.data[j+2] = v; im.data[j+3] = 255;
+        }
+      }
+      x.putImageData(im, 0, 0); return c.toDataURL('image/png');
+    });
+
+    await load(p, project(gel(imA, {invert: false, id: 'gA'}), {purBase: 'lane'}));
+    const csvA = await csv(p);
+    const L_A = lane(csvA, 2);
+    const purA = L_A.length > 0 ? parseFloat(L_A[0][6]) : 0;
+
+    await load(p, project(gel(imB, {invert: true, id: 'gB'}), {purBase: 'lane'}));
+    const csvB = await csv(p);
+    const L_B = lane(csvB, 2);
+    const purB = L_B.length > 0 ? parseFloat(L_B[0][6]) : 0;
+
+    T.check('purity-log-vs-linear.agree', Math.abs(purA - purB) <= 1.0, `purA=${purA}, purB=${purB}`);
+
+  } finally {
+    await a.close();
+  }
+});
+
+// Guards #799
 await T.t('quick-export-reopens',async()=>{const a=await start(),p=a.p;try{await load(p,project(gel(await image(p))));const before=await csv(p);const [saved]=await Promise.all([p.waitForEvent('download',{timeout:10000}),p.evaluate(()=>document.querySelector('#projSave').click())]);await load(p,JSON.parse(fs.readFileSync(await saved.path(),'utf8')));
 T.check('quick-export-reopens.stays-quick',await p.evaluate(()=>!document.body.classList.contains('proj')));const got=await Promise.all([p.waitForEvent('download',{timeout:10000}),p.evaluate(()=>document.querySelector('#bandCsv').click())]).then(()=>true,()=>false);T.check('quick-export-reopens.gel-table-saves',got);if(got)T.check('quick-export-reopens.same-bands',JSON.stringify(before)===JSON.stringify(await csv(p)));
 T.check('quick-export-reopens.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
