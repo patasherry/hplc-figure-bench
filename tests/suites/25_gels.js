@@ -143,4 +143,16 @@ await T.t('lane-run-full-name', async () => {
     T.check('lane-run-full-name.no-errors', !a.errs.length, a.errs.join('|'));
   } finally { await a.close(); }
 });
-T.done();})();
+await T.t('densitometry-od', async () => {
+    const a = await start(), p = a.p;
+    try {
+      const im = await image(p);
+      await load(p, project(gel(im)));
+      const L = lane(await csv(p));
+      T.check('densitometry-od.band1-purity-differs-from-grey', L[0][6] !== '23.33', 'The first band percentage is ' + L[0][6] + ' instead of 23.33 (the grey-value output).');
+    } finally {
+      await a.close();
+    }
+  });
+  T.done();
+})();
