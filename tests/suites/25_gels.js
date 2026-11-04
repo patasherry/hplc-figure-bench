@@ -143,4 +143,29 @@ await T.t('lane-run-full-name', async () => {
     T.check('lane-run-full-name.no-errors', !a.errs.length, a.errs.join('|'));
   } finally { await a.close(); }
 });
+
+
+await T.t('integration-tail-cutoff', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+
+    // We want to test that the band purity/percentage has changed and is correct.
+    // By changing tail from 0.05 to 0, band 1's percentage changed from 62.91 to 63.68.
+    await load(p, project(gel(im, {
+      labels: 'M, A, B',
+      marks: [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}],
+      tags: []
+    })));
+
+    let L1 = lane(await csv(p));
+    // Index 6 is percentage of lane
+    let pct = parseFloat(L1[0][6]);
+    // Before fix: 62.91. After fix: 63.68
+    T.check('integration-tail-cutoff.changed-area', pct > 63.5, 'Expected percentage to be > 63.5, was ' + pct);
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
