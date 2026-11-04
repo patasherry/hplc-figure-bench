@@ -5,12 +5,10 @@ const T = suite('796_tag_mass_sync');
 T.t('10_tag_mass_sync', async () => {
   const { p, h, close, errs } = await open();
 
-  // 1. New project; add the synthetic gel stand-in and select the gel step so the gel figure is shown.
   await p.evaluate(() => { document.querySelector('#pickGel').click(); });
   await p.setInputFiles('#gelFile', [path.join(DATA, 'standins', 'gel_photo.jpg')]);
   await p.waitForTimeout(400);
 
-  // 2. Paste the 100-residue sequence above into #protSeq; leave #o-tagPreset at sumo.
   const seq = "ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY";
   await p.evaluate(t => {
     const e = document.querySelector('#protSeq');
@@ -20,7 +18,6 @@ T.t('10_tag_mass_sync', async () => {
   }, seq);
   await p.waitForTimeout(500);
 
-  // 3. Read the kDa cell of the Tag only row of #protTable.
   const tagTableContent = await p.evaluate(() => {
     const tbl = document.querySelector('#protTable');
     if (!tbl) return null;
@@ -47,7 +44,6 @@ T.t('10_tag_mass_sync', async () => {
     return null;
   });
 
-  // 4. Tick #o-cleaveDetect; type the Untagged kDa into #o-protKda.
   await p.evaluate(() => {
     const e = document.querySelector('#o-cleaveDetect');
     if (e && !e.checked) e.click();
@@ -64,7 +60,6 @@ T.t('10_tag_mass_sync', async () => {
   }, m);
   await p.waitForTimeout(500);
 
-  // 5. Parse the kDa after "free His-SUMO" out of #cleaveInfo.
   const cleaveInfoText = await p.evaluate(() => {
     const e = document.querySelector('#cleaveInfo');
     return e ? e.textContent : null;
@@ -76,7 +71,6 @@ T.t('10_tag_mass_sync', async () => {
     if (mm) freeTagMatch = mm[1];
   }
 
-  // 6. Assert the two agree within 0.15 kDa.
   T.check('10_tag_mass_sync.tag_only_exists', tagTableContent !== null, 'Tag only row should exist');
   T.check('10_tag_mass_sync.free_tag_exists', freeTagMatch !== null, 'Free tag mass should be parsed');
 
