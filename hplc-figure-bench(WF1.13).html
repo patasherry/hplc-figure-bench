@@ -2295,7 +2295,12 @@ function buildOverlaySVG(ov){
     s.push(`<g font-size="${r2(pf)}">`);
     /* a label that would have to leave the figure to clear the others is left off and named under the figure */
     items.forEach(it => {
-      const w = it.w, bot = placeLabel(boxes, it.X - w/2, it.X + w/2, it.Y0, it.h, 0);
+      let bot, w = it.w;
+      if (o.peakRot) {
+        bot = placeLabel(boxes, it.X - it.h/2, it.X + it.h/2, it.Y0, w, 0);
+      } else {
+        bot = placeLabel(boxes, it.X - w/2, it.X + w/2, it.Y0, it.h, 0);
+      }
       if (bot == null) { lblLeft.push(it.raw); return; }
       if (it.Y - bot > fs*1.2) leaders.push({x: it.X, a: bot + 1.5, b: it.Y, own: boxes.length - 1});
       const txt = esc(it.raw);
