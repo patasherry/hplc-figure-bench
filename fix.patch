@@ -1,0 +1,101 @@
+diff --git a/hplc-figure-bench(WF1.13).html b/hplc-figure-bench(WF1.13).html
+index 336fed0..f0f6808 100644
+--- a/hplc-figure-bench(WF1.13).html
++++ b/hplc-figure-bench(WF1.13).html
+@@ -3808,12 +3808,12 @@ function buildRunFig(run){
+ const sig2 = v => v >= 100 ? fmt(v, 0) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2) : v >= 0.1 || v === 0 ? fmt(v, 2) : fmt(v, 3);
+ function finalYield(path){
+   const allRows = sumRows(), rows = path ? allRows.filter(x => path.includes(x.r)) : allRows, mgOf = allRows.mgOf || (() => null);
+-  const fin = rows.slice().reverse().find(x => mgOf(x) != null); if (!fin) return null;
++  const fin = rows.slice().reverse().find(x => mgOf(x) != null) || (rows.length ? rows[rows.length - 1] : null); if (!fin) return null;
+   /* the final sample's own concentration and volume, when entered, give the amount kept; the last pool stays the chromatography figure */
+   const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc != null ? kc : mgOf(fin);
+-  let fc = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finConc, null) : null, fv = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finVol, null) : null, meas = fc != null && fv != null, manLoad = null;
++  let fc = (!path || wfBranches().length <= 1) && prep.on && prep.finConc != null && prep.finConc !== '' ? +prep.finConc : null, fv = (!path || wfBranches().length <= 1) && prep.on && prep.finVol != null && prep.finVol !== '' ? +prep.finVol : null, meas = fc != null && isFinite(fc) && fv != null && isFinite(fv), manLoad = null;
+   /* no final sample entered: a measured step without a chromatogram after the last pool (a concentration, a buffer exchange) is what was kept */
+-  if (!meas && prep.on) { const wf = path || wfList(); for (let j = wf.indexOf(fin.r) + 1; j > 0 && j < wf.length; j++) if (wf[j].prep === 'manual' && manMg(wf[j].man) != null) { const m = wf[j].man; fc = numOr(m.conc, null); fv = numOr(m.vol, null); meas = true; manLoad = mgOf(fin); } }
++  if (!meas && prep.on) { const wf = path || wfList(); for (let j = wf.indexOf(fin.r) + 1; j > 0 && j < wf.length; j++) if (wf[j].prep === 'manual' && manMg(wf[j].man) != null) { const m = wf[j].man; fc = m.conc != null && m.conc !== '' ? +m.conc : null; fv = m.vol != null && m.vol !== '' ? +m.vol : null; meas = fc != null && isFinite(fc) && fv != null && isFinite(fv); manLoad = mgOf(fin); } }
+   const mg = meas ? fc*fv : pm;
+   const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, perG = cG > 0 ? mg/cG : null;
+   const poolVol = fin.nd && fin.nd.mg != null ? fin.nd.vol : fin.p && fin.p.measured ? fin.p.measVol : fin.p && fin.p.vol > 0 ? fin.p.vol : null;
+@@ -3831,12 +3831,13 @@ function yieldLine(res){
+   if (opt.wfYield === false || !res || !res.svg || !res.geo) return res; const ys = finalYields(); if (!ys.length) return res;
+   const fs = fontSize(), W = res.geo.W, H = res.geo.H, cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
+   const allLines = [], lf = fs*0.9;
+-  ys.forEach(y => {
++  if (ys.length) {
++    ys.forEach(y => {
+     const pos = prepSteps().concat(wfFigList()).indexOf(y.fin.r), letter = opt.wfLetters && pos >= 0 ? String.fromCharCode(65 + pos) + ', ' : '';
+     const pnm = cm ? (ndForm(y.fin.r) === 'tagged' && cm.tagParts.length ? cm.tn : cm.pn) : '';
+     const namePart = ys.length > 1 ? `${letter}${stepTitle(y.fin.r)}` : (y.meas ? '' : `${letter}${stepTitle(y.fin.r)}`);
+     const label = y.meas ? (ys.length > 1 ? `Final sample (${namePart})` : 'Final sample') : `Final pool (${namePart})`;
+-    const t = y.meas ? `${label}: ${y.mg != null ? sig2(y.mg) + ' mg' : 'unknown yield'}${(() => { const cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null; return cm && cm.pn !== 'protein' ? ' ' + cm.pn : ''; })()} (${sig2(y.fc)} mg/mL in ${fmtAuto(y.fv)} mL)${y.perL != null ? `, ${sig2(y.perL)} mg per L of culture` : ''}${y.perG != null ? `, ${y.perGTxt}` : ''}${hasTxt(prep.qcPurity) && !y.purTyped ? `, ${String(prep.qcPurity).trim()}` : y.pur != null && !(y.purEst && y.pur < 15) ? `, ${y.purEst ? '≈' : ''}${fmt(y.pur, 0)}% pure by gel` : ', purity not measured by gel'}${y.loaded && y.mg > y.loaded.mg*1.05 ? ` (unverified: the final sample exceeds the amount loaded on ${stepTitle(y.loaded.r).toLowerCase()})` : y.odd ? (o => ` (column amounts unverified: ${o ? `${stepTitle(o.r).toLowerCase()} step yield ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'a step yield is above 100%'})`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''}` : `${label}: ${y.mg != null ? sig2(y.mg) + ' mg' : 'unknown yield'}${pnm && pnm !== 'protein' ? ' ' + pnm : ''}${y.perL != null ? `, ${sig2(y.perL)} mg per L of culture` : ''}${y.perG != null ? `, ${y.perGTxt}` : ''}${y.pur != null && !(y.purEst && y.pur < 15) ? `, ${y.purEst ? '≈' : ''}${fmt(y.pur, 0)}% pure by gel` : ', purity not measured by gel'}${['mg', 'mgmol', 'area'].includes(y.basis) ? ' (from the A280 area' : ' (NanoDrop'}${y.odd ? (o => `, unverified because the ${o ? `${stepTitle(o.r).toLowerCase()} step yield is ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'a step yield is above 100%'}`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''})`;
++    const t = y.meas ? `${label}: ${y.mg != null ? sig2(y.mg) + ' mg' : 'unknown yield'}${(() => { const cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null; return cm && cm.pn !== 'protein' ? ' ' + cm.pn : ''; })()} (${sig2(y.fc)} mg/mL in ${fmtAuto(y.fv)} mL)${y.perL != null ? `, ${sig2(y.perL)} mg per L of culture` : ''}${y.perG != null ? `, ${y.perGTxt}` : ''}${hasTxt(prep.qcPurity) ? `, ${String(prep.qcPurity).trim()}` : y.pur != null && !(y.purEst && y.pur < 15) ? `, ${y.purEst ? '≈' : ''}${fmt(y.pur, 0)}% pure by gel` : ', purity not measured by gel'}${y.loaded && y.mg > y.loaded.mg*1.05 ? ` (unverified: the final sample exceeds the amount loaded on ${stepTitle(y.loaded.r).toLowerCase()})` : y.odd ? (o => ` (column amounts unverified: ${o ? `${stepTitle(o.r).toLowerCase()} step yield ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'a step yield is above 100%'})`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''}` : `${label}: ${y.mg != null ? sig2(y.mg) + ' mg' : 'unknown yield'}${pnm && pnm !== 'protein' ? ' ' + pnm : ''}${y.perL != null ? `, ${sig2(y.perL)} mg per L of culture` : ''}${y.perG != null ? `, ${y.perGTxt}` : ''}${hasTxt(prep.qcPurity) ? `, ${String(prep.qcPurity).trim()}` : y.pur != null && !(y.purEst && y.pur < 15) ? `, ${y.purEst ? '≈' : ''}${fmt(y.pur, 0)}% pure by gel` : ', purity not measured by gel'}${['mg', 'mgmol', 'area'].includes(y.basis) ? ' (from the A280 area' : ' (NanoDrop'}${y.odd ? (o => `, unverified because the ${o ? `${stepTitle(o.r).toLowerCase()} step yield is ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'a step yield is above 100%'}`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''})`;
+     allLines.push(...wrapWords(nbsp(t), Math.max(20, Math.floor(W/(lf*0.52)))));
+   });
+   const H2 = H + fs*0.6 + allLines.length*lf*1.2;
+@@ -3961,14 +3962,14 @@ const isManId = id => typeof id === 'string' && /^m\d+$/.test(id) && manSteps().
+ function manObj(m){ const o = prepObj[m.id] || (prepObj[m.id] = {id: m.id, prep: 'manual', gelOff: {}, fracs: [], integ: []}); prep.offs = prep.offs || {}; o.gelOff = prep.offs[m.id] || (prep.offs[m.id] = {});
+   const nm = String(m.name || '').trim() || MAN_NAME[m.kind] || 'Other step';
+   return Object.assign(o, {name: nm, stepName: nm, inWf: true, shade: '', note: String(m.arrow || '').trim(), wfW: numOr(m.wfW, 1), gelZ: numOr(m.gelZ, 1), man: m, wfDx: numOr(m.wfDx, 0), wfDy: numOr(m.wfDy, 0)}); }
+-function manMg(m){ const c = numOr(m.conc, null), v = numOr(m.vol, null); return c != null && v != null ? c*v : null; }
++function manMg(m){ const c = m.conc != null && m.conc !== '' ? +m.conc : null, v = m.vol != null && m.vol !== '' ? +m.vol : null; return c != null && isFinite(c) && v != null && isFinite(v) ? c*v : null; }
+ function manLines(m){ const t = x => String(x == null ? '' : x).trim(), out = [], c = numOr(m.conc, null), v = numOr(m.vol, null);
+   if (t(m.resin)) out.push(t(m.resin)); if (t(m.buffer)) out.push(t(m.buffer)); if (t(m.wash) && (m.kind === 'column' || m.kind === 'batch')) out.push('Wash: ' + t(m.wash)); if (t(m.elution)) out.push(t(m.elution));
+   if (v != null || c != null) out.push([v != null ? `${fmtAuto(v)} mL` : '', c != null ? `${fmtAuto(c)} mg/mL` : '', c != null && v != null ? `${sig2(c*v)} mg` : ''].filter(Boolean).join(', '));
+   if (t(m.note)) out.push({t: t(m.note), c: '#555555'}); return out; }
+ /* the amount loaded on the next column: the last measured amount after this step and before the next column */
+ function loadedAfter(r){ const wf = wfList(), i = wf.indexOf(r); let mg = r && r.id ? (btwMg(r) || {}).mg || null : null;
+-  for (let j = i + 1; i >= 0 && j < wf.length && wf[j].prep; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a) mg = a; }
++  for (let j = i + 1; i >= 0 && j < wf.length && wf[j].prep; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a != null) mg = a; }
+   return mg; }
+ /* cleavage gel lanes: before and after the protease */
+ const CLV_PRE = /^([-−–]\s?(ulp1?|sumo( protease)?|tev|3c|thrombin|protease|enz(yme)?)\b.*|uncut|uncleaved|before( \w+)?|pre[\s-]?(cleavage|dialysis)|t ?0|0 ?h)$/i,
+@@ -4447,8 +4448,7 @@ function methodsText(){
+   const R = [], q = prep.on ? exprQuant() : {}, cq = prep.cleave ? cleaveQuant() : null, ys = finalYields();
+   if (q.level || q.sol) R.push(`By SDS-PAGE, the tagged protein was about ${q.level ? `${fmt(q.level.pct, 0)}% of total cell protein` : ''}${q.level && q.sol ? ' and about ' : ''}${q.sol ? `${fmt(q.sol.pct, 0)}% soluble` : ''}.`);
+   if (cq) R.push(`About ${fmt(cq.pct, 0)}% of the fusion was cleaved, by SDS-PAGE.`);
+-  if (ys.length) {
+-    wf.forEach(r => { if (r.prep === 'manual') { const a = manMg(r.man); if (a) R.push(`After the ${r.name} step, the sample held ${sig2(a)} mg (${fmtAuto(+r.man.conc)} mg/mL in ${fmtAuto(+r.man.vol)} mL).`); return; } const bw = btwOf(r), kp = btwMg(r); if (bw && kp) { const epStr = poolMeas(r).nd ? epPhrase(ndEpsUsed(r)) : ''; R.push(`After ${lc(stepTitle(r))}, ${bw.how === 'conc' ? 'concentration' : 'that step'} left ${sig2(kp.mg)} mg (${(ms => ms.nd ? `${fmt(ms.c, 2)} mg/mL in ${fmtAuto(+bw.vOut)} mL by NanoDrop${ndA205(ndFinalOf(r)) ? ' A205' : ''}${ms.nd.n > 1 ? `, mean of ${ms.nd.n} readings` : ''}${epStr}` : `${fmtAuto(+bw.conc)} mg/mL in ${fmtAuto(+bw.vOut)} mL`)(poolMeas(r))}).`); } });
++  wf.forEach(r => { if (r.prep === 'manual') { const a = manMg(r.man); if (a != null) R.push(`After the ${r.name} step, the sample held ${sig2(a)} mg (${fmtAuto(+r.man.conc)} mg/mL in ${fmtAuto(+r.man.vol)} mL).`); return; } const bw = btwOf(r), kp = btwMg(r); if (bw && kp) { const epStr = poolMeas(r).nd ? epPhrase(ndEpsUsed(r)) : ''; R.push(`After ${lc(stepTitle(r))}, ${bw.how === 'conc' ? 'concentration' : 'that step'} left ${sig2(kp.mg)} mg (${(ms => ms.nd ? `${fmt(ms.c, 2)} mg/mL in ${fmtAuto(+bw.vOut)} mL by NanoDrop${ndA205(ndFinalOf(r)) ? ' A205' : ''}${ms.nd.n > 1 ? `, mean of ${ms.nd.n} readings` : ''}${epStr}` : `${fmtAuto(+bw.conc)} mg/mL in ${fmtAuto(+bw.vOut)} mL`)(poolMeas(r))}).`); } });
+     ys.forEach(y => {
+       const E = ndEpsFor(y.fin.r.id), pr = poolRows(y.fin.r), vol = y.poolVol ?? (pr && pr.measured ? pr.measVol : y.fin.nd && y.fin.nd.fv ? y.fin.nd.fv : pr && pr.vol), path = numOr(y.fin.r.path, numOr(opt.path, 2));
+       const ndSs = y.fin.p && y.fin.p.measured ? (y.fin.p.src === 'card' ? [] : ndFinalOf(y.fin.r)) : ndUsedOf(y.fin.r), ndHow = ndA205(ndSs) ? 'A205' : 'A280', ndEp = epPhrase(ndEpsUsed(y.fin.r, ndSs)).replace(/^, /, '');
+@@ -4456,8 +4456,8 @@ function methodsText(){
+       if (!y.meas && !(y.fin.p && y.fin.p.viaConc && btwMg(y.fin.r))) R.push(`${poolTitle} held ${sig2(y.poolMg)} mg${vol > 0 ? ` in ${fmtAuto(vol)} mL (${sig2(y.poolMg/vol)} mg/mL)` : ''}${y.poolPerL != null ? `, ${sig2(y.poolPerL)} mg per L of culture` : ''}, by ${y.fin.p && y.fin.p.measured ? `NanoDrop ${ndHow} of the ${y.fin.p.concentrated ? 'concentrated ' : ''}pool${ndEp ? ` (${ndEp})` : ''}` : ['mg', 'mgmol', 'area'].includes(y.poolBasis) ? `the A280 area of the pool (${path} mm path${hasTxt(y.fin.r.path) ? '' : ' [assumed, check]'}${epPhrase(E)})` : `NanoDrop ${ndHow}${ndEp ? ` (${ndEp})` : ''}`}.${y.pur == null && !hasTxt(prep.qcPurity) ? ' Its purity was not measured by gel.' : !hasTxt(prep.qcPurity) && !(y.purEst && y.pur < 15) ? ` Purity was ${y.purEst ? 'about ' : ''}${fmt(y.pur, 0)}% by SDS-PAGE.` : ''}${y.odd ? (o => ` This amount is unverified, because ${o ? `the ${lc(stepTitle(o.r))} step yield is ${fmt(Math.max(o.yld > 100 ? o.yld : 0, o.stepY || 0), 0)}%` : 'one step yield is above 100%'}.`)(sumRows().find(x => x.yld > 100 || x.stepY > 105)) : ''}`);
+     });
+   }
+-  if (prep.on) { const fc = numOr(prep.finConc, 0), fv = numOr(prep.finVol, 0), ra = v(prep.finRatio), cL = numOr(prep.cultureL, 0), cG = numOr(prep.pellet, 0);
+-    if (fc > 0 && fv > 0) R.push(`The final sample was ${fmtAuto(fc)} mg/mL in ${fmtAuto(fv)} mL, ${sig2(fc*fv)} mg${cL > 0 ? ` or ${sig2(fc*fv/cL)} mg per L of culture` : ''}${cG > 0 ? (cL > 0 ? ` (${sig2(fc*fv/cG)} mg per g of wet cell pellet)` : ` or ${sig2(fc*fv/cG)} mg per g of wet cell pellet`) : ''}${ra ? `, with an A260/A280 of ${ra}` : ''}.`);
++  if (prep.on) { const fc = prep.finConc != null && prep.finConc !== '' ? +prep.finConc : null, fv = prep.finVol != null && prep.finVol !== '' ? +prep.finVol : null, ra = v(prep.finRatio), cL = numOr(prep.cultureL, 0), cG = numOr(prep.pellet, 0);
++    if (fc != null && fc >= 0 && fv != null && fv >= 0) R.push(`The final sample was ${fmtAuto(fc)} mg/mL in ${fmtAuto(fv)} mL, ${sig2(fc*fv)} mg${cL > 0 ? ` or ${sig2(fc*fv/cL)} mg per L of culture` : ''}${cG > 0 ? (cL > 0 ? ` (${sig2(fc*fv/cG)} mg per g of wet cell pellet)` : ` or ${sig2(fc*fv/cG)} mg per g of wet cell pellet`) : ''}${ra ? `, with an A260/A280 of ${ra}` : ''}.`);
+     else if (ra) R.push(`The final sample had an A260/A280 of ${ra}.`);
+     const yy = finalYield(); if (yy && yy.meas && yy.loaded && yy.mg > yy.loaded.mg*1.05) R.push(`The final sample (${sig2(yy.mg)} mg) is more than the ${sig2(yy.loaded.mg)} mg loaded onto ${lc(stepTitle(yy.loaded.r))} [check the UV path and the concentration readings].`);
+     [['qcPurity', 'Purity'], ['qcMass', 'Intact mass'], ['qcActivity', 'Activity and other checks']].forEach(([k, l]) => { if (hasTxt(prep[k])) R.push(`${l}: ${v(prep[k]).replace(/\.$/, '')}${k === 'qcPurity' && yy && yy.purTyped ? ' [no gel of the last pool attached, check]' : ''}.`); }); }
+@@ -5125,7 +5125,7 @@ function sumRows(){
+   out.mgOf = x => basis === 'umol' || basis === 'nd' || basis === 'ndmol' ? (x.nd ? x.nd.mg : null) : basis === 'mg' || basis === 'mgmol' ? x.p.mg : null;
+   const first = out.length ? amt(out[0]) : null; let prev = null, prevKept = false;
+   /* a measured step without a chromatogram before the first column is what that column was loaded with */
+-  if (out.length && prep.on) { const wf = wfList(), i = wf.indexOf(out[0].r); let mg = null; for (let j = 0; j < i; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a) mg = a; }
++  if (out.length && prep.on) { const wf = wfList(), i = wf.indexOf(out[0].r); let mg = null; for (let j = 0; j < i; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a != null) mg = a; }
+     if (mg > 0) { const x = out[0], v = ['mg', 'nd'].includes(basis) ? mg : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? mg/kd(x) : null; if (v > 0) { prev = v; prevKept = true; } } }
+   /* yield counts from the first measured amount in the workflow, which can be a step without a chromatogram */
+   out.toAmt = (mg, x) => !(mg > 0) || !x ? null : ['mg', 'nd'].includes(basis) ? mg : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? mg/kd(x) : null;
+diff --git a/tests/package.json b/tests/package.json
+index c49298d..8104b0e 100644
+--- a/tests/package.json
++++ b/tests/package.json
+@@ -1,12 +1,5 @@
+ {
+-  "name": "hplc-figure-bench-tests",
+-  "private": true,
+-  "description": "Browser test suite for HPLC Figure Bench",
+-  "scripts": {
+-    "test": "node run.js",
+-    "compare": "node compare.js"
+-  },
+-  "devDependencies": {
++  "dependencies": {
+     "playwright": "^1.64.1"
+   }
+ }
