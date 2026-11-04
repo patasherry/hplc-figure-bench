@@ -1,0 +1,7 @@
+const fs = require('fs');
+let content = fs.readFileSync('suites/45_yield_semantic.js', 'utf8');
+content = content.replace(
+  /await setField\('#man-conc', '0'\);/g,
+  "await setField('#man-conc', '0');\n    await h.step('upstream');\n    await p.evaluate(() => { const e1 = document.querySelector('#pr-transform'); if (e1 && !e1.checked) { e1.checked = true; e1.dispatchEvent(new Event('change', {bubbles: true})); } const e2 = document.querySelector('#pr-expr'); if (e2 && !e2.checked) { e2.checked = true; e2.dispatchEvent(new Event('change', {bubbles: true})); } });\n    await h.wait(200);\n    await p.evaluate(() => { const sf = (s, v) => { const el = document.querySelector(s); if (el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } }; sf('#pr-trPlasmid', 'pET28'); sf('#pr-trMethod', 'heat shock'); sf('#pr-trSel', 'Kan'); sf('#pr-strain', 'BL21'); sf('#pr-medium', 'LB'); });\n    const rnStp = (await p.$$eval('#tl button[data-step]', els => els.map(e => e.getAttribute('data-step')))).find(s => s.startsWith('run:')); await h.step(rnStp);\n    await p.evaluate(() => { const sf = (s, v) => { const el = document.querySelector(s); if (el) { el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } }; sf('#run-col', 'Superdex'); sf('#run-flow', '1'); sf('#run-bufA', 'Buffer'); });"
+);
+fs.writeFileSync('suites/45_yield_semantic.js', content, 'utf8');

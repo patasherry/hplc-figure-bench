@@ -1,0 +1,13 @@
+node:internal/process/promises:394
+    triggerUncaughtException(err, true /* fromPromise */);
+    ^
+
+page.evaluate: TypeError: Cannot read properties of undefined (reading 'sumRows')
+    at eval (eval at evaluate (:370:30), <anonymous>:1:20)
+    at UtilityScript.evaluate (<anonymous>:372:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at /app/test_main.js:30:24 {
+  log: []
+}
+
+Node.js v22.22.1
