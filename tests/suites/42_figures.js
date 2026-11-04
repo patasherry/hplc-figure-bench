@@ -329,6 +329,71 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
     } finally { await q.close(); }
   });
 
+
+
+  await T.t('figure_y_axis_tick_overlap', async () => {
+    const {p, errs, close} = await open(); const h = H(p);
+    try {
+      await p.click('#homeQuick'); await h.wait(800);
+
+      const checkTicks = async (preset, fsSize, expectPass) => {
+        await p.evaluate((pr) => {
+          const sel = document.querySelector('#fig-preset');
+          if (sel) {
+             sel.value = pr;
+             sel.dispatchEvent(new Event('change'));
+          }
+        }, preset);
+        await h.wait(500);
+
+        const yAttrs = await p.evaluate(() => {
+          const svg = document.querySelector('#paper svg');
+          if (!svg) return [];
+          const texts = Array.from(svg.querySelectorAll('text'));
+          const xCount = {};
+          texts.forEach(t => {
+             const x = t.getAttribute('x');
+             if (!xCount[x]) xCount[x] = [];
+             xCount[x].push(t);
+          });
+          let bestX = null;
+          let maxCount = 0;
+          for (let x in xCount) {
+             const nums = xCount[x].filter(t => !isNaN(parseFloat(t.textContent.replace(/\u2212/g, '-'))));
+             if (nums.length > maxCount) {
+                maxCount = nums.length;
+                bestX = x;
+             }
+          }
+          if (!bestX) return [];
+
+          return xCount[bestX]
+             .filter(t => !isNaN(parseFloat(t.textContent.replace(/\u2212/g, '-'))))
+             .map(t => parseFloat(t.getAttribute('y')))
+             .sort((a,b) => a-b);
+        });
+
+        if (yAttrs.length < 2) {
+           T.check('overlap/' + preset + '_has_ticks', false, 'Not enough ticks: ' + yAttrs.length);
+           return;
+        }
+
+        let minGap = Infinity;
+        for (let i = 1; i < yAttrs.length; i++) {
+           const gap = yAttrs[i] - yAttrs[i-1];
+           if (gap < minGap) minGap = gap;
+        }
+
+        T.check('overlap/' + preset + '_gap_check', minGap >= fsSize, `Min gap ${minGap} should be >= ${fsSize}`);
+      };
+
+      await checkTicks('single', 8, true);
+      await checkTicks('poster', 24, true);
+
+      T.check('overlap/no_page_errors', !errs.length, errs.join(' | '));
+    } finally { await close(); }
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
