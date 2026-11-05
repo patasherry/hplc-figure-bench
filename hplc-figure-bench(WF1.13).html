@@ -5451,7 +5451,7 @@ async function loadFiles(files){
         }
       }
     }
-    toast((dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}${msg}` : `Loaded ${n} trace${n > 1 ? 's' : ''}${msg}`) + lostMsg + skipMsg);
+    toast((dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}${msg}` : `Loaded ${n} trace${n > 1 ? 's' : ''}${msg}`) + (newRuns.length && runs.length > newRuns.length ? `. ${runs.length} runs loaded in all` : '') + lostMsg + skipMsg);
   }
   if (imgs.length) addGelFiles(imgs);
 }
