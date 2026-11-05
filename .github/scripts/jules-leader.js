@@ -140,6 +140,10 @@ module.exports = async ({github, context, core}) => {
     const fobj = await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: p.number, per_page: 100}), files = fobj.map(f => f.filename);
     const labels = p.labels.map(l => l.name);
     if (labels.includes('awaiting-owner')) continue; /* a Direction board idea: Patrick OKs it on the PR, and the local manager merges it */
+    /* an empty PR changes nothing, so every file test below passes vacuously and it would merge and close its issue while the bug stays. Never merge one. */
+    if (!fobj.length) { if (!labels.includes(L.fail)) { await setLabels(p.number, [L.fail], []);
+      await github.rest.issues.createComment({owner, repo, issue_number: p.number, body: 'This pull request changes no files, so it cannot fix anything, and merging it would close its issue while the bug stays. Flagged for the coordinator instead of merged. If the fix is already on main, say so on the issue and close the issue directly.'});
+      say(`PR #${p.number}: empty (no files changed), flagged for the coordinator`); } continue; }
     if (!fobj.every(SAFE_FILE)) { if (!labels.includes(L.fail)) { await setLabels(p.number, [L.fail], []); say(`PR #${p.number}: changes the app or workflows, flagged for the coordinator`); } continue; }
     const runs = (await github.rest.actions.listWorkflowRunsForRepo({owner, repo, head_sha: p.head.sha, per_page: 20})).data.workflow_runs.filter(r => r.name === 'Test suite');
     const cs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: p.number, per_page: 100}), rep = cs.reverse().find(c => c.body.includes('<!-- test-suite-report -->'));
