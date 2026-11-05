@@ -70,13 +70,14 @@ A request is worth sending only if the agent can answer it in one go. The excerp
 1. **An explicit `relay-lines: <from>-<to>`** in the issue body, widened by `relay_context_lines` each side.
 2. **A line number** in the text ("line 2095", "`.html:2095`"): the whole definition that encloses it.
 3. **The functions the text names** (backticked, called with parens, or bare camelCase such as `poolRows`), each as its whole definition. Definitions are found indented as well as at column 0, because almost all of this app's functions sit inside the IIFE.
-4. **The sections whose subject matches the text**, from the app's own `/* ---------- name ---------- */` markers. A word that appears in few section titles counts for much more than one in many, so "NanoDrop" picks the NanoDrop section while "run" picks nothing on its own. A section's body counts for little, or a long section would win just by being long. Sections fill at most half the budget when step 3 already found something.
+4. **The quoted phrases that appear verbatim in the app.** A UI issue quotes what it is about, and that string sits next to the code that draws it: #1015 asked to centre "Choose data files", which is on line 571, and no amount of subject matching finds it, because the words of a button are not the words of a section title. Identifiers and paths in quotes are skipped, since step 3 and step 1 cover those.
+5. **The sections whose subject matches the text**, from the app's own `/* ---------- name ---------- */` markers. A word that appears in few section titles counts for much more than one in many, so "NanoDrop" picks the NanoDrop section while "run" picks nothing on its own. A section's body counts for little, or a long section would win just by being long. Sections fill at most a quarter of the budget when step 3 or 4 already found the location.
 
 Overlapping picks are merged and the total is capped at `relay_max_lines`.
 
 Until Nov 5 only steps 1 and 2 existed, so every board-raised issue (which names no line) went out with no code at all, and the answer was always `insufficient: send me these functions`. Worse, the `need` that came back was prose ("grey-value-to-absorbance conversion"), which resolved to no ranges either, so the next request was empty too: #993 burned three rounds and learned nothing. Steps 3 and 4 are what make one round enough.
 
-**A job that asks for a check also carries the test harness.** When the issue or the task mentions a test, check, fixture, suite or evidence, the request includes `tests/lib/harness.js` and one worked suite in full, because otherwise every agent replied asking for "the existing test-harness interfaces".
+**A job that asks for a check also carries the test harness.** When the issue or the task mentions a test, check, fixture or suite (above the board's own "Why the advisers chose it" section, since the debate always mentions tests), the request includes `tests/lib/harness.js` and one worked suite in full, because otherwise every agent replied asking for "the existing test-harness interfaces".
 
 **The rules discourage the escape hatch.** The request now says that the excerpt is chosen by subject and is not the whole file, that an agent which can see the relevant function must not ask for more, that `insufficient` must name exact function names or line numbers rather than describing a subject, and that an analysis under `verdict: answer` is worth more than `insufficient`.
 
@@ -121,6 +122,26 @@ In this order, stopping at the first failure.
 | 6 | `verdict: patch` carries a `test` block | reply asking for the test |
 
 Check 4 reads the file, not a sha, because unrelated merges change the sha without touching the hunk. Check 3 only compares the echoed `base` with the request's, so it catches a mixed-up response; drift is check 4's job. Check 5 uses the same pattern as the review gate's `ALLOWED`, so nothing is filed that the gate would close. Hunks for files other than the app are checked for path only.
+
+## Reading the response
+
+A response is pasted by hand out of a chat window, so the parser is written loosely on purpose. Every field is `name: value` at the start of a line. `patch` and `test` are blocks under their label, and all of these are accepted:
+
+- a blank line, or a comment line, between the label and the fence
+- ``` or ~~~, three characters or more
+- any language tag or none (`diff`, `patch`, `javascript`, nothing)
+- the whole fence indented, which is de-indented by its common margin
+- the `key: |` block style the other fields use
+
+A plain diff keeps its leading spaces, so context lines survive check 4.
+
+The `base` is compared the way git compares shas, by prefix from 7 characters, so echoing the full 40 is fine even though the request shows 10.
+
+Only two things are strict: the labels are spelled exactly, and nothing comes between the header's `id` line and them. When a block cannot be read, the rejection says which labels it did find, so the fix is obvious from the comment.
+
+This part was too strict until Nov 5, and both responses on #1015 were lost to it: the first for a blank line after `patch:`, the second, sent after the agent was told to try again, for echoing the full commit sha where the request showed ten characters. Neither had anything wrong with it.
+
+**Every request carries `tests/lib/harness.js`**, because a patch response must bring a test with it and an agent that cannot see the harness writes the test against `@playwright/test`, which this repository does not use. A job that is about checks in its own right gets a worked suite as well.
 
 ## What happens next
 

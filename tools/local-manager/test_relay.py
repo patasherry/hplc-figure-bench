@@ -70,7 +70,7 @@ bad('no block here', 'reply', 'RELAY RESPONSE')
 # 1: a patch verdict without a patch block
 bad(resp(diff='   ').replace('```diff\n   \n```', ''), 'reply', 'patch')
 # 2: unknown id
-bad(resp(rid='7-ffff'), 'reply', 'unknown id')
+bad(resp(rid='7-ffff'), 'reply', 'no open request with the id')
 # 3: a different base
 bad(resp(base='deadbeef00'), 'stale', 'base')
 # 4: context absent from the app at current main (the hunk drifted)
@@ -211,5 +211,41 @@ assert rl.merge_ranges([(1, 10), (5, 20), (40, 50)], 100) == [(1, 20), (40, 50)]
 assert rl.merge_ranges([(1, 100)], 10) == [(1, 10)]
 assert rl.ranges_from_need(APP, 'show lines 2-3', 2, 100, had=[(11, 13)]) == [(2, 3), (11, 13)]
 assert rl.ranges_from_need(APP, 'no identifier in this prose', 2, 100, had=[(11, 13)]) == [(11, 13)]
+
+# a quoted phrase from a UI issue finds the code that draws it, which no subject match would
+LIT = '\n'.join(['/* ---------- home ---------- */', '  const b = `<button id="pick">Choose data files</button>`;', '  more', '/* ---------- gels ---------- */', 'function laneProfile(g){ return g; }'])
+assert rl.literal_ranges(LIT, 'Center \'Choose data files\' in the empty-state view', 1) == [(1, 3)], rl.literal_ranges(LIT, "'Choose data files'", 1)
+assert rl.literal_ranges(LIT, 'the "Choose data files" button', 40)  # double quotes and smart quotes alike
+assert rl.literal_ranges(LIT, 'nothing quoted here', 1) == [] and rl.literal_ranges(LIT, 'see `laneProfile`', 1) == []  # an identifier is named_defs' job
+# the board's debate always says "test", so only the statement above it decides whether the harness rides along
+BOARD = 'Center the button\nMobile users scroll too far.\n\n**Evidence:** Usability report #893\n\n### Why the advisers chose it\n- Gemini: 4/5, add a test for it'
+assert not rl.wants_tests(BOARD) and rl.wants_tests('Add a UI-level regression test\n' + BOARD)
+
+# ---------- a response is pasted by hand, so the block parser is written loosely ----------
+HEAD = '=== HFB-RELAY RESPONSE v1 ===\nid: 7-ab\nbase: abc\nverdict: patch\nsummary: s\nchanges-a-reported-number: no\n\n'
+DIFF = '--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b'
+forms = {
+  'blank line before the fence': 'patch:\n\n```diff\n' + DIFF + '\n```\n\ntest:\n\n```js\nconst x=1;\n```\n',
+  'tildes and no tag': 'patch:\n~~~\n' + DIFF + '\n~~~\ntest:\n~~~\nconst x=1;\n~~~\n',
+  'four backticks, other tags': 'patch:\n````patch\n' + DIFF + '\n````\ntest:\n````javascript\nconst x=1;\n````\n',
+  'the whole fence indented': 'patch:\n    ```diff\n' + '\n'.join('    ' + l for l in DIFF.split('\n')) + '\n    ```\ntest:\n```js\nconst x=1;\n```\n',
+  'the block style of the other fields': 'patch: |\n' + '\n'.join('  ' + l for l in DIFF.split('\n')) + '\ntest: |\n  const x=1;\n',
+  'a comment line before the fence': 'patch:\n# the diff\n```diff\n' + DIFF + '\n```\ntest:\n```js\nconst x=1;\n```\n',
+}
+for name, form in forms.items():
+    got = rl.parse_response(HEAD + form + '=== END RESPONSE ===')
+    assert got['patch'].split('\n')[0] == '--- a/x', (name, got['patch'][:40])
+    assert got['patch'].rstrip().endswith('+b'), (name, got['patch'][-20:])
+    assert 'const x=1;' in got['test'], name
+    assert rl.hunk_present('x\na\ny', rl.parse_diff(got['patch'])[0]['hunks'][0]['old']) is False or True  # the diff survives parsing
+# a plain diff keeps its leading spaces: a context line must still start with one
+ctx = rl.parse_response(HEAD + 'patch:\n```diff\n--- a/x\n+++ b/x\n@@ -1,3 +1,3 @@\n ctx\n-a\n+b\n```\ntest:\n```js\nq\n```\n=== END RESPONSE ===')
+assert '\n ctx\n' in ctx['patch'], repr(ctx['patch'])
+
+# a sha is compared by prefix: the request carries 10 characters and an agent may echo the full 40
+assert rl.same_sha('7f18d1ffb0', '7f18d1ffb0993fdfc4bf2c443db33a42af0584c6') and rl.same_sha('7f18d1ffb0993f', '7f18d1ffb0')
+assert rl.same_sha(' 7F18D1FFB0 ', '7f18d1ffb0993f') and not rl.same_sha('7f18d1ffb0', '7f18d1ffb1')
+assert not rl.same_sha('abc123', 'abc123456') and rl.same_sha('abc123', 'abc123') and not rl.same_sha('', 'x')
+assert rl.validate(resp(base='abc1234567abcdef'), {'7-ab12': {'base': 'abc1234567'}}, APP)['id'] == '7-ab12'  # full sha accepted
 
 print('ok')

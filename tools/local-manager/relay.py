@@ -46,7 +46,9 @@ RULES = ['Reply with one RESPONSE block, nothing before or after it.',
          'Use synthetic, invented numbers in every example, fixture and table.',
          "Never reference, infer or reconstruct the owner's real sequences,\n    chromatograms, gels, readings or yields.",
          'The app is one file, no build step, no dependencies.',
-         'Tests are UI level and live in tests/suites/NN_name.js.',
+         'Tests are UI level and live in tests/suites/NN_name.js. A test uses this repository\'s own harness\n'
+         "    (const {open, H, suite, src} = require('../lib/harness')), never @playwright/test, and asserts on\n"
+         '    what the page shows. The harness is included below.',
          'A patch is a unified diff with at least three context lines per hunk.',
          'The excerpt is chosen by subject and is not the whole file. Answer from what you can see:\n'
          "    if the function the task is about is in front of you, do not ask for more.",
@@ -199,6 +201,26 @@ def merge_ranges(rs, limit):
     return kept
 
 
+QUOTED = re.compile(r"[\u2018\u2019'\"\u201c\u201d`]([^\u2018\u2019'\"\u201c\u201d`\n]{4,60})[\u2018\u2019'\"\u201c\u201d`]")
+
+
+def literal_ranges(app_text, text, ctx):
+    """Ranges around the quoted phrases of `text` that appear verbatim in the app.
+    A UI issue quotes what it is about ("Choose data files"), and that string sits next to the code that draws it,
+    which no amount of subject matching will find: the words of a button are not the words of a section title."""
+    lines, out = app_text.split('\n'), []
+    for ph in dict.fromkeys(QUOTED.findall(text or '')):
+        ph = ph.strip()
+        if len(ph) < 4 or not re.search(r'[A-Za-z]', ph) or re.fullmatch(r'[\w.()/-]+', ph):
+            continue  # an identifier or a path: named_defs and the range steps cover those
+        low = ph.lower()
+        hits = [i for i, l in enumerate(lines, 1) if low in l.lower()][:2]
+        for n in hits:
+            sp = span_of_function(lines, n)
+            out.append(sp if sp and sp[1] - sp[0] <= 200 else (max(1, n - ctx), min(len(lines), n + ctx)))
+    return out
+
+
 def named_defs(app_text, text):
     """Ranges of the functions `text` names (backticked or not), in the order named."""
     lines, out = app_text.split('\n'), []
@@ -242,9 +264,10 @@ def pick_ranges(app_text, body, ctx, budget=MAX_LINES):
     if n:
         out.append(span_of_function(lines, n) or (max(1, n - ctx), min(len(lines), n + ctx)))
     out += named_defs(app_text, body)
+    out += literal_ranges(app_text, body, ctx)
     out = merge_ranges(out, budget)
     used = sum(b - a + 1 for a, b in out)
-    room = (budget - used) if not out else min(budget - used, budget//2)  # named functions are the better signal: sections only fill what is left
+    room = (budget - used) if not out else min(budget - used, budget//4)  # a named function or a quoted string is the real location: sections only top it up
     if room > 40:
         out = merge_ranges(out + section_ranges(app_text, body, room, skip=out), budget)
     return out or None
@@ -257,6 +280,7 @@ def ranges_from_need(app_text, need, ctx, budget=MAX_LINES, had=()):
     lines = app_text.split('\n')
     out = [(max(1, min(a, b)), min(len(lines), max(a, b))) for a, b in ((int(x), int(y)) for x, y in re.findall(r'\b(\d+)\s*-\s*(\d+)\b', need or ''))]
     out += named_defs(app_text, need)
+    out += literal_ranges(app_text, need, ctx)
     out = merge_ranges(out, budget)
     used = sum(b - a + 1 for a, b in out)
     if used < budget:
@@ -275,12 +299,16 @@ NO_EXCERPT_RULE = ('You have no excerpt, so you cannot see the code. Reply with 
                    '    name the functions or line ranges you want to see.')
 
 
-TEST_WORDS = re.compile(r'\btest|\bcheck|\bfixture|\bsuite|\bregression|\bacceptance|\bharness|\bevidence|\bmain-failing', re.I)
+TEST_WORDS = re.compile(r'\btest|\bcheck|\bfixture|\bsuite|\bregression|\bharness|\bmain-failing', re.I)
+
+
+BOARD_TAIL = re.compile(r'###\s*Why the advisers chose it|<details><summary>The debate', re.I)
 
 
 def wants_tests(*texts):
-    """True when the job is about writing a check. Such a request carries the harness, because every agent asked for it otherwise."""
-    return any(TEST_WORDS.search(t or '') for t in texts)
+    """True when the job itself is about writing a check. Such a request carries the harness, because every agent asked for it otherwise.
+    A board issue carries the whole debate, where somebody always says "test", so only the statement above it counts."""
+    return any(TEST_WORDS.search(BOARD_TAIL.split(t or '')[0]) for t in texts)
 
 
 def build_request(rid, base, app_text, issue, expires, task, question, ranges, extra=()):
@@ -339,8 +367,27 @@ def _block(s, key):
 
 
 def _fenced(s, key, lang):
-    m = re.search(r'^' + key + r':[^\n]*\n```' + lang + r'[^\n]*\n(.*?)\n```[ \t]*$', s, re.M | re.S)
-    return m.group(1) if m else None
+    """The fenced block after 'key:'. Written loosely on purpose, because a response is pasted by hand from a chat window:
+    blank or comment lines may sit between the label and the fence, the fence may be ``` or ~~~ or longer, indented, and
+    tagged with anything or nothing (an agent writes ```patch or ```javascript as readily as ```diff). The one rejection
+    we have seen, on #1015, was a well-formed answer with a blank line after 'patch:'."""
+    m = re.search(r'^[ \t]*' + key + r':[^\n]*\n'          # the label
+                  r'(?:[ \t]*(?:#[^\n]*)?\n)*'              # blank lines, or a comment line, before the fence
+                  r'[ \t]*(`{3,}|~{3,})[ \t]*\w*[^\n]*\n'  # the opening fence, any tag or none
+                  r'(.*?)'
+                  r'\n[ \t]*\1[ \t]*(?:\n|\Z)', s, re.M | re.S)
+    if not m:
+        return None
+    body = m.group(2)
+    pad = min((len(l) - len(l.lstrip()) for l in body.split('\n') if l.strip()), default=0)
+    # a plain diff starts at column 0 so pad is 0 and nothing moves; an indented fence needs the indent off or no hunk matches
+    return '\n'.join(l[pad:] for l in body.split('\n')) if pad else body
+
+
+def _field(s, key, lang):
+    """A patch or test block however it was written: fenced, or as a 'key: |' block when the agent used the style of the
+    other fields. Fenced first, since that is what the request asks for."""
+    return _fenced(s, key, lang) or _block(s, key)
 
 
 def parse_response(text):
@@ -363,11 +410,15 @@ def parse_response(text):
         raise Bad('reply', f'verdict must be patch, answer or insufficient, not "{r["verdict"]}"')
     if r['changes-a-reported-number'] not in ('yes', 'no'):
         raise Bad('reply', 'changes-a-reported-number must be yes or no')
-    r['patch'], r['test'] = _fenced(body, 'patch', 'diff'), _fenced(body, 'test', 'js')
+    r['patch'], r['test'] = _field(body, 'patch', 'diff'), _field(body, 'test', 'js')
     r['answer'], r['need'] = _block(body, 'answer'), _block(body, 'need')
     need = {'patch': 'patch', 'answer': 'answer', 'insufficient': 'need'}[r['verdict']]
     if not (r[need] or '').strip():
-        raise Bad('reply', f'missing field "{need}" (required for verdict: {r["verdict"]})')
+        seen = sorted({m.group(1) for m in re.finditer(r'(?m)^[ \t]*(' + FIELD_RE + r'):', body)})
+        raise Bad('reply', f'verdict is {r["verdict"]}, so a "{need}" block is required, and I could not read one. '
+                           f'The labels I found were: {", ".join(seen) or "none"}. '
+                           f'Write it as "{need}:" at the start of a line with the content in a fenced block under it '
+                           f'(a blank line, any fence tag and longer fences are all fine)')
     return r
 
 
@@ -417,6 +468,16 @@ def check_paths(files):
                 raise Bad('reply', f'the diff touches "{p}", which is outside the app, tests/, docs/ and README.md')
 
 
+def same_sha(a, b):
+    """True when two commit shas name the same commit. The request carries a 10-character prefix and an agent may echo the
+    full 40, or a shorter abbreviation: git compares shas by prefix and so do we, from 7 characters, which is git's own floor."""
+    a, b = (a or '').strip().lower(), (b or '').strip().lower()
+    if not (a and b) or not all(re.fullmatch(r'[0-9a-f]{7,40}', x) for x in (a, b)):
+        return a == b
+    n = min(len(a), len(b))
+    return a[:n] == b[:n]
+
+
 def validate(resp_text, requests, app_text):
     """The six checks, in order, stopping at the first failure.
     requests: {id: {'base': ...}} of the open requests on the issue. Returns the parsed response, or raises Bad.
@@ -424,8 +485,10 @@ def validate(resp_text, requests, app_text):
     r = parse_response(resp_text)                                                    # 1
     req = requests.get(r['id'])
     if req is None:                                                                  # 2
-        raise Bad('reply', f'unknown id "{r["id"]}": no open request with that id on this issue')
-    if r['base'] != req['base']:                                                     # 3
+        raise Bad('reply', f'there is no open request with the id "{r["id"]}" on this issue. '
+                           'Either it was already answered and filed, or it expired, or the id was mistyped: '
+                           'check the newest request comment for the id to echo')
+    if not same_sha(r['base'], req['base']):                                         # 3
         raise Bad('stale', f'base "{r["base"]}" is not the request\'s base "{req["base"]}"')
     files = parse_diff(r['patch']) if r['verdict'] == 'patch' else []
     if r['verdict'] == 'patch':
