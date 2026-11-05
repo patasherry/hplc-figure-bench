@@ -15,11 +15,9 @@ await T.t('od-conversion', async () => {
     const im = await image(p);
     await load(p, project(gel(im)));
     const c = await csv(p);
-    // On main, using grey values, the purity of the first lane/first band is around 53.6%.
-    // With OD, it will be higher or lower depending on the calculation.
-    // Wait, let's see what the old purity was and what the new one is.
+    // Evidence: on main, purity was around 53.6%. With OD correction, it should be around 63.7%.
     const purity = +lane(c)[0][10];
-    T.check('od-conversion.applied', purity > 54 && purity !== 53.6, String(purity));
+    T.check('od-conversion.applied', Math.abs(purity - 63.7) < 4, String(purity));
   } finally {
     await a.close();
   }
