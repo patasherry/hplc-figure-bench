@@ -511,7 +511,7 @@ button,input,select,textarea{font-family:inherit}
     <button class="btn ghost" id="homeBtn" type="button" hidden>All projects</button>
     <button class="btn ghost" id="quickSave" type="button" hidden title="Turn what is loaded into a project that saves as you go">Save as project</button>
     <button class="btn ghost" id="projOpen" type="button" title="Open a project file saved from this tool">Open file</button>
-    <button class="btn ghost" id="projSave" type="button" title="Save runs, traces, gels, labels, marks and settings in one file, so you can change a figure later">Export file</button>
+    <button class="btn ghost" id="projSave" type="button" title="Save runs, traces, gels, labels, marks and settings in one file, so you can change a figure later">Export project</button>
     <input type="file" id="projFile" accept=".json,application/json" hidden>
   </div>
 </header>
@@ -2967,7 +2967,7 @@ function detectBands(g, i, sensPct, gelMax){
       let rm = v; j = y; while (j < h - 1) { j++; if (sig[j] > v) break; if (sig[j] < rm) rm = sig[j]; }
       const prom = v - Math.max(lm, rm); if (prom < Math.max(DET.minAbs*0.6, v*DET.promRel, noise*DET.noiseK*0.6)) continue;
     }
-    let l = y, r = y; while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > v*DET.tail) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > v*DET.tail) r++;
+    let l = y, r = y; while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > 0) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > 0) r++;
     let area = 0; for (let j=l;j<=r;j++) area += sig[j];
     let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
     bands.push({row: y, h: v, area, l, r, hl, hr});
@@ -6235,9 +6235,9 @@ async function setBaseline(P){ try { const pk = await packFor(P, snapshot()); if
 const docBytes = o => new TextEncoder().encode(JSON.stringify(o)).length;
 async function saveOne(P, S, force){
   if (P.blocked) return; const show = (t, e) => { if (PROJ === P) setSaveState(t, e); };
-  const stop = why => { P.blocked = why; show(why === 'gone' ? 'Not saved: this project was deleted in another tab. Use Export file to keep this copy' : 'Not saved: this project changed in another tab or device. Reload to see the newer version', true); };
+  const stop = why => { P.blocked = why; show(why === 'gone' ? 'Not saved: this project was deleted in another tab. Use Export project to keep this copy' : 'Not saved: this project changed in another tab or device. Reload to see the newer version', true); };
   try { await storeInit();
-    const pk = await packFor(P, S); if (!pk) { show('Not saved: this view cannot keep projects. Use Export file', true); return; }
+    const pk = await packFor(P, S); if (!pk) { show('Not saved: this view cannot keep projects. Use Export project', true); return; }
     const sig = pk.sig; if (!force && sig === P.sig) { savedTo(P, S.seq); return; }
     if (STORE.mode === 'cloud') { const {st, refs} = pk;
       show('Saving…'); const ref = projCol().doc(P.id), now = await ref.get();
@@ -6254,7 +6254,7 @@ async function saveOne(P, S, force){
     }
     const n = lostCount(P); show(n ? `Saved. ${n} item${n === 1 ? '' : 's'} did not load and ${n === 1 ? 'is' : 'are'} kept for next time` : STORE.mode === 'cloud' ? 'Saved' : 'Saved in this browser');
   } catch (e) { const c = e && e.code;
-    show(c === 'quota_exceeded' ? 'Not saved: storage is full. Export a file and delete old projects' : c === 'not_granted' || c === 'invalid_argument' ? 'Not saved: you can view this page but not save to it. Use Export file' : 'Not saved yet, will retry', true);
+    show(c === 'quota_exceeded' ? 'Not saved: storage is full. Export a project and delete old projects' : c === 'not_granted' || c === 'invalid_argument' ? 'Not saved: you can view this page but not save to it. Use Export project' : 'Not saved yet, will retry', true);
     if ((!c || c === 'unavailable' || c === 'store_unavailable') && PROJ === P) { clearTimeout(saveT); saveT = setTimeout(() => flushSave(force), 8000); } }
 }
 function hashStr(s){ let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
@@ -6281,8 +6281,8 @@ async function renderHome(){
   const el = $('#projList'); el.innerHTML = '<p class="empty-p">Loading projects…</p>';
   await storeInit();
   $('#homeWhere').textContent = STORE.mode === 'cloud' ? 'Projects are saved with this page, so they open wherever you are signed in. Run data and gel images are uploaded with them, and only people you share the page with can open it.'
-    : STORE.mode === 'local' ? 'Projects are saved in this browser. Use Export file to move one to another computer or keep a copy.'
-    : 'This view cannot keep projects. Use Export file to save your work.';
+    : STORE.mode === 'local' ? 'Projects are saved in this browser. Use Export project to move one to another computer or keep a copy.'
+    : 'This view cannot keep projects. Use Export project to save your work.';
   let list = []; try { list = await storeList(); } catch (e) { el.innerHTML = '<p class="empty-p">Could not load your projects. Reload the page to try again.</p>'; return; }
   if (!list.length) { el.innerHTML = '<p class="empty-p">No projects yet. Start one above when you transform your construct.</p>'; return; }
   el.innerHTML = list.map(p => `<div class="pcard has-del" role="button" tabindex="0" data-pid="${esc(p.id)}"><span class="pn">${esc(p.name || 'Untitled project')}</span>
