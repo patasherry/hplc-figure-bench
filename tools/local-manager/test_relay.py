@@ -212,4 +212,13 @@ assert rl.merge_ranges([(1, 100)], 10) == [(1, 10)]
 assert rl.ranges_from_need(APP, 'show lines 2-3', 2, 100, had=[(11, 13)]) == [(2, 3), (11, 13)]
 assert rl.ranges_from_need(APP, 'no identifier in this prose', 2, 100, had=[(11, 13)]) == [(11, 13)]
 
+# a quoted phrase from a UI issue finds the code that draws it, which no subject match would
+LIT = '\n'.join(['/* ---------- home ---------- */', '  const b = `<button id="pick">Choose data files</button>`;', '  more', '/* ---------- gels ---------- */', 'function laneProfile(g){ return g; }'])
+assert rl.literal_ranges(LIT, 'Center \'Choose data files\' in the empty-state view', 1) == [(1, 3)], rl.literal_ranges(LIT, "'Choose data files'", 1)
+assert rl.literal_ranges(LIT, 'the "Choose data files" button', 40)  # double quotes and smart quotes alike
+assert rl.literal_ranges(LIT, 'nothing quoted here', 1) == [] and rl.literal_ranges(LIT, 'see `laneProfile`', 1) == []  # an identifier is named_defs' job
+# the board's debate always says "test", so only the statement above it decides whether the harness rides along
+BOARD = 'Center the button\nMobile users scroll too far.\n\n**Evidence:** Usability report #893\n\n### Why the advisers chose it\n- Gemini: 4/5, add a test for it'
+assert not rl.wants_tests(BOARD) and rl.wants_tests('Add a UI-level regression test\n' + BOARD)
+
 print('ok')
