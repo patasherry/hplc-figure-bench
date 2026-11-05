@@ -6097,7 +6097,7 @@ function nextHere(k){ if (!PROJ) return true; const [a, b] = String(k).split(':'
 function nextStep(){
   const real = traces.filter(t => !t.ex);
   if (projUndo) { const _n = {k: 'undoOpen', t: 'Project opened over your previous work.', go: 'Undo', act: () => { const u = projUndo; projUndo = null; openProject(u, 'previous work', true); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
-  if (!runs.length && !real.length && !gels.length) { const _n = {k: 'start', t: 'Drop ÄKTA or HPLC exports, or a gel image, to begin.'}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
+  if (!runs.length && !real.length && !gels.length) { const _n = {k: 'start', t: 'Drop ÄKTA or HPLC exports, or a gel image, to begin.', go: 'Choose data files', act: () => $('#file').click()}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
   const steps = runs.filter(r => r.inWf && !isSec(r) && !r.isStd);
   /* a step for the figure on screen comes first, so the button never edits something out of view */
   const noPools = steps.filter(r => !String(r.shade || '').trim()), noPool = noPools.find(r => r.id === cur) || (curGel() ? null : noPools[0]);
