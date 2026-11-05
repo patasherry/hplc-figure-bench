@@ -169,3 +169,26 @@ await T.t('integration-tail-cutoff', async () => {
 });
 
 T.done();})();
+
+
+T.t('label-truncation', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    await load(p, project(gel(im)));
+    await p.locator('details[data-sub="glanes"]').evaluate(el => el.open = true);
+    await p.fill('#g-labels', 'M, A, B');
+    await p.dispatchEvent('#g-labels', 'change');
+    await p.waitForTimeout(800);
+    let txt = await p.textContent('#st-lanes');
+
+    // We expect it to reflect the full length originally when nLanes is empty or defaults to length
+    T.check('label-truncation.status-lanes-labels', /3 lanes/.test(txt), 'Status bar lane count changes properly to manual label length: ' + txt);
+
+    await p.fill('#g-n', '3');
+    await p.dispatchEvent('#g-n', 'change');
+    await p.waitForTimeout(800);
+    let txt2 = await p.textContent('#st-lanes');
+    T.check('label-truncation.status-lanes-manual', /3 lanes/.test(txt2), 'Status bar lane count respects manual count if provided');
+  } finally { await a.close(); }
+});
