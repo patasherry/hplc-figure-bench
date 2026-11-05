@@ -135,9 +135,11 @@ A response is pasted by hand out of a chat window, so the parser is written loos
 
 A plain diff keeps its leading spaces, so context lines survive check 4.
 
+The `base` is compared the way git compares shas, by prefix from 7 characters, so echoing the full 40 is fine even though the request shows 10.
+
 Only two things are strict: the labels are spelled exactly, and nothing comes between the header's `id` line and them. When a block cannot be read, the rejection says which labels it did find, so the fix is obvious from the comment.
 
-This part was too strict until Nov 5. The one response that came back on #1015 was correct in every way, and was thrown away because the agent left a blank line after `patch:`.
+This part was too strict until Nov 5, and both responses on #1015 were lost to it: the first for a blank line after `patch:`, the second, sent after the agent was told to try again, for echoing the full commit sha where the request showed ten characters. Neither had anything wrong with it.
 
 **Every request carries `tests/lib/harness.js`**, because a patch response must bring a test with it and an agent that cannot see the harness writes the test against `@playwright/test`, which this repository does not use. A job that is about checks in its own right gets a worked suite as well.
 

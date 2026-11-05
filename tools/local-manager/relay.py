@@ -468,6 +468,16 @@ def check_paths(files):
                 raise Bad('reply', f'the diff touches "{p}", which is outside the app, tests/, docs/ and README.md')
 
 
+def same_sha(a, b):
+    """True when two commit shas name the same commit. The request carries a 10-character prefix and an agent may echo the
+    full 40, or a shorter abbreviation: git compares shas by prefix and so do we, from 7 characters, which is git's own floor."""
+    a, b = (a or '').strip().lower(), (b or '').strip().lower()
+    if not (a and b) or not all(re.fullmatch(r'[0-9a-f]{7,40}', x) for x in (a, b)):
+        return a == b
+    n = min(len(a), len(b))
+    return a[:n] == b[:n]
+
+
 def validate(resp_text, requests, app_text):
     """The six checks, in order, stopping at the first failure.
     requests: {id: {'base': ...}} of the open requests on the issue. Returns the parsed response, or raises Bad.
@@ -475,8 +485,10 @@ def validate(resp_text, requests, app_text):
     r = parse_response(resp_text)                                                    # 1
     req = requests.get(r['id'])
     if req is None:                                                                  # 2
-        raise Bad('reply', f'unknown id "{r["id"]}": no open request with that id on this issue')
-    if r['base'] != req['base']:                                                     # 3
+        raise Bad('reply', f'there is no open request with the id "{r["id"]}" on this issue. '
+                           'Either it was already answered and filed, or it expired, or the id was mistyped: '
+                           'check the newest request comment for the id to echo')
+    if not same_sha(r['base'], req['base']):                                         # 3
         raise Bad('stale', f'base "{r["base"]}" is not the request\'s base "{req["base"]}"')
     files = parse_diff(r['patch']) if r['verdict'] == 'patch' else []
     if r['verdict'] == 'patch':

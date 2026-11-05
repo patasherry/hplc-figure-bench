@@ -831,7 +831,7 @@ def relay_collect(n, issue):
             m = gh(f'repos/{REPO}/issues', 'POST', {'title': r['summary'][:200], 'body': rl.filed_body(r, n, rid), 'labels': ['from-relay', 'owner-approved', FIRST]})['number']
             post(n, f'Response `{rid}` passed all six checks (the patch context is in the app at current main). Filed as #{m}, queued for Claude Code first. The patch is not applied.' + done); log(f'relay #{n}: patch filed as #{m}')
         elif v == 'answer':
-            late = '' if r['base'] == base else f'\n\n_(Written against main {r["base"]}; main is now {base}, so check it against the current code.)_'
+            late = '' if rl.same_sha(r['base'], base) else f'\n\n_(Written against main {r["base"]}; main is now {base}, so check it against the current code.)_'
             post(n, f'**Relay answer to `{rid}`:** {nomention(r["summary"])}\n\n{nomention(r["answer"])}{late}' + done)
         elif rl.request_count(bodies) < 1 + RELAY_ROUNDS and not DRY:
             ranges = rl.ranges_from_need(app, r['need'], RELAY_CTX, RELAY_LINES, had=relay_ranges_of(cs, rid))
