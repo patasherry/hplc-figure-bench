@@ -189,6 +189,86 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
 
   // Publication readiness at journal widths (#662): checks that exported figures at single
   // and double column presets have no text under 6 pt, and ticks and text don't overlap.
+
+
+  await T.t('y_axis_overlap_large_presets', async () => {
+    const q2 = await open(), pg2 = q2.p, hq2 = H(pg2);
+    try {
+      await hq2.newProject('Y Axis Overlap');
+      await hq2.addRun([path.join(__dirname, '../data/chrom/hplc_export.csv')]);
+
+      // Go to figure overlay mode to set preset
+      await pg2.evaluate(() => { const el = document.querySelector('#homeQuick'); if (el) el.click(); });
+      await hq2.wait(400);
+
+      // Verify single preset (default) by opening run panel
+      await pg2.evaluate(() => { const el = document.querySelector('.run-panel'); if (el) el.click(); });
+      await hq2.wait(400);
+
+      const singleCount = await pg2.evaluate(() => {
+        const svg = document.querySelector('#paper svg');
+        if (!svg) return 0;
+        const texts = Array.from(svg.querySelectorAll('text'));
+        const xs = texts.map(t => parseFloat(t.getAttribute('x'))).filter(x => !isNaN(x));
+        const minX = Math.min(...xs);
+        return texts.filter(t => Math.abs(parseFloat(t.getAttribute('x')) - minX) < 2).length;
+      });
+
+
+
+      // Set poster preset
+      await pg2.evaluate(() => { const el = document.querySelector('#homeQuick'); if (el) el.click(); });
+      await hq2.wait(400);
+
+      await pg2.evaluate(() => {
+        const e = document.querySelector('#o-preset');
+        if (e) {
+          e.value = 'poster';
+          e.dispatchEvent(new Event('change', {bubbles: true}));
+          e.dispatchEvent(new Event('input', {bubbles: true}));
+        }
+      });
+      await hq2.wait(400);
+
+      // Open run panel again
+      await pg2.evaluate(() => { const el = document.querySelector('.run-panel'); if (el) el.click(); });
+      await hq2.wait(400);
+
+      const { minGap, fontSize, yTicksCount, allTexts } = await pg2.evaluate(() => {
+        const svg = document.querySelector('#paper svg');
+        if (!svg) return { minGap: 0, fontSize: 0, yTicksCount: 0, allTexts: '' };
+        const texts = Array.from(svg.querySelectorAll('text'));
+
+        const xs = texts.map(t => parseFloat(t.getAttribute('x'))).filter(x => !isNaN(x));
+        const minX = Math.min(...xs);
+
+        const yTicks = texts.filter(t => Math.abs(parseFloat(t.getAttribute('x')) - minX) < 2);
+        const ys = yTicks.map(t => parseFloat(t.getAttribute('y'))).sort((a,b) => a-b);
+
+        let minGap = Infinity;
+        for (let i = 1; i < ys.length; i++) {
+          const gap = ys[i] - ys[i-1];
+          if (gap < minGap) minGap = gap;
+        }
+
+        const fontSize = yTicks.length > 0 ? (parseFloat(yTicks[0].getAttribute('font-size')) || 0) : 0;
+        return {
+          minGap, fontSize, yTicksCount: yTicks.length,
+          allTexts: texts.map(t => t.textContent + '@' + t.getAttribute('x') + ',' + t.getAttribute('y')).join(' | ')
+        };
+      });
+
+      if (yTicksCount === 0) throw new Error('No y-axis ticks found in poster preset. Texts: ' + allTexts);
+
+      if (minGap < fontSize) {
+        throw new Error(`Y-axis labels overlap on poster preset: minimum gap ${minGap.toFixed(1)} pt is less than font size ${fontSize} pt.`);
+      }
+
+    } finally {
+      await q2.close();
+    }
+  });
+
   await T.t('publication_readiness_journal_widths', async () => {
     const q = await open(), hq = H(q.p), pg = q.p;
     try {
