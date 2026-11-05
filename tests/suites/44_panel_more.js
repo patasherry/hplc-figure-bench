@@ -60,7 +60,7 @@ const {open, H, suite, src} = require('../lib/harness');
       const h2 = el && el.closest('section') && el.closest('section').querySelector('h2');
       return h2 && h2.firstChild ? h2.firstChild.textContent.trim() : null;
     });
-    T.check('zoom_inset_in_window_section', zoomSec === 'Window', `Zoom inset is in section: ${zoomSec}`);
+    T.check('zoom_inset_in_window_section', zoomSec === 'Window', `Show Inset View is in section: ${zoomSec}`);
 
     // 4. UV path input width fits "assumed: 2" and More options links in project
     await p.click('#homeBtn'); await h.wait(400);

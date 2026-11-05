@@ -1144,7 +1144,7 @@ button,input,select,textarea{font-family:inherit}
         <label class="f">Y from<input type="number" step="any" id="o-ymin" data-opt="ymin" placeholder="auto"></label>
         <label class="f">Y to<input type="number" step="any" id="o-ymax" data-opt="ymax" placeholder="auto"></label>
       </div>
-      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Zoom inset: whole run, with the X window magnified</label>
+      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Show Inset View: whole run, with the X window magnified</label>
       <div class="row">
         <label class="f">Inset position
           <select id="o-zoomInsetPos" data-opt="zoomInsetPos">
@@ -1975,7 +1975,7 @@ function condLineCount(r, W){ if (r.prep || !opt.runCond || opt.runCond === 'non
   return Math.min(16, runCondLines(r, opt.runCond).reduce((t, x) => t + wrapWords(x, room).length, 0)); }
 const uvWl = uv => ((((uv && uv.name) || '').match(/UV\s*(?:\d[\s_-]+)?(2[2-9]\d|3\d\d|4\d\d)(?!\d)/i) || ((uv && uv.name) || '').match(/(?:^|[^\d])(2[2-9]\d|3\d\d|4\d\d)(?!\d)/)) || [])[1] || '';
 function uvTitle(t, uv){ const w0 = WF_WL !== undefined ? WF_WL : uvWl(uv), wl = w0 ? [w0, w0] : null, base = /^(UV a|A)bsorbance \(mAU\)$/.test(t || '');
-  return base && wl ? `A<tspan font-size="75%" dy="0.3em">${wl[1]}</tspan><tspan dy="-0.3em"> (mAU)</tspan>` : esc(t); }
+  return base && wl ? `A<tspan font-size="75%" dy="0.33em">${wl[1]}</tspan><tspan dy="-0.33em"> (mAU)</tspan>` : esc(t); }
 const kdaRound = v => v >= 10 ? String(Math.round(v)) : fmtAuto(v);
 const kdaText = v => v >= 100 ? String(Math.round(v)) : v >= 10 ? fmt(v, v % 1 ? 1 : 0).replace(/\.0$/, '') : String(+(+v).toPrecision(3));
 const OLIGO = ['', 'monomer', 'dimer', 'trimer', 'tetramer', 'pentamer', 'hexamer', 'heptamer', 'octamer'];
@@ -2681,7 +2681,7 @@ function buildCalSVG(cal){
   s.push('</g><g fill="#000000">');
   const xly = B + tOut + 3 + fs*0.78;
   xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(xly)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
-  s.push(`<text x="${r2((L + R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle">${fit.useKav ? 'K<tspan font-size="75%" dy="0.3em">av</tspan>' : cal.unit === 'min' ? 'Elution time (min)' : 'Elution volume (mL)'}</text>`);
+  s.push(`<text x="${r2((L + R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle">${fit.useKav ? 'K<tspan font-size="75%" dy="0.33em">av</tspan>' : cal.unit === 'min' ? 'Elution time (min)' : 'Elution volume (mL)'}</text>`);
   yTicks.forEach(v => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${kdaText(v)}</text>`));
   s.push(`<text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">Apparent mass (kDa)</text>`);
   s.push(`<text x="${r2(R)}" y="${r2(T + fs*0.6)}" text-anchor="end" font-size="${r2(fs*0.8)}">R² = ${fmt(fit.r2, 3)}</text>`);
@@ -5045,7 +5045,7 @@ function renderWfTool(){
       + (!it.noArrow && !last ? `<label class="wfl" for="wfA">Arrow note</label><input type="text" id="wfA" value="${esc(it.arrow)}" placeholder="e.g. SUMO protease, 4 °C overnight">` : '')
       + (!it.noW && row ? `<span class="wfg"><span class="wfl">Width</span><button type="button" class="mini" data-wf="w:-1" aria-label="Narrower">−</button><button type="button" class="mini" data-wf="w:1" aria-label="Wider">+</button></span>` : '')
       + (it.gel ? `<span class="wfg"><span class="wfl">Gel</span><button type="button" class="mini" data-wf="gz:-1" aria-label="Smaller gel">−</button><button type="button" class="mini" data-wf="gz:1" aria-label="Larger gel">+</button></span>` : '')
-      + (it.kind === 'run' ? `<label class="check" style="margin-right:12px; margin-left:6px;"><input type="checkbox" data-wfz="1" ${it.zoom ? 'checked' : ''}> Zoom inset</label>` : '')
+      + (it.kind === 'run' ? `<label class="check" style="margin-right:12px; margin-left:6px;"><input type="checkbox" data-wfz="1" ${it.zoom ? 'checked' : ''}> Show Inset View</label>` : '')
       + `<button type="button" class="mini" data-wf="reset">Reset position</button><button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button>`; }
   const rb = tool.querySelector('[data-wf=reset]'); if (rb) rb.disabled = !(it.ox || it.oy);
   tool.hidden = false; const th = tool.offsetHeight, tw = tool.offsetWidth, ww = wrap.clientWidth;
@@ -5928,7 +5928,7 @@ function buildNDSVG(only, info){
   xt.v.forEach(v => s.push(`<line x1="${r2(px(v))}" y1="${r2(B)}" x2="${r2(px(v))}" y2="${r2(B + dir*tl)}"/>`)); yt.v.forEach(v => s.push(`<line x1="${r2(L)}" y1="${r2(py(v))}" x2="${r2(L - dir*tl)}" y2="${r2(py(v))}"/>`)); s.push('</g>');
   s.push(`<g fill="#000000">`); xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(B + tOut + 3 + fs*0.85)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
   yt.v.forEach((v, i) => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${ytl[i]}</text>`));
-  s.push(`<text x="${r2((L + R)/2)}" y="${r2(H - fs*0.35)}" text-anchor="middle">Wavelength (nm)</text><text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">${norm ? 'Absorbance / A<tspan font-size="75%" dy="0.3em">280</tspan>' : 'Absorbance (10 mm)'}</text></g>`);
+  s.push(`<text x="${r2((L + R)/2)}" y="${r2(H - fs*0.35)}" text-anchor="middle">Wavelength (nm)</text><text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">${norm ? 'Absorbance / A<tspan font-size="75%" dy="0.33em">280</tspan>' : 'Absorbance (10 mm)'}</text></g>`);
   const lf = fs*0.82, maxC = Math.max(6, Math.floor((legW - fs*2.4)/(lf*0.52)));
   sp.forEach((smp, k) => { const yy = T + fs*0.6 + k*fs*1.3, nm = smp.name.length > maxC ? smp.name.slice(0, maxC - 1) + '…' : smp.name; s.push(`<line x1="${r2(R + fs*0.7)}" y1="${r2(yy - fs*0.3)}" x2="${r2(R + fs*1.8)}" y2="${r2(yy - fs*0.3)}" stroke="${pal[k % pal.length]}" stroke-width="${r2(lw*1.6)}"/><text x="${r2(R + fs*2.1)}" y="${r2(yy)}" font-size="${r2(lf)}">${esc(nm)}</text>`); });
   s.push('</svg>'); return {svg: s.join(''), geo: {W, H, nd: true}};

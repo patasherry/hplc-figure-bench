@@ -23,6 +23,13 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       T.check('overlay/off-by-default', (await plotAreas(p)) === 1 && (await insetCount(p)) === 0, 'one plot area and no inset with the option off');
       await setOpt(p, 'o-xmin', '5'); await setOpt(p, 'o-xmax', '8'); await h.wait(400);
       const offSvg = await p.evaluate(() => document.querySelector('#paper svg').outerHTML);
+
+    const labelText = await p.evaluate(() => {
+      const el = document.getElementById('o-zoomInset');
+      return el && el.parentElement ? el.parentElement.textContent.trim() : null;
+    });
+    T.check('zoom_inset_label_text', labelText === 'Show Inset View: whole run, with the X window magnified', `Label is ${labelText}`);
+
       await setOpt(p, 'o-zoomInset', true); await h.wait(600);
       T.check('overlay/two-plot-areas', (await plotAreas(p)) === 2 && (await insetCount(p)) === 1, `plot areas ${await plotAreas(p)}`);
 
