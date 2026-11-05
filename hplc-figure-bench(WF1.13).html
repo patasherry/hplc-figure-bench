@@ -1464,6 +1464,9 @@ function shortRunName(r){
   const w = String(r.name).split(/\s+/), lcp = b => { let k = 0; while (k < w.length - 1 && k < b.length && w[k].toLowerCase() === b[k].toLowerCase()) k++; return k; };
   const k = Math.max(0, ...runs.filter(x => x !== r).map(x => lcp(String(x.name).split(/\s+/))));
   return k >= 2 ? w.slice(k).join(' ') : r.name; }
+function fitYTicks(t, lo, hi, n, plotH, fs){
+  for (let k = n; k > 1 && t.v.length > 2; k--) { if ((plotH/(hi - lo))*t.step >= fs*1.5) break; t = ticks(lo, hi, k - 1); }
+  return t; }
 function fitTicks(t, lo, hi, n, plotW, cw, fs){
   for (let k = n; k > 1 && t.v.length > 2; k--) { const w = Math.max(...t.v.map(v => fmt(v, t.dec).length))*cw + fs*0.9; if ((plotW/(hi - lo))*t.step >= w) break; t = ticks(lo, hi, k - 1); }
   return t; }
@@ -2246,7 +2249,8 @@ function buildOverlaySVG(ov){
   let y0 = ylo - yr*0.03; let y1 = yhi + (yhi - y0)*padPts/Math.max(1, plotH0 - padPts);
   y0 = numOr(o.ymin, y0); y1 = numOr(o.ymax, y1); if (!(y1 > y0)) y1 = y0 + 1;
 
-  const yt = ticks(y0, y1, Math.max(3, Math.round(numOr(o.h,2.6)*1.8)));
+  let yt = ticks(y0, y1, Math.max(3, Math.round(numOr(o.h,2.6)*1.8)));
+  yt = fitYTicks(yt, y0, y1, Math.max(3, Math.round(numOr(o.h,2.6)*1.8)), Math.max(1, H - (tOut + 3 + fs + 4 + fs*1.25) - fs*0.7), fs);
   let xt = ticks(xlo, xhi, Math.max(4, Math.round(numOr(o.w,3.5)*2)));
   const ytl = yt.v.map(v => tkf(v, yt.dec));
   const mL = o.showY ? (tOut + 3 + Math.max(...ytl.map(s=>s.length))*cw + 5 + fs*1.2) : fs*0.8;
@@ -2444,7 +2448,8 @@ function buildRunPlainSVG(run, ov){
   let y0 = ylo - yr*band/usable - yr*0.02, y1 = yhi + yr*top/usable;
   y0 = numOr(run.ymin, y0); y1 = numOr(run.ymax, y1); if (!(y1 > y0)) y1 = y0 + 1;
 
-  const yt = ticks(y0, y1, Math.max(3, Math.round(H/72*1.8)));
+  let yt = ticks(y0, y1, Math.max(3, Math.round(H/72*1.8)));
+  yt = fitYTicks(yt, y0, y1, Math.max(3, Math.round(H/72*1.8)), Math.max(1, H - (tOut + 3 + fs + 4 + fs*1.25 + (secRun || (run.integ || []).length ? fs*1.1 : 0))), fs);
   /* the strip under the trace holds fraction labels, not data, so no y values are printed there */
   if (band && (run.ymin ?? '') === '') { const keep = yt.v.filter(v => v >= ylo - yr*0.05); if (keep.length >= 2) yt.v = keep; }
   let xt = ticks(xlo, xhi, Math.max(3, Math.round(W/72*2)));
