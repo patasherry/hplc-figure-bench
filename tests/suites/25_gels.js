@@ -168,4 +168,7 @@ await T.t('integration-tail-cutoff', async () => {
   }
 });
 
-T.done();})();
+T.done();
+
+await T.t('lane-status-bar', async () => { const a = await start(), p = a.p; try { const im = await image(p); await load(p, project(gel(im))); const summary = await p.locator('#st-lanes').textContent(); T.check('lane-status-bar.shows-configured-lanes', summary.includes('3 lanes, no runs'), summary); } finally { await a.close(); } });
+})();
