@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
         with:
           ref: main
           fetch-depth: 0
@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Restore the manager's memory from the last cloud pass
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v3
         with:
           path: ~/.hfb-manager-state.json
           key: hfb-cloud-state-${{ github.run_id }}
@@ -49,7 +49,7 @@ jobs:
           python tools/local-manager/manager.py --cloud
       - name: Keep the manager's memory for the next pass
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v3
         with:
           path: ~/.hfb-manager-state.json
           key: hfb-cloud-state-${{ github.run_id }}

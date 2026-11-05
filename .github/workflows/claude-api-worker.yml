@@ -78,12 +78,12 @@ jobs:
           echo "issue=$n" >> "$GITHUB_OUTPUT"; echo "first=$first" >> "$GITHUB_OUTPUT"
           echo "Took #$n"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
         if: steps.pick.outputs.issue
         with:
           fetch-depth: 0
           token: ${{ secrets.HFB_TOKEN }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v3
         if: steps.pick.outputs.issue
         with:
           node-version: 22
