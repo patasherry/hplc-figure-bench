@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>HPLC Figure Bench</title>
+<title>Protein Purification Bench</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -509,7 +509,7 @@ button,input,select,textarea{font-family:inherit}
 </style>
 
 <header class="top">
-  <h1><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M1.5 15.5h3.2c1.6 0 2-1.4 2.6-4.4C8 7.6 8.6 3 10 3s2 4.6 2.7 8.1c.6 3 1 4.4 2.6 4.4h5.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><rect x="5.5" y="18.2" width="11" height="2.3" rx="1.15" fill="currentColor" opacity=".55"/></svg>HPLC Figure Bench</h1>
+  <h1><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M1.5 15.5h3.2c1.6 0 2-1.4 2.6-4.4C8 7.6 8.6 3 10 3s2 4.6 2.7 8.1c.6 3 1 4.4 2.6 4.4h5.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><rect x="5.5" y="18.2" width="11" height="2.3" rx="1.15" fill="currentColor" opacity=".55"/></svg>Protein Purification Bench</h1>
   <div class="projbar" id="projBar" hidden>
     <span class="pb-sep" aria-hidden="true">/</span>
     <input type="text" id="projName" class="projname" aria-label="Project name" spellcheck="false">
@@ -6137,6 +6137,9 @@ function projectData(){
     let img = g._img || ''; if (!img) { try { img = g.src.toDataURL('image/png'); if (img.length > 12e6) img = g.src.toDataURL('image/jpeg', 0.95); g._img = img; } catch (e) {} } o.image = img; delete o.imageId; return o; });
   /* upload ids belong to one saved project, so a file never carries them */
   const noId = (o, k) => { const c = plain(o); delete c[k]; return c; };
+  /* The name shown to the user is Protein Purification Bench. This schema field stays 'HPLC Figure Bench' for good:
+     change it and every project file saved before the rename fails to import, and every file saved after it fails to
+     open in an older copy. The same goes for the 'hplc-fig-opt' settings key and the 'hfb-projects' database. */
   return {app: 'HPLC Figure Bench', version: 1, saved: new Date().toISOString(), cur, opt: plain(opt), runs: runs.map(r => noId(r, 'blobId')), traces: traces.filter(t => !t.ex).map(t => noId(t, 'blobId')), gels: gs, struct: struct ? noId(struct, 'blobId') : null, nanodrop: ndSamples.map(n => noId(n, 'specId')), prep};
 }
 let projUndo = null, failedGels = [];

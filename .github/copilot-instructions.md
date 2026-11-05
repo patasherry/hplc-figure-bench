@@ -4,7 +4,7 @@ Read `AGENTS.md` first and follow it exactly. It is the rulebook for every agent
 
 ## The project
 
-HPLC Figure Bench is one HTML file, `hplc-figure-bench(WF1.13).html`, that a biochemistry graduate student uses for real protein purification data: chromatograms, SDS-PAGE gels, SEC calibration, NanoDrop readings, yields and Methods text. A wrong number is worse than a missing feature. Read `docs/CODEMAP.md` to find code, and `docs/GOALS.md` for priorities.
+Protein Purification Bench is one HTML file, `hplc-figure-bench(WF1.13).html`, that a biochemistry graduate student uses for real protein purification data: chromatograms, SDS-PAGE gels, SEC calibration, NanoDrop readings, yields and Methods text. A wrong number is worse than a missing feature. Read `docs/CODEMAP.md` to find code, and `docs/GOALS.md` for priorities.
 
 ## When you work on an issue (coding agent)
 
