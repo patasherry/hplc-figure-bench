@@ -168,4 +168,18 @@ await T.t('integration-tail-cutoff', async () => {
   }
 });
 
-T.done();})();
+await T.t('integration-tail-cutoff-adaptive.pct-increased', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    await load(p, project(gel(im, { edits: { added: [{lane: 1, y: 120.5/360}], removed: [] }})));
+    let L1 = lane(await csv(p));
+    let pct = parseFloat(L1[0][6]);
+    T.check('integration-tail-cutoff-adaptive.pct-increased', pct > 63.65, 'Expected percentage to increase over rigid 5% cutoff, was ' + pct);
+  } finally {
+    await a.close();
+  }
+});
+
+T.done();
+})();
