@@ -593,7 +593,17 @@ button,input,select,textarea{font-family:inherit}
       <div class="tablewrap"><table class="itab" id="protTable"></table></div>
       <p class="hint" id="protEps"></p>
       <p class="hint" id="auInfo"></p>
-      <div class="btns"><button type="button" class="btn" id="protUse" title="Sets the protein and tag sizes for gel matching, the SEC monomer mass and the A280 used for mg estimates">Use for gel, SEC and mg</button></div>
+      <div class="btns">
+        <button type="button" class="btn" id="protUse" title="Sets the protein and tag sizes for gel matching and the SEC monomer mass">Use for gel and SEC</button>
+        <label class="f">Mass coefficient
+          <select id="o-epsMode" data-opt="epsMode">
+            <option value="auto">Auto (by step)</option>
+            <option value="untagged">Untagged</option>
+            <option value="tagged">Tagged</option>
+          </select>
+        </label>
+        <label class="f">Custom A280 (1 mg/mL)<input type="number" step="any" min="0" id="o-eps" data-opt="eps" placeholder="optional"></label>
+      </div>
       <p class="hint">Mass is the average mass of the chain. pI uses the Bjellqvist pK values, the same as ExPASy ProtParam. A280 of a 1 mg/mL solution assumes all cysteines reduced (5500 per Trp, 1490 per Tyr). The asymmetric unit mass adds every entity in the deposited model except water.</p>
       <p class="hint">If this view cannot reach the PDB, download the entry's .cif file from rcsb.org and drop it here or anywhere on the page.</p>
     </section>
@@ -912,7 +922,6 @@ button,input,select,textarea{font-family:inherit}
         <label class="f">Peak finding prominence (%)<input type="number" id="o-intProm" data-opt="intProm" min="0.5" step="0.5"></label>
         <label class="f">UV flow cell path (mm)<input type="number" step="any" min="0.1" id="o-path" data-opt="path"></label>
       </div>
-      <label class="f">A280 of a 1 mg/mL solution (1 cm), for mass estimates<input type="number" step="any" min="0" id="o-eps" data-opt="eps" placeholder="optional, e.g. 0.92"></label>
       <label class="check"><input type="checkbox" id="o-intFill" data-opt="intFill">Shade integrated areas</label>
       <p class="hint">Drag across the chromatogram to integrate a region, or click Detect peaks under the figure. Gaussian fit splits overlapping peaks over one shared baseline. ÄKTA pure and start UV cells are 2 mm.</p>
     </section>
@@ -5559,6 +5568,16 @@ function renderProt(){
   const put = (sel, v) => { const e = $(sel); if (e && e !== document.activeElement && e.value !== v) e.value = v; };
   put('#pdbCode', opt.pdbCode || ''); put('#protSeq', opt.protSeq || ''); put('#tagSeq', opt.tagSeq || '');
   $('#tagSeq').placeholder = TAG_SEQ[opt.tagPreset] || "Paste the tag's sequence, including any linker and protease site";
+
+  const epsSel = $('#o-epsMode');
+  if (epsSel) {
+    const F = protForms();
+    const v = opt.epsMode || 'auto';
+    const ut = F.length && F[0].a280 ? `Untagged (${fmt(F[0].a280, 3)})` : 'Untagged';
+    const tg = F.length > 1 && F[1].a280 ? `Tagged (${fmt(F[1].a280, 3)})` : 'Tagged';
+    epsSel.innerHTML = `<option value="auto">Auto (by step)</option><option value="untagged">${esc(ut)}</option><option value="tagged">${esc(tg)}</option>`;
+    epsSel.value = v;
+  }
   const pe = struct ? struct.ents.filter(isProtEnt) : [], ew = $('#protEntWrap'); ew.hidden = pe.length < 2;
   if (pe.length > 1) { const h = pe.map(e => `<option value="${e.id}"${e.id === struct.ent ? ' selected' : ''}>${esc(e.desc || 'Entity ' + e.id)} (chain${e.chains.length > 1 ? 's' : ''} ${esc(e.chains.join(', '))})</option>`).join(''); const sl = $('#protEnt'); if (sl._h !== h) { sl._h = h; sl.innerHTML = h; } }
   const F = protForms();
@@ -5580,9 +5599,9 @@ function renderProt(){
 $('#protNote').addEventListener('click', e => { if (e.target.id === 'protTake' && struct) { const en = struct.ents.find(x => x.id === struct.ent); if (en) { opt.protSeq = en.seq; opt.protSrc = struct.code; saveOpt(); syncControls(); render(); } } else if (e.target.id === 'protApply') applyProt(); });
 $('#protSeq').addEventListener('input', () => { opt.protSrc = ''; });
 function applyProt(quiet){ const F = protForms(); if (!F.length) return; const u = F[0], t = F[2];
-  opt.protKda = +fmt(u.mass/1000, 1); opt.secMono = opt.protKda; if (u.a280) opt.eps = +fmt(u.a280, 3); if (t) opt.tagKda = +fmt(t.mass/1000, 1);
-  saveOpt(); syncControls(); render(); { const b = $('#protUse'); b.textContent = 'Applied'; b.disabled = true; setTimeout(() => { b.textContent = 'Use for gel, SEC and mg'; b.disabled = false; }, 1600); }
-  if (quiet !== true) toast(`Protein ${u.unk ? '≈ ' : ''}${opt.protKda} kDa${t ? `, tag ${t.unk ? '≈ ' : ''}${opt.tagKda} kDa` : ''}${u.a280 ? `, A280 ${u.unk ? '≈ ' : ''}${opt.eps} per mg/mL` : ''} now used for the gel, SEC and mg estimates${u.unk ? ` (approximate: ${u.unk} unknown residue${u.unk > 1 ? 's' : ''} counted as average)` : ''}`);}
+  opt.protKda = +fmt(u.mass/1000, 1); opt.secMono = opt.protKda; if (t) opt.tagKda = +fmt(t.mass/1000, 1);
+  saveOpt(); syncControls(); render(); { const b = $('#protUse'); b.textContent = 'Applied'; b.disabled = true; setTimeout(() => { b.textContent = 'Use for gel and SEC'; b.disabled = false; }, 1600); }
+  if (quiet !== true) toast(`Protein ${u.unk ? '≈ ' : ''}${opt.protKda} kDa${t ? `, tag ${t.unk ? '≈ ' : ''}${opt.tagKda} kDa` : ''} now used for the gel and SEC estimates${u.unk ? ` (approximate: ${u.unk} unknown residue${u.unk > 1 ? 's' : ''} counted as average)` : ''}`);}
 $('#protUse').addEventListener('click', () => applyProt());
 
 /* ---------- construct and expression panel ---------- */
@@ -5792,11 +5811,13 @@ function cutAfterIndex(){ const wf = runs.filter(r => r.inWf); if (prep.cleave) 
   const n = wf.findIndex(r => PROT_NOTE.test(String(r.note || '')) && !PROT_NOT.test(String(r.note || ''))); if (n >= 0) return n;
   const rv = wf.findIndex(r => (String(r.stepName || '').trim() || guessStep(r)) === 'Reverse IMAC'); return rv > 0 ? rv - 1 : -1; }
 const ndForm = r => { if (!r) return 'untagged'; if (r.ndForm) return r.ndForm; const wf = runs.filter(x => x.inWf), i = wf.indexOf(r), c = cutAfterIndex(); if (i < 0) return 'untagged'; return c < 0 || i <= c ? 'tagged' : 'untagged'; };
-function ndEpsFor(runId){ const r = runs.find(x => x.id === runId), F = protForms(), form = ndForm(r);
-  /* a tagged sample whose tag preset (GST, MBP…) has no sequence yet: the untagged mass would be wrong, so use the typed A280 or none */
+function ndEpsFor(runId){
+  if (numOr(opt.eps, 0) > 0) return {e: +opt.eps, kda: numOr(opt.protKda, 0) || null, src: 'set'};
+  const r = runId ? runs.find(x => x.id === runId) : null, F = protForms();
+  const form = opt.epsMode === 'untagged' ? 'untagged' : opt.epsMode === 'tagged' ? 'tagged' : ndForm(r);
   const noTag = form === 'tagged' && F.length === 1 && opt.tagPreset && opt.tagPreset !== 'custom' && TAG_PRESETS[opt.tagPreset];
-  if (F.length && !noTag) { const f = form === 'tagged' && F[1] ? F[1] : F[0]; if (f.a280) return {e: f.a280, kda: f.mass/1000, src: form === 'tagged' && F[1] ? 'tagged' : 'untagged'}; /* true product MW */ }
-  return numOr(opt.eps, 0) > 0 ? {e: +opt.eps, kda: numOr(opt.protKda, 0) || null, src: 'set'} : null; }
+  if (F.length && !noTag) { const f = form === 'tagged' && F[1] ? F[1] : F[0]; if (f.a280) return {e: f.a280, kda: f.mass/1000, src: form === 'tagged' && F[1] ? 'tagged' : 'untagged'}; }
+  return null; }
 /* the methods phrase for the A280 coefficient, said only when a reading of this run was actually converted with it (not for instrument, A205 or typed concentrations) */
 const epPhrase = E => E ? `, A280 of ${fmt(E.e, 2)} for 1 mg/mL of the ${E.src === 'set' ? 'protein' : E.src + ' form'}` : '';
 const ndEpsUsed = (r, ss) => { const E = r && ndEpsFor(r.id); return E && (ss || ndFinalOf(r)).some(s => s.kind !== 'nucleic' && s.a280 != null && (s.kind === 'protein' || s.conc == null)) ? E : null; };
