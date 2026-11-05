@@ -59,6 +59,17 @@ const {open, H, suite, src, path, DATA} = require('../lib/harness');
     }
   });
 
+  await T.t('status/counts-all-loaded-runs', async () => {
+    const {p: p2, errs: errs2, close: close2} = await open(), h2 = H(p2);
+    await h2.newProject('Two runs');
+    await h2.addRun(src('his'));
+    await h2.addRun(src('q'));
+    const status = await p2.locator('#toast').innerText();
+    T.check('status reports all loaded runs', /Loaded 2 ÄKTA runs/.test(status), status);
+    T.check('status count has no page errors', !errs2.length, errs2.join(' | '));
+    await close2();
+  });
+
   await close();
   T.done();
 })();
