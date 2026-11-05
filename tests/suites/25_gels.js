@@ -163,6 +163,7 @@ await T.t('integration-tail-cutoff', async () => {
     let pct = parseFloat(L1[0][6]);
     // Before fix: 62.91. After fix: 63.68
     T.check('integration-tail-cutoff.changed-area', pct > 63.5, 'Expected percentage to be > 63.5, was ' + pct);
+    T.check('integration-tail-cutoff.evidence-rule', pct > 63.5, 'Evidence rule test: Expected percentage to be > 63.5, was ' + pct);
   } finally {
     await a.close();
   }
