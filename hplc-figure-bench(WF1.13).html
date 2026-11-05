@@ -592,7 +592,7 @@ button,input,select,textarea{font-family:inherit}
       <label class="f">Protein sequence, untagged<textarea id="protSeq" data-opt="protSeq" rows="3" spellcheck="false" placeholder="Paste the sequence, or load a PDB entry"></textarea></label>
       <div class="row">
         <label class="f">Tag<select id="o-tagPreset2" data-opt="tagPreset">
-          <option value="sumo">His-SUMO</option><option value="his">His-tag (thrombin site)</option><option value="gst">GST</option><option value="mbp">MBP</option>
+          <option value="">No tag</option><option value="sumo">His-SUMO</option><option value="his">His-tag (thrombin site)</option><option value="gst">GST</option><option value="mbp">MBP</option>
           <option value="hismbp">His-MBP</option><option value="trx">His-Trx</option><option value="gfp">GFP</option><option value="custom">Other</option></select></label>
         <label class="f">Tag end<select id="o-tagPos" data-opt="tagPos"><option value="N">N-terminal</option><option value="C">C-terminal</option></select></label>
       </div>
@@ -1096,6 +1096,7 @@ button,input,select,textarea{font-family:inherit}
       <div class="row">
         <label class="f">Tag
           <select id="o-tagPreset" data-opt="tagPreset">
+            <option value="">No tag</option>
             <option value="sumo">His-SUMO (~12.5 kDa)</option>
             <option value="his">His-tag (~2.2 kDa)</option>
             <option value="gst">GST (~26 kDa)</option>
@@ -1151,7 +1152,7 @@ button,input,select,textarea{font-family:inherit}
         <label class="f">Y from<input type="number" step="any" id="o-ymin" data-opt="ymin" placeholder="auto"></label>
         <label class="f">Y to<input type="number" step="any" id="o-ymax" data-opt="ymax" placeholder="auto"></label>
       </div>
-      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Zoom inset: whole run, with the X window magnified</label>
+      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Show Inset View: whole run, with the X window magnified</label>
       <div class="row">
         <label class="f">Inset position
           <select id="o-zoomInsetPos" data-opt="zoomInsetPos">
@@ -1354,7 +1355,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   showPeaks:true, peakRot:false, peakDec:2, prom:5, peakColor:'trace', peakMax:8,
   xlabel:'Retention time (min)', ylabel:'Absorbance (mAU)', showY:true, frame:false, ticksOut:true,
   scalebar:false, sbValue:'', sbUnit:'mAU', legend:'inside',
-  runPad:15, sec:'grad', fracFmt:'full', fracEvery:0, phases:false, runTitle:false, bandSens:5, gelAutoCrop:true, bandLabels:'none', purBase:'lane', tagTol:2, tagShow:true, purRow:false, known: null, knownTol:6, knownMin:5, cleaveDetect:false, tagPreset:'sumo', tagKda:'', protKda:'', knownShow:'arrows', knownOn:false, knownCount:false,
+  runPad:15, sec:'grad', fracFmt:'full', fracEvery:0, phases:false, runTitle:false, bandSens:5, gelAutoCrop:true, bandLabels:'none', purBase:'lane', tagTol:2, tagShow:true, purRow:false, known: null, knownTol:6, knownMin:5, cleaveDetect:false, tagPreset:'', tagKda:'', protKda:'', knownShow:'arrows', knownOn:false, knownCount:false,
   secStds:false, targetName:'', taggedName:'', targetArrow:false, tagCounts:true, gelPos:'below', gelAlign:'center', gelScale:100, laneMark:'fill', gelView:'focus', ndNorm:'raw', ndFrom:240, ndCorr:true, ndFig:'conc', gelSpan:2.5, gelFocusKda:'', gelGap:0, gelSide:60, runGel:true, connectors:true, linkFrom:'axis', laneColors:true, laneAlpha:0.55,
   rxlabel:'Volume (mL)', rylabel:'Absorbance (mAU)', y2grad:'Buffer B (%)', y2cond:'Conductivity (mS/cm)',
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
@@ -1407,11 +1408,11 @@ const LADDERS = {
   custom:{name:'Custom (type values below)', v:''}};
 $('#g-preset').innerHTML = Object.entries(LADDERS).map(([k,v]) => `<option value="${k}">${v.name}</option>`).join('');
 
-let opt = Object.assign({}, DEF);
-try { const s = JSON.parse(localStorage.getItem('hplc-fig-opt') || 'null'); if (s && typeof s === 'object' && !Array.isArray(s)) Object.assign(opt, s); } catch(e) {}
+let opt = Object.assign({}, DEF), savedOpt = null;
+try { const s = JSON.parse(localStorage.getItem('hplc-fig-opt') || 'null'); if (s && typeof s === 'object' && !Array.isArray(s)) { Object.assign(opt, s); savedOpt = s; } } catch(e) {}
 opt.xmin = opt.xmax = opt.ymin = opt.ymax = '';
-/* the tidier defaults reach settings saved before them once */
-const tidyOpt = () => { if (!opt.tidy13) { opt.wfYield = false; opt.secStds = false; opt.tidy13 = true; } if (!opt.tidy14) { opt.noGelSlot = false; if (numOr(opt.wfGelH, 1.8) === 1.8) opt.wfGelH = 1.3; opt.tidy14 = true; } }; tidyOpt();
+/* the tidier defaults reach settings saved before them once. tidy15: a sequence is untagged unless a tag is chosen, but settings and projects saved under the old His-SUMO default keep it */
+const tidyOpt = s => { if (!opt.tidy13) { opt.wfYield = false; opt.secStds = false; opt.tidy13 = true; } if (!opt.tidy14) { opt.noGelSlot = false; if (numOr(opt.wfGelH, 1.8) === 1.8) opt.wfGelH = 1.3; opt.tidy14 = true; } if (!opt.tidy15) { if (s && !('tagPreset' in s)) opt.tagPreset = 'sumo'; opt.tidy15 = true; } }; tidyOpt(savedOpt);
 /* known proteins and SEC calibrations from saved settings or a project file: drop entries that are not objects, and built-in proteins take their current sizes and notes */
 function tidyKnown(L){ L = Array.isArray(L) ? L.filter(k => k && typeof k === 'object' && !Array.isArray(k)) : []; L.forEach(k => { const d = KNOWN_DEFAULT.find(x => x.name === k.name && x.kind === k.kind); if (d) { k.kda = d.kda; k.ctx = d.ctx; k.src = d.src; if (d.app) k.app = d.app; else delete k.app; } }); return L; }
 function tidyLists(){ opt.known = Array.isArray(opt.known) ? tidyKnown(opt.known) : KNOWN_DEFAULT.map(k => Object.assign({}, k)); secCals(); }
@@ -1474,7 +1475,7 @@ function shortRunName(r){
   const k = Math.max(0, ...runs.filter(x => x !== r).map(x => lcp(String(x.name).split(/\s+/))));
   return k >= 2 ? w.slice(k).join(' ') : r.name; }
 function fitTicks(t, lo, hi, n, plotW, cw, fs){
-  for (let k = n; k > 1 && t.v.length > 2; k--) { const w = Math.max(...t.v.map(v => fmt(v, t.dec).length))*cw + fs*0.9; if ((plotW/(hi - lo))*t.step >= w) break; t = ticks(lo, hi, k - 1); }
+  for (let k = n; k > 1 && t.v.length > 2; k--) { const w = cw ? Math.max(...t.v.map(v => fmt(v, t.dec).length))*cw + fs*0.9 : fs*1.05; if ((plotW/(hi - lo))*t.step >= w) break; t = ticks(lo, hi, k - 1); }
   return t; }
 function fmt(v, dec){ let s = (+v).toFixed(dec); if (/^-0(\.0+)?$/.test(s)) s = s.slice(1); return s; }
 /* tick numbers use a true minus sign */
@@ -1983,7 +1984,7 @@ function condLineCount(r, W){ if (r.prep || !opt.runCond || opt.runCond === 'non
   return Math.min(16, runCondLines(r, opt.runCond).reduce((t, x) => t + wrapWords(x, room).length, 0)); }
 const uvWl = uv => ((((uv && uv.name) || '').match(/UV\s*(?:\d[\s_-]+)?(2[2-9]\d|3\d\d|4\d\d)(?!\d)/i) || ((uv && uv.name) || '').match(/(?:^|[^\d])(2[2-9]\d|3\d\d|4\d\d)(?!\d)/)) || [])[1] || '';
 function uvTitle(t, uv){ const w0 = WF_WL !== undefined ? WF_WL : uvWl(uv), wl = w0 ? [w0, w0] : null, base = /^(UV a|A)bsorbance \(mAU\)$/.test(t || '');
-  return base && wl ? `A<tspan font-size="75%" dy="0.3em">${wl[1]}</tspan><tspan dy="-0.3em"> (mAU)</tspan>` : esc(t); }
+  return base && wl ? `A<tspan font-size="75%" dy="0.33em">${wl[1]}</tspan><tspan dy="-0.33em"> (mAU)</tspan>` : esc(t); }
 const kdaRound = v => v >= 10 ? String(Math.round(v)) : fmtAuto(v);
 const kdaText = v => v >= 100 ? String(Math.round(v)) : v >= 10 ? fmt(v, v % 1 ? 1 : 0).replace(/\.0$/, '') : String(+(+v).toPrecision(3));
 const OLIGO = ['', 'monomer', 'dimer', 'trimer', 'tetramer', 'pentamer', 'hexamer', 'heptamer', 'octamer'];
@@ -2450,7 +2451,7 @@ function buildRunPlainSVG(run, ov){
   const nCond = ov.nest && COND_N ? Math.max(condL.length, COND_N) : condL.length, condH = nCond ? nCond*cf*1.2 + fs*0.5 : 0;
   const mB = tOut + 3 + fs + 4 + fs*1.25 + (calNote ? fs*0.95 : 0) + condH, mT = fs*0.7 + titleH + stdH + ndH, plotH0 = H - mB - mT;
   /* room above the tallest peak for its label, so the label never sits on the trace */
-  const poolCap = poolCaption(run), willLab = (secRun ? (!o.secStds && ['olig', 'mw'].includes(o.secLabel || 'mw') ? 've' : (o.secLabel || 'mw')) : o.intLabel) !== 'none' && (secRun || (run.integ || []).length), top = 4 + (willLab ? fs*1.1 : 0) + (poolCap ? fs*1.05 : 0);
+  const poolCap = poolCaption(run), willLab = (secRun ? (o.secLabel || 'mw') : o.intLabel) !== 'none' && (secRun || (run.integ || []).length), top = 4 + (willLab ? fs*1.1 : 0) + (poolCap ? fs*1.05 : 0);
   const usable = Math.max(10, plotH0 - band - top);
   let y0 = ylo - yr*band/usable - yr*0.02, y1 = yhi + yr*top/usable;
   y0 = numOr(run.ymin, y0); y1 = numOr(run.ymax, y1); if (!(y1 > y0)) y1 = y0 + 1;
@@ -2519,7 +2520,7 @@ function buildRunPlainSVG(run, ov){
         s.push(`<rect x="${r2(xc - w/2)}" y="${r2(B - sh)}" width="${r2(w)}" height="${r2(sh)}" fill="${l.color}" stroke="#ffffff" stroke-width="0.5"/>`); } });
     s.push('</g>');
   }
-  const labMode = secRun ? (!o.secStds && ['olig', 'mw'].includes(o.secLabel || 'mw') ? 've' : (run.isStd && o.secLabel === 'olig') ? 'mw' : (o.secLabel || 'mw')) : o.intLabel;
+  const labMode = secRun ? ((run.isStd && o.secLabel === 'olig') ? 'mw' : (o.secLabel || 'mw')) : o.intLabel;
   const iRows = (o.intFill || labMode !== 'none') ? integRows(run) : [];
   if (iRows.length && o.intFill) {
     s.push(`<g clip-path="url(#${idp}plot-area)">`);
@@ -2689,7 +2690,7 @@ function buildCalSVG(cal){
   s.push('</g><g fill="#000000">');
   const xly = B + tOut + 3 + fs*0.78;
   xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(xly)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
-  s.push(`<text x="${r2((L + R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle">${fit.useKav ? 'K<tspan font-size="75%" dy="0.3em">av</tspan>' : cal.unit === 'min' ? 'Elution time (min)' : 'Elution volume (mL)'}</text>`);
+  s.push(`<text x="${r2((L + R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle">${fit.useKav ? 'K<tspan font-size="75%" dy="0.33em">av</tspan>' : cal.unit === 'min' ? 'Elution time (min)' : 'Elution volume (mL)'}</text>`);
   yTicks.forEach(v => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${kdaText(v)}</text>`));
   s.push(`<text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">Apparent mass (kDa)</text>`);
   s.push(`<text x="${r2(R)}" y="${r2(T + fs*0.6)}" text-anchor="end" font-size="${r2(fs*0.8)}">R² = ${fmt(fit.r2, 3)}</text>`);
@@ -3774,9 +3775,16 @@ function composeRuns(list, cfg){
   });
   if (n > 1 && cfg.arrows) {
     const pc = poolDark();
-    /* an arrow between panels that are not level (one was dragged): a straight line with its head turned to match */
-    const slantArrow = (xa, ya, xb, yb) => { const a = Math.atan2(yb - ya, xb - xa), c = Math.cos(a), s = Math.sin(a), bx = xb - 5*c, by = yb - 5*s;
-      return `<line x1="${r2(xa)}" y1="${r2(ya)}" x2="${r2(xb - 4*c)}" y2="${r2(yb - 4*s)}" stroke-width="1"/><path d="M${r2(xb)} ${r2(yb)}L${r2(bx - 2.6*s)} ${r2(by + 2.6*c)}L${r2(bx + 2.6*s)} ${r2(by - 2.6*c)}Z" stroke="none"/>`; };
+    /* an arrow between panels that are not level (one was dragged): a manhattan route */
+    const orthoArrow = (xa, ya, xb, yb, dir) => {
+      if (dir === 'x') {
+        const xm = (xa + xb) / 2;
+        return `<path d="M${r2(xa)} ${r2(ya)}H${r2(xm)}V${r2(yb)}H${r2(xb - 4)}" stroke-width="1" fill="none"/><path d="M${r2(xb)} ${r2(yb)}L${r2(xb - 5)} ${r2(yb - 2.6)}L${r2(xb - 5)} ${r2(yb + 2.6)}Z" stroke="none"/>`;
+      } else {
+        const ym = (ya + yb) / 2;
+        return `<path d="M${r2(xa)} ${r2(ya)}V${r2(ym)}H${r2(xb)}V${r2(yb - 4)}" stroke-width="1" fill="none"/><path d="M${r2(xb)} ${r2(yb)}L${r2(xb - 2.6)} ${r2(yb - 5)}L${r2(xb + 2.6)} ${r2(yb - 5)}Z" stroke="none"/>`;
+      }
+    };
     body.push(`<g fill="#000000" stroke="#000000">`);
     for (let i=0;i<n-1;i++){
       if (par[i + 1] !== i) continue;
@@ -3795,7 +3803,7 @@ function composeRuns(list, cfg){
         if (ay1 === ay2) {
           body.push(`<line${eid} x1="${r2(x1)}" y1="${r2(ay)}" x2="${r2(x2 - 4)}" y2="${r2(ay)}" stroke-width="1"/>`);
           body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
-        } else body.push(slantArrow(x1, ay1, x2, ay2).replace('<line', '<line' + eid));
+        } else body.push(orthoArrow(x1, ay1, x2, ay2, 'x').replace('<path', '<path' + eid));
         words.forEach((w, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay - 4 - (words.length - 1 - k)*fs*1.1)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(w)}</text>`));
         if (note) wrapN(note, x2 - x1).forEach((t, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay + nf*1.25 + k*nf*1.1)}" text-anchor="middle" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(t)}</text>`));
       } else {
@@ -3803,7 +3811,7 @@ function composeRuns(list, cfg){
         if (ax === ax2) {
           body.push(`<line${eid} x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
           body.push(`<path d="M${r2(ax)} ${r2(y2)}L${r2(ax - 2.6)} ${r2(y2 - 5)}L${r2(ax + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
-        } else body.push(slantArrow(ax, y1, ax2, y2).replace('<line', '<line' + eid));
+        } else body.push(orthoArrow(ax, y1, ax2, y2, 'y').replace('<path', '<path' + eid));
         if (lab || note) body.push(`<text x="${r2(ax + fs*0.8)}" y="${r2((y1 + y2)/2 + fs*0.35)}" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       }
     }
@@ -5064,7 +5072,7 @@ function renderWfTool(){
       + (!it.noArrow && !last ? `<label class="wfl" for="wfA">Arrow note</label><input type="text" id="wfA" value="${esc(it.arrow)}" placeholder="e.g. SUMO protease, 4 °C overnight">` : '')
       + (!it.noW && row ? `<span class="wfg"><span class="wfl">Width</span><button type="button" class="mini" data-wf="w:-1" aria-label="Narrower">−</button><button type="button" class="mini" data-wf="w:1" aria-label="Wider">+</button></span>` : '')
       + (it.gel ? `<span class="wfg"><span class="wfl">Gel</span><button type="button" class="mini" data-wf="gz:-1" aria-label="Smaller gel">−</button><button type="button" class="mini" data-wf="gz:1" aria-label="Larger gel">+</button></span>` : '')
-      + (it.kind === 'run' ? `<label class="check" style="margin-right:12px; margin-left:6px;"><input type="checkbox" data-wfz="1" ${it.zoom ? 'checked' : ''}> Zoom inset</label>` : '')
+      + (it.kind === 'run' ? `<label class="check" style="margin-right:12px; margin-left:6px;"><input type="checkbox" data-wfz="1" ${it.zoom ? 'checked' : ''}> Show Inset View</label>` : '')
       + `<button type="button" class="mini" data-wf="reset">Reset position</button><button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button>`; }
   const rb = tool.querySelector('[data-wf=reset]'); if (rb) rb.disabled = !(it.ox || it.oy);
   tool.hidden = false; const th = tool.offsetHeight, tw = tool.offsetWidth, ww = wrap.clientWidth;
@@ -5947,7 +5955,7 @@ function buildNDSVG(only, info){
   xt.v.forEach(v => s.push(`<line x1="${r2(px(v))}" y1="${r2(B)}" x2="${r2(px(v))}" y2="${r2(B + dir*tl)}"/>`)); yt.v.forEach(v => s.push(`<line x1="${r2(L)}" y1="${r2(py(v))}" x2="${r2(L - dir*tl)}" y2="${r2(py(v))}"/>`)); s.push('</g>');
   s.push(`<g fill="#000000">`); xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(B + tOut + 3 + fs*0.85)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
   yt.v.forEach((v, i) => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${ytl[i]}</text>`));
-  s.push(`<text x="${r2((L + R)/2)}" y="${r2(H - fs*0.35)}" text-anchor="middle">Wavelength (nm)</text><text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">${norm ? 'Absorbance / A<tspan font-size="75%" dy="0.3em">280</tspan>' : 'Absorbance (10 mm)'}</text></g>`);
+  s.push(`<text x="${r2((L + R)/2)}" y="${r2(H - fs*0.35)}" text-anchor="middle">Wavelength (nm)</text><text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">${norm ? 'Absorbance / A<tspan font-size="75%" dy="0.33em">280</tspan>' : 'Absorbance (10 mm)'}</text></g>`);
   const lf = fs*0.82, maxC = Math.max(6, Math.floor((legW - fs*2.4)/(lf*0.52)));
   sp.forEach((smp, k) => { const yy = T + fs*0.6 + k*fs*1.3, nm = smp.name.length > maxC ? smp.name.slice(0, maxC - 1) + '…' : smp.name; s.push(`<line x1="${r2(R + fs*0.7)}" y1="${r2(yy - fs*0.3)}" x2="${r2(R + fs*1.8)}" y2="${r2(yy - fs*0.3)}" stroke="${pal[k % pal.length]}" stroke-width="${r2(lw*1.6)}"/><text x="${r2(R + fs*2.1)}" y="${r2(yy)}" font-size="${r2(lf)}">${esc(nm)}</text>`); });
   s.push('</svg>'); return {svg: s.join(''), geo: {W, H, nd: true}};
@@ -6164,7 +6172,7 @@ async function openProject(data, name, noUndo){
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
     { const pq = Array.isArray(opt.myQuick) ? opt.myQuick : [], del = new Set([...(myQDel || []), ...(Array.isArray(opt.myQuickDel) ? opt.myQuickDel : [])]); opt.myQuickDel = [...del]; opt.myQuick = myQ.concat(pq.filter(q => !myQ.some(m => m.id === q.id))).filter(q => !del.has(q.id)); }
     const pc = secCals(); opt.secCals = pc.concat(myCals.filter(c => !pc.some(x => x.id === c.id)));
-    if (myKnown) { const pk = tidyKnown(dopt.known); opt.known = myKnown.concat(pk.filter(k => !myKnown.some(m => m.name === k.name && +m.kda === +k.kda))); } tidyLists(); tidyOpt(); }
+    if (myKnown) { const pk = tidyKnown(dopt.known); opt.known = myKnown.concat(pk.filter(k => !myKnown.some(m => m.name === k.name && +m.kda === +k.kda))); } tidyLists(); tidyOpt(dopt); }
   let mx = 0; [...runs, ...gels].forEach(x => { const m = String(x.id).match(/\d+/); if (m) mx = Math.max(mx, +m[0]); }); traces.forEach(t => { mx = Math.max(mx, +t.id || 0); }); uid = Math.max(mx + 1, numOr(prep.nextUid, 0));
   cur = data.cur || 'overlay'; marking = null; tagMode = '';
   renderList(); syncControls(); render(); saveOpt();

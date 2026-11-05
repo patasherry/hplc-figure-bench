@@ -123,7 +123,11 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
       await setField('#o-secMono', '49.2'); await p.selectOption('#o-secLabel', 'mw').catch(() => {}); await h.wait(600); await p.click('#intAuto').catch(() => {}); await h.wait(700);
       const on = (await h.svgTexts()).map(x => x.t).join(' | ') + ' || ' + (await h.peakTable()).flat().join(' | ');
       T.check('sec.size_text_when_on', /\bKav\b/.test(on) && /\d\s*kDa/.test(on), on.slice(0, 300)); /* guards: with standards on, Kav and apparent size appear */
-      await p.locator('#o-secStds').uncheck({force: true}); await h.wait(400); });
+      await p.locator('#o-secStds').uncheck({force: true}); await h.wait(400);
+
+      await p.selectOption('#o-secLabel', 'mw'); await h.wait(400);
+      const mw_lbl = (await h.svgTexts()).map(x => x.t).join(' | ');
+      T.check('sec.peak_label_mw', /\d+\s*kDa/.test(mw_lbl), mw_lbl.slice(0, 300)); });
 
     /* moving the Concentrated step and removing a column keep the numbers consistent */
     await T.t('p1_move', async () => { const before = (await table()).rows.map(r => r.Step); const it = (await h.timeline()).find(x => /^btw:/.test(x.k)); await h.step(it.k);

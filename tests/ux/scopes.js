@@ -70,7 +70,7 @@ module.exports = [
     ]},
   {id: 'zoom', title: 'Zoom inset and full chromatograms', goal: 'Show a whole run with the peak region magnified, then show full chromatograms in the workflow figure.',
     steps: [
-      {name: 'Start a project with a run', run: async ({h, src}) => { await project(h, 'UX zoom'); await h.addRun(src('his')); }},
+      {name: 'Start a project with a run', run: async ({h, src}) => { await project(h, 'Peak Zoom'); await h.addRun(src('his')); }},
       {name: 'Turn on the zoom inset', run: async ({p}) => { if (!(await p.isVisible('#o-zoomInset'))) await clickText(p, /window|more options/i, 'Window'); await tick(p, '#o-zoomInset'); }},
       {name: 'Show the workflow figure with full chromatograms', run: async ({p, h}) => { await showWorkflow(p, h); await tick(p, '#o-wfFull'); }},
     ]},

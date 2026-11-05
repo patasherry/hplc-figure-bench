@@ -10,8 +10,14 @@ T.t('10_tag_mass_sync', async () => {
   await p.setInputFiles('#gelFile', [path.join(DATA, 'standins', 'gel_photo.jpg')]);
   await p.waitForTimeout(400);
 
-  // 2. Paste the 100-residue sequence above into #protSeq; leave #o-tagPreset at sumo.
+  // 2. Choose His-SUMO in #o-tagPreset (the menu starts at No tag since #1007); paste the 100-residue sequence above into #protSeq.
   const seq = "ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY";
+  await p.evaluate(() => {
+    const e = document.querySelector('#o-tagPreset');
+    e.value = 'sumo';
+    e.dispatchEvent(new Event('change', {bubbles: true}));
+  });
+  await p.waitForTimeout(200);
   await p.evaluate(t => {
     const e = document.querySelector('#protSeq');
     e.value = t;

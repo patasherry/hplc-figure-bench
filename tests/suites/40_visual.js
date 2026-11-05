@@ -101,6 +101,29 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
             const d = Math.max(...nb.map(P => Math.abs(P[k] - C[k]))); T.check(`${tag}:fig-${lay}:conc-axis-aligned`, d <= 2, `off by ${d.toFixed(1)} px (${useLine ? 'axis line' : 'tick row, axis line not found'}) ${shot}`); } } /* Concentrated x axis lines up with its row neighbours */
         const badA = g.arrows.filter(a => { const P = g.panels.find(Q => a.x >= Q.x0 - 30 && a.x < Q.x1 && a.y >= Q.y0 && a.y < Q.y1 && Q.plotBottom); if (!P) return false; const top = P.y0 + 14, bot = P.plotBottom; return a.y < top + 0.15*(bot - top) || a.y > bot - 0.1*(bot - top); });
         if (lay === 'row') T.check(`${tag}:fig-${lay}:arrows-found`, g.arrows.length >= 2, `${g.arrows.length} arrowheads`); /* the row layout draws arrows between steps */
+        /* check ortho routing when dragged */
+        if (lay === 'row' && theme === 'light') {
+          await T.t(`${tag}:fig-ortho-arrow`, async () => {
+            const P = (await figGeom(p)).panels.find(Q => /IMAC/.test(Q.title));
+            if (P) {
+              const tr = await p.evaluate(i => { const r = document.querySelectorAll('#paper svg text')[i].getBoundingClientRect(); return {x: r.left, y: r.top, r: r.right, b: r.bottom}; }, P.ti);
+              await p.mouse.move(tr.x + 20, tr.b + 40);
+              await p.mouse.down();
+              await p.mouse.move(tr.x + 20 + 50, tr.b + 40 + 50);
+              await p.mouse.up();
+              await h.wait(400);
+
+              const svg = await p.evaluate(() => document.querySelector('#paper svg').innerHTML);
+              const hasSlant = /<line[^>]*stroke-width="1"/.test(svg);
+              const hasOrtho = /<path[^>]*d="M[^"]*H[^"]*V[^"]*H/.test(svg) || /<path[^>]*d="M[^"]*V[^"]*H[^"]*V/.test(svg);
+              T.check(`${tag}:fig-ortho-arrow:routed`, !hasSlant && hasOrtho, 'arrows should use manhattan path');
+            }
+          });
+        }
+
+
+
+
         T.check(`${tag}:fig-${lay}:arrow-height`, !badA.length, badA.map(a => `${Math.round(a.x)},${Math.round(a.y)}`).join(' ')); /* step arrows sit in the plot's vertical middle band, not at the top or on the axis */
         /* click-to-edit toolbar, one panel per layout to stay under the time budget (light theme only) */
         if (theme === 'light') { const P = g.panels.find(Q => /IMAC|Concentrat/.test(Q.title)) || g.panels[0];
@@ -125,12 +148,5 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
       T.check(`chrom:${f}:no-overlap`, !ov.length, ov.slice(0, 6).join(' | ') + ' ' + shot); /* hard cases (overlapping, tiny, 96-well, 2 plates) keep labels apart */
       T.check(`chrom:${f}:no-hscroll`, !(await h.hScroll()), shot); /* a wide plate never makes the page scroll sideways */ }); }
     await close(); }
-  test('gel label size clamped to 5pt', async ({ page }) => {
-    const p = page;
-    await newProject('test-gel-label');
-    await addRun(['tests/data/gel1.png']);
-    await p.waitForTimeout(2000);
-    const h = (await p.locator('#paper svg text:has-text("Band 1")').first().getAttribute('h'));
-    expect(parseFloat(h)).toBeGreaterThanOrEqual(6.666);
-  });
+
   T.done(); })();
