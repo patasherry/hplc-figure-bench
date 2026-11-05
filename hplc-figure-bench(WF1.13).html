@@ -3774,9 +3774,16 @@ function composeRuns(list, cfg){
   });
   if (n > 1 && cfg.arrows) {
     const pc = poolDark();
-    /* an arrow between panels that are not level (one was dragged): a straight line with its head turned to match */
-    const slantArrow = (xa, ya, xb, yb) => { const a = Math.atan2(yb - ya, xb - xa), c = Math.cos(a), s = Math.sin(a), bx = xb - 5*c, by = yb - 5*s;
-      return `<line x1="${r2(xa)}" y1="${r2(ya)}" x2="${r2(xb - 4*c)}" y2="${r2(yb - 4*s)}" stroke-width="1"/><path d="M${r2(xb)} ${r2(yb)}L${r2(bx - 2.6*s)} ${r2(by + 2.6*c)}L${r2(bx + 2.6*s)} ${r2(by - 2.6*c)}Z" stroke="none"/>`; };
+    /* an arrow between panels that are not level (one was dragged): a manhattan route */
+    const orthoArrow = (xa, ya, xb, yb, dir) => {
+      if (dir === 'x') {
+        const xm = (xa + xb) / 2;
+        return `<path d="M${r2(xa)} ${r2(ya)}H${r2(xm)}V${r2(yb)}H${r2(xb - 4)}" stroke-width="1" fill="none"/><path d="M${r2(xb)} ${r2(yb)}L${r2(xb - 5)} ${r2(yb - 2.6)}L${r2(xb - 5)} ${r2(yb + 2.6)}Z" stroke="none"/>`;
+      } else {
+        const ym = (ya + yb) / 2;
+        return `<path d="M${r2(xa)} ${r2(ya)}V${r2(ym)}H${r2(xb)}V${r2(yb - 4)}" stroke-width="1" fill="none"/><path d="M${r2(xb)} ${r2(yb)}L${r2(xb - 2.6)} ${r2(yb - 5)}L${r2(xb + 2.6)} ${r2(yb - 5)}Z" stroke="none"/>`;
+      }
+    };
     body.push(`<g fill="#000000" stroke="#000000">`);
     for (let i=0;i<n-1;i++){
       if (par[i + 1] !== i) continue;
@@ -3795,7 +3802,7 @@ function composeRuns(list, cfg){
         if (ay1 === ay2) {
           body.push(`<line${eid} x1="${r2(x1)}" y1="${r2(ay)}" x2="${r2(x2 - 4)}" y2="${r2(ay)}" stroke-width="1"/>`);
           body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
-        } else body.push(slantArrow(x1, ay1, x2, ay2).replace('<line', '<line' + eid));
+        } else body.push(orthoArrow(x1, ay1, x2, ay2, 'x').replace('<path', '<path' + eid));
         words.forEach((w, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay - 4 - (words.length - 1 - k)*fs*1.1)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(w)}</text>`));
         if (note) wrapN(note, x2 - x1).forEach((t, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay + nf*1.25 + k*nf*1.1)}" text-anchor="middle" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(t)}</text>`));
       } else {
@@ -3803,7 +3810,7 @@ function composeRuns(list, cfg){
         if (ax === ax2) {
           body.push(`<line${eid} x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
           body.push(`<path d="M${r2(ax)} ${r2(y2)}L${r2(ax - 2.6)} ${r2(y2 - 5)}L${r2(ax + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
-        } else body.push(slantArrow(ax, y1, ax2, y2).replace('<line', '<line' + eid));
+        } else body.push(orthoArrow(ax, y1, ax2, y2, 'y').replace('<path', '<path' + eid));
         if (lab || note) body.push(`<text x="${r2(ax + fs*0.8)}" y="${r2((y1 + y2)/2 + fs*0.35)}" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       }
     }
