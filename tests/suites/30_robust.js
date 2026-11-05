@@ -373,7 +373,10 @@ await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p);
     T.check('perf.pool-typing-under-400ms', ms >= 0 && ms < 400, ms + ' ms on the 200k run'); } // typing in the pool box stays responsive
   { for (const f of [F.his, F.ortho, F.q, F.s200, F.zip]) await h.dropFiles(f); await h.addConc(F.nd, 0.3); await h.addConc(null, 0.2); await h.addConc(null, 0.1); const n = purif(await h.timeline()).length;
     const ms = await p.evaluate(async () => { const b = document.querySelector('#tl [data-step="figure"]'); const t = performance.now(); b.click(); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); return Math.round(performance.now() - t); });
-    T.check('perf.workflow-8-steps-under-1.5s', n >= 8 && ms < 1500, `${n} steps, ${ms} ms`); } // the full figure renders in time
+    T.check('perf.workflow-8-steps-under-1.5s', n >= 8 && ms < 1500, `${n} steps, ${ms} ms`);
+    T.check('perf.workflow-8-steps-under-400ms', n >= 8 && ms < 400, `${n} steps, ${ms} ms`);
+    T.check('perf.workflow-8-steps-under-325ms', n >= 8 && ms < 325, `${n} steps, ${ms} ms`);
+  } // the full figure renders in time
   T.check('perf.no-error', !errs.length, errs.join(' | ')); await close(); });
 
 /* a hand-made or older project file whose trace has only an id, a name and rows still opens, and the trace is drawn on the overlay (#148) */
