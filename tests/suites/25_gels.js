@@ -168,4 +168,46 @@ await T.t('integration-tail-cutoff', async () => {
   }
 });
 
+
+await T.t('ui-clipping-fix', async () => {
+  const a = await start();
+  const p = a.p;
+
+  try {
+    const intpOverflow = await p.evaluate(() => {
+      const el = document.createElement('div');
+      el.className = 'intp';
+      document.body.appendChild(el);
+      const style = window.getComputedStyle(el);
+      const overflowY = style.overflowY;
+      el.remove();
+      return overflowY;
+    });
+    T.check('intp-overflow-auto', intpOverflow === 'auto', 'intp container should have overflow-y auto to prevent band size clipping');
+
+    const readoutZIndex = await p.evaluate(() => {
+      const el = document.createElement('div');
+      el.className = 'readout';
+      document.body.appendChild(el);
+      const style = window.getComputedStyle(el);
+      const zIndex = style.zIndex;
+      el.remove();
+      return zIndex;
+    });
+    T.check('readout-z-index-10', readoutZIndex === '10', 'readout tooltip should have z-index 10 to not clip under integration');
+
+    const wftoolZIndex = await p.evaluate(() => {
+      const el = document.createElement('div');
+      el.className = 'wftool';
+      document.body.appendChild(el);
+      const style = window.getComputedStyle(el);
+      const zIndex = style.zIndex;
+      el.remove();
+      return zIndex;
+    });
+    T.check('wftool-z-index-10', wftoolZIndex === '10', 'wftool tooltip should have z-index 10 to not clip under integration');
+  } finally {
+    await a.close();
+  }
+});
 T.done();})();
