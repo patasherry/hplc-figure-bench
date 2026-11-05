@@ -453,6 +453,12 @@ details.koff #knownList,details.koff #knownList + .btns{opacity:.5}
 .paper > svg{display:block;width:100%;height:auto;max-height:max(320px,calc(100vh - 370px));cursor:crosshair}
 body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
 .paper .empty{color:#5a6177;font-size:14px;text-align:center;max-width:36ch;line-height:1.5}
+.figmodal{width:min(1200px,calc(100vw - 32px));height:min(90vh,calc(100vh - 32px));max-width:none;max-height:none;border:1px solid var(--line2);border-radius:12px;background:var(--panel);color:var(--ink);padding:0;box-shadow:var(--shadow)}
+.figmodal::backdrop{background:rgba(15,18,26,.58)}
+.figmodal-head{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.figmodal-head strong{flex:1;font-size:15px}
+.figmodal-body{height:calc(100% - 57px);overflow:auto;padding:18px;background:var(--well)}
+.figmodal-body > svg{display:block;width:100%;height:auto;min-width:640px;background:#ffffff}
 .spec{display:grid;gap:1px;font-size:12px;color:var(--muted);min-width:0}
 .spec #spec{color:var(--ink)}
 .spec span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(60ch,100%)}
@@ -631,6 +637,7 @@ button,input,select,textarea{font-family:inherit}
         <label class="check"><input type="checkbox" id="o-wfLetters" data-opt="wfLetters">Panel letters</label>
         <label class="check"><input type="checkbox" id="o-wfGels" data-opt="wfGels">Gels under each step</label>
         <label class="check" title="Draw each chromatogram over its whole run instead of the cropped window. The crop of the run itself is kept for the single-run figure"><input type="checkbox" id="o-wfFull" data-opt="wfFull">Full chromatogram in the workflow</label>
+        <button class="btn quiet" id="wfFullView" type="button" title="Open a scalable SVG view with every workflow chromatogram shown over its whole run">View full chromatograms</button>
         <label class="check"><input type="checkbox" id="o-wfArrows" data-opt="wfArrows">Arrows between steps</label>
         <label class="check"><input type="checkbox" id="o-noGelSlot" data-opt="noGelSlot">Mark steps without a gel (on screen only)</label>
         <label class="check" title="Grid and stacked figures taller than 9.5 in get shorter traces and gels"><input type="checkbox" id="o-wfFit" data-opt="wfFit">Fit to page height</label>
@@ -1294,6 +1301,7 @@ button,input,select,textarea{font-family:inherit}
       <div class="prompt" id="markPrompt" role="status" aria-live="polite" hidden></div>
       <div class="paperwrap" id="paperwrap"><div class="paper" id="paper" role="tabpanel" aria-label="Figure preview"></div><div class="dragbox" id="dragBox" hidden></div><div class="wfsel" id="wfSelBox" hidden></div><div class="wftool" id="wfTool" hidden role="dialog" aria-label="Edit panel"></div><div class="readout" id="readout" aria-live="off"></div></div>
     </div>
+    <dialog class="figmodal" id="wfFullModal" aria-labelledby="wfFullModalTitle"><div class="figmodal-head"><strong id="wfFullModalTitle">Full chromatograms</strong><button class="btn quiet" id="wfFullModalClose" type="button">Close</button></div><div class="figmodal-body" id="wfFullModalFig"></div></dialog>
     <div class="canvas-foot">
       <div class="spec"><span id="spec"></span><span id="spec2"></span></div>
       <div class="btns export">
@@ -4536,6 +4544,17 @@ function buildFig(f, screen){ FIG_SCREEN = !!screen;
 
 /* ---------- UI ---------- */
 const paper = $('#paper'), list = $('#list');
+function showWorkflowFull(){
+  const f = curFig(), modal = $('#wfFullModal'), body = $('#wfFullModalFig');
+  if (!f || f.kind !== 'workflow' || !modal || !body) return;
+  const res = withOpt({wfFull: true}, () => buildWorkflow());
+  if (!res.svg) return toast('Nothing to show yet');
+  body.innerHTML = res.svg;
+  if (!modal.open) modal.showModal();
+}
+$('#wfFullView').addEventListener('click', showWorkflowFull);
+$('#wfFullModalClose').addEventListener('click', () => $('#wfFullModal').close());
+$('#wfFullModal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#moreOpts').addEventListener('click', e => { const b = e.target.closest('[data-more-sec]'); if (b) { document.body.classList.add('moreopen'); render(); const sec = [...document.querySelectorAll('#panel > .grp')].find(g => { const h = g.querySelector(':scope > h2'); return h && h.firstChild && h.firstChild.textContent.trim() === b.dataset.moreSec; }); if (sec) { sec.classList.remove('collapsed'); const h = sec.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', 'true'); sec.scrollIntoView({behavior: smooth(), block: 'start'}); } } });
 $('#moreBtn').addEventListener('click', () => { document.body.classList.toggle('moreopen'); render(); });
 /* the ladder is detected automatically whenever the crop, lanes or ladder sizes change, until you mark it by hand */
