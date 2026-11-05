@@ -671,7 +671,8 @@ RELAY_LABEL = cfg.get('relay_label', 'needs-relay')  # Patrick puts this on an i
 RELAY_BOARD = cfg.get('board_relay_label', 'relay-from-board')  # the board puts this on a from-board issue whose advisers' scores were split
 BOARD_RELAY_MAX = cfg.get('board_relay_max', 2)  # board-raised requests per round; the rest go to jules-queue
 RELAY_PENDING = 'relay-pending'  # on issues with an open request, so the PC and cloud copies find them without sharing state
-RELAY_HOURS, RELAY_ROUNDS, RELAY_CTX = cfg.get('relay_expire_hours', 12), cfg.get('relay_max_rounds', 2), cfg.get('relay_context_lines', 40)
+RELAY_HOURS, RELAY_ROUNDS, RELAY_CTX = cfg.get('relay_expire_hours', 12), cfg.get('relay_max_rounds', 1), cfg.get('relay_context_lines', 40)
+RELAY_LINES = cfg.get('relay_max_lines', rl.MAX_LINES)  # excerpt lines per request: the relay is for the hard jobs, so it sends whole sections
 
 
 def relay_app():
@@ -679,6 +680,31 @@ def relay_app():
     meta = gh(f'repos/{REPO}/contents/{urllib.parse.quote(rl.APP)}?ref=main')
     text = base64.b64decode(gh(f'repos/{REPO}/git/blobs/{meta["sha"]}')['content']).decode('utf-8')
     return text, gh(f'repos/{REPO}/commits/main')['sha'][:10]
+
+
+def relay_file(path):
+    """A small repository file at main, as text, or None."""
+    try:
+        meta = gh(f'repos/{REPO}/contents/{urllib.parse.quote(path)}?ref=main')
+        return base64.b64decode(gh(f'repos/{REPO}/git/blobs/{meta["sha"]}')['content']).decode('utf-8')
+    except Exception as e:
+        log(f'relay: could not read {path}: {e}'); return None
+
+
+HARNESS = ['tests/lib/harness.js', 'tests/suites/25_gels.js']
+
+
+def relay_extra(title, body):
+    """The whole files a request carries beside the excerpt. A job that asks for a check gets the harness and one worked suite:
+    without them every agent answered 'insufficient, show me the test-harness interfaces'."""
+    if not rl.wants_tests(title, body):
+        return []
+    out = []
+    for path in HARNESS:
+        t = relay_file(path)
+        if t:
+            out.append((path, t if len(t) < 20000 else t[:20000] + '\n... (truncated)'))
+    return out
 
 
 def relay_labelled_by_owner(n):
@@ -706,7 +732,7 @@ def relay_send(n, issue, app_text, base, ranges, board=False):
            'so it comes here for a bigger reasoning budget before it goes to the work queue.\n\n' + rl.BOARD_MARK + '\n') if board else ''
     body = re.sub(r'^.*relay-lines:.*$', '', issue.get('body') or '', flags=re.M).strip()[:6000]
     exp = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=RELAY_HOURS)
-    req = rl.build_request(rid, base, app_text, n, exp, issue['title'], body or issue['title'], ranges)
+    req = rl.build_request(rid, base, app_text, n, exp, issue['title'], body or issue['title'], ranges, relay_extra(issue['title'], body))
     post(n, why + f'**Relay request `{rid}`.** Paste the block below into the offline agent as its whole prompt, then paste its reply back here as a comment. Valid until {rl.iso(exp)}.\n\n'
             + rl.MARK.format(rid, base) + '\n````\n' + req + '\n````' + SIGN.format(rv.MODEL))
     log(f'relay request {rid} posted on #{n}')
@@ -742,7 +768,7 @@ def relay(s):
             if board and rt.is_light(i['title']):  # a light job gains little from a bigger reasoning budget: the normal queue
                 post(n, 'This is a light job, so it did not need the offline relay. It went to the normal work queue (`jules-queue`) instead.' + SIGN.format(rv.MODEL))
                 label(n, add=['jules-queue'], remove=[lab]); continue
-            ranges = rl.pick_ranges(app, i.get('body'), RELAY_CTX)  # a board issue with no location still goes out, without an excerpt: the agent names what it needs (round 2)
+            ranges = rl.pick_ranges(app, f"{i['title']}\n{i.get('body') or ''}", RELAY_CTX, RELAY_LINES)  # by subject when no line is named, so the first request already carries the right code
             if not ranges and not board:
                 post(n, f'I need a range to cut the excerpt from. Add a line `relay-lines: <from>-<to>` or a line number ("line 1234") to the issue body, then label it `{RELAY_LABEL}` again.' + SIGN.format(rv.MODEL))
                 label(n, remove=[RELAY_LABEL]); continue
@@ -789,7 +815,7 @@ def relay_collect(n, issue):
             mid = re.search(r'^id:\s*(\S+)', c['body'], re.M)
             rid = mid.group(1) if mid else ''
             reqs.pop(rid, None)
-            ranges = relay_ranges_of(cs, rid) or rl.pick_ranges(app, issue.get('body'), RELAY_CTX)
+            ranges = relay_ranges_of(cs, rid) or rl.pick_ranges(app, f"{issue['title']}\n{issue.get('body') or ''}", RELAY_CTX, RELAY_LINES)
             if rl.request_count(bodies) < 1 + RELAY_ROUNDS and (ranges or board) and not DRY:
                 post(n, f'Stale: {b.msg}. Request `{rid}` is withdrawn and a fresh one follows, cut from main as it is now. Nothing was filed.' + rl.DONE.format(rid) + sig + SIGN.format(rv.MODEL))
                 new = relay_send(n, issue, app, base, ranges, board); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
@@ -808,7 +834,7 @@ def relay_collect(n, issue):
             late = '' if r['base'] == base else f'\n\n_(Written against main {r["base"]}; main is now {base}, so check it against the current code.)_'
             post(n, f'**Relay answer to `{rid}`:** {nomention(r["summary"])}\n\n{nomention(r["answer"])}{late}' + done)
         elif rl.request_count(bodies) < 1 + RELAY_ROUNDS and not DRY:
-            ranges = rl.ranges_from_need(app, r['need'], RELAY_CTX) or relay_ranges_of(cs, rid)
+            ranges = rl.ranges_from_need(app, r['need'], RELAY_CTX, RELAY_LINES, had=relay_ranges_of(cs, rid))
             post(n, f'`{rid}` came back as insufficient: {nomention(r["need"])[:600]}\n\nA second request follows.' + done)
             new = relay_send(n, issue, app, base, ranges, board); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
         else:
@@ -992,6 +1018,17 @@ def gate(s):
                 continue  # wait for the tests
             stuck_conflict = True  # GitHub runs no PR tests while a PR conflicts with main, so without this it would wait forever
         files = [f['filename'] for f in gh(f'repos/{REPO}/pulls/{n}/files?per_page=100')]
+        if not files:  # an empty PR fixes nothing, and every file check below passes vacuously, so it would merge and close its issue while the bug stays
+            full = gh(f'repos/{REPO}/pulls/{n}')
+            m0 = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
+            iss = int(m0.group(1)) if m0 else linked_issue(n)
+            gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
+            post(n, 'This pull request changes no files, so it cannot fix anything. Closed without merging, because merging it would close its issue while the bug stays.' + SIGN.format(rv.MODEL))
+            if iss:
+                label(iss, add=['jules-queue'], remove=['jules-running', 'jules-done', 'claude-cloud-running', 'claude-code-running'])
+                post(iss, f'PR #{n} for this issue changed no files, so it was closed without merging and the issue is queued again. The fix still has to be made in the app, with a check that fails on main and passes on the branch.' + SIGN.format(rv.MODEL))
+            log(f'PR #{n}: empty, closed and #{iss} requeued')
+            continue
         if rv.APP not in files and all(ALLOWED.match(f) for f in files) and not (stuck_conflict or waits_approval):
             s['gated'][str(n)] = sha  # tests or docs only and nothing stray: the leader's own merge rule handles it
             continue

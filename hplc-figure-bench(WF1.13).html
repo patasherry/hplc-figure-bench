@@ -287,9 +287,9 @@ details.paste[open]{display:grid;gap:8px}
 .canvas{background:var(--panel);border:1px solid var(--line);border-radius:12px;display:grid;grid-template-columns:minmax(0,1fr);min-width:0;overflow:hidden}
 .canvas-body{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:16px;background:var(--well);min-width:0}
 .canvas-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding:10px 14px;border-top:1px solid var(--line)}
-.export{justify-content:flex-end}
+.export{justify-content:flex-end;gap:8px}
 .export select{width:auto;min-height:32px}
-.readout{position:absolute;top:10px;right:10px;font-size:11.5px;color:var(--paper-ink);background:var(--paper);border:1px solid var(--paper-edge);border-radius:6px;padding:2px 8px;pointer-events:none;box-shadow:0 1px 2px rgba(21,26,40,.08)}
+.readout{position:absolute;top:10px;right:10px;font-size:11.5px;color:var(--paper-ink);background:var(--paper);border:1px solid var(--paper-edge);border-radius:6px;padding:2px 8px;pointer-events:none;box-shadow:0 1px 2px rgba(21,26,40,.08);z-index:10}
 .readout:empty{display:none}
 .cardopts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
 /* an input and its button read as one control */
@@ -339,7 +339,7 @@ label.f.condmissing>input{border-color:var(--warn)}
 .paperwrap{position:relative}
 .wfsel{position:absolute;pointer-events:none;border:2px solid var(--accent, #2f4ea0);border-radius:4px;background:color-mix(in srgb, var(--accent, #2f4ea0) 5%, transparent)}
 .wfsel::after{content:"";position:absolute;top:-5px;left:-5px;right:-5px;bottom:-5px;background-image:radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px);background-position:top left, top right, bottom left, bottom right;background-size:8px 8px;background-repeat:no-repeat}
-.wftool{position:absolute;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:6px;max-width:min(560px, calc(100% - 16px));padding:8px;background:var(--card, #fff);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14);font-size:13px}
+.wftool{position:absolute;z-index:10;display:flex;flex-wrap:wrap;align-items:center;gap:6px;max-width:min(560px, calc(100% - 16px));padding:8px;background:var(--card, #fff);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14);font-size:13px}
 .wftool input[type=text]{flex:1 1 150px;min-width:0;padding:5px 7px;border:1px solid var(--line);border-radius:5px;font:inherit;background:var(--well, #fff);color:inherit}
 .wftool #wfA{flex-basis:260px;min-width:min(260px,100%);text-overflow:clip}
 .wftool .wfl{color:var(--muted);font-size:12px}
@@ -352,7 +352,7 @@ label.f.condmissing>input{border-color:var(--warn)}
 .lrow.amb select{border-color:var(--warn);box-shadow:inset 3px 0 0 var(--warn)}
 .lrow input,.lrow select{padding:4px 6px;font-size:12.5px;min-height:28px}
 .lrow select{padding-right:24px}
-.intp{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px}
+.intp{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px;overflow-y:auto}
 .intp-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:13.5px}
 .intp-head strong{font-weight:600}
 .tablewrap{overflow-x:auto}
@@ -453,6 +453,12 @@ details.koff #knownList,details.koff #knownList + .btns{opacity:.5}
 .paper > svg{display:block;width:100%;height:auto;max-height:max(320px,calc(100vh - 370px));cursor:crosshair}
 body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
 .paper .empty{color:#5a6177;font-size:14px;text-align:center;max-width:36ch;line-height:1.5}
+.figmodal{width:min(1200px,calc(100vw - 32px));height:min(90vh,calc(100vh - 32px));max-width:none;max-height:none;border:1px solid var(--line2);border-radius:12px;background:var(--panel);color:var(--ink);padding:0;box-shadow:var(--shadow)}
+.figmodal::backdrop{background:rgba(15,18,26,.58)}
+.figmodal-head{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.figmodal-head strong{flex:1;font-size:15px}
+.figmodal-body{height:calc(100% - 57px);overflow:auto;padding:18px;background:var(--well)}
+.figmodal-body > svg{display:block;width:100%;height:auto;min-width:640px;background:#ffffff}
 .spec{display:grid;gap:1px;font-size:12px;color:var(--muted);min-width:0}
 .spec #spec{color:var(--ink)}
 .spec span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(60ch,100%)}
@@ -471,7 +477,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
   /* on a phone the figure keeps its printed size and scrolls sideways, instead of shrinking past legibility */
   .paper{padding:10px;min-height:0;overflow-x:auto;justify-content:flex-start}
   .canvas-body{padding:10px}
-  .export{justify-content:flex-start}
+  .export{justify-content:flex-start;gap:8px}
   header.top .top-act{margin-left:-10px}
   .paper > svg{width:auto;max-width:none;max-height:none;flex:none;margin-inline:auto}
   header.top p{font-size:12.5px}
@@ -538,7 +544,7 @@ button,input,select,textarea{font-family:inherit}
 
 <div class="app">
   <aside class="panel" id="panel">
-    <div class="psearch"><input type="search" id="panelSearch" placeholder="Search settings" aria-label="Search settings" autocomplete="off"></div>
+    <div class="psearch"><input type="search" id="panelSearch" placeholder="Search settings/data/files" aria-label="Search settings" autocomplete="off"></div>
     <section class="grp steps" id="stepsPanel" hidden>
       <h2>Steps</h2>
       <ol class="tl" id="tl"></ol>
@@ -586,7 +592,7 @@ button,input,select,textarea{font-family:inherit}
       <label class="f">Protein sequence, untagged<textarea id="protSeq" data-opt="protSeq" rows="3" spellcheck="false" placeholder="Paste the sequence, or load a PDB entry"></textarea></label>
       <div class="row">
         <label class="f">Tag<select id="o-tagPreset2" data-opt="tagPreset">
-          <option value="sumo">His-SUMO</option><option value="his">His-tag (thrombin site)</option><option value="gst">GST</option><option value="mbp">MBP</option>
+          <option value="">No tag</option><option value="sumo">His-SUMO</option><option value="his">His-tag (thrombin site)</option><option value="gst">GST</option><option value="mbp">MBP</option>
           <option value="hismbp">His-MBP</option><option value="trx">His-Trx</option><option value="gfp">GFP</option><option value="custom">Other</option></select></label>
         <label class="f">Tag end<select id="o-tagPos" data-opt="tagPos"><option value="N">N-terminal</option><option value="C">C-terminal</option></select></label>
       </div>
@@ -631,6 +637,7 @@ button,input,select,textarea{font-family:inherit}
         <label class="check"><input type="checkbox" id="o-wfLetters" data-opt="wfLetters">Panel letters</label>
         <label class="check"><input type="checkbox" id="o-wfGels" data-opt="wfGels">Gels under each step</label>
         <label class="check" title="Draw each chromatogram over its whole run instead of the cropped window. The crop of the run itself is kept for the single-run figure"><input type="checkbox" id="o-wfFull" data-opt="wfFull">Full chromatogram in the workflow</label>
+        <button class="btn quiet" id="wfFullView" type="button" title="Open a scalable SVG view with every workflow chromatogram shown over its whole run">View full chromatograms</button>
         <label class="check"><input type="checkbox" id="o-wfArrows" data-opt="wfArrows">Arrows between steps</label>
         <label class="check"><input type="checkbox" id="o-noGelSlot" data-opt="noGelSlot">Mark steps without a gel (on screen only)</label>
         <label class="check" title="Grid and stacked figures taller than 9.5 in get shorter traces and gels"><input type="checkbox" id="o-wfFit" data-opt="wfFit">Fit to page height</label>
@@ -1089,6 +1096,7 @@ button,input,select,textarea{font-family:inherit}
       <div class="row">
         <label class="f">Tag
           <select id="o-tagPreset" data-opt="tagPreset">
+            <option value="">No tag</option>
             <option value="sumo">His-SUMO (~12.5 kDa)</option>
             <option value="his">His-tag (~2.2 kDa)</option>
             <option value="gst">GST (~26 kDa)</option>
@@ -1144,7 +1152,7 @@ button,input,select,textarea{font-family:inherit}
         <label class="f">Y from<input type="number" step="any" id="o-ymin" data-opt="ymin" placeholder="auto"></label>
         <label class="f">Y to<input type="number" step="any" id="o-ymax" data-opt="ymax" placeholder="auto"></label>
       </div>
-      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Zoom inset: whole run, with the X window magnified</label>
+      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Show Inset View: whole run, with the X window magnified</label>
       <div class="row">
         <label class="f">Inset position
           <select id="o-zoomInsetPos" data-opt="zoomInsetPos">
@@ -1294,6 +1302,7 @@ button,input,select,textarea{font-family:inherit}
       <div class="prompt" id="markPrompt" role="status" aria-live="polite" hidden></div>
       <div class="paperwrap" id="paperwrap"><div class="paper" id="paper" role="tabpanel" aria-label="Figure preview"></div><div class="dragbox" id="dragBox" hidden></div><div class="wfsel" id="wfSelBox" hidden></div><div class="wftool" id="wfTool" hidden role="dialog" aria-label="Edit panel"></div><div class="readout" id="readout" aria-live="off"></div></div>
     </div>
+    <dialog class="figmodal" id="wfFullModal" aria-labelledby="wfFullModalTitle"><div class="figmodal-head"><strong id="wfFullModalTitle">Full chromatograms</strong><button class="btn quiet" id="wfFullModalClose" type="button">Close</button></div><div class="figmodal-body" id="wfFullModalFig"></div></dialog>
     <div class="canvas-foot">
       <div class="spec"><span id="spec"></span><span id="spec2"></span></div>
       <div class="btns export">
@@ -1346,7 +1355,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   showPeaks:true, peakRot:false, peakDec:2, prom:5, peakColor:'trace', peakMax:8,
   xlabel:'Retention time (min)', ylabel:'Absorbance (mAU)', showY:true, frame:false, ticksOut:true,
   scalebar:false, sbValue:'', sbUnit:'mAU', legend:'inside',
-  runPad:15, sec:'grad', fracFmt:'full', fracEvery:0, phases:false, runTitle:false, bandSens:5, gelAutoCrop:true, bandLabels:'none', purBase:'lane', tagTol:2, tagShow:true, purRow:false, known: null, knownTol:6, knownMin:5, cleaveDetect:false, tagPreset:'sumo', tagKda:'', protKda:'', knownShow:'arrows', knownOn:false, knownCount:false,
+  runPad:15, sec:'grad', fracFmt:'full', fracEvery:0, phases:false, runTitle:false, bandSens:5, gelAutoCrop:true, bandLabels:'none', purBase:'lane', tagTol:2, tagShow:true, purRow:false, known: null, knownTol:6, knownMin:5, cleaveDetect:false, tagPreset:'', tagKda:'', protKda:'', knownShow:'arrows', knownOn:false, knownCount:false,
   secStds:false, targetName:'', taggedName:'', targetArrow:false, tagCounts:true, gelPos:'below', gelAlign:'center', gelScale:100, laneMark:'fill', gelView:'focus', ndNorm:'raw', ndFrom:240, ndCorr:true, ndFig:'conc', gelSpan:2.5, gelFocusKda:'', gelGap:0, gelSide:60, runGel:true, connectors:true, linkFrom:'axis', laneColors:true, laneAlpha:0.55,
   rxlabel:'Volume (mL)', rylabel:'Absorbance (mAU)', y2grad:'Buffer B (%)', y2cond:'Conductivity (mS/cm)',
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
@@ -1399,11 +1408,11 @@ const LADDERS = {
   custom:{name:'Custom (type values below)', v:''}};
 $('#g-preset').innerHTML = Object.entries(LADDERS).map(([k,v]) => `<option value="${k}">${v.name}</option>`).join('');
 
-let opt = Object.assign({}, DEF);
-try { const s = JSON.parse(localStorage.getItem('hplc-fig-opt') || 'null'); if (s && typeof s === 'object' && !Array.isArray(s)) Object.assign(opt, s); } catch(e) {}
+let opt = Object.assign({}, DEF), savedOpt = null;
+try { const s = JSON.parse(localStorage.getItem('hplc-fig-opt') || 'null'); if (s && typeof s === 'object' && !Array.isArray(s)) { Object.assign(opt, s); savedOpt = s; } } catch(e) {}
 opt.xmin = opt.xmax = opt.ymin = opt.ymax = '';
-/* the tidier defaults reach settings saved before them once */
-const tidyOpt = () => { if (!opt.tidy13) { opt.wfYield = false; opt.secStds = false; opt.tidy13 = true; } if (!opt.tidy14) { opt.noGelSlot = false; if (numOr(opt.wfGelH, 1.8) === 1.8) opt.wfGelH = 1.3; opt.tidy14 = true; } }; tidyOpt();
+/* the tidier defaults reach settings saved before them once. tidy15: a sequence is untagged unless a tag is chosen, but settings and projects saved under the old His-SUMO default keep it */
+const tidyOpt = s => { if (!opt.tidy13) { opt.wfYield = false; opt.secStds = false; opt.tidy13 = true; } if (!opt.tidy14) { opt.noGelSlot = false; if (numOr(opt.wfGelH, 1.8) === 1.8) opt.wfGelH = 1.3; opt.tidy14 = true; } if (!opt.tidy15) { if (s && !('tagPreset' in s)) opt.tagPreset = 'sumo'; opt.tidy15 = true; } }; tidyOpt(savedOpt);
 /* known proteins and SEC calibrations from saved settings or a project file: drop entries that are not objects, and built-in proteins take their current sizes and notes */
 function tidyKnown(L){ L = Array.isArray(L) ? L.filter(k => k && typeof k === 'object' && !Array.isArray(k)) : []; L.forEach(k => { const d = KNOWN_DEFAULT.find(x => x.name === k.name && x.kind === k.kind); if (d) { k.kda = d.kda; k.ctx = d.ctx; k.src = d.src; if (d.app) k.app = d.app; else delete k.app; } }); return L; }
 function tidyLists(){ opt.known = Array.isArray(opt.known) ? tidyKnown(opt.known) : KNOWN_DEFAULT.map(k => Object.assign({}, k)); secCals(); }
@@ -1466,7 +1475,7 @@ function shortRunName(r){
   const k = Math.max(0, ...runs.filter(x => x !== r).map(x => lcp(String(x.name).split(/\s+/))));
   return k >= 2 ? w.slice(k).join(' ') : r.name; }
 function fitTicks(t, lo, hi, n, plotW, cw, fs){
-  for (let k = n; k > 1 && t.v.length > 2; k--) { const w = Math.max(...t.v.map(v => fmt(v, t.dec).length))*cw + fs*0.9; if ((plotW/(hi - lo))*t.step >= w) break; t = ticks(lo, hi, k - 1); }
+  for (let k = n; k > 1 && t.v.length > 2; k--) { const w = cw ? Math.max(...t.v.map(v => fmt(v, t.dec).length))*cw + fs*0.9 : fs*1.05; if ((plotW/(hi - lo))*t.step >= w) break; t = ticks(lo, hi, k - 1); }
   return t; }
 function fmt(v, dec){ let s = (+v).toFixed(dec); if (/^-0(\.0+)?$/.test(s)) s = s.slice(1); return s; }
 /* tick numbers use a true minus sign */
@@ -1975,7 +1984,7 @@ function condLineCount(r, W){ if (r.prep || !opt.runCond || opt.runCond === 'non
   return Math.min(16, runCondLines(r, opt.runCond).reduce((t, x) => t + wrapWords(x, room).length, 0)); }
 const uvWl = uv => ((((uv && uv.name) || '').match(/UV\s*(?:\d[\s_-]+)?(2[2-9]\d|3\d\d|4\d\d)(?!\d)/i) || ((uv && uv.name) || '').match(/(?:^|[^\d])(2[2-9]\d|3\d\d|4\d\d)(?!\d)/)) || [])[1] || '';
 function uvTitle(t, uv){ const w0 = WF_WL !== undefined ? WF_WL : uvWl(uv), wl = w0 ? [w0, w0] : null, base = /^(UV a|A)bsorbance \(mAU\)$/.test(t || '');
-  return base && wl ? `A<tspan font-size="75%" dy="0.3em">${wl[1]}</tspan><tspan dy="-0.3em"> (mAU)</tspan>` : esc(t); }
+  return base && wl ? `A<tspan font-size="75%" dy="0.33em">${wl[1]}</tspan><tspan dy="-0.33em"> (mAU)</tspan>` : esc(t); }
 const kdaRound = v => v >= 10 ? String(Math.round(v)) : fmtAuto(v);
 const kdaText = v => v >= 100 ? String(Math.round(v)) : v >= 10 ? fmt(v, v % 1 ? 1 : 0).replace(/\.0$/, '') : String(+(+v).toPrecision(3));
 const OLIGO = ['', 'monomer', 'dimer', 'trimer', 'tetramer', 'pentamer', 'hexamer', 'heptamer', 'octamer'];
@@ -2681,7 +2690,7 @@ function buildCalSVG(cal){
   s.push('</g><g fill="#000000">');
   const xly = B + tOut + 3 + fs*0.78;
   xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(xly)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
-  s.push(`<text x="${r2((L + R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle">${fit.useKav ? 'K<tspan font-size="75%" dy="0.3em">av</tspan>' : cal.unit === 'min' ? 'Elution time (min)' : 'Elution volume (mL)'}</text>`);
+  s.push(`<text x="${r2((L + R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle">${fit.useKav ? 'K<tspan font-size="75%" dy="0.33em">av</tspan>' : cal.unit === 'min' ? 'Elution time (min)' : 'Elution volume (mL)'}</text>`);
   yTicks.forEach(v => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${kdaText(v)}</text>`));
   s.push(`<text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">Apparent mass (kDa)</text>`);
   s.push(`<text x="${r2(R)}" y="${r2(T + fs*0.6)}" text-anchor="end" font-size="${r2(fs*0.8)}">R² = ${fmt(fit.r2, 3)}</text>`);
@@ -3766,9 +3775,16 @@ function composeRuns(list, cfg){
   });
   if (n > 1 && cfg.arrows) {
     const pc = poolDark();
-    /* an arrow between panels that are not level (one was dragged): a straight line with its head turned to match */
-    const slantArrow = (xa, ya, xb, yb) => { const a = Math.atan2(yb - ya, xb - xa), c = Math.cos(a), s = Math.sin(a), bx = xb - 5*c, by = yb - 5*s;
-      return `<line x1="${r2(xa)}" y1="${r2(ya)}" x2="${r2(xb - 4*c)}" y2="${r2(yb - 4*s)}" stroke-width="1"/><path d="M${r2(xb)} ${r2(yb)}L${r2(bx - 2.6*s)} ${r2(by + 2.6*c)}L${r2(bx + 2.6*s)} ${r2(by - 2.6*c)}Z" stroke="none"/>`; };
+    /* an arrow between panels that are not level (one was dragged): a manhattan route */
+    const orthoArrow = (xa, ya, xb, yb, dir) => {
+      if (dir === 'x') {
+        const xm = (xa + xb) / 2;
+        return `<path d="M${r2(xa)} ${r2(ya)}H${r2(xm)}V${r2(yb)}H${r2(xb - 4)}" stroke-width="1" fill="none"/><path d="M${r2(xb)} ${r2(yb)}L${r2(xb - 5)} ${r2(yb - 2.6)}L${r2(xb - 5)} ${r2(yb + 2.6)}Z" stroke="none"/>`;
+      } else {
+        const ym = (ya + yb) / 2;
+        return `<path d="M${r2(xa)} ${r2(ya)}V${r2(ym)}H${r2(xb)}V${r2(yb - 4)}" stroke-width="1" fill="none"/><path d="M${r2(xb)} ${r2(yb)}L${r2(xb - 2.6)} ${r2(yb - 5)}L${r2(xb + 2.6)} ${r2(yb - 5)}Z" stroke="none"/>`;
+      }
+    };
     body.push(`<g fill="#000000" stroke="#000000">`);
     for (let i=0;i<n-1;i++){
       if (par[i + 1] !== i) continue;
@@ -3787,7 +3803,7 @@ function composeRuns(list, cfg){
         if (ay1 === ay2) {
           body.push(`<line${eid} x1="${r2(x1)}" y1="${r2(ay)}" x2="${r2(x2 - 4)}" y2="${r2(ay)}" stroke-width="1"/>`);
           body.push(`<path d="M${r2(x2)} ${r2(ay)}L${r2(x2 - 5)} ${r2(ay - 2.6)}L${r2(x2 - 5)} ${r2(ay + 2.6)}Z" stroke="none"/>`);
-        } else body.push(slantArrow(x1, ay1, x2, ay2).replace('<line', '<line' + eid));
+        } else body.push(orthoArrow(x1, ay1, x2, ay2, 'x').replace('<path', '<path' + eid));
         words.forEach((w, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay - 4 - (words.length - 1 - k)*fs*1.1)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(w)}</text>`));
         if (note) wrapN(note, x2 - x1).forEach((t, k) => body.push(`<text x="${r2((x1 + x2)/2)}" y="${r2(ay + nf*1.25 + k*nf*1.1)}" text-anchor="middle" stroke="none" fill="#444444" font-size="${r2(nf)}">${esc(t)}</text>`));
       } else {
@@ -3795,7 +3811,7 @@ function composeRuns(list, cfg){
         if (ax === ax2) {
           body.push(`<line${eid} x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
           body.push(`<path d="M${r2(ax)} ${r2(y2)}L${r2(ax - 2.6)} ${r2(y2 - 5)}L${r2(ax + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
-        } else body.push(slantArrow(ax, y1, ax2, y2).replace('<line', '<line' + eid));
+        } else body.push(orthoArrow(ax, y1, ax2, y2, 'y').replace('<path', '<path' + eid));
         if (lab || note) body.push(`<text x="${r2(ax + fs*0.8)}" y="${r2((y1 + y2)/2 + fs*0.35)}" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       }
     }
@@ -4536,6 +4552,17 @@ function buildFig(f, screen){ FIG_SCREEN = !!screen;
 
 /* ---------- UI ---------- */
 const paper = $('#paper'), list = $('#list');
+function showWorkflowFull(){
+  const f = curFig(), modal = $('#wfFullModal'), body = $('#wfFullModalFig');
+  if (!f || f.kind !== 'workflow' || !modal || !body) return;
+  const res = withOpt({wfFull: true}, () => buildWorkflow());
+  if (!res.svg) return toast('Nothing to show yet');
+  body.innerHTML = res.svg;
+  if (!modal.open) modal.showModal();
+}
+$('#wfFullView').addEventListener('click', showWorkflowFull);
+$('#wfFullModalClose').addEventListener('click', () => $('#wfFullModal').close());
+$('#wfFullModal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#moreOpts').addEventListener('click', e => { const b = e.target.closest('[data-more-sec]'); if (b) { document.body.classList.add('moreopen'); render(); const sec = [...document.querySelectorAll('#panel > .grp')].find(g => { const h = g.querySelector(':scope > h2'); return h && h.firstChild && h.firstChild.textContent.trim() === b.dataset.moreSec; }); if (sec) { sec.classList.remove('collapsed'); const h = sec.querySelector(':scope > h2'); if (h) h.setAttribute('aria-expanded', 'true'); sec.scrollIntoView({behavior: smooth(), block: 'start'}); } } });
 $('#moreBtn').addEventListener('click', () => { document.body.classList.toggle('moreopen'); render(); });
 /* the ladder is detected automatically whenever the crop, lanes or ladder sizes change, until you mark it by hand */
@@ -4611,7 +4638,7 @@ function render(){
   const figs = figures(), tabs = $('#figtabs');
   tabs.hidden = figs.length < 2;
   /* run tabs drop the words every run name starts with ("Human NADK ..."), the full name stays in the tooltip */
-  const tabName = x => { if (x.kind !== 'run') return x.name; if (!PROJ || !x.run.inWf) return shortRunName(x.run); const t = stepTitle(x.run), dup = runs.filter(r => r.inWf && stepTitle(r) === t).length > 1; return dup ? `${t} ${runs.filter(r => r.inWf && stepTitle(r) === t).indexOf(x.run) + 1}` : t; };
+  const tabName = x => { if (x.kind !== 'run') return x.name; if (!PROJ || !x.run.inWf) return `<span title="${esc(x.run.name)}">${esc(shortRunName(x.run))}</span>`; const t = stepTitle(x.run), dup = runs.filter(r => r.inWf && stepTitle(r) === t).length > 1; return dup ? `${t} ${runs.filter(r => r.inWf && stepTitle(r) === t).indexOf(x.run) + 1}` : t; };
   const tabHtml = figs.map(x => `<button type="button" role="tab" class="figtab" data-fig="${x.id}" aria-selected="${x.id === cur}" aria-pressed="${x.id === cur}" tabindex="${x.id === cur ? 0 : -1}" title="${esc(x.name)}">${esc(tabName(x))}</button>`).join('');
   if (tabs._h !== tabHtml) { tabs._h = tabHtml; tabs.innerHTML = tabHtml; }
   tabs.classList.toggle('ovf', !tabs.hidden && tabs.scrollWidth > tabs.clientWidth + 2);
@@ -4644,7 +4671,7 @@ $('#figtabs').addEventListener('keydown', e => { const k = {ArrowRight: 1, Arrow
 
 function gelMeta(g){
   const asg = gelLabels(g).map((_, i) => laneAssign(g, i)), short = t => t.length > 18 ? t.slice(0, 17) + '…' : t;
-  const parts = PREP_LANE.map(k => { const c = asg.filter(a => a === k).length; return c ? `${PREP_NAME[k]} ×${c}` : ''; }).concat(runs.map(r => { const c = asg.filter(a => a === r.id).length; return c ? `${esc(short(shortRunName(r)))} ×${c}` : ''; })).filter(Boolean), nm = asg.filter(a => a === 'marker').length;
+  const parts = PREP_LANE.map(k => { const c = asg.filter(a => a === k).length; return c ? `${PREP_NAME[k]} ×${c}` : ''; }).concat(runs.map(r => { const c = asg.filter(a => a === r.id).length; return c ? `<span title="${esc(r.name)}">${esc(short(shortRunName(r)))}</span> ×${c}` : ''; })).filter(Boolean), nm = asg.filter(a => a === 'marker').length;
   return (parts.length ? parts.join(', ') : 'No lanes assigned to a run') + (nm ? `, ladder ×${nm}` : ''); }
 function gelCardBody(g){
   const labs = gelLabels(g), asg = labs.map((_, i) => laneAssign(g, i)), samp = new Set(asg.filter(a => a !== 'marker'));
@@ -5045,7 +5072,7 @@ function renderWfTool(){
       + (!it.noArrow && !last ? `<label class="wfl" for="wfA">Arrow note</label><input type="text" id="wfA" value="${esc(it.arrow)}" placeholder="e.g. SUMO protease, 4 °C overnight">` : '')
       + (!it.noW && row ? `<span class="wfg"><span class="wfl">Width</span><button type="button" class="mini" data-wf="w:-1" aria-label="Narrower">−</button><button type="button" class="mini" data-wf="w:1" aria-label="Wider">+</button></span>` : '')
       + (it.gel ? `<span class="wfg"><span class="wfl">Gel</span><button type="button" class="mini" data-wf="gz:-1" aria-label="Smaller gel">−</button><button type="button" class="mini" data-wf="gz:1" aria-label="Larger gel">+</button></span>` : '')
-      + (it.kind === 'run' ? `<label class="check" style="margin-right:12px; margin-left:6px;"><input type="checkbox" data-wfz="1" ${it.zoom ? 'checked' : ''}> Zoom inset</label>` : '')
+      + (it.kind === 'run' ? `<label class="check" style="margin-right:12px; margin-left:6px;"><input type="checkbox" data-wfz="1" ${it.zoom ? 'checked' : ''}> Show Inset View</label>` : '')
       + `<button type="button" class="mini" data-wf="reset">Reset position</button><button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button>`; }
   const rb = tool.querySelector('[data-wf=reset]'); if (rb) rb.disabled = !(it.ox || it.oy);
   tool.hidden = false; const th = tool.offsetHeight, tw = tool.offsetWidth, ww = wrap.clientWidth;
@@ -5928,7 +5955,7 @@ function buildNDSVG(only, info){
   xt.v.forEach(v => s.push(`<line x1="${r2(px(v))}" y1="${r2(B)}" x2="${r2(px(v))}" y2="${r2(B + dir*tl)}"/>`)); yt.v.forEach(v => s.push(`<line x1="${r2(L)}" y1="${r2(py(v))}" x2="${r2(L - dir*tl)}" y2="${r2(py(v))}"/>`)); s.push('</g>');
   s.push(`<g fill="#000000">`); xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(B + tOut + 3 + fs*0.85)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
   yt.v.forEach((v, i) => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${ytl[i]}</text>`));
-  s.push(`<text x="${r2((L + R)/2)}" y="${r2(H - fs*0.35)}" text-anchor="middle">Wavelength (nm)</text><text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">${norm ? 'Absorbance / A<tspan font-size="75%" dy="0.3em">280</tspan>' : 'Absorbance (10 mm)'}</text></g>`);
+  s.push(`<text x="${r2((L + R)/2)}" y="${r2(H - fs*0.35)}" text-anchor="middle">Wavelength (nm)</text><text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">${norm ? 'Absorbance / A<tspan font-size="75%" dy="0.33em">280</tspan>' : 'Absorbance (10 mm)'}</text></g>`);
   const lf = fs*0.82, maxC = Math.max(6, Math.floor((legW - fs*2.4)/(lf*0.52)));
   sp.forEach((smp, k) => { const yy = T + fs*0.6 + k*fs*1.3, nm = smp.name.length > maxC ? smp.name.slice(0, maxC - 1) + '…' : smp.name; s.push(`<line x1="${r2(R + fs*0.7)}" y1="${r2(yy - fs*0.3)}" x2="${r2(R + fs*1.8)}" y2="${r2(yy - fs*0.3)}" stroke="${pal[k % pal.length]}" stroke-width="${r2(lw*1.6)}"/><text x="${r2(R + fs*2.1)}" y="${r2(yy)}" font-size="${r2(lf)}">${esc(nm)}</text>`); });
   s.push('</svg>'); return {svg: s.join(''), geo: {W, H, nd: true}};
@@ -6145,7 +6172,7 @@ async function openProject(data, name, noUndo){
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
     { const pq = Array.isArray(opt.myQuick) ? opt.myQuick : [], del = new Set([...(myQDel || []), ...(Array.isArray(opt.myQuickDel) ? opt.myQuickDel : [])]); opt.myQuickDel = [...del]; opt.myQuick = myQ.concat(pq.filter(q => !myQ.some(m => m.id === q.id))).filter(q => !del.has(q.id)); }
     const pc = secCals(); opt.secCals = pc.concat(myCals.filter(c => !pc.some(x => x.id === c.id)));
-    if (myKnown) { const pk = tidyKnown(dopt.known); opt.known = myKnown.concat(pk.filter(k => !myKnown.some(m => m.name === k.name && +m.kda === +k.kda))); } tidyLists(); tidyOpt(); }
+    if (myKnown) { const pk = tidyKnown(dopt.known); opt.known = myKnown.concat(pk.filter(k => !myKnown.some(m => m.name === k.name && +m.kda === +k.kda))); } tidyLists(); tidyOpt(dopt); }
   let mx = 0; [...runs, ...gels].forEach(x => { const m = String(x.id).match(/\d+/); if (m) mx = Math.max(mx, +m[0]); }); traces.forEach(t => { mx = Math.max(mx, +t.id || 0); }); uid = Math.max(mx + 1, numOr(prep.nextUid, 0));
   cur = data.cur || 'overlay'; marking = null; tagMode = '';
   renderList(); syncControls(); render(); saveOpt();
