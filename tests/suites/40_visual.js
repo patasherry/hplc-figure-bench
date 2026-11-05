@@ -124,7 +124,7 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
       const shot = path.join(SHOTS, `1400_chrom_${f.replace(/\W+/g, '_')}.png`); try { await p.locator('#paper svg').first().screenshot({path: shot}); } catch (e) {}
       T.check(`chrom:${f}:no-overlap`, !ov.length, ov.slice(0, 6).join(' | ') + ' ' + shot); /* hard cases (overlapping, tiny, 96-well, 2 plates) keep labels apart */
       T.check(`chrom:${f}:no-hscroll`, !(await h.hScroll()), shot); /* a wide plate never makes the page scroll sideways */ }); }
-    await T.t(`issue-861-tooltip-zindex`, async () => {
+    await T.t(`${W}:issue-861-tooltip-zindex`, async () => {
       const getZ = sel => p.evaluate(sel => window.getComputedStyle(document.querySelector(sel)).zIndex, sel);
       const getO = sel => p.evaluate(sel => document.querySelector(sel).style.overflowY, sel);
       T.check(`issue-861:intPanel-overflow`, await getO('#intPanel') === 'auto', 'intPanel overflow-y should be auto');
