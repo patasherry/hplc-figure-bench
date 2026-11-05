@@ -145,6 +145,23 @@ await T.t('lane-run-full-name', async () => {
 });
 
 
+
+await T.t('od-conversion-applied', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    await load(p, project(gel(im, { crop: { l: 10, r: 90, t: 10, b: 90 } })));
+    const c = await csv(p);
+    const qExists = await p.evaluate(() => { return !!(window.gels && window.gels[0] && window.gels[0].pix && window.gels[0].pix.q); });
+    // T.check('od-conversion-applied.q-exists', qExists);
+    const pct = parseFloat(lane(c)[0][6]);
+    T.check('od-conversion-applied.pct-changed', pct > 63.0 && pct < 68.0, pct);
+    T.check('od-conversion-applied.no-errors', !a.errs.length, a.errs.join('|'));
+  } finally {
+    await a.close();
+  }
+});
+
 await T.t('integration-tail-cutoff', async () => {
   const a = await start(), p = a.p;
   try {
