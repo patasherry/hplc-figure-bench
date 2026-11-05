@@ -199,6 +199,26 @@ def merge_ranges(rs, limit):
     return kept
 
 
+QUOTED = re.compile(r"[\u2018\u2019'\"\u201c\u201d`]([^\u2018\u2019'\"\u201c\u201d`\n]{4,60})[\u2018\u2019'\"\u201c\u201d`]")
+
+
+def literal_ranges(app_text, text, ctx):
+    """Ranges around the quoted phrases of `text` that appear verbatim in the app.
+    A UI issue quotes what it is about ("Choose data files"), and that string sits next to the code that draws it,
+    which no amount of subject matching will find: the words of a button are not the words of a section title."""
+    lines, out = app_text.split('\n'), []
+    for ph in dict.fromkeys(QUOTED.findall(text or '')):
+        ph = ph.strip()
+        if len(ph) < 4 or not re.search(r'[A-Za-z]', ph) or re.fullmatch(r'[\w.()/-]+', ph):
+            continue  # an identifier or a path: named_defs and the range steps cover those
+        low = ph.lower()
+        hits = [i for i, l in enumerate(lines, 1) if low in l.lower()][:2]
+        for n in hits:
+            sp = span_of_function(lines, n)
+            out.append(sp if sp and sp[1] - sp[0] <= 200 else (max(1, n - ctx), min(len(lines), n + ctx)))
+    return out
+
+
 def named_defs(app_text, text):
     """Ranges of the functions `text` names (backticked or not), in the order named."""
     lines, out = app_text.split('\n'), []
@@ -242,9 +262,10 @@ def pick_ranges(app_text, body, ctx, budget=MAX_LINES):
     if n:
         out.append(span_of_function(lines, n) or (max(1, n - ctx), min(len(lines), n + ctx)))
     out += named_defs(app_text, body)
+    out += literal_ranges(app_text, body, ctx)
     out = merge_ranges(out, budget)
     used = sum(b - a + 1 for a, b in out)
-    room = (budget - used) if not out else min(budget - used, budget//2)  # named functions are the better signal: sections only fill what is left
+    room = (budget - used) if not out else min(budget - used, budget//4)  # a named function or a quoted string is the real location: sections only top it up
     if room > 40:
         out = merge_ranges(out + section_ranges(app_text, body, room, skip=out), budget)
     return out or None
@@ -257,6 +278,7 @@ def ranges_from_need(app_text, need, ctx, budget=MAX_LINES, had=()):
     lines = app_text.split('\n')
     out = [(max(1, min(a, b)), min(len(lines), max(a, b))) for a, b in ((int(x), int(y)) for x, y in re.findall(r'\b(\d+)\s*-\s*(\d+)\b', need or ''))]
     out += named_defs(app_text, need)
+    out += literal_ranges(app_text, need, ctx)
     out = merge_ranges(out, budget)
     used = sum(b - a + 1 for a, b in out)
     if used < budget:
@@ -275,12 +297,16 @@ NO_EXCERPT_RULE = ('You have no excerpt, so you cannot see the code. Reply with 
                    '    name the functions or line ranges you want to see.')
 
 
-TEST_WORDS = re.compile(r'\btest|\bcheck|\bfixture|\bsuite|\bregression|\bacceptance|\bharness|\bevidence|\bmain-failing', re.I)
+TEST_WORDS = re.compile(r'\btest|\bcheck|\bfixture|\bsuite|\bregression|\bharness|\bmain-failing', re.I)
+
+
+BOARD_TAIL = re.compile(r'###\s*Why the advisers chose it|<details><summary>The debate', re.I)
 
 
 def wants_tests(*texts):
-    """True when the job is about writing a check. Such a request carries the harness, because every agent asked for it otherwise."""
-    return any(TEST_WORDS.search(t or '') for t in texts)
+    """True when the job itself is about writing a check. Such a request carries the harness, because every agent asked for it otherwise.
+    A board issue carries the whole debate, where somebody always says "test", so only the statement above it counts."""
+    return any(TEST_WORDS.search(BOARD_TAIL.split(t or '')[0]) for t in texts)
 
 
 def build_request(rid, base, app_text, issue, expires, task, question, ranges, extra=()):
