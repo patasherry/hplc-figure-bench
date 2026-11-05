@@ -1465,7 +1465,7 @@ function shortRunName(r){
   const k = Math.max(0, ...runs.filter(x => x !== r).map(x => lcp(String(x.name).split(/\s+/))));
   return k >= 2 ? w.slice(k).join(' ') : r.name; }
 function fitTicks(t, lo, hi, n, plotW, cw, fs){
-  for (let k = n; k > 1 && t.v.length > 2; k--) { const w = Math.max(...t.v.map(v => fmt(v, t.dec).length))*cw + fs*0.9; if ((plotW/(hi - lo))*t.step >= w) break; t = ticks(lo, hi, k - 1); }
+  for (let k = n; k > 1 && t.v.length > 2; k--) { const w = Math.max(...t.v.map(v => fmt(v, t.dec).length))*cw + fs*(cw === 0 ? 2.5 : 0.9); if ((plotW/(hi - lo))*t.step >= w) break; t = ticks(lo, hi, k - 1); }
   return t; }
 function fmt(v, dec){ let s = (+v).toFixed(dec); if (/^-0(\.0+)?$/.test(s)) s = s.slice(1); return s; }
 /* tick numbers use a true minus sign */
