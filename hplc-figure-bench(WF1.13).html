@@ -1466,6 +1466,9 @@ function shortRunName(r){
 function fitTicks(t, lo, hi, n, plotW, cw, fs){
   for (let k = n; k > 1 && t.v.length > 2; k--) { const w = Math.max(...t.v.map(v => fmt(v, t.dec).length))*cw + fs*0.9; if ((plotW/(hi - lo))*t.step >= w) break; t = ticks(lo, hi, k - 1); }
   return t; }
+function fitTicksY(t, lo, hi, n, plotH, fs){
+  for (let k = n; k > 1 && t.v.length > 2; k--) { if ((plotH/(hi - lo))*t.step >= fs*2.5) break; t = ticks(lo, hi, k - 1); }
+  return t; }
 function fmt(v, dec){ let s = (+v).toFixed(dec); if (/^-0(\.0+)?$/.test(s)) s = s.slice(1); return s; }
 /* tick numbers use a true minus sign */
 const tkf = (v, d) => fmt(v, d).replace(/^-/, '\u2212');
@@ -2245,11 +2248,12 @@ function buildOverlaySVG(ov){
   let y0 = ylo - yr*0.03; let y1 = yhi + (yhi - y0)*padPts/Math.max(1, plotH0 - padPts);
   y0 = numOr(o.ymin, y0); y1 = numOr(o.ymax, y1); if (!(y1 > y0)) y1 = y0 + 1;
 
-  const yt = ticks(y0, y1, Math.max(3, Math.round(numOr(o.h,2.6)*1.8)));
+  const mB = tOut + 3 + fs + 4 + fs*1.25, mT = fs*0.7;
+  let yt = ticks(y0, y1, Math.max(3, Math.round(numOr(o.h,2.6)*1.8)));
+  yt = fitTicksY(yt, y0, y1, Math.max(3, Math.round(numOr(o.h,2.6)*1.8)), Math.max(H - mB, mT + 24) - mT, fs);
   let xt = ticks(xlo, xhi, Math.max(4, Math.round(numOr(o.w,3.5)*2)));
   const ytl = yt.v.map(v => tkf(v, yt.dec));
   const mL = o.showY ? (tOut + 3 + Math.max(...ytl.map(s=>s.length))*cw + 5 + fs*1.2) : fs*0.8;
-  const mB = tOut + 3 + fs + 4 + fs*1.25, mT = fs*0.7;
   let mR = fs*0.8, sbV = 0, sbLab = '';
   if (o.scalebar) { sbV = numOr(o.sbValue, niceStep((y1-y0)*0.2)); sbLab = fmtAuto(sbV) + (o.sbUnit ? ' ' + o.sbUnit : ''); mR += 10 + sbLab.length*cw; }
   /* keep a usable plot even when fonts or margins are too big for the figure size */
@@ -2410,7 +2414,7 @@ function buildRunPlainSVG(run, ov){
     if (o.sec === 'grad') { secTitle = o.y2grad; secCol = RUN_COLORS.grad; st = {v:[0,25,50,75,100], dec:0};
       /* with buffer B's strength typed on the run card (e.g. 500 mM imidazole), the axis reads in concentration */
       const bb = axisConc(run); if (bb) { const ct = ticks(bb.a, bb.c, 5), cv = ct.v.filter(v => v >= bb.a - 1e-9 && v <= bb.c*1.001); st = {v: cv.map(v => (v - bb.a)*100/(bb.c - bb.a)), dec: ct.dec}; stl = cv.map(v => tkf(v, ct.dec)); secTitle = `${bb.name} (${bb.u})`; } }
-    else { const a = arrMin(sec.ys), b = arrMax(sec.ys), r = (b-a) || 1; s0 = a - r*0.05; s1 = b + r*0.1; secTitle = o.y2cond; secCol = RUN_COLORS.cond; st = ticks(s0, s1, Math.max(3, Math.round(H/72*1.8))); }
+    else { const a = arrMin(sec.ys), b = arrMax(sec.ys), r = (b-a) || 1; s0 = a - r*0.05; s1 = b + r*0.1; secTitle = o.y2cond; secCol = RUN_COLORS.cond; st = ticks(s0, s1, Math.max(3, Math.round(H/72*1.8))); st = fitTicksY(st, s0, s1, Math.max(3, Math.round(H/72*1.8)), Math.max(H - fs*4, 10), fs); }
     if (!stl.length) stl = st.v.map(v => tkf(v, st.dec));
   }
   const estW = W - fs*6 - (hasSec ? fs*6 : fs);
@@ -2443,7 +2447,8 @@ function buildRunPlainSVG(run, ov){
   let y0 = ylo - yr*band/usable - yr*0.02, y1 = yhi + yr*top/usable;
   y0 = numOr(run.ymin, y0); y1 = numOr(run.ymax, y1); if (!(y1 > y0)) y1 = y0 + 1;
 
-  const yt = ticks(y0, y1, Math.max(3, Math.round(H/72*1.8)));
+  let yt = ticks(y0, y1, Math.max(3, Math.round(H/72*1.8)));
+  yt = fitTicksY(yt, y0, y1, Math.max(3, Math.round(H/72*1.8)), Math.max(H - mB, mT + 24) - mT, fs);
   /* the strip under the trace holds fraction labels, not data, so no y values are printed there */
   if (band && (run.ymin ?? '') === '') { const keep = yt.v.filter(v => v >= ylo - yr*0.05); if (keep.length >= 2) yt.v = keep; }
   let xt = ticks(xlo, xhi, Math.max(3, Math.round(W/72*2)));
@@ -4194,7 +4199,10 @@ function ncSVG(W, H, fs, aw, run){ const nf = fs*0.85, lh = nf*1.3, s = [], line
   lines.forEach((o, i) => { const x = typeof o === 'string' ? {t: o} : o; s.push(`<text x="${r2(L0)}" y="${r2(y)}" font-size="${r2(i === 0 ? fs : nf)}"${i === 0 ? ' font-weight="bold"' : ''} fill="${x.c || '#000000'}">${esc(x.t)}</text>`); y += i === 0 ? fs*1.3 : lh; });
   if (!sp.length) { s.push(prepGlyph('conc', L0, y + fs*0.4, Math.min(fs*3, H*0.3), aw)); PREP_USED = H; return s.join(''); }
   const xlo = 240, xhi = 340, pal = PAL.okabe, ys = sp.flatMap(q => q.spec.ab.filter((v, i) => q.spec.wl[i] >= xlo && q.spec.wl[i] <= xhi)), y0 = Math.min(0, ...ys), y1 = Math.max(...ys)*1.08 || 1;
-  const yt = ticks(y0, y1, 3); if (yt.v.length > 1) yt.v = yt.v.filter(v => v > y0); const ytl = yt.v.map(v => fmt(v, yt.dec)), L = L0 + yTitleW + Math.max(...ytl.map(t => t.length))*tf*0.56 + 4, R = W - fs*0.9, B = NC_ALIGN && NC_ALIGN.B > y + fs*3 ? NC_ALIGN.B : H - tf*2.9, T = Math.max(y + fs*0.3, NC_ALIGN ? NC_ALIGN.T : 0);
+  const B = NC_ALIGN && NC_ALIGN.B > y + fs*3 ? NC_ALIGN.B : H - tf*2.9, T = Math.max(y + fs*0.3, NC_ALIGN ? NC_ALIGN.T : 0);
+  let yt = ticks(y0, y1, 3); yt = fitTicksY(yt, y0, y1, 3, B - T, fs);
+  if (yt.v.length > 1) yt.v = yt.v.filter(v => v > y0);
+  const ytl = yt.v.map(v => fmt(v, yt.dec)), L = L0 + yTitleW + Math.max(...ytl.map(t => t.length))*tf*0.56 + 4, R = W - fs*0.9;
   const px = x => L + (x - xlo)/(xhi - xlo)*(R - L), py = v => B - (v - y0)/(y1 - y0)*(B - T), tl = fs*0.35;
   s.push(`<line x1="${r2(px(280))}" y1="${r2(T)}" x2="${r2(px(280))}" y2="${r2(B)}" stroke="#a0a0a0" stroke-width="${r2(aw*0.6)}" stroke-dasharray="2 2"/>`);
   sp.forEach((q, k) => { let d = ''; q.spec.wl.forEach((w, i) => { if (w < xlo || w > xhi) return; d += (d ? 'L' : 'M') + r2(px(w)) + ' ' + r2(py(q.spec.ab[i])); }); s.push(`<path d="${d}" fill="none" stroke="${sp.length > 1 ? pal[k % pal.length] : '#0072B2'}" stroke-width="${r2(Math.max(0.6, aw*1.1))}" stroke-linejoin="round"/>`); });
@@ -5900,8 +5908,12 @@ function buildNDSVG(only, info){
   const val = (s, i) => norm && s.a280 ? s.spec.ab[i]/s.a280 : s.spec.ab[i];
   const xs = sp.flatMap(s => s.spec.wl), xlo = Math.max(numOr(o.ndFrom, 240), Math.min(...xs)), xhi = Math.min(350, Math.max(...xs));
   const ys = sp.flatMap(s => s.spec.ab.map((v, i) => s.spec.wl[i] >= xlo && s.spec.wl[i] <= xhi ? val(s, i) : null).filter(v => v != null)), y0 = Math.min(0, ...ys), y1 = Math.max(...ys)*1.06 || 1;
-  const legW = Math.min(W*0.38, Math.max(...sp.map(s => s.name.length))*fs*0.47 + fs*2.4), yt = ticks(y0, y1, Math.max(3, Math.round(H/72*1.8))), ytl = yt.v.map(v => fmt(v, yt.dec));
-  const L = tOut + 3 + Math.max(...ytl.map(t => t.length))*cw + 5 + fs*1.2, R = W - legW, T = fs*1.2 + info.length*fs*1.25, B = H - (tOut + 3 + fs + 4 + fs*1.25);
+  const legW = Math.min(W*0.38, Math.max(...sp.map(s => s.name.length))*fs*0.47 + fs*2.4);
+  const T = fs*1.2 + info.length*fs*1.25, B = H - (tOut + 3 + fs + 4 + fs*1.25);
+  let yt = ticks(y0, y1, Math.max(3, Math.round(H/72*1.8)));
+  yt = fitTicksY(yt, y0, y1, Math.max(3, Math.round(H/72*1.8)), B - T, fs);
+  const ytl = yt.v.map(v => fmt(v, yt.dec));
+  const L = tOut + 3 + Math.max(...ytl.map(t => t.length))*cw + 5 + fs*1.2, R = W - legW;
   let xt = ticks(xlo, xhi, 6); xt = fitTicks(xt, xlo, xhi, 6, R - L, cw, fs);
   const px = x => L + (x - xlo)/(xhi - xlo)*(R - L), py = y => B - (y - y0)/(y1 - y0)*(B - T), dir = o.ticksOut ? 1 : -1;
   const s = [S.head]; if (o.bg) s.push(`<rect width="${r2(W)}" height="${r2(H)}" fill="#ffffff"/>`);
