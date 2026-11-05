@@ -132,6 +132,14 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
       T.check(`issue-861:readout-zindex`, await getZ('.readout') === '20', 'readout z-index should be 20');
     });
 
+    await T.t(`issue-861-tooltip-zindex`, async () => {
+      const getZ = sel => p.evaluate(sel => window.getComputedStyle(document.querySelector(sel)).zIndex, sel);
+      const getO = sel => p.evaluate(sel => document.querySelector(sel).style.overflowY, sel);
+      T.check(`issue-861:intPanel-overflow`, await getO('#intPanel') === 'auto', 'intPanel overflow-y should be auto');
+      T.check(`issue-861:wftool-zindex`, await getZ('.wftool') === '20', 'wftool z-index should be 20');
+      T.check(`issue-861:readout-zindex`, await getZ('.readout') === '20', 'readout z-index should be 20');
+    });
+
     await close(); }
   test('gel label size clamped to 5pt', async ({ page }) => {
     const p = page;
