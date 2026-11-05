@@ -82,5 +82,48 @@ async function fresh(id, fn){
     T.check('purity_missing_not_shown_in_svg', !html2.includes('0% pure'), `SVG does not include 0% pure`);
   });
 
+
+  await fresh('zero_yield_line_prep', async (p, h) => {
+    const openFolds = loc => loc.evaluate(e => { let d = e.closest('details'); while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); } });
+    const setField = async (sel, v) => { const l = p.locator(sel).first(); await openFolds(l); await l.fill(String(v)); await l.dispatchEvent('change'); await h.wait(150); };
+    const methods = async () => { await h.step('figure'); await p.evaluate(() => { const b = document.getElementById('methodsBox'); if (b) b.open = true; }); await h.wait(400); return h.methods(); };
+
+    await h.newProject('Zero prep final test');
+    await h.gb(path.join(DATA, 'standins', 'pET28-SUMO-standin.gb'));
+    await h.addRun(path.join(DATA, 'chrom', 'sec_semicolon_unicorn7.csv'));
+    await h.pool('1.A.1-1.A.3');
+
+    // Go to Final step
+    await h.step('final');
+    await h.wait(400);
+
+    // Set explicitly to zero
+    await p.evaluate(() => { const c = document.getElementById('pr-finConc'); if (c) { c.value = '0'; c.dispatchEvent(new Event('input', {bubbles: true})); c.dispatchEvent(new Event('change', {bubbles: true})); } const v = document.getElementById('pr-finVol'); if (v) { v.value = '10'; v.dispatchEvent(new Event('input', {bubbles: true})); v.dispatchEvent(new Event('change', {bubbles: true})); } });
+    await h.wait(200);
+
+    await h.step('figure');
+    await p.evaluate(() => {
+      const el = document.getElementById('o-wfYield');
+      if (el) { el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.step('figure');
+    await h.wait(500);
+
+    let html = await p.evaluate(() => document.querySelector('#paper').innerHTML);
+    T.check('zero_prep_measured_shows_sample_svg', html.includes('Final sample:') || html.includes('Final sample ('), `SVG includes Final sample: ${html.includes('Final sample:') || html.includes('Final sample (')}`);
+
+    // Unknown case
+    await h.step('final');
+    await h.wait(400);
+    await p.evaluate(() => { const c = document.getElementById('pr-finConc'); if (c) { c.value = ''; c.dispatchEvent(new Event('input', {bubbles: true})); c.dispatchEvent(new Event('change', {bubbles: true})); } });
+    await h.wait(200);
+
+    await h.step('figure');
+    await h.wait(500);
+
+    let html2 = await p.evaluate(() => document.querySelector('#paper').innerHTML);
+    T.check('unknown_prep_shows_pool', html2.includes('Final pool:') || html2.includes('Final pool ('), `SVG includes Final pool: ${html2.includes('Final pool:') || html2.includes('Final pool (')}`);
+  });
+
   T.done();
 })();
