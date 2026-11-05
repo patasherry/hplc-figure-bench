@@ -210,4 +210,77 @@ await T.t('ui-clipping-fix', async () => {
     await a.close();
   }
 });
+
+await T.t('contaminant-cleavage-point', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+
+    // Case A: three steps, IMAC, SEC, SEC polish. Cleavage configured after SEC.
+    const projA = {
+      app: 'HPLC Figure Bench', version: 1, cur: 'g1',
+      opt: { knownOn: true, knownCount: true, purBase: 'tagged' },
+      runs: [
+        { id: 'r1', inWf: true, stepName: 'IMAC' },
+        { id: 'r2', inWf: true, stepName: 'SEC' },
+        { id: 'r3', inWf: true, stepName: 'SEC polish' }
+      ],
+      prep: { cleave: true, cleaveAfter: 'r2', k_knownOn: true, 'k_His-Ulp1': true },
+      gels: [gel(im, {
+        labels: 'M, SEC pool',
+        assign: [null, 'r2'],
+        marks: [{kda: 150, y: 0.1}, {kda: 100, y: 0.2}, {kda: 75, y: 0.3}, {kda: 50, y: 0.4}, {kda: 37, y: 0.5}, {kda: 27, y: 0.6388}, {kda: 10, y: 0.8}],
+        marksManual: true
+      })]
+    };
+
+    await load(p, projA);
+    // Explicitly toggle k_His-Ulp1 to make sure it's turned on
+    await p.evaluate(() => {
+        const el = document.getElementById('k_His-Ulp1') || document.getElementById('k_His-Ulp1') || document.querySelector('input[type="checkbox"][id*="Ulp1"]');
+        if (el && !el.checked) {
+            el.checked = true;
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await p.waitForTimeout(500);
+
+    let tableA = await p.locator('#bandTable').textContent();
+    T.check('contaminant-cleavage-point.caseA-not-labelled', !tableA.includes('His-Ulp1'), 'Lane before cleavage should not have His-Ulp1');
+
+    const projC = {
+      app: 'HPLC Figure Bench', version: 1, cur: 'g1',
+      opt: { knownOn: true, knownCount: true, purBase: 'tagged' },
+      runs: [
+        { id: 'r1', inWf: true, stepName: 'SEC' },
+        { id: 'r2', inWf: true, stepName: 'SEC polish' }
+      ],
+      prep: { cleave: true, cleaveAfter: 'r1', k_knownOn: true, 'k_His-Ulp1': true },
+      gels: [gel(im, {
+        labels: 'M, Polish pool',
+        assign: [null, 'r2'],
+        marks: [{kda: 150, y: 0.1}, {kda: 100, y: 0.2}, {kda: 75, y: 0.3}, {kda: 50, y: 0.4}, {kda: 37, y: 0.5}, {kda: 27, y: 0.6388}, {kda: 10, y: 0.8}],
+        marksManual: true
+      })]
+    };
+
+    await load(p, projC);
+    await p.evaluate(() => {
+        const el = document.getElementById('k_His-Ulp1') || document.getElementById('k_His-Ulp1') || document.querySelector('input[type="checkbox"][id*="Ulp1"]');
+        if (el && !el.checked) {
+            el.checked = true;
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await p.waitForTimeout(500);
+
+    let tableC = await p.locator('#bandTable').textContent();
+    T.check('contaminant-cleavage-point.caseC-is-labelled', tableC.includes('His-Ulp1'), 'Lane after cleavage should have His-Ulp1: ' + tableC.trim().slice(0, 200));
+
+    T.check('contaminant-cleavage-point.no-errors', !a.errs.length, a.errs.join('|'));
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
