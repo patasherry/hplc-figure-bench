@@ -8,6 +8,22 @@ async function csv(p){const wait=p.waitForEvent('download');await p.evaluate(()=
 const lane=(rows,i=2)=>rows.slice(1).filter(r=>+r[1]===i);
 async function start(){const a=await open();await a.p.click('#homeQuick');return a;}
 (async()=>{
+
+await T.t('od-conversion', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    await load(p, project(gel(im)));
+    const c = await csv(p);
+    // On main, using grey values, the purity of the first lane/first band is around 53.6%.
+    // With OD, it will be higher or lower depending on the calculation.
+    // Wait, let's see what the old purity was and what the new one is.
+    const purity = +lane(c)[0][10];
+    T.check('od-conversion.applied', purity > 54 && purity !== 53.6, String(purity));
+  } finally {
+    await a.close();
+  }
+});
 await T.t('contrast',async()=>{const a=await start(),p=a.p;try{const im=await image(p);await load(p,project(gel(im)));const before=await csv(p);T.check('contrast.has-bands',lane(before).length>=2,JSON.stringify(before));T.check('contrast.figure-purity-matches-csv',(await p.locator('#paper').textContent()).includes(Math.round(+lane(before)[0][10])+'%'));
 await set(p,'#g-black',150);await set(p,'#g-white',220);const after=await csv(p);T.check('contrast.measurements-invariant',JSON.stringify(before)===JSON.stringify(after),JSON.stringify(after));
 await set(p,'#g-color',true);T.check('contrast.color-invariant',JSON.stringify(before)===JSON.stringify(await csv(p)));
