@@ -5257,7 +5257,7 @@ function renderIntTable(run){
       <td><input type="number" step="0.01" id="ia${k}" data-ri="${ri}" data-rk="a" value="${fmt(r.a, 2)}" aria-label="${r.name} start"></td>
       <td><input type="number" step="0.01" id="ib${k}" data-ri="${ri}" data-rk="b" value="${fmt(r.b, 2)}" aria-label="${r.name} end"></td>
       <td>${fmt(r.apex, 2)}</td>${hasKav ? `<td>${si.kav == null ? '' : fmt(si.kav, 3)}</td>` : ''}${hasMw ? `<td>${mwCell}</td>` : ''}${hasOl ? `<td>${olCell}</td>` : ''}<td>${fmtAuto(r.height)}</td>${gs ? `<td>${fmt(r.fwhm, 2)}</td>` : ''}<td>${fmtAuto(r.area)}</td><td>${r.pct == null ? '' : fmt(r.pct, 1)}</td>
-      ${hasMg ? `<td>${r.mg == null ? '' : fmt(r.mg, 2)}</td>` : ''}${rat ? `<td>${ratAt(r)}</td>` : ''}${gs ? `<td${r.r2 != null && r.r2 < 0.98 ? ' class="warnc" title="Below 0.98, so one Gaussian may not describe this peak. Split it, or use trapezoid areas"' : ''}>${r.r2 == null ? '' : fmt(r.r2, 3)}</td>` : ''}<td><button type="button" class="xbtn" data-rdel="${ri}" aria-label="Remove ${r.name}">×</button></td></tr>`; }).join('');
+      ${hasMg ? `<td>${r.mg == null ? '' : fmt(r.mg, 2)}</td>` : ''}${rat ? `<td>${ratAt(r)}</td>` : ''}${gs ? `<td${r.r2 != null && r.r2 < 0.98 ? ' class="warnc" title="Below 0.98, so one Gaussian may not describe this peak. Split it, or use trapezoid areas"' : ''}>${r.r2 == null ? '' : fmt(r.r2, 3)}</td>` : ''}<td><button type="button" class="xbtn" data-rzoom="${ri}" aria-label="Zoom to ${r.name}">🔍</button> <button type="button" class="xbtn" data-rdel="${ri}" aria-label="Remove ${r.name}">×</button></td></tr>`; }).join('');
   const blank = n => '<td></td>'.repeat(n);
   const pr = pool ? `<tr class="pool" title="UV area across the pooled fractions, same baseline as the regions"><td><span class="sw" style="background:${esc(opt.poolColor)}"></span>Pool ${esc(pool.label)}</td><td>${fmt(pool.a, 2)}</td><td>${fmt(pool.b, 2)}</td>${blank(1 + (hasKav ? 1 : 0) + (hasMw ? 1 : 0) + (hasOl ? 1 : 0) + 1)}${gs ? '<td></td>' : ''}<td>${fmtAuto(pool.area)}</td><td></td>${hasMg ? `<td>${pool.mg == null ? '' : fmt(pool.mg, 2)}</td>` : ''}${rat ? '<td></td>' : ''}${gs ? '<td></td>' : ''}<td></td></tr>` : '';
   const note = sec && !hasMw && opt.secStds ? `<tr><td colspan="${cols}" class="empty-row">Add a column calibration under Size exclusion (SEC) to see apparent molecular weights and oligomer states.</td></tr>` : '';
@@ -5271,7 +5271,24 @@ function renderIntTable(run){
 $('#intMore').addEventListener('click', () => { $('#intTable').classList.toggle('all'); render(); });
 $('#intTable').addEventListener('change', e => { const el = e.target; if (el.dataset.ri === undefined) return; const r = curRun(); if (!r) return;
   const reg = r.integ[+el.dataset.ri]; if (reg && isFinite(+el.value)) { reg[el.dataset.rk] = +el.value; reg.auto = false; } render(); });
-$('#intTable').addEventListener('click', e => { const b = e.target.closest('[data-rdel]'); if (!b) return; const r = curRun(); if (!r) return; r.integ.splice(+b.dataset.rdel, 1); render(); });
+$('#intTable').addEventListener('click', e => {
+  const b = e.target.closest('[data-rdel]');
+  const z = e.target.closest('[data-rzoom]');
+  const r = curRun();
+  if (b && r) {
+    r.integ.splice(+b.dataset.rdel, 1);
+    render();
+  } else if (z && r) {
+    const reg = r.integ[+z.dataset.rzoom];
+    if (reg) {
+      const ro = r || opt;
+      ro.xmin = reg.a;
+      ro.xmax = reg.b;
+      syncControls();
+      render();
+    }
+  }
+});
 $('#intAuto').addEventListener('click', () => { const r = curRun(); if (!r) return; const n = autoIntegrate(r); render(); toast(n ? `Found ${n} peak${n > 1 ? 's' : ''}. Adjust start and end in the table if needed.` : 'No peaks above the detection prominence'); });
 $('#intClear').addEventListener('click', () => { const r = curRun(); if (!r) return; r.integ = []; render(); });
 $('#intCsv').addEventListener('click', () => {
