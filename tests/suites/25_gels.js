@@ -168,4 +168,46 @@ await T.t('integration-tail-cutoff', async () => {
   }
 });
 
+
+
+
+
+
+
+await T.t('densitometry-od', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    await load(p, project(gel(im, {
+      labels: 'M, A, B',
+      marks: [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}],
+      tags: []
+    })));
+
+    await p.waitForSelector('#bandTable td');
+    await p.waitForTimeout(500); // give it some time to populate
+
+    const pct = await p.evaluate(() => {
+      const trs = document.querySelectorAll('#bandTable tr');
+      for (const tr of trs) {
+        if (!tr.textContent.includes('%')) continue;
+        const tds = tr.querySelectorAll('td');
+        for (let i = 0; i < tds.length; i++) {
+          const val = parseFloat(tds[i].textContent);
+          if (tds[i].textContent.includes('%') && !isNaN(val) && val > 59.0 && val < 64.0) {
+            return val;
+          }
+        }
+      }
+      return 0;
+    });
+
+    T.check('densitometry-od.pct-shifted', pct > 63.0 || pct === 0, 'Percentage is ' + pct);
+  } catch(e) {
+    T.check('densitometry-od.threw', false, e.message);
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
