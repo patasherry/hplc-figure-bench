@@ -2762,15 +2762,15 @@ function processGel(g){
   const sc = Math.min(1, 1400/cw), ow = Math.max(2, Math.round(cw*sc)), oh = Math.max(2, Math.round(ch*sc));
   const c2 = document.createElement('canvas'); c2.width = ow; c2.height = oh; const x2 = c2.getContext('2d');
   x2.imageSmoothingQuality = 'high'; x2.drawImage(c1, cx, cy, cw, ch, 0, 0, ow, oh);
-  const img = x2.getImageData(0, 0, ow, oh), d = img.data, hist = new Uint32Array(256), dk = new Float32Array(ow*oh);
+  const img = x2.getImageData(0, 0, ow, oh), d = img.data, hist = new Uint32Array(256), dk = new Float32Array(ow*oh), dq = new Float32Array(ow*oh);
   const bl = +g.black, wh = Math.max(bl + 1, +g.white), k = 255/(wh - bl);
   for (let i=0;i<d.length;i+=4){
-    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++; dk[i/4] = g.invert ? gray : 255 - gray;
+    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++; const sig_val = g.invert ? gray : 255 - gray; dk[i/4] = sig_val; dq[i/4] = Math.max(0, -Math.log10(Math.max(1, 255 - sig_val) / 255));
     if (g.color) for (let j=0;j<3;j++){ let v = (d[i+j] - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; d[i+j] = g.invert ? 255 - v : v; }
     else { let v = (gray - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; if (g.invert) v = 255 - v; d[i] = d[i+1] = d[i+2] = v; }
   }
   x2.putImageData(img, 0, 0);
-  g.pix = {w: ow, h: oh, d: dk}; g._bands = null;
+  g.pix = {w: ow, h: oh, d: dk, q: dq}; g._bands = null;
   g.out = {url: c2.toDataURL('image/jpeg', 0.92), w: ow, h: oh}; g.hist = hist; g.crop = {l, r: rr, t, b};
 }
 /* ---------- auto crop: find the stained lanes, their spacing, and the top and bottom of the bands ---------- */
@@ -2966,13 +2966,25 @@ function laneProfile(g, i){
 function profNoise(sig){ const d = []; for (let y=1;y<sig.length;y++) d.push(Math.abs(sig[y] - sig[y-1])); d.sort((a, b) => a - b); return (d[d.length >> 1] || 0)*1.4826/Math.SQRT2; }
 function detectBands(g, i, sensPct, gelMax){
   const sig = laneProfile(g, i), h = sig.length, mx = arrMax(sig); if (!(mx > 0)) return {bands: [], total: 0, sig};
+
+  const qpr = new Float64Array(h);
+  const P = g.pix, n = gelLabels(g).length, lw = P.w/n, tr = laneTrack(g, i);
+  for (let y=0;y<h;y++){ const x0 = Math.max(0, Math.floor((i + DET.laneLo)*lw + tr[y])), x1 = Math.min(P.w, Math.ceil((i + DET.laneHi)*lw + tr[y])); let t = 0; const o = y*P.w; for (let x=x0;x<x1;x++) t += (P.q ? P.q[o + x] : P.d[o + x]); qpr[y] = x1 > x0 ? t/(x1 - x0) : 0; }
+  const W = Math.max(5, Math.round(P.h*DET.bgWin));
+  const ksm = Math.max(1, Math.round(P.h*DET.smooth)), qsm = new Float64Array(P.h);
+  for (let y=0;y<P.h;y++){ let t = 0, c = 0; for (let j=Math.max(0,y-ksm); j<=Math.min(P.h-1,y+ksm); j++){ t += qpr[j]; c++; } qsm[y] = t/c; }
+  const qmn = new Float64Array(P.h), qbg = new Float64Array(P.h);
+  for (let y=0;y<P.h;y++){ let m = Infinity; for (let j=Math.max(0,y-W); j<=Math.min(P.h-1,y+W); j++) if (qsm[j] < m) m = qsm[j]; qmn[y] = m; }
+  for (let y=0;y<P.h;y++){ let t = 0, c = 0; for (let j=Math.max(0,y-W); j<=Math.min(P.h-1,y+W); j++){ t += qmn[j]; c++; } qbg[y] = Math.min(qsm[y], t/c); }
+  const qsig = new Float64Array(P.h); for (let y=0;y<P.h;y++) qsig[y] = Math.max(0, qsm[y] - qbg[y]);
+
   const noise = profNoise(sig);
   let bgLevel = 0; if (DET.madK > 0) { const srt = Array.from(sig).sort((a, b) => a - b), med = srt[srt.length >> 1]; bgLevel = med + 1.4826*srt.map(v => Math.abs(v - med)).sort((a, b) => a - b)[srt.length >> 1]; }
   /* a band must clear: an absolute floor, a share of this lane's strongest band, a multiple of the point-to-point noise,
      a multiple of the lane's typical background level, and a share of the gel's strongest band */
   const thr = Math.max(DET.minAbs, mx*sensPct/100, noise*DET.noiseK, bgLevel*DET.madK, (gelMax || 0)*DET.gelRel), sep = Math.max(2, Math.round(h*DET.sep)), bands = [];
   const yTop = Math.round(h*DET.edgeTop), yBot = h - 1 - Math.round(h*DET.edgeBot);
-  let total = 0; for (let y=yTop;y<=yBot;y++) total += sig[y];
+  let total = 0; for (let y=yTop;y<=yBot;y++) total += qsig[y];
   for (let y=Math.max(1, yTop);y<Math.min(h-1, yBot);y++){
     const v = sig[y]; if (v < thr || v < sig[y-1] || v < sig[y+1]) continue;
     let ok = true; for (let j=Math.max(0,y-sep); j<=Math.min(h-1,y+sep); j++) if (sig[j] > v || (sig[j] === v && j < y)) { ok = false; break; } if (!ok) continue;
@@ -2983,7 +2995,7 @@ function detectBands(g, i, sensPct, gelMax){
       const prom = v - Math.max(lm, rm); if (prom < Math.max(DET.minAbs*0.6, v*DET.promRel, noise*DET.noiseK*0.6)) continue;
     }
     let l = y, r = y; while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > 0) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > 0) r++;
-    let area = 0; for (let j=l;j<=r;j++) area += sig[j];
+    let area = 0; for (let j=l;j<=r;j++) area += qsig[j];
     let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
     bands.push({row: y, h: v, area, l, r, hl, hr});
   }
@@ -2999,7 +3011,7 @@ function detectBands(g, i, sensPct, gelMax){
       /* only on the flank of a clearly stronger, separately detected band: a smear has dips everywhere */
       if (!bands.some(b => !b.shoulder && b.h > DET.shRatio*sig[y] && Math.abs(b.row - y) <= DET.shDist*(b.hr - b.hl + 1))) continue;
       let hl = y, hr = y; while (hl > 0 && d2[hl-1] < 0) hl--; while (hr < h-1 && d2[hr+1] < 0) hr++;
-      bands.push({row: y, h: sig[y], area: 0, l: hl, r: hr, hl, hr, shoulder: true});
+      bands.push({row: y, h: qsig[y], area: 0, l: hl, r: hr, hl, hr, shoulder: true});
     }
     bands.sort((a, b) => a.row - b.row);
   }
@@ -3009,7 +3021,7 @@ function detectBands(g, i, sensPct, gelMax){
       if (G && b.row - G[G.length-1].row < 3.2*Math.max(b.sg, G[G.length-1].sg)) G.push(b); else groups.push([b]); });
     groups.forEach(G => {
       const lo = Math.max(0, Math.floor(G[0].row - 3.5*G[0].sg)), hi = Math.min(h - 1, Math.ceil(G[G.length-1].row + 3.5*G[G.length-1].sg));
-      const xs = [], ys = []; for (let y=lo;y<=hi;y++){ xs.push(y); ys.push(sig[y]); }
+      const xs = [], ys = []; for (let y=lo;y<=hi;y++){ xs.push(y); ys.push(qsig[y]); }
       if (xs.length < 5) return;
       const fit = fitGaussians(xs, ys, G.flatMap(b => [Math.max(b.h, 1e-3), b.row, b.sg]), lo, hi, 0.8);
       G.forEach((b, k) => { const A = fit.p[3*k], mu = fit.p[3*k+1], sg = fit.p[3*k+2];
@@ -3017,24 +3029,24 @@ function detectBands(g, i, sensPct, gelMax){
     });
     for (let k = bands.length - 1; k >= 0; k--) if (bands[k].drop || (bands[k].shoulder && !(bands[k].area > 0))) bands.splice(k, 1);
   }
-  bands.forEach(b => { if (b.area > 0) return; let lA = b.row, rA = b.row; while (lA > 0 && sig[lA-1] <= sig[lA]) lA--; while (rA < h-1 && sig[rA+1] <= sig[rA]) rA++; let a = 0; for (let j=lA;j<=rA;j++) a += sig[j]; b.area = a; });
+  bands.forEach(b => { if (b.area > 0) return; let lA = b.row, rA = b.row; while (lA > 0 && sig[lA-1] <= sig[lA]) lA--; while (rA < h-1 && sig[rA+1] <= sig[rA]) rA++; let a = 0; for (let j=lA;j<=rA;j++) a += qsig[j]; b.area = a; });
   /* saturation: a flat-topped band is wider at 97% of its height than a Gaussian can be */
   bands.forEach(b => { if (b.shoulder) return; let a = b.row, z = b.row; while (a > 0 && sig[a-1] >= 0.97*b.h) a--; while (z < h-1 && sig[z+1] >= 0.97*b.h) z++;
     b.sat = (z - a + 1)/Math.max(1, b.hr - b.hl + 1) > DET.satRatio && (b.hr - b.hl + 1) >= 5 && b.h >= 0.5*Math.max(gelMax || 0, mx); });
-  const c = g.crop; bands.forEach(b => { b.yRot = c.t + (b.row + 0.5)/h*(c.b - c.t); b.pct = total > 0 ? 100*b.area/total : 0; });
+  const c = g.crop; total = 0; bands.forEach(b => total += b.area); bands.forEach(b => { b.yRot = c.t + (b.row + 0.5)/h*(c.b - c.t); b.pct = total > 0 ? 100*b.area/total : 0; });
   for (let k = bands.length - 1; k >= 0; k--) if (bands[k].shoulder && bands[k].pct < 1) bands.splice(k, 1);
-  return {bands, total, sig, noise};
+  return {bands, total, sig, qsig, noise};
 }
 /* a band the user added by hand: snap to the darkest row nearby, then take its extent from the profile */
-function bandAt(g, sig, yRot){
+function bandAt(g, sig, qsig, yRot){
   const h = sig.length, c = g.crop, r0 = Math.round((yRot - c.t)/(c.b - c.t)*h - 0.5), w = Math.max(2, Math.round(h*0.008));
   let y = Math.min(h - 1, Math.max(0, r0)); for (let j=Math.max(0, r0 - w); j<=Math.min(h - 1, r0 + w); j++) if (sig[j] > sig[y]) y = j;
   const v = sig[y]; let l = y, r = y, area = 0;
   if (v > 0) { while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > v*0.05 && y - l < h*0.04) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > v*0.05 && r - y < h*0.04) r++; }
   else { l = Math.max(0, y - 2); r = Math.min(h - 1, y + 2); }
-  for (let j=l;j<=r;j++) area += sig[j];
+  for (let j=l;j<=r;j++) area += (qsig ? qsig[j] : sig[j]);
   let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
-  return {row: y, h: v, area, l, r, hl, hr, yRot: c.t + (y + 0.5)/h*(c.b - c.t), manual: true};
+  return {row: y, h: (qsig ? qsig[y] : v), area, l, r, hl, hr, yRot: c.t + (y + 0.5)/h*(c.b - c.t), manual: true};
 }
 function mwText(g, mw){
   if (mw == null) return '?'; const ks = g.marks.filter(k => k.kda > 0).map(m => m.kda); if (!ks.length) return '?';
@@ -3078,7 +3090,7 @@ function gelBands(g){
   const lanes = labs.map((l, i) => { if (laneAssign(g, i) === 'marker') return {i, label: l, marker: true, bands: []};
     const r = detectBands(g, i, numOr(opt.bandSens, 8), gelMax), tolE = 0.006*(g.crop.b - g.crop.t);
     let bands = r.bands.filter(b => !ed.removed.some(x => x.lane === i && Math.abs(x.y - b.yRot) <= Math.max(tolE, Math.min(x.half || 0, bandHalf(g, b)))));
-    ed.added.filter(x => x.lane === i).forEach(x => { const b = bandAt(g, r.sig, x.y); if (!bands.some(q => Math.abs(q.yRot - b.yRot) <= tolE)) bands.push(b); });
+    ed.added.filter(x => x.lane === i).forEach(x => { const b = bandAt(g, r.sig, r.qsig, x.y); if (!bands.some(q => Math.abs(q.yRot - b.yRot) <= tolE)) bands.push(b); });
     bands.sort((a, b) => a.row - b.row);
     /* overlapping bands: split each cluster once at the signal minimum between neighbours, so every row belongs to exactly one band */
     if (!DET.fit) { for (let j = 0; j < bands.length;) { let e = j, hi = bands[j].r, lo = bands[j].l; while (e + 1 < bands.length && bands[e+1].l <= hi) { e++; hi = Math.max(hi, bands[e].r); lo = Math.min(lo, bands[e].l); }

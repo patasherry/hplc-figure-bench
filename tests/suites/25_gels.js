@@ -17,6 +17,13 @@ T.check('contrast.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.c
 await T.t('quick-export-reopens',async()=>{const a=await start(),p=a.p;try{await load(p,project(gel(await image(p))));const before=await csv(p);const [saved]=await Promise.all([p.waitForEvent('download',{timeout:10000}),p.evaluate(()=>document.querySelector('#projSave').click())]);await load(p,JSON.parse(fs.readFileSync(await saved.path(),'utf8')));
 T.check('quick-export-reopens.stays-quick',await p.evaluate(()=>!document.body.classList.contains('proj')));const got=await Promise.all([p.waitForEvent('download',{timeout:10000}),p.evaluate(()=>document.querySelector('#bandCsv').click())]).then(()=>true,()=>false);T.check('quick-export-reopens.gel-table-saves',got);if(got)T.check('quick-export-reopens.same-bands',JSON.stringify(before)===JSON.stringify(await csv(p)));
 T.check('quick-export-reopens.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
+await T.t('densitometry-od',async()=>{const a=await start(),p=a.p;try{
+  const im=await image(p);await load(p,project(gel(im)));
+  const bands=await csv(p);
+  const lane2 = lane(bands, 2);
+  T.check('od-conversion-applied', lane2[0][10] !== '63.7', lane2[0][10]);
+}finally{await a.close();}});
+
 await T.t('area',async()=>{const a=await start(),p=a.p;try{const im=await image(p);await load(p,project(gel(im)));const before=await csv(p);
 await load(p,project(gel(im,{edits:{added:[{lane:1,y:125.5/360}],removed:[]}})));const after=await csv(p);T.check('area.snapped-duplicate-rejected',lane(after).length===lane(before).length,JSON.stringify(after));T.check('area.duplicate-keeps-purity',lane(after)[0][10]===lane(before)[0][10]);
 await load(p,project(gel(await image(p,'overlap'),{edits:{added:[{lane:1,y:143.5/360}],removed:[]},tags:[{kind:'target',lane:1,y:120.5/360},{kind:'target',lane:1,y:143.5/360}]}),{tagTol:4}));const L=lane(await csv(p)),total=L.reduce((s,r)=>s+(+r[6]),0);
