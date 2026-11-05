@@ -639,6 +639,61 @@ ORIGIN
     }
   });
 
+
+  /* ================= 11. Extinction coefficient selector ================= */
+  await T.t('11_eps_selector', async () => {
+    // Drop file to create project
+    await h.dropFiles([path.join(DATA, 'chrom', 'imac_HisTrap_FF_1mL_step_u7.csv')]);
+    await h.wait(500);
+
+    // Go to Protein tab
+    await h.step('construct');
+    await h.wait(200);
+
+    const protSeq = 'M' + 'AWY'.repeat(5);
+    const tagSeq = 'M' + 'AWY'.repeat(2);
+
+    // Set up sequences
+    await p.evaluate(t => { const e = document.querySelector('#protSeq'); e.value = t; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); }, protSeq);
+    await h.wait(200);
+    await p.evaluate(t => { const e = document.querySelector('#tagSeq'); e.value = t; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); }, tagSeq);
+    await h.wait(500);
+
+    const optText = await p.evaluate(() => {
+      const sel = document.getElementById('o-epsMode');
+      return sel ? Array.from(sel.options).map(o => o.textContent).join(' | ') : null;
+    });
+
+    T.check('11_eps_selector.options_display_values', optText && optText.includes('Untagged (') && optText.includes('Tagged ('), `Expected selector to display values, got: ${optText}`);
+
+    // Go to Run tab and pool
+    await h.step('run');
+    await h.wait(200);
+    await h.pool('T1-T3');
+    await h.wait(500);
+
+    // Read the mass from the summary table
+    await h.step('figure');
+    await h.wait(500);
+    const getMass = async () => { const rows = await h.sumTable(); const row = rows.find(r => r[0].includes('imac_HisTrap')); return row ? row[5] : null; };
+
+    const massAuto = await getMass();
+    T.check('11_eps_selector.mass_auto', !!massAuto, 'Auto mass should be calculated');
+
+    // Force Untagged
+    await h.step('construct');
+    await h.wait(200);
+    await p.selectOption('#o-epsMode', 'untagged');
+    await h.wait(500);
+
+    // Read mass again
+    await h.step('figure');
+    await h.wait(500);
+    const massUntagged = await getMass();
+
+    T.check('11_eps_selector.mass_changes', massAuto !== massUntagged, `Expected mass to change when forcing Untagged, but it stayed ${massAuto}`);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
