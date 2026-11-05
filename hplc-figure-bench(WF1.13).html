@@ -1144,7 +1144,7 @@ button,input,select,textarea{font-family:inherit}
         <label class="f">Y from<input type="number" step="any" id="o-ymin" data-opt="ymin" placeholder="auto"></label>
         <label class="f">Y to<input type="number" step="any" id="o-ymax" data-opt="ymax" placeholder="auto"></label>
       </div>
-      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Show Inset View: whole run, with the X window magnified</label>
+      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Show inset view: whole run, with the X window magnified</label>
       <div class="row">
         <label class="f">Inset position
           <select id="o-zoomInsetPos" data-opt="zoomInsetPos">
@@ -5045,7 +5045,7 @@ function renderWfTool(){
       + (!it.noArrow && !last ? `<label class="wfl" for="wfA">Arrow note</label><input type="text" id="wfA" value="${esc(it.arrow)}" placeholder="e.g. SUMO protease, 4 °C overnight">` : '')
       + (!it.noW && row ? `<span class="wfg"><span class="wfl">Width</span><button type="button" class="mini" data-wf="w:-1" aria-label="Narrower">−</button><button type="button" class="mini" data-wf="w:1" aria-label="Wider">+</button></span>` : '')
       + (it.gel ? `<span class="wfg"><span class="wfl">Gel</span><button type="button" class="mini" data-wf="gz:-1" aria-label="Smaller gel">−</button><button type="button" class="mini" data-wf="gz:1" aria-label="Larger gel">+</button></span>` : '')
-      + (it.kind === 'run' ? `<label class="check" style="margin-right:12px; margin-left:6px;"><input type="checkbox" data-wfz="1" ${it.zoom ? 'checked' : ''}> Show Inset View</label>` : '')
+      + (it.kind === 'run' ? `<label class="check" style="margin-right:12px; margin-left:6px;"><input type="checkbox" data-wfz="1" ${it.zoom ? 'checked' : ''}> Show inset view</label>` : '')
       + `<button type="button" class="mini" data-wf="reset">Reset position</button><button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button>`; }
   const rb = tool.querySelector('[data-wf=reset]'); if (rb) rb.disabled = !(it.ox || it.oy);
   tool.hidden = false; const th = tool.offsetHeight, tw = tool.offsetWidth, ww = wrap.clientWidth;

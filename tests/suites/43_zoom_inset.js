@@ -28,7 +28,7 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       const el = document.getElementById('o-zoomInset');
       return el && el.parentElement ? el.parentElement.textContent.trim() : null;
     });
-    T.check('zoom_inset_label_text', labelText === 'Show Inset View: whole run, with the X window magnified', `Label is ${labelText}`);
+    T.check('zoom_inset_label_text', labelText === 'Show inset view: whole run, with the X window magnified', `Label is ${labelText}`);
 
       await setOpt(p, 'o-zoomInset', true); await h.wait(600);
       T.check('overlay/two-plot-areas', (await plotAreas(p)) === 2 && (await insetCount(p)) === 1, `plot areas ${await plotAreas(p)}`);
