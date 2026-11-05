@@ -2982,7 +2982,7 @@ function detectBands(g, i, sensPct, gelMax){
       let rm = v; j = y; while (j < h - 1) { j++; if (sig[j] > v) break; if (sig[j] < rm) rm = sig[j]; }
       const prom = v - Math.max(lm, rm); if (prom < Math.max(DET.minAbs*0.6, v*DET.promRel, noise*DET.noiseK*0.6)) continue;
     }
-    let l = y, r = y; while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > 0) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > 0) r++;
+    let l = y, r = y; while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > noise * DET.tail) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > noise * DET.tail) r++;
     let area = 0; for (let j=l;j<=r;j++) area += sig[j];
     let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
     bands.push({row: y, h: v, area, l, r, hl, hr});
@@ -3026,11 +3026,11 @@ function detectBands(g, i, sensPct, gelMax){
   return {bands, total, sig, noise};
 }
 /* a band the user added by hand: snap to the darkest row nearby, then take its extent from the profile */
-function bandAt(g, sig, yRot){
+function bandAt(g, sig, yRot, noise){
   const h = sig.length, c = g.crop, r0 = Math.round((yRot - c.t)/(c.b - c.t)*h - 0.5), w = Math.max(2, Math.round(h*0.008));
   let y = Math.min(h - 1, Math.max(0, r0)); for (let j=Math.max(0, r0 - w); j<=Math.min(h - 1, r0 + w); j++) if (sig[j] > sig[y]) y = j;
   const v = sig[y]; let l = y, r = y, area = 0;
-  if (v > 0) { while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > v*0.05 && y - l < h*0.04) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > v*0.05 && r - y < h*0.04) r++; }
+  if (v > 0) { while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > noise * DET.tail && y - l < h*0.04) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > noise * DET.tail && r - y < h*0.04) r++; }
   else { l = Math.max(0, y - 2); r = Math.min(h - 1, y + 2); }
   for (let j=l;j<=r;j++) area += sig[j];
   let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
@@ -3078,7 +3078,7 @@ function gelBands(g){
   const lanes = labs.map((l, i) => { if (laneAssign(g, i) === 'marker') return {i, label: l, marker: true, bands: []};
     const r = detectBands(g, i, numOr(opt.bandSens, 8), gelMax), tolE = 0.006*(g.crop.b - g.crop.t);
     let bands = r.bands.filter(b => !ed.removed.some(x => x.lane === i && Math.abs(x.y - b.yRot) <= Math.max(tolE, Math.min(x.half || 0, bandHalf(g, b)))));
-    ed.added.filter(x => x.lane === i).forEach(x => { const b = bandAt(g, r.sig, x.y); if (!bands.some(q => Math.abs(q.yRot - b.yRot) <= tolE)) bands.push(b); });
+    ed.added.filter(x => x.lane === i).forEach(x => { const b = bandAt(g, r.sig, x.y, r.noise || 0); if (!bands.some(q => Math.abs(q.yRot - b.yRot) <= tolE)) bands.push(b); });
     bands.sort((a, b) => a.row - b.row);
     /* overlapping bands: split each cluster once at the signal minimum between neighbours, so every row belongs to exactly one band */
     if (!DET.fit) { for (let j = 0; j < bands.length;) { let e = j, hi = bands[j].r, lo = bands[j].l; while (e + 1 < bands.length && bands[e+1].l <= hi) { e++; hi = Math.max(hi, bands[e].r); lo = Math.min(lo, bands[e].l); }

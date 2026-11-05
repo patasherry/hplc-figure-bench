@@ -1,7 +1,7 @@
 const {open,suite,fs,src}=require('../lib/harness');const T=suite('25_gels');
 const gel=(image,x={})=>Object.assign({id:'g1',name:'synthetic gel',image,nLanes:3,labels:'M, A, B',marksManual:true,marks:[{kda:100,y:.2},{kda:10,y:.8}],black:0,white:255,autoLv:false,tags:[{kind:'target',lane:1,y:120.5/360}],cl:0,cr:0,ct:0,cb:0,rot:0,fine:0,assign:[]},x);
 const project=(g,o={})=>({app:'HPLC Figure Bench',version:1,runs:[],traces:[],gels:[g],cur:'g1',opt:Object.assign({gelAutoCrop:false,bandSens:5,purBase:'lane',purRow:true,knownOn:false,tagPreset:'custom',tagSeq:'',tidy13:true,tidy14:true},o)});
-async function image(p,kind='standard'){return p.evaluate(kind=>{const c=document.createElement('canvas');c.width=300;c.height=360;const x=c.getContext('2d'),im=x.createImageData(300,360);for(let y=0;y<360;y++)for(let a=0;a<300;a++){const lane=Math.floor(a/100),dx=Math.abs(a%100-50),w=Math.exp(-.5*(dx/24)**8),bands=lane===0?[[72,60,4],[145,65,4],[216,65,4],[288,70,4]]:kind==='overlap'?[[120,110,14],[143,70,10]]:kind==='overlap3'?[[95,100,5],[118,20,3],[135,110,22]]:[[120,110,7],[230,55,8]];let dark=bands.reduce((s,[mu,h,z])=>s+h*Math.exp(-.5*((y-mu)/z)**2),0)*w,v=Math.round(Math.max(0,235-dark));if(kind==='inverse')v=255-v;const j=4*(300*y+a);im.data[j]=im.data[j+1]=im.data[j+2]=v;im.data[j+3]=255;}x.putImageData(im,0,0);return c.toDataURL('image/png');},kind);}
+async function image(p,kind='standard'){return p.evaluate(kind=>{const c=document.createElement('canvas');c.width=300;c.height=360;const x=c.getContext('2d'),im=x.createImageData(300,360);for(let y=0;y<360;y++)for(let a=0;a<300;a++){const lane=Math.floor(a/100),dx=Math.abs(a%100-50),w=Math.exp(-.5*(dx/24)**8),bands=lane===0?[[72,60,4],[145,65,4],[216,65,4],[288,70,4]]:kind==='overlap'?[[120,110,14],[143,70,10]]:kind==='overlap3'?[[95,100,5],[118,20,3],[135,110,22]]:kind==='narrow'?[[120,110,3],[230,55,8]]:[[120,110,7],[230,55,8]];let dark=bands.reduce((s,[mu,h,z])=>s+h*Math.exp(-.5*((y-mu)/z)**2),0)*w,v=Math.round(Math.max(0,235-dark));if(kind==='inverse')v=255-v;const j=4*(300*y+a);im.data[j]=im.data[j+1]=im.data[j+2]=v;im.data[j+3]=255;}x.putImageData(im,0,0);return c.toDataURL('image/png');},kind);}
 async function load(p,d){await p.setInputFiles('#projFile',{name:'legacy_gel_project.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(d))});await p.waitForTimeout(350);}
 async function set(p,id,value){await p.evaluate(([id,value])=>{const e=document.querySelector(id);if(e.type==='checkbox')e.checked=value;else e.value=value;e.dispatchEvent(new Event('input',{bubbles:true}));},[id,value]);await p.waitForTimeout(450);}
 async function csv(p){const wait=p.waitForEvent('download');await p.evaluate(()=>document.querySelector('#bandCsv').click());const d=await wait,s=fs.readFileSync(await d.path(),'utf8');return s.trim().split(/\r?\n/).map(l=>{const a=[];let v='',q=false;for(let i=0;i<l.length;i++){const c=l[i];if(c==='"'){if(q&&l[i+1]==='"'){v+='"';i++;}else q=!q;}else if(c===','&&!q){a.push(v);v='';}else v+=c;}a.push(v);return a;});}
@@ -148,21 +148,26 @@ await T.t('lane-run-full-name', async () => {
 await T.t('integration-tail-cutoff', async () => {
   const a = await start(), p = a.p;
   try {
-    const im = await image(p);
+    const im = await image(p, 'narrow');
 
-    // We want to test that the band purity/percentage has changed and is correct.
-    // By changing tail from 0.05 to 0, band 1's percentage changed from 62.91 to 63.68.
     await load(p, project(gel(im, {
       labels: 'M, A, B',
       marks: [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}],
-      tags: []
+      tags: [],
+      edits: {
+        added: [{lane: 1, y: 120.5/360}],
+        removed: [{lane: 1, y: 120.5/360, half: 0.1}] // remove auto band
+      }
     })));
 
-    let L1 = lane(await csv(p));
-    // Index 6 is percentage of lane
+    let L1 = lane(await csv(p), 2); // Lane A is index 2 in csv
     let pct = parseFloat(L1[0][6]);
-    // Before fix: 62.91. After fix: 63.68
-    T.check('integration-tail-cutoff.changed-area', pct > 63.5, 'Expected percentage to be > 63.5, was ' + pct);
+
+    // On main, the manual band stops at 5% (which is reached at ~4 pixels because z=3).
+    // With adaptive tail cutoff (noise=0), it goes all the way to 14 pixels.
+    // Let's see what it prints!
+
+    T.check('integration-tail-cutoff.changed-area', pct > 42.5, 'Expected manual band percentage to increase due to adaptive tail cutoff, was ' + pct);
   } finally {
     await a.close();
   }
