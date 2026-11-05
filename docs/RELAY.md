@@ -63,6 +63,23 @@ response-format: |
 
 As implemented: `task` is the issue title, `question` is the issue body (without the `relay-lines:` line, at most 6000 characters), source lines are numbered `  <n>: <text>`. A second-round request repeats the `excerpt:` line and its numbered lines once per range.
 
+## Choosing the excerpt
+
+A request is worth sending only if the agent can answer it in one go. The excerpt is picked in this order, and each step only fills what the step before it left:
+
+1. **An explicit `relay-lines: <from>-<to>`** in the issue body, widened by `relay_context_lines` each side.
+2. **A line number** in the text ("line 2095", "`.html:2095`"): the whole definition that encloses it.
+3. **The functions the text names** (backticked, called with parens, or bare camelCase such as `poolRows`), each as its whole definition. Definitions are found indented as well as at column 0, because almost all of this app's functions sit inside the IIFE.
+4. **The sections whose subject matches the text**, from the app's own `/* ---------- name ---------- */` markers. A word that appears in few section titles counts for much more than one in many, so "NanoDrop" picks the NanoDrop section while "run" picks nothing on its own. A section's body counts for little, or a long section would win just by being long. Sections fill at most half the budget when step 3 already found something.
+
+Overlapping picks are merged and the total is capped at `relay_max_lines`.
+
+Until Nov 5 only steps 1 and 2 existed, so every board-raised issue (which names no line) went out with no code at all, and the answer was always `insufficient: send me these functions`. Worse, the `need` that came back was prose ("grey-value-to-absorbance conversion"), which resolved to no ranges either, so the next request was empty too: #993 burned three rounds and learned nothing. Steps 3 and 4 are what make one round enough.
+
+**A job that asks for a check also carries the test harness.** When the issue or the task mentions a test, check, fixture, suite or evidence, the request includes `tests/lib/harness.js` and one worked suite in full, because otherwise every agent replied asking for "the existing test-harness interfaces".
+
+**The rules discourage the escape hatch.** The request now says that the excerpt is chosen by subject and is not the whole file, that an agent which can see the relevant function must not ask for more, that `insufficient` must name exact function names or line numbers rather than describing a subject, and that an analysis under `verdict: answer` is worth more than `insufficient`.
+
 ## Response block
 
 ```
@@ -109,7 +126,7 @@ Check 4 reads the file, not a sha, because unrelated merges change the sha witho
 
 - **patch, passes:** an issue titled from `summary`, labelled `from-relay`, `owner-approved`, `for-claude-first`. Its body has the summary, the diff, the test, and a link to the originating issue and request id. When `changes-a-reported-number` is `yes` it says the PR needs a check that fails on main and passes on the PR. **The patch is not committed.** An agent with repository access applies it to current main, runs the suites and opens the PR through the usual gate, so a drifted hunk becomes a rebase.
 - **answer:** posted on the originating issue; nothing is filed. If its `base` is not today's main, the post says so.
-- **insufficient:** a second request covers the line ranges and function names named in `need` (falling back to the earlier ranges). At most `relay_max_rounds` further requests per issue, then the manager gives up with a note.
+- **insufficient:** a second request covers what `need` asks for, picked the same way as the first (explicit ranges, then named functions, then a subject match on the need's own words), **added to** what the first request already carried, so round two never sends less. At most `relay_max_rounds` further requests per issue, then the manager gives up with a note.
 - **stale (3 or 4):** the request is withdrawn and a fresh one is cut from main as it is now, counted against the same limit.
 - **expired:** a request older than `relay_expire_hours` is withdrawn with a note; a response to it counts as an unknown id.
 
@@ -118,7 +135,7 @@ Check 4 reads the file, not a sha, because unrelated merges change the sha witho
 The Direction board (#222) can raise a request itself, so Patrick does not have to label anything.
 
 - **Which proposals:** an adopted proposal that is not *strong* **and** is app-changing. Strong means every adviser scored it at `board_go_score` (4) or more; those keep the old path (`jules-queue` and `board-approved`). A contested but light proposal (`routing.is_light`, the Jules leader's `LIGHT` test) also keeps the old path. A contested app-changing proposal is created with `from-board` and `relay-from-board` and **without** `jules-queue`. Its body is unchanged (votes and debate), because the request is cut from it.
-- **No location:** board proposals are prose and rarely name a line. A board-raised issue with no `relay-lines:` range or line number still gets a request, with no excerpt: the block carries `excerpt-status: none` and a rule telling the agent it cannot see the code and should reply `verdict: insufficient`, naming the functions or line ranges it needs. The second round resolves those (`ranges_from_need`), within `relay_max_rounds`. The hand-labelled `needs-relay` path still asks Patrick for a range.
+- **No location:** board proposals are prose and rarely name a line, and that is fine: the excerpt is picked by subject (below). A request with no excerpt at all is now the rare last case, for an issue whose text names no identifier and no subject that matches any section. It carries `excerpt-status: none` and a rule telling the agent it cannot see the code and should reply `verdict: insufficient`, naming the functions or line ranges it needs. The second round resolves those (`ranges_from_need`), within `relay_max_rounds`. The hand-labelled `needs-relay` path still asks Patrick for a range.
 - **Cap:** at most `board_relay_max` (2) per round, in rank order. Proposals past the cap go to `jules-queue` as before.
 - **Trust:** the owner check of `needs-relay` is unchanged. For `relay-from-board` the manager accepts the issue only if it also carries `from-board` and the newest `relay-from-board` label event was made by the account the manager posts under. The request comment starts with "The board raised this one because the advisers' scores were split" and names the issue and the board. Everything after that (block, six checks, filing) is the same.
 - **Fallback:** the relay is a preference, not a gate. If the request expires (`relay_expire_hours`) unanswered, the manager drops `relay-from-board`, adds `jules-queue` and says so in the withdrawal comment. The same happens at once for a board-raised issue whose title is light.
@@ -131,10 +148,11 @@ In the manager's settings file; all optional.
 |---|---|---|
 | `relay_label` | `needs-relay` | label Patrick puts on an issue to ask for a request |
 | `relay_expire_hours` | 12 | hours a request stays valid |
-| `relay_max_rounds` | 2 | further requests per issue after the first (insufficient or stale) |
+| `relay_max_rounds` | 1 | further requests per issue after the first (insufficient or stale) |
 | `board_relay_label` | `relay-from-board` | label the board puts on a split proposal to route it to the relay |
 | `board_relay_max` | 2 | board-raised requests per board round |
 | `relay_context_lines` | 40 | lines added each side of a named `relay-lines` range (and of a bare line number when no function encloses it) |
+| `relay_max_lines` | 1400 | excerpt lines per request, in total. The relay is for the hard jobs and the agent reading it has room for whole sections |
 
 ## Worked example
 
