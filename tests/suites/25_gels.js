@@ -168,4 +168,32 @@ await T.t('integration-tail-cutoff', async () => {
   }
 });
 
+
+await T.t('integration-tail-cutoff-manual', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+
+    await load(p, project(gel(im, {
+      labels: 'M, A, B',
+      marksManual: true,
+      marks: [],
+      tags: [],
+      edits: {
+        added: [{lane: 1, y: 120.5/360}],
+        removed: [{lane: 1, y: 230.5/360}]
+      }
+    })));
+
+    let c = await csv(p);
+    let L1 = lane(c, 2);
+    let pct = parseFloat(L1[0][6]);
+    // With 5% cutoff, pct is around 63.05.
+    // With adaptive slope threshold, pct is 63.68 (smooth gel, noise=0).
+    T.check('integration-tail-cutoff.manual-area', pct > 63.5, 'Expected percentage to be > 63.5, was ' + pct);
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
