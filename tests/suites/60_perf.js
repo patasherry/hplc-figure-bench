@@ -116,6 +116,33 @@ function makePNG(w, h) {
     T.check('layout-switching', ms < 12000, `${ms} ms for 8 layout switches (budget: 12000 ms)`);
   });
 
+  // Adding check to verify the 8 step workflow layout switch time is truly fixed as requested by the issue
+  await T.t('layout-switching-single-pass', async () => {
+    const F = {
+      his: path.join(DATA, 'standins', 'imac_histrap_1ml_step.csv'),
+      ortho: path.join(DATA, 'standins', 'imac_histrap_1ml_ortho.csv'),
+      q: path.join(DATA, 'standins', 'iex_q_6ml.csv'),
+      s200: path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv'),
+      zip: path.join(DATA, 'chrom', 'sec_Sup6_basic_unicorn7.zip')
+    };
+    for (const f of [F.his, F.ortho, F.q, F.s200, F.zip]) await h.dropFiles(f);
+    await p.evaluate(async () => {
+      const e = document.querySelector('#wf-grid'); if (e) e.click();
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    });
+
+    // We measure just one layout switch from stack to grid and back
+    const t0 = Date.now();
+    await p.evaluate(async () => {
+      const e2 = document.querySelector('#wf-stack'); if (e2) e2.click();
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const e3 = document.querySelector('#wf-grid'); if (e3) e3.click();
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    });
+    const ms = Date.now() - t0;
+    T.check('perf.workflow-8-steps-under-1.5s.single-pass', ms < 800, `${ms} ms to switch layouts twice (budget: 800 ms)`);
+  });
+
   // 5. Loading a 3000x2000 synthetic gel PNG
   await T.t('load-synthetic-gel-png', async () => {
     const tg0 = Date.now();
