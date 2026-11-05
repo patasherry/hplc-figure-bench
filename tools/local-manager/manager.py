@@ -695,12 +695,12 @@ HARNESS = ['tests/lib/harness.js', 'tests/suites/25_gels.js']
 
 
 def relay_extra(title, body):
-    """The whole files a request carries beside the excerpt. A job that asks for a check gets the harness and one worked suite:
-    without them every agent answered 'insufficient, show me the test-harness interfaces'."""
-    if not rl.wants_tests(title, body):
-        return []
+    """The whole files a request carries beside the excerpt. Every patch response has to bring a test with it, so the harness
+    always rides along: without it an agent writes the test against @playwright/test, which this repository does not use.
+    A job that is about checks in its own right gets a worked suite too."""
+    want = HARNESS if rl.wants_tests(title, body) else HARNESS[:1]
     out = []
-    for path in HARNESS:
+    for path in want:
         t = relay_file(path)
         if t:
             out.append((path, t if len(t) < 20000 else t[:20000] + '\n... (truncated)'))

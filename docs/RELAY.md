@@ -123,6 +123,24 @@ In this order, stopping at the first failure.
 
 Check 4 reads the file, not a sha, because unrelated merges change the sha without touching the hunk. Check 3 only compares the echoed `base` with the request's, so it catches a mixed-up response; drift is check 4's job. Check 5 uses the same pattern as the review gate's `ALLOWED`, so nothing is filed that the gate would close. Hunks for files other than the app are checked for path only.
 
+## Reading the response
+
+A response is pasted by hand out of a chat window, so the parser is written loosely on purpose. Every field is `name: value` at the start of a line. `patch` and `test` are blocks under their label, and all of these are accepted:
+
+- a blank line, or a comment line, between the label and the fence
+- ``` or ~~~, three characters or more
+- any language tag or none (`diff`, `patch`, `javascript`, nothing)
+- the whole fence indented, which is de-indented by its common margin
+- the `key: |` block style the other fields use
+
+A plain diff keeps its leading spaces, so context lines survive check 4.
+
+Only two things are strict: the labels are spelled exactly, and nothing comes between the header's `id` line and them. When a block cannot be read, the rejection says which labels it did find, so the fix is obvious from the comment.
+
+This part was too strict until Nov 5. The one response that came back on #1015 was correct in every way, and was thrown away because the agent left a blank line after `patch:`.
+
+**Every request carries `tests/lib/harness.js`**, because a patch response must bring a test with it and an agent that cannot see the harness writes the test against `@playwright/test`, which this repository does not use. A job that is about checks in its own right gets a worked suite as well.
+
 ## What happens next
 
 - **patch, passes:** an issue titled from `summary`, labelled `from-relay`, `owner-approved`, `for-claude-first`. Its body has the summary, the diff, the test, and a link to the originating issue and request id. When `changes-a-reported-number` is `yes` it says the PR needs a check that fails on main and passes on the PR. **The patch is not committed.** An agent with repository access applies it to current main, runs the suites and opens the PR through the usual gate, so a drifted hunk becomes a rebase.
