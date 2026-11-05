@@ -1327,7 +1327,9 @@ def antigravity(s):
     tried = s.get('ag_tried', {})
     ok = lambda i, m=1: str(i['number']) not in a and rt.eligible(i, tried, m)  # other workers' jobs get one try; Jules' queue gets AG_MAX_TRIES
     cop_off = COPILOT_MODE == 'off' or max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
-    waiting = ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
+      mine = lambda i: str(i['number']) not in a and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
+    waiting = [(i, 'for-antigravity') for i in issues('for-antigravity') if mine(i)] + \
+              ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
               ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] if CLOUD else [])
     # from-patrick (Claude Science findings) is allowed: science_inbox moves a finding from for-claude-first to jules-queue only after FIRST_HOURS, so the Claude window has lapsed
     queue = [i for i in issues('jules-queue') if ok(i, AG_MAX_TRIES)]
