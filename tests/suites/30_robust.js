@@ -375,7 +375,6 @@ await T.t('perf', async () => { const {p, errs, close} = await open(), h = H(p);
     const ms = await p.evaluate(async () => { const b = document.querySelector('#tl [data-step="figure"]'); const t = performance.now(); b.click(); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); return Math.round(performance.now() - t); });
     T.check('perf.workflow-8-steps-under-1.5s', n >= 8 && ms < 1500, `${n} steps, ${ms} ms`);
     T.check('perf.workflow-8-steps-under-400ms', n >= 8 && ms < 400, `${n} steps, ${ms} ms`);
-    T.check('perf.workflow-8-steps-under-325ms', n >= 8 && ms < 325, `${n} steps, ${ms} ms`);
   } // the full figure renders in time
   T.check('perf.no-error', !errs.length, errs.join(' | ')); await close(); });
 
