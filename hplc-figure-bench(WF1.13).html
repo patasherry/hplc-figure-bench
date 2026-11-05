@@ -6401,7 +6401,7 @@ function stepList(){
   let first = true;
   wf.forEach(r => { if (r.prep === 'manual') { const mm = r.man, a = manMg(mm), any = ['resin', 'buffer', 'wash', 'elution', 'vol', 'conc', 'note'].some(q => String(mm[q] || '').trim());
       const need = (mm.kind === 'column' || mm.kind === 'batch') && !String(mm.resin || '').trim() && any ? 'Needs the column or resin' : '';
-      L.push({k: 'man:' + mm.id, g: first ? 'Purification' : '', t: r.name, done: any && !need, warn: need, s: need || [String(mm.resin || '').trim(), a ? `${sig2(a)} mg` : ''].filter(Boolean).join(', ') || MAN_KINDS[mm.kind] || 'Details'}); first = false; return; }
+      L.push({k: 'man:' + mm.id, g: first ? 'Purification' : '', t: r.name, done: any && !need, warn: need, s: need || [String(mm.resin || '').trim(), a != null ? `${sig2(a)} mg` : ''].filter(Boolean).join(', ') || MAN_KINDS[mm.kind] || 'Details'}); first = false; return; }
     if (r.prep === 'cleave') { const q = cleaveQuant(), pr = cleaveProtease(); L.push({k: 'cleave', g: first ? 'Purification' : '', t: stepTitle(r), done: !!(hasTxt(prep.protease) || hasTxt(prep.dialBuffer) || q || m('cleave').date), s: [pr, q ? `≈${fmt(q.pct, 0)}% cleaved` : ''].filter(Boolean).join(', ') || 'Protease, dialysis, cleavage gel'}); first = false; return; }
     const p = poolRows(r), pl = poolLabel(r), mg = p && p.mg > 0 ? `${sig2(p.mg)} mg` : '', pooled = !!String(r.shade || '').trim(), nd = pooled ? runNeeds(r) : [], o = odd(r);
     const warn = !pooled ? '' : [o ? `Step yield ${o}%, check the UV path` : '', nd.length ? `${o ? 'needs' : 'Needs'} ${nd.join(', ')}` : ''].filter(Boolean).join(', ');
