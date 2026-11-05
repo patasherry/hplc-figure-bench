@@ -1,4 +1,4 @@
-# Test suite for HPLC Figure Bench
+# Test suite for Protein Purification Bench
 
 Browser tests that drive the app through its UI (clicking, typing, dropping files) and check what it displays.
 They run in headless Chromium through Playwright.

@@ -4,13 +4,15 @@ This file is the shared rulebook for every coding agent working on this reposito
 
 ## What this project is
 
-HPLC Figure Bench is a single-file HTML application for making publication-quality protein purification figures: HPLC and ÄKTA chromatograms, SDS-PAGE gels with densitometry, SEC calibration, NanoDrop readings, and a step-by-step purification workflow figure with a written summary and methods text.
+Protein Purification Bench is a single-file HTML application for making publication-quality protein purification figures: HPLC and ÄKTA chromatograms, SDS-PAGE gels with densitometry, SEC calibration, NanoDrop readings, and a step-by-step purification workflow figure with a written summary and methods text.
 
 The owner is a biochemistry graduate student who uses it for real lab data. Scientific correctness matters more than new features.
 
 ## Repository layout
 
 - `hplc-figure-bench(WF1.13).html`: the entire application (HTML, CSS and JavaScript in one file). Do not rename it unless the task asks you to. The owner manages the version label.
+
+**The name.** The app is called **Protein Purification Bench** (the Direction board's unanimous choice on #222, 2026-10-30, carried out in PR #1018). That is the name in the page title, the header and all prose. Three things keep the old name for good, because they are data rather than labels: the file name above, the `hplc-fig-opt` settings key, and the `app: 'HPLC Figure Bench'` field in project files, which both the exporter writes and the importer checks. Renaming any of those stops every project saved before the rename from loading, and stops every file saved after it from opening in an older copy. `tests/suites/01_name.js` checks both halves.
 - `README.md`: user-facing documentation.
 - `AGENTS.md`: this file.
 - `CLAUDE.md`: points Claude Code to this file.
