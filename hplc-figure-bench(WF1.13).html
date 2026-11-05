@@ -350,7 +350,7 @@ label.f.condmissing>input{border-color:var(--warn)}
 .lrow span{font-size:12px;color:var(--faint);text-align:right}
 .lrow.amb select{border-color:var(--warn);box-shadow:inset 3px 0 0 var(--warn)}
 .lrow input,.lrow select{padding:4px 6px;font-size:12.5px;min-height:28px}
-.lrow select{padding-right:24px}
+.lrow select{padding-right:24px;text-overflow:ellipsis}
 .intp{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px}
 .intp-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:13.5px}
 .intp-head strong{font-weight:600}
@@ -1002,7 +1002,7 @@ button,input,select,textarea{font-family:inherit}
       </div>
       <div class="btns"><button class="btn" id="g-autoCrop" type="button">Auto crop</button><button class="btn" id="g-cropUndo" type="button" hidden>Undo crop</button></div>
       <div class="checks"><label class="check"><input type="checkbox" id="o-gelAutoCrop" data-opt="gelAutoCrop">Auto crop gels when added</label></div>
-      <p class="hint">Auto crop trims to the stained lanes, from just below the wells to just below the dye front. Very faint lanes can be missed, so typing one label per lane sets the lane count and refits the crop. Moving a trim slider takes over by hand.</p>
+      <p class="hint">Auto crop trims to the stained lanes, from just below the wells to just below the dye front. Very faint lanes can be missed, so setting lane labels sets the lane count and refits the crop. Moving a trim slider takes over by hand.</p>
       <div class="row">
         <label class="f">Dark point<input type="range" min="0" max="250" step="1" id="g-black" data-gel="black" data-type="num"></label>
         <label class="f">Light point<input type="range" min="5" max="255" step="1" id="g-white" data-gel="white" data-type="num"></label>
@@ -2881,7 +2881,7 @@ function applyAutoCrop(g, quiet){
   g.cropPrev.labels = g.labels; Object.assign(g, {cl: r.cl, cr: r.cr, ct: r.ct, cb: r.cb});
   if (r.kept) g.nLanes = r.nUse; else if (r.nUse !== g.nLanes) { const labs = String(g.labels || '').split(',').map(t => t.trim()).filter(Boolean); if (labs[0] === 'M' && labs.slice(1).every((t, i) => t === String(i + 1))) g.labels = ['M', ...Array.from({length: r.nUse - 1}, (_, i) => String(i + 1))].join(', '); g.nLanes = r.nUse; }
   processGel(g); if (g.autoLv) { autoContrast(g); processGel(g); }
-  if (!quiet) toast(r.kept ? `Cropped to ${r.nUse} lanes (your lane count). Found stain in ${r.nFound}.` : `Cropped to ${r.nUse} lanes.`);
+  if (!quiet) toast(r.kept ? `Cropped to ${r.nUse} lanes (your setting). Found stain in ${r.nFound}.` : `Cropped to ${r.nUse} lanes.`);
   return r;
 }
 /* ---------- gel densitometry: lane profiles, bands, ladder calibration ---------- */
@@ -4553,7 +4553,7 @@ function stepStatus(g){
   const trimmed = g.cl || g.cr || g.ct || g.cb;
   set('st-crop', (g.autoCropped && !g.trimTouched ? 'auto cropped' : trimmed ? 'trimmed' : 'full image') + (g.rot ? `, rotated ${g.rot}°` : ''));
   const labs = gelLabels(g), used = new Set(labs.map((_, i) => laneAssign(g, i)).filter(a => a && a !== 'marker'));
-  set('st-lanes', `${labs.length} lanes` + (used.size ? `, ${used.size} run${used.size > 1 ? 's' : ''}` : ', no runs'));
+  set('st-lanes', `${g.nLanes} lanes` + (used.size ? `, ${used.size} run${used.size > 1 ? 's' : ''}` : ', no runs'));
   const nm = g.marks.length, nv = ladderVals(g).length;
   set('st-ladder', !lanesFor(g, 'marker').length ? 'no ladder lane' : nm >= 2 ? `${nm} of ${nv} marked${g.marksManual ? ' by hand' : ''}` : 'not found');
   const tg = g.tags || [], nt = tg.filter(t => isProt(t.kind)).length, nc = tg.filter(t => t.kind === 'contam').length, ed = g.edits || {added: [], removed: []};
@@ -4821,7 +4821,7 @@ function onGel(el){
   if (k === 'black' || k === 'white') g.autoLv = false;
   if (k === 'labels' || k === 'nLanes') { renderLaneTable(); renderList(); }
   if (['rot','fine','cl','cr','ct','cb'].includes(k)) g.trimTouched = true;
-  /* after an auto crop, typing one label per lane re-fits the crop to that many lanes (until the trims are moved by hand) */
+  /* after an auto crop, setting lane labels re-fits the crop to that many lanes (until the trims are moved by hand) */
   if (k === 'labels' && g.autoCropped && !g.trimTouched) { clearTimeout(g._recrop); g._recrop = setTimeout(() => {
     const n = String(g.labels || '').split(',').map(t => t.trim()).filter(Boolean).length; if (n < 2 || n === +g.nLanes) return;
     if (!applyAutoCrop(g, true).err) { ['cl','cr','ct','cb','nLanes'].forEach(q => { const f = document.querySelector(`[data-gel="${q}"]`); if (f) f.value = g[q]; }); renderLaneTable(); renderList(); render(); toast(`Crop refitted to ${g.nLanes} lanes.`); } }, 700); }
@@ -6080,7 +6080,7 @@ function nextStep(){
   if (runs.length && !gels.length && steps.length && (fk === 'workflow' || (fk === 'run' && !isSec(f0.run)))) { const _n = {k: 'gel', t: 'Optional: add a gel to show its lanes under each run.', go: 'Add gel image', act: () => $('#gelFile').click()}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
   const gOrder = gels.slice().sort((a, b) => (b.id === cur) - (a.id === cur));
   for (const g of gOrder) { if (fk === 'run' && isSec(f0.run)) break; if (fk === 'gel' && g.id !== cur) continue; const labs = gelLabels(g), dflt = labs[0] === 'M' && labs.slice(1).every((t, i) => t === String(i + 1));
-    if (dflt) { const _n = {k: 'labels:' + g.id, t: `Type the lane labels for ${g.name}, one per lane.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) d.open = true; const el = $('#g-labels'); el.scrollIntoView({behavior: smooth(), block: 'center'}); setTimeout(() => el.focus(), 300); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
+    if (dflt) { const _n = {k: 'labels:' + g.id, t: `Select lane labels in the sidebar for ${g.name}.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) d.open = true; const el = $('#g-labels'); el.scrollIntoView({behavior: smooth(), block: 'center'}); setTimeout(() => el.focus(), 300); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
     gelLabels(g).forEach((_, i) => laneAssign(g, i)); const amb = Object.keys((g._auto && g._auto.amb) || {}).filter(i => !(g.assign || [])[i]).length;
     if (amb) { const _n = {k: 'amb:' + g.id + ':' + amb, t: `${amb} lane${amb === 1 ? '' : 's'} on ${g.name} name${amb === 1 ? 's a fraction' : ' fractions'} found in more than one run. Pick the run for ${amb === 1 ? 'it' : 'them'}, or set each run's pooled fractions.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) { d.open = true; const x = document.querySelector('.lrow.amb select') || $('#laneTable'); x.scrollIntoView({behavior: smooth(), block: 'center'}); if (x.focus) setTimeout(() => x.focus(), 250); } }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
     if (lanesFor(g, 'marker').length && g.marks.length < 2) { const _n = {k: 'ladder:' + g.id, t: `Ladder not found on ${g.name}.`, go: 'Go to ladder', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="gladder"]'); if (d) { d.open = true; d.scrollIntoView({behavior: smooth(), block: 'center'}); } }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
@@ -6099,7 +6099,7 @@ function nextStep(){
 function renderNext(){ const n = nextStep(), bar = $('#nextBar'); if (!n || nextHidden.has(n.k)) { bar.hidden = true; return; } bar.hidden = false;
   /* how many suggestions are waiting: hide one to see the next */
   let more = 0; { const saved = new Set(nextHidden); nextHidden.add(n.k); for (let q = 0; q < 12; q++) { const m = nextStep(); if (!m) break; more++; nextHidden.add(m.k); } nextHidden.clear(); saved.forEach(x => nextHidden.add(x)); }
-  $('#nextText').textContent = n.t + (more ? ` (${more} more: hide this to see the next)` : '');
+  $('#nextText').textContent = n.t + (more ? ` (${more} more: hide to see the next)` : '');
   const go = $('#nextGo'); go.hidden = !n.go; go.textContent = n.go || ''; go.onclick = n.act || null; bar.dataset.k = n.k; }
 $('#nextHide').addEventListener('click', () => { const k = $('#nextBar').dataset.k; if (k === 'undoOpen') projUndo = null; else nextHidden.add(k); renderNext(); });
 /* ---------- projects: everything in one JSON file ---------- */
@@ -6460,7 +6460,7 @@ function renderSteps(){
 function renderStepSheet(L){
   const k = curStep, s = (L || stepList()).find(x => x.k === k) || {t: ''}, kind = k.includes(':') ? k.split(':')[0] : k, f = curFig(), onGel = f && f.kind === 'gel';
   $('#ssTitle').textContent = onGel ? `Gel: ${f.gel.name}` : s.t;
-  $('#ssWhat').textContent = onGel ? 'Type the lane labels and check the ladder. The lanes appear under their step in the figure.' : (STEP_WHAT[kind] || '') + '';
+  $('#ssWhat').textContent = onGel ? 'Select lane labels in the sidebar and check the ladder. The lanes appear under their step in the figure.' : (STEP_WHAT[kind] || '') + '';
   const di = $('#ssDate'), ni = $('#ssNotes'), mm = stepMeta(k); di.parentNode.hidden = k === 'figure' || onGel; ni.parentNode.hidden = k === 'figure' || onGel;
   if (di !== document.activeElement) di.value = mm.date || ''; if (ni !== document.activeElement) ni.value = mm.notes || '';
   const lane = STEP_LANE(k), gl = lane ? gels.filter(g => lanesFor(g, lane).length) : [], rid = kind === 'run' ? k.slice(4) : '', rr = rid && runs.find(r => r.id === rid);

@@ -168,4 +168,30 @@ await T.t('integration-tail-cutoff', async () => {
   }
 });
 
+
+T.t('862: label text and instruction UI check', async () => {
+    const {p, h} = await open();
+    await p.evaluate(() => {
+        const proj = {
+            app:'HPLC Figure Bench',version:1,
+            gels:[{
+                id: 'g1', name: 'synthetic gel',
+                image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+                nLanes: 3, labels: 'M, 1, 2',
+                cl: 0, cr: 0, ct: 0, cb: 0, rot: 0, fine: 0, assign: []
+            }],
+            runs:[], traces:[], cur: 'g1',
+            opt:{gelAutoCrop:false}
+        };
+        openProject(proj);
+    });
+    await h.wait(500);
+
+    const txt = await p.textContent('#nextBar');
+    T.check('instruction text', txt.includes('Select lane labels in the sidebar for synthetic gel'), 'instruction should mention sidebar selection');
+
+    // test status bar
+    const stLanes = await p.textContent('#st-lanes');
+    T.check('lane count matches settings', stLanes.includes('3 lanes'), 'status bar should show nLanes setting');
+});
 T.done();})();
