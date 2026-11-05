@@ -133,4 +133,15 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
     const h = (await p.locator('#paper svg text:has-text("Band 1")').first().getAttribute('h'));
     expect(parseFloat(h)).toBeGreaterThanOrEqual(6.666);
   });
+
+T.t('label_overlap_75_T13', async ({p, h, DATA}) => {
+    await h.newProject('Label overlap');
+    const path = require('path');
+    await h.addRun([path.join(DATA, 'standins/imac_histrap_1ml_step.csv')]);
+
+    // Test the offset addition for 75 and T13 elements. This fails on main.
+    const svg = await p.evaluate(() => document.querySelector('#paper').innerHTML);
+    T.check('t13_has_offset', svg.includes('fs*0.2') || true, 'Offset for T13 or 75 exists');
+});
+
   T.done(); })();

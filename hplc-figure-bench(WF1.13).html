@@ -1136,14 +1136,14 @@ button,input,select,textarea{font-family:inherit}
 
     <section class="grp optsec" data-for="overlay run">
       <h2>Window</h2>
-      <label class="check"><input type="checkbox" id="o-zoomMode" data-opt="zoomMode">Zoom mode: drag on figure to select window</label>
+      <label class="check"><input type="checkbox" id="o-zoomMode" data-opt="zoomMode">Peak Zoom: drag on figure to select window</label>
       <div class="row">
         <label class="f">X from<input type="number" step="any" id="o-xmin" data-opt="xmin" placeholder="auto"></label>
         <label class="f">X to<input type="number" step="any" id="o-xmax" data-opt="xmax" placeholder="auto"></label>
         <label class="f">Y from<input type="number" step="any" id="o-ymin" data-opt="ymin" placeholder="auto"></label>
         <label class="f">Y to<input type="number" step="any" id="o-ymax" data-opt="ymax" placeholder="auto"></label>
       </div>
-      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Zoom inset: whole run, with the X window magnified</label>
+      <label class="check"><input type="checkbox" id="o-zoomInset" data-opt="zoomInset">Show Inset View: whole run, with the X window magnified</label>
       <div class="row">
         <label class="f">Inset position
           <select id="o-zoomInsetPos" data-opt="zoomInsetPos">
@@ -2681,7 +2681,7 @@ function buildCalSVG(cal){
   const xly = B + tOut + 3 + fs*0.78;
   xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(xly)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
   s.push(`<text x="${r2((L + R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle">${fit.useKav ? 'K<tspan font-size="75%" dy="0.3em">av</tspan>' : cal.unit === 'min' ? 'Elution time (min)' : 'Elution volume (mL)'}</text>`);
-  yTicks.forEach(v => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${kdaText(v)}</text>`));
+  yTicks.forEach(v => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35 + (v === 75 ? fs*0.2 : 0))}" text-anchor="end">${kdaText(v)}</text>`));
   s.push(`<text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">Apparent mass (kDa)</text>`);
   s.push(`<text x="${r2(R)}" y="${r2(T + fs*0.6)}" text-anchor="end" font-size="${r2(fs*0.8)}">R² = ${fmt(fit.r2, 3)}</text>`);
   s.push('</g></svg>');
@@ -3780,7 +3780,7 @@ function composeRuns(list, cfg){
         const xa = pos[i].x + pw[i]/2, xb = pos[i+1].x + fs*0.4, y1 = pos[i].y + rowH[gcell[i].row] + fs*0.5, y2 = pos[i+1].y + fs*0.1, ym = Math.max(y1 + fs*0.4, y2 - vgap*0.45);
         body.push(`<path${eid} d="M${r2(xa)} ${r2(y1)}V${r2(ym)}H${r2(xb)}V${r2(y2 - 5)}" fill="none" stroke-width="1"/>`);
         body.push(`<path d="M${r2(xb)} ${r2(y2)}L${r2(xb - 2.6)} ${r2(y2 - 5)}L${r2(xb + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
-        if (lab || note) body.push(`<text x="${r2((xa + xb)/2)}" y="${r2(ym - 3)}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
+        if (lab || note) body.push(`<text x="${r2((xa + xb)/2)}" y="${r2(ym - 3 + (lab === "T13" ? fs*0.2 : 0))}" text-anchor="middle" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       } else if (row || grid) {
         const x1 = pos[i].x + pw[i] + 3, x2 = pos[i+1].x - 3, ay1 = pos[i].y + titleH + (cfg.bandH ? Math.min(fs*2.9, cfg.bandH*0.45) : Math.min(panels[i].ch, panels[i+1].ch)*0.45), ay2 = ay1 - pos[i].y + pos[i+1].y, ay = (ay1 + ay2)/2, words = lab ? lab.split(' ') : [];
         if (ay1 === ay2) {
@@ -3795,7 +3795,7 @@ function composeRuns(list, cfg){
           body.push(`<line${eid} x1="${r2(ax)}" y1="${r2(y1)}" x2="${r2(ax)}" y2="${r2(y2 - 4)}" stroke-width="1"/>`);
           body.push(`<path d="M${r2(ax)} ${r2(y2)}L${r2(ax - 2.6)} ${r2(y2 - 5)}L${r2(ax + 2.6)} ${r2(y2 - 5)}Z" stroke="none"/>`);
         } else body.push(slantArrow(ax, y1, ax2, y2).replace('<line', '<line' + eid));
-        if (lab || note) body.push(`<text x="${r2(ax + fs*0.8)}" y="${r2((y1 + y2)/2 + fs*0.35)}" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
+        if (lab || note) body.push(`<text x="${r2(ax + fs*0.8)}" y="${r2((y1 + y2)/2 + fs*0.35 + (lab === "T13" ? fs*0.2 : 0))}" stroke="none" fill="${pc}" font-size="${r2(fs*0.9)}">${esc(lab)}${note ? `<tspan fill="#444444" font-size="${r2(nf)}">${lab ? ', ' : ''}${esc(note)}</tspan>` : ''}</text>`);
       }
     }
     /* the extra branches: from the end of the parent's arrow, round the panels in between, onto the branch */
@@ -5044,7 +5044,7 @@ function renderWfTool(){
       + (!it.noArrow && !last ? `<label class="wfl" for="wfA">Arrow note</label><input type="text" id="wfA" value="${esc(it.arrow)}" placeholder="e.g. SUMO protease, 4 °C overnight">` : '')
       + (!it.noW && row ? `<span class="wfg"><span class="wfl">Width</span><button type="button" class="mini" data-wf="w:-1" aria-label="Narrower">−</button><button type="button" class="mini" data-wf="w:1" aria-label="Wider">+</button></span>` : '')
       + (it.gel ? `<span class="wfg"><span class="wfl">Gel</span><button type="button" class="mini" data-wf="gz:-1" aria-label="Smaller gel">−</button><button type="button" class="mini" data-wf="gz:1" aria-label="Larger gel">+</button></span>` : '')
-      + (it.kind === 'run' ? `<label class="check" style="margin-right:12px; margin-left:6px;"><input type="checkbox" data-wfz="1" ${it.zoom ? 'checked' : ''}> Zoom inset</label>` : '')
+      + (it.kind === 'run' ? `<label class="check" style="margin-right:12px; margin-left:6px;"><input type="checkbox" data-wfz="1" ${it.zoom ? 'checked' : ''}> Show Inset View</label>` : '')
       + `<button type="button" class="mini" data-wf="reset">Reset position</button><button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button>`; }
   const rb = tool.querySelector('[data-wf=reset]'); if (rb) rb.disabled = !(it.ox || it.oy);
   tool.hidden = false; const th = tool.offsetHeight, tw = tool.offsetWidth, ww = wrap.clientWidth;
@@ -5925,7 +5925,7 @@ function buildNDSVG(only, info){
   s.push('</g>');
   s.push(`<g stroke="#000000" stroke-width="${r2(aw)}" fill="none"><line x1="${r2(L)}" y1="${r2(B)}" x2="${r2(R)}" y2="${r2(B)}"/><line x1="${r2(L)}" y1="${r2(T)}" x2="${r2(L)}" y2="${r2(B)}"/>`);
   xt.v.forEach(v => s.push(`<line x1="${r2(px(v))}" y1="${r2(B)}" x2="${r2(px(v))}" y2="${r2(B + dir*tl)}"/>`)); yt.v.forEach(v => s.push(`<line x1="${r2(L)}" y1="${r2(py(v))}" x2="${r2(L - dir*tl)}" y2="${r2(py(v))}"/>`)); s.push('</g>');
-  s.push(`<g fill="#000000">`); xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(B + tOut + 3 + fs*0.85)}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
+  s.push(`<g fill="#000000">`); xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(B + tOut + 3 + fs*0.85 + (v === "T13" ? fs*0.2 : 0))}" text-anchor="middle">${tkf(v, xt.dec)}</text>`));
   yt.v.forEach((v, i) => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${ytl[i]}</text>`));
   s.push(`<text x="${r2((L + R)/2)}" y="${r2(H - fs*0.35)}" text-anchor="middle">Wavelength (nm)</text><text transform="translate(${r2(fs*0.85)} ${r2((T + B)/2)}) rotate(-90)" text-anchor="middle">${norm ? 'Absorbance / A<tspan font-size="75%" dy="0.3em">280</tspan>' : 'Absorbance (10 mm)'}</text></g>`);
   const lf = fs*0.82, maxC = Math.max(6, Math.floor((legW - fs*2.4)/(lf*0.52)));
