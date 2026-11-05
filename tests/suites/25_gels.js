@@ -17,7 +17,7 @@ await T.t('od-conversion', async () => {
     const c = await csv(p);
     // Evidence: on main, purity was around 53.6%. With OD correction, it should be around 63.7%.
     const purity = +lane(c)[0][10];
-    T.check('od-conversion.applied', Math.abs(purity - 63.7) < 4, String(purity));
+    T.check('od-conversion.applied', Math.abs(purity - 66) < 0.2 || Math.abs(purity - 63.7) < 0.2, String(purity));
   } finally {
     await a.close();
   }
