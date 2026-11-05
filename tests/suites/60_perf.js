@@ -115,7 +115,6 @@ function makePNG(w, h) {
     const ms = Date.now() - tLayout0;
     T.check('layout-switching', ms < 12000, `${ms} ms for 8 layout switches (budget: 12000 ms)`);
   });
-
   // Adding check to verify the 8 step workflow layout switch time is truly fixed as requested by the issue
   await T.t('layout-switching-single-pass', async () => {
     const F = {
@@ -142,6 +141,10 @@ function makePNG(w, h) {
     const ms = Date.now() - t0;
     T.check('perf.workflow-8-steps-under-1.5s.single-pass', ms < 800, `${ms} ms to switch layouts twice (budget: 800 ms)`);
   });
+
+
+
+
 
   // 5. Loading a 3000x2000 synthetic gel PNG
   await T.t('load-synthetic-gel-png', async () => {
