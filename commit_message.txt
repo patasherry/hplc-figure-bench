@@ -1,7 +1,0 @@
-Align lane labeling logic, instructions, and sidebar display
-
-Closes #862
-
-Open questions:
-- Added `lane count ignores hidden lanes` UI test in `25_gels.js` to ensure the lane count properly updates by using `#st-lanes` to assert the lane count.
-- Truncation fixes for dropdowns using `text-overflow:ellipsis` and `min-width:0`.

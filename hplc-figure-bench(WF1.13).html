@@ -351,7 +351,7 @@ label.f.condmissing>input{border-color:var(--warn)}
 .lrow span{font-size:12px;color:var(--faint);text-align:right}
 .lrow.amb select{border-color:var(--warn);box-shadow:inset 3px 0 0 var(--warn)}
 .lrow input,.lrow select{padding:4px 6px;font-size:12.5px;min-height:28px}
-.lrow select{padding-right:24px}
+.lrow select{padding-right:24px;text-overflow:ellipsis;min-width:0}
 .intp{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px}
 .intp-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:13.5px}
 .intp-head strong{font-weight:600}
@@ -1003,7 +1003,7 @@ button,input,select,textarea{font-family:inherit}
       </div>
       <div class="btns"><button class="btn" id="g-autoCrop" type="button">Auto crop</button><button class="btn" id="g-cropUndo" type="button" hidden>Undo crop</button></div>
       <div class="checks"><label class="check"><input type="checkbox" id="o-gelAutoCrop" data-opt="gelAutoCrop">Auto crop gels when added</label></div>
-      <p class="hint">Auto crop trims to the stained lanes, from just below the wells to just below the dye front. Very faint lanes can be missed, so typing one label per lane sets the lane count and refits the crop. Moving a trim slider takes over by hand.</p>
+      <p class="hint">Auto crop trims to the stained lanes, from just below the wells to just below the dye front. Very faint lanes can be missed, so selecting a label for each lane sets the lane count and refits the crop. Moving a trim slider takes over by hand.</p>
       <div class="row">
         <label class="f">Dark point<input type="range" min="0" max="250" step="1" id="g-black" data-gel="black" data-type="num"></label>
         <label class="f">Light point<input type="range" min="5" max="255" step="1" id="g-white" data-gel="white" data-type="num"></label>
@@ -2852,7 +2852,7 @@ function autoCrop(g){
   const nFound = Math.max(1, kLast + 1);
   const labs = String(g.labels || '').split(',').map(t => t.trim()).filter(Boolean), nUser = +g.nLanes || 0;
   const dflt = labs[0] === 'M' && labs.slice(1).every((t, i) => t === String(i + 1));
-  /* lane labels the user typed (not the default M, 1, 2 ...) set the lane count: empty or very faint lanes cannot be seen */
+  /* lane labels the user selected (not the default M, 1, 2 ...) set the lane count: empty or very faint lanes cannot be seen */
   const keep = !dflt && labs.length >= 2 && labs.length !== nFound, nUse = keep ? labs.length : nFound;
   const left = x0 - period/2, xa = grp[0].c, xz = grp[grp.length-1].c;
   let L = Math.max(0, left), R = Math.min(W, left + nUse*period);
@@ -4553,8 +4553,8 @@ function stepStatus(g){
   const set = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
   const trimmed = g.cl || g.cr || g.ct || g.cb;
   set('st-crop', (g.autoCropped && !g.trimTouched ? 'auto cropped' : trimmed ? 'trimmed' : 'full image') + (g.rot ? `, rotated ${g.rot}°` : ''));
-  const labs = gelLabels(g), used = new Set(labs.map((_, i) => laneAssign(g, i)).filter(a => a && a !== 'marker'));
-  set('st-lanes', `${labs.length} lanes` + (used.size ? `, ${used.size} run${used.size > 1 ? 's' : ''}` : ', no runs'));
+  const labs = gelLabels(g), asgn = labs.map((_, i) => laneAssign(g, i)), vis = asgn.filter(a => a !== ''), used = new Set(asgn.filter(a => a && a !== 'marker'));
+  set('st-lanes', `${vis.length} lane${vis.length === 1 ? '' : 's'}` + (used.size ? `, ${used.size} run${used.size > 1 ? 's' : ''}` : ', no runs'));
   const nm = g.marks.length, nv = ladderVals(g).length;
   set('st-ladder', !lanesFor(g, 'marker').length ? 'no ladder lane' : nm >= 2 ? `${nm} of ${nv} marked${g.marksManual ? ' by hand' : ''}` : 'not found');
   const tg = g.tags || [], nt = tg.filter(t => isProt(t.kind)).length, nc = tg.filter(t => t.kind === 'contam').length, ed = g.edits || {added: [], removed: []};
@@ -4666,12 +4666,12 @@ function renderLaneTable(){
   const labs = gelLabels(g), short = t => t.length > 24 ? t.slice(0, 23) + '…' : t;
   el.innerHTML = labs.map((l, i) => { const a = laneAssign(g, i);
     const am = !(g.assign || [])[i] && a === '' && g._auto && g._auto.amb && g._auto.amb[i];
-    return `<div class="lrow${am ? ' amb' : ''}"${am ? ` title="${esc(l)} is a fraction in ${am.length} runs. Pick the run it came from, or set the runs' pooled fractions."` : ''}><span>${i + 1}</span><input type="text" id="ln${i}" data-lane="${i}" data-lk="label" value="${esc(l)}" aria-label="Lane ${i + 1} label"><select id="la${i}" data-lane="${i}" data-lk="assign" aria-label="Lane ${i + 1} belongs to"${(() => { const rk = runs.findIndex(r => r.id === a); if (rk >= 0) return ` title="${esc(runs[rk].name)}"`; if (a === 'marker') return ' title="Ladder"'; if (a === '') return ' title="Not shown with a run"'; const m = (typeof a === 'string' && /^m\d+$/.test(a) && manSteps().some(mx => mx.id === a)) ? manSteps().find(x => x.id === a) : null; return ` title="${esc(PREP_NAME[a] || (m ? m.name || MAN_NAME[m.kind] || 'Other step' : a))}"`; })()}><option value="marker" ${a === 'marker' ? 'selected' : ''}>Ladder</option><option value="" ${a === '' ? 'selected' : ''}>Not shown with a run</option>${PREP_OPT().replace(`value="${a}"`, `value="${a}" selected`)}${runs.map((r, k) => `<option value="${r.id}" title="${esc(r.name)}" ${a === r.id ? 'selected' : ''}>${k + 1}. ${esc(short(shortRunName(r)))}</option>`).join('')}</select></div>`; }).join('');
+    return `<div class="lrow${am ? ' amb' : ''}"${am ? ` title="${esc(l)} is a fraction in ${am.length} runs. Pick the run it came from, or set the runs' pooled fractions."` : ''}><span>${i + 1}</span><input type="text" id="ln${i}" data-lane="${i}" data-lk="label" value="${esc(l)}" aria-label="Lane ${i + 1} label"><select id="la${i}" data-lane="${i}" data-lk="assign" aria-label="Lane ${i + 1} belongs to"${(() => { const rk = runs.findIndex(r => r.id === a); if (rk >= 0) return ` title="${esc(runs[rk].name)}"`; if (a === 'marker') return ' title="Ladder"'; if (a === '') return ' title="hide"'; const m = (typeof a === 'string' && /^m\d+$/.test(a) && manSteps().some(mx => mx.id === a)) ? manSteps().find(x => x.id === a) : null; return ` title="${esc(PREP_NAME[a] || (m ? m.name || MAN_NAME[m.kind] || 'Other step' : a))}"`; })()}><option value="marker" ${a === 'marker' ? 'selected' : ''}>Ladder</option><option value="" ${a === '' ? 'selected' : ''}>hide</option>${PREP_OPT().replace(`value="${a}"`, `value="${a}" selected`)}${runs.map((r, k) => `<option value="${r.id}" title="${esc(r.name)}" ${a === r.id ? 'selected' : ''}>${k + 1}. ${esc(short(shortRunName(r)))}</option>`).join('')}</select></div>`; }).join('');
 }
 function onLane(el){
   const g = curGel(); if (!g) return; const i = +el.dataset.lane;
   if (el.dataset.lk === 'label') { const labs = gelLabels(g); labs[i] = el.value.replace(/,/g, ' '); g.labels = labs.join(', '); $('#g-labels').value = g.labels; render(); return; }
-  g.assign = g.assign || []; g.assign[i] = el.value; { const r = runs.find(x => x.id === el.value); if (r) el.title = r.name; else { const m = (typeof el.value === 'string' && /^m\d+$/.test(el.value) && manSteps().some(mx => mx.id === el.value)) ? manSteps().find(x => x.id === el.value) : null; el.title = PREP_NAME[el.value] || (m ? m.name || MAN_NAME[m.kind] || 'Other step' : (el.value === 'marker' ? 'Ladder' : 'Not shown with a run')); } } renderList(); render();
+  g.assign = g.assign || []; g.assign[i] = el.value; { const r = runs.find(x => x.id === el.value); if (r) el.title = r.name; else { const m = (typeof el.value === 'string' && /^m\d+$/.test(el.value) && manSteps().some(mx => mx.id === el.value)) ? manSteps().find(x => x.id === el.value) : null; el.title = PREP_NAME[el.value] || (m ? m.name || MAN_NAME[m.kind] || 'Other step' : (el.value === 'marker' ? 'Ladder' : 'hide')); } } renderList(); render();
 }
 function renderList(){
   const runCards = runs.map((r, idx) => {
@@ -6081,12 +6081,12 @@ function nextStep(){
   if (runs.length && !gels.length && steps.length && (fk === 'workflow' || (fk === 'run' && !isSec(f0.run)))) { const _n = {k: 'gel', t: 'Optional: add a gel to show its lanes under each run.', go: 'Add gel image', act: () => $('#gelFile').click()}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
   const gOrder = gels.slice().sort((a, b) => (b.id === cur) - (a.id === cur));
   for (const g of gOrder) { if (fk === 'run' && isSec(f0.run)) break; if (fk === 'gel' && g.id !== cur) continue; const labs = gelLabels(g), dflt = labs[0] === 'M' && labs.slice(1).every((t, i) => t === String(i + 1));
-    if (dflt) { const _n = {k: 'labels:' + g.id, t: `Type the lane labels for ${g.name}, one per lane.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) d.open = true; const el = $('#g-labels'); el.scrollIntoView({behavior: smooth(), block: 'center'}); setTimeout(() => el.focus(), 300); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
+    if (dflt) { const _n = {k: 'labels:' + g.id, t: `Select lane labels in the sidebar for ${g.name}.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) d.open = true; const el = $('#g-labels'); el.scrollIntoView({behavior: smooth(), block: 'center'}); setTimeout(() => el.focus(), 300); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
     gelLabels(g).forEach((_, i) => laneAssign(g, i)); const amb = Object.keys((g._auto && g._auto.amb) || {}).filter(i => !(g.assign || [])[i]).length;
     if (amb) { const _n = {k: 'amb:' + g.id + ':' + amb, t: `${amb} lane${amb === 1 ? '' : 's'} on ${g.name} name${amb === 1 ? 's a fraction' : ' fractions'} found in more than one run. Pick the run for ${amb === 1 ? 'it' : 'them'}, or set each run's pooled fractions.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) { d.open = true; const x = document.querySelector('.lrow.amb select') || $('#laneTable'); x.scrollIntoView({behavior: smooth(), block: 'center'}); if (x.focus) setTimeout(() => x.focus(), 250); } }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
     if (lanesFor(g, 'marker').length && g.marks.length < 2) { const _n = {k: 'ladder:' + g.id, t: `Ladder not found on ${g.name}.`, go: 'Go to ladder', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="gladder"]'); if (d) { d.open = true; d.scrollIntoView({behavior: smooth(), block: 'center'}); } }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
     /* lanes that name a fraction the run never collected, and lanes out of elution order (their connectors cross) */
-    { const labsG = gelLabels(g), go = () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) { d.open = true; $('#g-labels').scrollIntoView({behavior: smooth(), block: 'center'}); } };
+    { const labsG = gelLabels(g), go = () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) { d.open = true; $('#laneTable').scrollIntoView({behavior: smooth(), block: 'center'}); } };
       const miss = [], seq = new Map();
       labsG.forEach((l, i) => { const id = laneAssign(g, i), r = runs.find(x => x.id === id); if (!r) return; const tok = String(l).trim().split(RANGE_SPLIT_RE)[0]; if (!/^[A-Z]{0,3}\d{1,3}('|#\d+|\(\d+\))?$|^\d+\.[A-Z]\.\d+$/i.test(tok)) return;
         const k = fracIdx(r, tok, null, shadeSet(r)); if (k < 0) miss.push(laneShow(l)); else { if (!seq.has(id)) seq.set(id, []); seq.get(id).push({k, l: laneShow(l)}); } });
@@ -6461,7 +6461,7 @@ function renderSteps(){
 function renderStepSheet(L){
   const k = curStep, s = (L || stepList()).find(x => x.k === k) || {t: ''}, kind = k.includes(':') ? k.split(':')[0] : k, f = curFig(), onGel = f && f.kind === 'gel';
   $('#ssTitle').textContent = onGel ? `Gel: ${f.gel.name}` : s.t;
-  $('#ssWhat').textContent = onGel ? 'Type the lane labels and check the ladder. The lanes appear under their step in the figure.' : (STEP_WHAT[kind] || '') + '';
+  $('#ssWhat').textContent = onGel ? 'Select lane labels in the sidebar and check the ladder. Select \'hide\' to remove a lane. The lanes appear under their step in the figure.' : (STEP_WHAT[kind] || '') + '';
   const di = $('#ssDate'), ni = $('#ssNotes'), mm = stepMeta(k); di.parentNode.hidden = k === 'figure' || onGel; ni.parentNode.hidden = k === 'figure' || onGel;
   if (di !== document.activeElement) di.value = mm.date || ''; if (ni !== document.activeElement) ni.value = mm.notes || '';
   const lane = STEP_LANE(k), gl = lane ? gels.filter(g => lanesFor(g, lane).length) : [], rid = kind === 'run' ? k.slice(4) : '', rr = rid && runs.find(r => r.id === rid);

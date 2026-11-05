@@ -168,4 +168,23 @@ await T.t('integration-tail-cutoff', async () => {
   }
 });
 
+
+await T.t('lane count ignores hidden lanes', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    await load(p, project(gel(im)));
+
+    // Set lane to hide
+    await p.evaluate(() => { const el = document.querySelector('#la0'); if(el) { el.value = ''; el.dispatchEvent(new Event('change')); } });
+    await p.waitForTimeout(500);
+
+    // Check the status text
+    const status = await p.locator('#st-lanes').textContent();
+    T.check('status reflects visible lanes', status.includes('1 lane') && !status.includes('2 lanes'), 'status is ' + status);
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
