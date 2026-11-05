@@ -17,7 +17,9 @@ async function fresh(id, fn){
     await h.newProject('Zero vs unknown yield semantic tests');
     await h.gb(path.join(DATA, 'standins', 'pET28-SUMO-standin.gb'));
     await h.addRun(path.join(DATA, 'chrom', 'sec_semicolon_unicorn7.csv'));
-    await h.pool('A2-A6');
+    await h.pool('1.A.1-1.A.3');
+    await p.evaluate(() => { const el = document.querySelector('.trace.run.sel [data-k=path]'); if (el) { el.value = '10'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } const f = document.querySelector('.trace.run.sel [data-k=mFlow]'); if (f) { f.value = '1'; f.dispatchEvent(new Event('input', {bubbles: true})); f.dispatchEvent(new Event('change', {bubbles: true})); } });
+    await h.wait(400);
 
     await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
     await p.evaluate(() => document.querySelector('#tl [data-addstep="man:other"]').click()); await h.wait(500);
@@ -64,7 +66,7 @@ async function fresh(id, fn){
     // Case 3: Purity Zero vs Missing
     await p.evaluate(() => {
       const b = document.querySelector('#pr-qcPurity');
-      if (b) { b.value = '0% pure by gel'; b.dispatchEvent(new Event('input', {bubbles: true})); b.dispatchEvent(new Event('change', {bubbles: true})); }
+      if (b) { b.value = '0% pure'; b.dispatchEvent(new Event('input', {bubbles: true})); b.dispatchEvent(new Event('change', {bubbles: true})); }
     });
     await h.step('figure');
     await h.wait(500);
