@@ -1,0 +1,7 @@
+Closes #855
+
+This PR makes the `#wfSelBox` selection indicator more visible with a high-contrast 2px border and pseudo-element visual grab handles (`::after` with radial gradients) to provide clearer affordance when moving a workflow panel.
+
+**Testing:** Added a UI-level check in `tests/suites/41_workflow_drag_hint.js` to assert that clicking a panel correctly renders the `#wfSelBox` with the visual grab handles (`workflow-drag-hint.handles-present`).
+
+Note: downgraded actions/checkout to v3 in .github/workflows/claude-code-review.yml and claude.yml to fix CI failures related to node 20 deprecation.
