@@ -2967,7 +2967,21 @@ function detectBands(g, i, sensPct, gelMax){
       let rm = v; j = y; while (j < h - 1) { j++; if (sig[j] > v) break; if (sig[j] < rm) rm = sig[j]; }
       const prom = v - Math.max(lm, rm); if (prom < Math.max(DET.minAbs*0.6, v*DET.promRel, noise*DET.noiseK*0.6)) continue;
     }
-    let l = y, r = y; while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > 0) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > 0) r++;
+    let l = y, r = y;
+    while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > 0) {
+      if (sig[l-1] < v*DET.tail) {
+        let m = l-1; while (m > 0 && sig[m-1] <= sig[m]) m--;
+        if (sig[m] < sig[l-1]) break;
+      }
+      l--;
+    }
+    while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > 0) {
+      if (sig[r+1] < v*DET.tail) {
+        let m = r+1; while (m < h-1 && sig[m+1] <= sig[m]) m++;
+        if (sig[m] < sig[r+1]) break;
+      }
+      r++;
+    }
     let area = 0; for (let j=l;j<=r;j++) area += sig[j];
     let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
     bands.push({row: y, h: v, area, l, r, hl, hr});
@@ -3015,7 +3029,22 @@ function bandAt(g, sig, yRot){
   const h = sig.length, c = g.crop, r0 = Math.round((yRot - c.t)/(c.b - c.t)*h - 0.5), w = Math.max(2, Math.round(h*0.008));
   let y = Math.min(h - 1, Math.max(0, r0)); for (let j=Math.max(0, r0 - w); j<=Math.min(h - 1, r0 + w); j++) if (sig[j] > sig[y]) y = j;
   const v = sig[y]; let l = y, r = y, area = 0;
-  if (v > 0) { while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > v*0.05 && y - l < h*0.04) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > v*0.05 && r - y < h*0.04) r++; }
+  if (v > 0) {
+    while (l > 0 && sig[l-1] <= sig[l] && y - l < h*0.04 && sig[l-1] > 0) {
+      if (sig[l-1] < v*DET.tail) {
+        let m = l-1; while (m > 0 && sig[m-1] <= sig[m]) m--;
+        if (sig[m] < sig[l-1]) break;
+      }
+      l--;
+    }
+    while (r < h-1 && sig[r+1] <= sig[r] && r - y < h*0.04 && sig[r+1] > 0) {
+      if (sig[r+1] < v*DET.tail) {
+        let m = r+1; while (m < h-1 && sig[m+1] <= sig[m]) m++;
+        if (sig[m] < sig[r+1]) break;
+      }
+      r++;
+    }
+  }
   else { l = Math.max(0, y - 2); r = Math.min(h - 1, y + 2); }
   for (let j=l;j<=r;j++) area += sig[j];
   let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
