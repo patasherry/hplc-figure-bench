@@ -26,7 +26,17 @@ const {open, H, suite, src} = require('../lib/harness');
       T.check('workflow-drag-hint.grab-cursor', await p.$eval('#paper', e => getComputedStyle(e).cursor) === 'grab', await p.$eval('#paper', e => getComputedStyle(e).cursor));
       await p.mouse.down(); await p.mouse.move(point.x + 8, point.y + 8);
       T.check('workflow-drag-hint.grabbing-cursor', await p.$eval('#paper', e => getComputedStyle(e).cursor) === 'grabbing', await p.$eval('#paper', e => getComputedStyle(e).cursor));
+
       await p.mouse.up();
+
+      const handles = await p.evaluate(() => {
+        const sel = document.querySelector('#wfSelBox');
+        if (!sel) return false;
+        const style = window.getComputedStyle(sel, '::after');
+        return style.backgroundImage.includes('radial-gradient');
+      });
+      T.check('workflow-drag-hint.handles-present', handles, 'selection box has visual grab handles');
+
     }
   });
   T.check('no page errors', !errs.length, errs.join(' | '));
