@@ -79,6 +79,10 @@ const {open, H, suite, src} = require('../lib/harness');
     // 5. Workflow full chromatogram visible by default
     await h.step('figure'); await h.wait(400);
     T.check('wf_full_visible_by_default', await vis('#o-wfFull'), 'Full chromatogram checkbox visible');
+
+    // 6. Check search placeholder text (#895)
+    const searchPlaceholder = await p.getAttribute('#panelSearch', 'placeholder');
+    T.check('search_placeholder_text', searchPlaceholder === 'Search settings/data/files', 'Search placeholder should be "Search settings/data/files" to reduce ambiguity');
   });
 
   T.check('no_errors', !errs.length, errs.join('|'));
