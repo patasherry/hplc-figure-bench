@@ -3882,7 +3882,12 @@ function buildWorkflow(){
   /* Fit to page: a grid or stacked figure taller than the page gets shorter traces and gels (never below 60%) until it fits */
   const fit = (L, c, maxH) => { let res = composeRuns(L, c);
     if (opt.wfFit !== false && opt.wfLayout !== 'row' && res.geo && (res.geo.H0 || res.geo.H) > maxH) { let k = 1;
-      for (let t = 0; t < 4 && (res.geo.H0 || res.geo.H) > maxH && k > 0.6; t++) { k = Math.max(0.6, k*(maxH - 0.1*72)/(res.geo.H0 || res.geo.H)); res = composeRuns(L, Object.assign({}, c, {chromH: c.chromH*k, gelK: k})); }
+      k = Math.max(0.6, (maxH - 0.1*72) / (res.geo.H0 || res.geo.H));
+      res = composeRuns(L, Object.assign({}, c, {chromH: c.chromH*k, gelK: k}));
+      if (res.geo && (res.geo.H0 || res.geo.H) > maxH && k > 0.6) {
+        k = Math.max(0.6, k * (maxH - 0.1*72) / (res.geo.H0 || res.geo.H));
+        res = composeRuns(L, Object.assign({}, c, {chromH: c.chromH*k, gelK: k}));
+      }
       if (res.geo) res.geo.fitted = k; }
     return res; };
   if (!pre.length) return yieldLine(fit(list, cfg, PAGE));

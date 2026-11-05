@@ -153,6 +153,32 @@ function makePNG(w, h) {
     T.check('reopen-project', ms != null && ms < 10000, ms != null ? `${ms} ms (budget: 10000 ms)` : 'timeout waiting for project reopen');
   });
 
+
+  // UI-level regression check for structural correctness (Issue #769)
+  await T.t('workflow-8-steps-structural-correctness', async () => {
+    const {p: p2, errs: errs2, close: close2} = await open(); const h2 = H(p2);
+    await h2.newProject('Workflow 8');
+    const F2 = {
+      his: path.join(DATA, 'standins', 'imac_histrap_1ml_step.csv'),
+      ortho: path.join(DATA, 'standins', 'imac_histrap_1ml_ortho.csv'),
+      q: path.join(DATA, 'standins', 'iex_q_6ml.csv'),
+      s200: path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv'),
+      zip: path.join(DATA, 'chrom', 'sec_Sup6_basic_unicorn7.zip'),
+      nd: path.join(DATA, 'nd', 'nd_one_protein_a280.csv'),
+      other1: path.join(DATA, 'chrom', 'time_iso_u7.csv'),
+      other2: path.join(DATA, 'chrom', 'time_ddmm_u7.csv')
+    };
+    for (const f of [F2.his, F2.ortho, F2.q, F2.s200, F2.zip, F2.other1, F2.other2]) await h2.dropFiles(f);
+    await h2.addConc(F2.nd, 0.3);
+
+    // We now have 8 steps (7 runs + 1 conc)
+    await h2.step('figure');
+
+    const groups = await p2.evaluate(() => document.querySelectorAll('#paper svg g[data-wfp]').length);
+    T.check('structural-correctness', groups === 8, `${groups} SVG groups rendered for the 8-step workflow`);
+    await close2();
+  });
+
   T.check('no-page-errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
