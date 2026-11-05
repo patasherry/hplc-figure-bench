@@ -210,4 +210,78 @@ await T.t('ui-clipping-fix', async () => {
     await a.close();
   }
 });
+
+await T.t('purity-log-vs-linear', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await p.evaluate(() => {
+      // 20x360 image
+      const od_y = (y) => {
+        return 0.80 * Math.exp(-0.5 * Math.pow((y - 90)/6.0, 2)) / (6.0 * Math.sqrt(2*Math.PI))
+             + 0.12 * Math.exp(-0.5 * Math.pow((y - 180)/5.5, 2)) / (5.5 * Math.sqrt(2*Math.PI))
+             + 0.08 * Math.exp(-0.5 * Math.pow((y - 265)/6.5, 2)) / (6.5 * Math.sqrt(2*Math.PI));
+      };
+      const OD = new Float64Array(360);
+      let maxOD = 0;
+      for (let y = 0; y < 360; y++) {
+        OD[y] = od_y(y);
+        if (OD[y] > maxOD) maxOD = OD[y];
+      }
+      for (let y = 0; y < 360; y++) {
+        OD[y] = OD[y] / maxOD * 1.0;
+      }
+
+      const cA = document.createElement('canvas'); cA.width = 40; cA.height = 360;
+      const xA = cA.getContext('2d');
+      const dA = xA.createImageData(40, 360);
+      for(let y=0; y<360; y++) {
+        const grey = 255 * Math.pow(10, -OD[y]);
+        for(let x=0; x<40; x++) {
+          const i = (y*40 + x)*4;
+          dA.data[i] = dA.data[i+1] = dA.data[i+2] = grey;
+          dA.data[i+3] = 255;
+        }
+      }
+      xA.putImageData(dA, 0, 0);
+      const brightfield = cA.toDataURL();
+
+      const cB = document.createElement('canvas'); cB.width = 40; cB.height = 360;
+      const xB = cB.getContext('2d');
+      const dB = xB.createImageData(40, 360);
+      for(let y=0; y<360; y++) {
+        const grey = 12 + 200 * OD[y];
+        for(let x=0; x<40; x++) {
+          const i = (y*40 + x)*4;
+          dB.data[i] = dB.data[i+1] = dB.data[i+2] = grey;
+          dB.data[i+3] = 255;
+        }
+      }
+      xB.putImageData(dB, 0, 0);
+      const linear = cB.toDataURL();
+
+      return {brightfield, linear};
+    });
+
+    await load(p, project(
+      gel(im.brightfield, {name: 'brightfield', invert: false, labels: 'M, A'}),
+      gel(im.linear, {name: 'linear', invert: true, labels: 'M, B'})
+    ));
+
+    const csvData = await csv(p);
+    const L1 = lane(csvData, 2); // Lane A in Gel 1
+    const p1 = parseFloat(L1[0][6]);
+
+    // Switch to gel 2 and read
+    await p.evaluate(() => { const btns = document.querySelectorAll('#gelSel button'); if(btns.length > 1) btns[1].click(); else if (btns.length === 1) btns[0].click(); });
+    await p.waitForTimeout(500);
+    const csvData2 = await csv(p);
+    const L2 = lane(csvData2, 2); // Lane B in Gel 2
+    const p2 = parseFloat(L2[0][6]);
+
+    T.check('purity-log-vs-linear.agree-within-1-point', Math.abs(p1 - p2) <= 1.0, 'brightfield: ' + p1 + ', linear: ' + p2);
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
