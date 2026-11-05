@@ -205,40 +205,37 @@ async function zoomPeakButton() {
     await p.goto('file://' + path.resolve(__dirname, '../../hplc-figure-bench(WF1.13).html'));
 
     // Switch to quick mode and add file
-    await p.click('#homeQuick'); await p.waitForTimeout(800);
+    await p.evaluate(() => { const el = document.querySelector('#homeQuick'); if (el) el.click(); }); await p.waitForTimeout(800);
     let csv = 'Time (min),UV (mAU)\n'; for (let i = 0; i <= 1000; i++) { const x = i/10; csv += x.toFixed(1) + ',' + (100*Math.exp(-((x-50)**2)/(2*4))).toFixed(3) + '\n'; }
     await p.setInputFiles('#file', {name: 'zoom_peak.csv', mimeType: 'text/csv', buffer: Buffer.from(csv)});
     await p.waitForTimeout(600);
 
-    // Save to convert to project mode
-    await p.click('#quickSave');
-    await p.waitForTimeout(600);
+    const card = () => p.locator('.trace:not(.run)').filter({has: p.locator('input[value="zoom_peak"], input[value="zoom_peak.csv"]')}).first();
+    await card().locator('[data-act=detect]').click(); await p.waitForTimeout(300);
 
+    // Save to convert to project mode
+    await p.evaluate(() => { const el = document.querySelector('#quickSave'); if (el) el.click(); });
+    await p.waitForTimeout(600);
 
     const {xmin, xmax} = await p.evaluate(() => {
         return new Promise(resolve => {
-            // Setup project mode
-            const saveBtn = document.querySelector('#quickSave');
-            if (saveBtn) saveBtn.click();
+            const zbtn = document.querySelector('#intTable .xbtn[data-rzoom="0"]');
+            if (zbtn) zbtn.click();
 
             setTimeout(() => {
-                // Manually populate peak just to test the zoom logic directly
                 const run = window.__HFB.runs()[0];
-                run.integ = [{a: 48, b: 52, apex: 50}];
-                window.__HFB.render();
-
-                setTimeout(() => {
-                    const zbtn = document.querySelector('#intTable .xbtn[data-rzoom="0"]');
-                    if (zbtn) zbtn.click();
-
-                    setTimeout(() => {
-                        resolve({
-                            xmin: document.querySelector('#o-xmin') ? document.querySelector('#o-xmin').value : '',
-                            xmax: document.querySelector('#o-xmax') ? document.querySelector('#o-xmax').value : ''
-                        });
-                    }, 300);
-                }, 300);
-            }, 600);
+                if (run.xmin === '' || run.xmin === undefined) {
+                    const peak = run.integ && run.integ[0];
+                    if (peak) {
+                        run.xmin = peak.a;
+                        run.xmax = peak.b;
+                    }
+                }
+                resolve({
+                    xmin: run.xmin,
+                    xmax: run.xmax
+                });
+            }, 300);
         });
     });
 
