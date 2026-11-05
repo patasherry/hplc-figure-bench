@@ -289,7 +289,7 @@ details.paste[open]{display:grid;gap:8px}
 .canvas-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding:10px 14px;border-top:1px solid var(--line)}
 .export{justify-content:flex-end}
 .export select{width:auto;min-height:32px}
-.readout{position:absolute;top:10px;right:10px;font-size:11.5px;color:var(--paper-ink);background:var(--paper);border:1px solid var(--paper-edge);border-radius:6px;padding:2px 8px;pointer-events:none;box-shadow:0 1px 2px rgba(21,26,40,.08)}
+.readout{position:absolute;top:10px;right:10px;z-index:10;font-size:11.5px;color:var(--paper-ink);background:var(--paper);border:1px solid var(--paper-edge);border-radius:6px;padding:2px 8px;pointer-events:none;box-shadow:0 1px 2px rgba(21,26,40,.08)}
 .readout:empty{display:none}
 .cardopts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
 /* an input and its button read as one control */
@@ -339,7 +339,7 @@ label.f.condmissing>input{border-color:var(--warn)}
 .paperwrap{position:relative}
 .wfsel{position:absolute;pointer-events:none;border:2px solid var(--accent, #2f4ea0);border-radius:4px;background:color-mix(in srgb, var(--accent, #2f4ea0) 5%, transparent)}
 .wfsel::after{content:"";position:absolute;top:-5px;left:-5px;right:-5px;bottom:-5px;background-image:radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px);background-position:top left, top right, bottom left, bottom right;background-size:8px 8px;background-repeat:no-repeat}
-.wftool{position:absolute;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:6px;max-width:min(560px, calc(100% - 16px));padding:8px;background:var(--card, #fff);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14);font-size:13px}
+.wftool{position:absolute;z-index:10;display:flex;flex-wrap:wrap;align-items:center;gap:6px;max-width:min(560px, calc(100% - 16px));padding:8px;background:var(--card, #fff);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14);font-size:13px}
 .wftool input[type=text]{flex:1 1 150px;min-width:0;padding:5px 7px;border:1px solid var(--line);border-radius:5px;font:inherit;background:var(--well, #fff);color:inherit}
 .wftool .wfl{color:var(--muted);font-size:12px}
 .wftool .wfg{display:inline-flex;align-items:center;gap:2px}
@@ -351,7 +351,7 @@ label.f.condmissing>input{border-color:var(--warn)}
 .lrow.amb select{border-color:var(--warn);box-shadow:inset 3px 0 0 var(--warn)}
 .lrow input,.lrow select{padding:4px 6px;font-size:12.5px;min-height:28px}
 .lrow select{padding-right:24px}
-.intp{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px}
+.intp{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px;overflow-y:auto}
 .intp-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:13.5px}
 .intp-head strong{font-weight:600}
 .tablewrap{overflow-x:auto}
