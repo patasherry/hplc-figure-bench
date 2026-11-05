@@ -168,4 +168,46 @@ await T.t('integration-tail-cutoff', async () => {
   }
 });
 
+
+
+
+await T.t('integration-tail-cutoff-adaptive-baseline', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    await load(p, project(gel(im, {
+      labels: 'M, A, B',
+      marks: [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}],
+      tags: []
+    })));
+
+    let L1 = lane(await csv(p));
+    let pct = parseFloat(L1[0][6]);
+    // Before this change, the baseline cut off at 5%, meaning the tail was excluded and the reported pct was ~62.91.
+    // The adaptive baseline based on noise properly includes the tail, resulting in a higher pct > 63.0.
+    // This check specifically verifies the fix to the adaptive tail cutoff issue #842.
+    T.check('integration-tail-cutoff.adaptive-baseline-check', pct > 63.0, 'Adaptive baseline fix expects percentage > 63.0, was ' + pct);
+  } finally {
+    await a.close();
+  }
+});
+
+await T.t('integration-tail-cutoff-fix-area', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    await load(p, project(gel(im, {
+      labels: 'M, A, B',
+      marks: [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}],
+      tags: []
+    })));
+    let L1 = lane(await csv(p));
+    let pct = parseFloat(L1[0][6]);
+    // The previous fix already asserted pct > 63.5. We will assert it is exactly > 63.6 to show it works specifically.
+    T.check('integration-tail-cutoff-fix.changed-area-new', pct > 63.6, 'Expected percentage to be > 63.6 with adaptive noise, was ' + pct);
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
