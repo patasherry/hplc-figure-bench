@@ -168,4 +168,28 @@ await T.t('integration-tail-cutoff', async () => {
   }
 });
 
+
+await T.t('integration-optical-density', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+
+    // We want to test that the band purity/percentage uses optical density.
+    await load(p, project(gel(im, {
+      labels: 'M, A, B',
+      marks: [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}],
+      tags: []
+    })));
+
+    let L1 = lane(await csv(p));
+    // Index 6 is percentage of lane
+    let pct = parseFloat(L1[0][6]);
+    // Before OD fix (using gray values), the percentage is roughly 63.68%
+    // After OD fix (using -log10), the heavier bands contribute exponentially more, giving roughly 79.91%
+    T.check('integration-optical-density.changed-area', Math.abs(pct - 79.91) < 1, 'Expected percentage to be roughly 79.91, was ' + pct);
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
