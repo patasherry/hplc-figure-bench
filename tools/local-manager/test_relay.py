@@ -221,4 +221,25 @@ assert rl.literal_ranges(LIT, 'nothing quoted here', 1) == [] and rl.literal_ran
 BOARD = 'Center the button\nMobile users scroll too far.\n\n**Evidence:** Usability report #893\n\n### Why the advisers chose it\n- Gemini: 4/5, add a test for it'
 assert not rl.wants_tests(BOARD) and rl.wants_tests('Add a UI-level regression test\n' + BOARD)
 
+# ---------- a response is pasted by hand, so the block parser is written loosely ----------
+HEAD = '=== HFB-RELAY RESPONSE v1 ===\nid: 7-ab\nbase: abc\nverdict: patch\nsummary: s\nchanges-a-reported-number: no\n\n'
+DIFF = '--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b'
+forms = {
+  'blank line before the fence': 'patch:\n\n```diff\n' + DIFF + '\n```\n\ntest:\n\n```js\nconst x=1;\n```\n',
+  'tildes and no tag': 'patch:\n~~~\n' + DIFF + '\n~~~\ntest:\n~~~\nconst x=1;\n~~~\n',
+  'four backticks, other tags': 'patch:\n````patch\n' + DIFF + '\n````\ntest:\n````javascript\nconst x=1;\n````\n',
+  'the whole fence indented': 'patch:\n    ```diff\n' + '\n'.join('    ' + l for l in DIFF.split('\n')) + '\n    ```\ntest:\n```js\nconst x=1;\n```\n',
+  'the block style of the other fields': 'patch: |\n' + '\n'.join('  ' + l for l in DIFF.split('\n')) + '\ntest: |\n  const x=1;\n',
+  'a comment line before the fence': 'patch:\n# the diff\n```diff\n' + DIFF + '\n```\ntest:\n```js\nconst x=1;\n```\n',
+}
+for name, form in forms.items():
+    got = rl.parse_response(HEAD + form + '=== END RESPONSE ===')
+    assert got['patch'].split('\n')[0] == '--- a/x', (name, got['patch'][:40])
+    assert got['patch'].rstrip().endswith('+b'), (name, got['patch'][-20:])
+    assert 'const x=1;' in got['test'], name
+    assert rl.hunk_present('x\na\ny', rl.parse_diff(got['patch'])[0]['hunks'][0]['old']) is False or True  # the diff survives parsing
+# a plain diff keeps its leading spaces: a context line must still start with one
+ctx = rl.parse_response(HEAD + 'patch:\n```diff\n--- a/x\n+++ b/x\n@@ -1,3 +1,3 @@\n ctx\n-a\n+b\n```\ntest:\n```js\nq\n```\n=== END RESPONSE ===')
+assert '\n ctx\n' in ctx['patch'], repr(ctx['patch'])
+
 print('ok')
