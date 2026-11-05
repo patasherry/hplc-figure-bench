@@ -2462,7 +2462,7 @@ function buildRunPlainSVG(run, ov){
   /* pool blocks split only by a tiny waste segment are drawn as one, so the shading has no hairline seams */
   const pBlocks = (shaded.size ? poolBlocks(run).map(k => ({a: Math.max(k.a, xlo), b: Math.min(k.b, xhi)})).filter(k => k.b > k.a) : []).reduce((m, k) => { const q = m[m.length - 1]; if (q && k.a - q.b < (xhi - xlo)*0.012) q.b = Math.max(q.b, k.b); else m.push(Object.assign({}, k)); return m; }, []);
   /* fills under the trace stop at the zero line (or the top of the fraction-label strip), not at the plot floor */
-  const bLow = (() => { const v = uv.ys.filter((_, k) => uv.xs[k] >= xlo && uv.xs[k] <= xhi).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length*0.03)] : 0; })();
+  const bLow = (() => { const v = uv.ys.filter((_, k) => uv.xs[k] >= xlo && uv.xs[k] <= xhi); if (!v.length) return 0; let m = v[0]; for(let i=1;i<v.length;i++) if(v[i]<m) m=v[i]; return m; })();
   const yBase = Math.min(B - band, py(Math.min(y1, Math.max(y0, Math.min(0, bLow)))));
   const links = [...laneLinks().values()].filter(l => l.run === run), laneFills = o.laneMark !== 'strip' && laneLinks().size > 0;
   if (ndTxt && pBlocks.length) { const a = Math.min(...pBlocks.map(k => k.a)), b = Math.max(...pBlocks.map(k => k.b)), nf = fs*0.8, w = ndTxt.length*nf*0.5;
