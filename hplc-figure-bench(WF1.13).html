@@ -289,7 +289,7 @@ details.paste[open]{display:grid;gap:8px}
 .canvas-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding:10px 14px;border-top:1px solid var(--line)}
 .export{justify-content:flex-end}
 .export select{width:auto;min-height:32px}
-.readout{position:absolute;top:10px;right:10px;font-size:11.5px;color:var(--paper-ink);background:var(--paper);border:1px solid var(--paper-edge);border-radius:6px;padding:2px 8px;pointer-events:none;box-shadow:0 1px 2px rgba(21,26,40,.08)}
+.readout{position:absolute;top:10px;right:10px;font-size:11.5px;color:var(--paper-ink);background:var(--paper);border:1px solid var(--paper-edge);border-radius:6px;padding:2px 8px;pointer-events:none;box-shadow:0 1px 2px rgba(21,26,40,.08);z-index:10}
 .readout:empty{display:none}
 .cardopts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
 /* an input and its button read as one control */
@@ -351,7 +351,7 @@ label.f.condmissing>input{border-color:var(--warn)}
 .lrow.amb select{border-color:var(--warn);box-shadow:inset 3px 0 0 var(--warn)}
 .lrow input,.lrow select{padding:4px 6px;font-size:12.5px;min-height:28px}
 .lrow select{padding-right:24px}
-.intp{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px}
+.intp{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px;overflow-y:auto}
 .intp-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:13.5px}
 .intp-head strong{font-weight:600}
 .tablewrap{overflow-x:auto}
