@@ -1,0 +1,7 @@
+LOCUS       test_plasmid          96 bp    DNA
+FEATURES             Location/Qualifiers
+     CDS             <1..96
+                     /transl_table=11
+ORIGIN
+        1 GTGGCTTGGTATGCTTGGTATGCTTGGTATGCTTGGTATGCTTGGTATGCTTGGTATGCTTGGTATGCTTGGTATGCTTGGTATGCTTGGTATTAA
+//

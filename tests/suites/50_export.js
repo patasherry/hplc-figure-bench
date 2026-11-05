@@ -59,7 +59,7 @@ function parseZip(buffer) {
     await p.setInputFiles('#gelFile', [src('gel')]);
     await h.wait(1500);
 
-    T.t('export-gap', async () => {
+    await T.t('export-gap', async () => {
       const gap = await p.evaluate(() => {
         const exportDiv = document.querySelector('.export');
         return window.getComputedStyle(exportDiv).gap;
