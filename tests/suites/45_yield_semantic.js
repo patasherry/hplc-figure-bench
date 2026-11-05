@@ -19,7 +19,6 @@ async function fresh(id, fn){
     await h.addRun(path.join(DATA, 'chrom', 'sec_semicolon_unicorn7.csv'));
     await h.pool('1.A.1-1.A.3');
     await p.evaluate(() => { const el = document.querySelector('.trace.run.sel [data-k=path]'); if (el) { el.value = '10'; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); } const f = document.querySelector('.trace.run.sel [data-k=mFlow]'); if (f) { f.value = '1'; f.dispatchEvent(new Event('input', {bubbles: true})); f.dispatchEvent(new Event('change', {bubbles: true})); } });
-    await h.wait(400);
 
     await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
     await p.evaluate(() => document.querySelector('#tl [data-addstep="man:other"]').click()); await h.wait(500);
