@@ -266,4 +266,25 @@ assert rl.fit_chars(_lines, [(399, 10000)], 100000) == [(399, 400)]
 big = rl.pick_ranges(LONG, 'relay-lines: 1-400', 0, chars=4000)
 assert big and rl.chars_of(_lines, big) <= 4000, rl.chars_of(_lines, big)
 
+# #1064: a correct patch was rejected twice over indentation. The file has two spaces, the answer carried three, and a
+# context line in a unified diff already has a leading marker, so one space either way is the easiest slip there is.
+APP_SRC = "\n".join(["function ndConc(s){ return 1; }",
+                     "function ndConcRaw(s){ const dil = 1;",
+                     "  if (s.kind === 'nucleic') return {v: 1};",
+                     "  if (s.kind !== 'protein') return {v: 2};",
+                     "  const E = ndEpsFor(s.runId);",
+                     "}"])
+three = ["function ndConcRaw(s){ const dil = 1;",
+         "   if (s.kind === 'nucleic') return {v: 1};",
+         "   if (s.kind !== 'protein') return {v: 2};"]
+assert rl.hunk_present(APP_SRC, three), 'three-space indent against a two-space file must still match'
+assert rl.hunk_present(APP_SRC, [l.strip() for l in three]), 'no indent at all must still match'
+assert rl.hunk_present(APP_SRC, three + ['']), 'a trailing blank line must not break it'
+# order and contiguity still have to hold, so an invented or reordered hunk is still caught
+assert not rl.hunk_present(APP_SRC, ["  const E = ndEpsFor(s.runId);", "  if (s.kind === 'nucleic') return {v: 1};"])
+assert not rl.hunk_present(APP_SRC, ["  if (s.kind === 'nucleic') return {v: 1};", "  this line was never in the file;"])
+assert not rl.hunk_present(APP_SRC, ['', '  ']), 'a hunk with nothing but blanks is not present'
+# a line that only matches once its own whitespace is stripped must not match a different line
+assert not rl.hunk_present(APP_SRC, ["  if (s.kind === 'nucleic') return {v: 99};"])
+
 print('ok')
