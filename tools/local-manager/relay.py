@@ -46,7 +46,9 @@ RULES = ['Reply with one RESPONSE block, nothing before or after it.',
          'Use synthetic, invented numbers in every example, fixture and table.',
          "Never reference, infer or reconstruct the owner's real sequences,\n    chromatograms, gels, readings or yields.",
          'The app is one file, no build step, no dependencies.',
-         'Tests are UI level and live in tests/suites/NN_name.js.',
+         'Tests are UI level and live in tests/suites/NN_name.js. A test uses this repository\'s own harness\n'
+         "    (const {open, H, suite, src} = require('../lib/harness')), never @playwright/test, and asserts on\n"
+         '    what the page shows. The harness is included below.',
          'A patch is a unified diff with at least three context lines per hunk.',
          'The excerpt is chosen by subject and is not the whole file. Answer from what you can see:\n'
          "    if the function the task is about is in front of you, do not ask for more.",
@@ -365,8 +367,27 @@ def _block(s, key):
 
 
 def _fenced(s, key, lang):
-    m = re.search(r'^' + key + r':[^\n]*\n```' + lang + r'[^\n]*\n(.*?)\n```[ \t]*$', s, re.M | re.S)
-    return m.group(1) if m else None
+    """The fenced block after 'key:'. Written loosely on purpose, because a response is pasted by hand from a chat window:
+    blank or comment lines may sit between the label and the fence, the fence may be ``` or ~~~ or longer, indented, and
+    tagged with anything or nothing (an agent writes ```patch or ```javascript as readily as ```diff). The one rejection
+    we have seen, on #1015, was a well-formed answer with a blank line after 'patch:'."""
+    m = re.search(r'^[ \t]*' + key + r':[^\n]*\n'          # the label
+                  r'(?:[ \t]*(?:#[^\n]*)?\n)*'              # blank lines, or a comment line, before the fence
+                  r'[ \t]*(`{3,}|~{3,})[ \t]*\w*[^\n]*\n'  # the opening fence, any tag or none
+                  r'(.*?)'
+                  r'\n[ \t]*\1[ \t]*(?:\n|\Z)', s, re.M | re.S)
+    if not m:
+        return None
+    body = m.group(2)
+    pad = min((len(l) - len(l.lstrip()) for l in body.split('\n') if l.strip()), default=0)
+    # a plain diff starts at column 0 so pad is 0 and nothing moves; an indented fence needs the indent off or no hunk matches
+    return '\n'.join(l[pad:] for l in body.split('\n')) if pad else body
+
+
+def _field(s, key, lang):
+    """A patch or test block however it was written: fenced, or as a 'key: |' block when the agent used the style of the
+    other fields. Fenced first, since that is what the request asks for."""
+    return _fenced(s, key, lang) or _block(s, key)
 
 
 def parse_response(text):
@@ -389,11 +410,15 @@ def parse_response(text):
         raise Bad('reply', f'verdict must be patch, answer or insufficient, not "{r["verdict"]}"')
     if r['changes-a-reported-number'] not in ('yes', 'no'):
         raise Bad('reply', 'changes-a-reported-number must be yes or no')
-    r['patch'], r['test'] = _fenced(body, 'patch', 'diff'), _fenced(body, 'test', 'js')
+    r['patch'], r['test'] = _field(body, 'patch', 'diff'), _field(body, 'test', 'js')
     r['answer'], r['need'] = _block(body, 'answer'), _block(body, 'need')
     need = {'patch': 'patch', 'answer': 'answer', 'insufficient': 'need'}[r['verdict']]
     if not (r[need] or '').strip():
-        raise Bad('reply', f'missing field "{need}" (required for verdict: {r["verdict"]})')
+        seen = sorted({m.group(1) for m in re.finditer(r'(?m)^[ \t]*(' + FIELD_RE + r'):', body)})
+        raise Bad('reply', f'verdict is {r["verdict"]}, so a "{need}" block is required, and I could not read one. '
+                           f'The labels I found were: {", ".join(seen) or "none"}. '
+                           f'Write it as "{need}:" at the start of a line with the content in a fenced block under it '
+                           f'(a blank line, any fence tag and longer fences are all fine)')
     return r
 
 
@@ -443,6 +468,16 @@ def check_paths(files):
                 raise Bad('reply', f'the diff touches "{p}", which is outside the app, tests/, docs/ and README.md')
 
 
+def same_sha(a, b):
+    """True when two commit shas name the same commit. The request carries a 10-character prefix and an agent may echo the
+    full 40, or a shorter abbreviation: git compares shas by prefix and so do we, from 7 characters, which is git's own floor."""
+    a, b = (a or '').strip().lower(), (b or '').strip().lower()
+    if not (a and b) or not all(re.fullmatch(r'[0-9a-f]{7,40}', x) for x in (a, b)):
+        return a == b
+    n = min(len(a), len(b))
+    return a[:n] == b[:n]
+
+
 def validate(resp_text, requests, app_text):
     """The six checks, in order, stopping at the first failure.
     requests: {id: {'base': ...}} of the open requests on the issue. Returns the parsed response, or raises Bad.
@@ -450,8 +485,10 @@ def validate(resp_text, requests, app_text):
     r = parse_response(resp_text)                                                    # 1
     req = requests.get(r['id'])
     if req is None:                                                                  # 2
-        raise Bad('reply', f'unknown id "{r["id"]}": no open request with that id on this issue')
-    if r['base'] != req['base']:                                                     # 3
+        raise Bad('reply', f'there is no open request with the id "{r["id"]}" on this issue. '
+                           'Either it was already answered and filed, or it expired, or the id was mistyped: '
+                           'check the newest request comment for the id to echo')
+    if not same_sha(r['base'], req['base']):                                         # 3
         raise Bad('stale', f'base "{r["base"]}" is not the request\'s base "{req["base"]}"')
     files = parse_diff(r['patch']) if r['verdict'] == 'patch' else []
     if r['verdict'] == 'patch':

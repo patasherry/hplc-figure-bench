@@ -60,5 +60,18 @@ const {open, H, suite, src, path, DATA} = require('../lib/harness');
   });
 
   await close();
+
+  // #942: adding a second run says how many runs the project now holds, not only the one just added
+  await T.t('count/two-runs', async () => {
+    const {p, close} = await open(); const h = H(p);
+    await h.newProject('Two runs'); await h.addRun(src('his'));
+    const t1 = (await h.toasts()).join(' | ');
+    T.check('count/first-run-no-total', /Loaded 1 ÄKTA run/.test(t1) && !/runs loaded in all/.test(t1), t1);
+    await h.addRun(src('q'));
+    const t2 = (await h.toasts()).join(' | ');
+    T.check('count/second-run-says-2', /Loaded 1 ÄKTA run/.test(t2) && /2 runs loaded in all/.test(t2), t2);
+    await close();
+  });
+
   T.done();
 })();

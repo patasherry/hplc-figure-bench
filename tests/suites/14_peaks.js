@@ -136,6 +136,24 @@ async function peakFile(e) {
       }
     }
 
+    if (e.type === 'isolated') {
+      // Zoom to peak functionality
+      await p.evaluate(() => { const b = document.getElementById('moreBtn'); if (b && b.getAttribute('aria-expanded') !== 'true') b.click(); });
+      await h.wait(100);
+
+      // Zoom out first by clearing xmin and xmax
+      await setOpt(p, 'o-xmin', '');
+      await setOpt(p, 'o-xmax', '');
+      await p.evaluate(() => { const el = document.getElementById('zoomPeakBtn'); if (el) el.click(); });
+      await h.wait(500);
+
+      const xmin = await p.inputValue('#o-xmin');
+      const xmax = await p.inputValue('#o-xmax');
+
+      T.check('zoom_to_peak_xmin', parseFloat(xmin) > 0, `xmin updated to ${xmin}`);
+      T.check('zoom_to_peak_xmax', parseFloat(xmax) > 0, `xmax updated to ${xmax}`);
+    }
+
   } finally {
     T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | '));
     await close();
