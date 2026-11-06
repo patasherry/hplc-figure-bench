@@ -39,7 +39,7 @@ AUTO_MAX, AUTO_QUEUE, AUTO_AVG = cfg.get('board_adopt_max', 5), cfg.get('board_q
 BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
 COPILOT_MODE = cfg.get('copilot_mode', 'off')  # off (Patrick has no Copilot credits): no Copilot jobs at all, and its turn goes to Claude Code. auto: the cloud agent, and the Copilot CLI while it is paused. cloud or cli: only that one
-CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 15), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
+CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 40), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
 TRACK = cfg.get('tracking_issue', 17)
 CLOUD_STANDBY = cfg.get('cloud_standby_minutes', 20)  # the cloud copy works only when the PC manager has been quiet this long
 DIGEST_HOUR = cfg.get('digest_hour', 7)
@@ -1275,10 +1275,10 @@ def copilot_cli_job(s, i, retry):
 AG_MARK = '<!-- antigravity-job -->'
 AG_APP = 'for-antigravity-app'  # waiting for Patrick to paste the prompt into the Antigravity desktop app
 AG_AGENT = cfg.get('antigravity_agent', 'antigravity-preview-09-2026')
-AG_AT_ONCE = cfg.get('antigravity_at_once', 4)
-AG_PER_PASS = cfg.get('antigravity_per_pass', 2)  # jobs handed over in one pass
+AG_AT_ONCE = cfg.get('antigravity_at_once', 6)
+AG_PER_PASS = cfg.get('antigravity_per_pass', 3)  # jobs handed over in one pass
 AG_MAX_TRIES = cfg.get('antigravity_max_tries', 2)  # attempts per issue before it stays with Jules
-AG_WHEN_QUEUE = cfg.get('antigravity_when_queue', 2)  # hand a job over while at least this many wait for Jules
+AG_WHEN_QUEUE = cfg.get('antigravity_when_queue', 1)  # hand a job over while at least this many wait for Jules
 AG_TOKENS = cfg.get('antigravity_max_tokens', 1500000)  # the app file alone is large; 400k ran out before the first job finished
 AG_JOB = """You are the Google Antigravity agent working on issue #{n} of Protein Purification Bench, a public GitHub repository.
 1. Clone it: git clone --depth 50 https://github.com/{repo}.git && cd {name}
