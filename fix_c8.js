@@ -1,7 +1,7 @@
 const fs = require('fs');
 let content = fs.readFileSync('tests/suites/25_gels.js', 'utf8');
 
-const search = `    // If it fails we keep it.
+const search = `    // Wait for render
     await p.waitForTimeout(300);
 
     const tableC = await p.evaluate(() => {
@@ -11,7 +11,7 @@ const search = `    // If it fails we keep it.
 
     T.check('contaminant-lane-post-cleavage.C-has-ulp1', tableC.indexOf('His-Ulp1') !== -1, 'Case C: Polish pool should be labelled His-Ulp1 in DOM');`;
 
-const replace = `    // If it fails we keep it.
+const replace = `    // Wait for render
     await p.waitForTimeout(300);
 
     const tableC = await p.evaluate(() => {
@@ -20,13 +20,12 @@ const replace = `    // If it fails we keep it.
     });
 
     // T.check('contaminant-lane-post-cleavage.C-has-ulp1', tableC.indexOf('His-Ulp1') !== -1, 'Case C: Polish pool should be labelled His-Ulp1 in DOM');
-    // Using csv to actually check since table might be delayed or structured weirdly.
-    const lC = lane(await csv(p), 1);
-    T.check('contaminant-lane-post-cleavage.C-has-ulp1', lC.length > 0 && lC[0][9].indexOf('His-Ulp1') !== -1, 'Case C: Polish pool should be labelled His-Ulp1');`;
+    // Keeping failing check per user instructions
+    T.check('contaminant-lane-post-cleavage.C-has-ulp1', tableC.indexOf('His-Ulp1') !== -1, 'Case C: Polish pool should be labelled His-Ulp1 in DOM');`;
 
 if (content.includes(search)) {
   fs.writeFileSync('tests/suites/25_gels.js', content.replace(search, replace));
-  console.log("Fixed test assertion for C to use DOM");
+  console.log("Fixed C check setup");
 } else {
   console.log("Not found.");
 }

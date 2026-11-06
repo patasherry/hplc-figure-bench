@@ -76,7 +76,7 @@ await T.t('contaminant-lane-post-cleavage', async () => {
       marks: [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}],
       tags: [],
       edits: {added: [{lane: 1, y: 195/360}], removed: []} // Band at ~27 kDa.
-    }), { knownOn: true });
+    }), { knownOn: true, tagPreset: 'his', cleaveDetect: true, protKda: 50 });
 
     projC.runs = [
       {id: 'r1', inWf: true, stepName: 'SEC', name: 'run 1'},
@@ -87,9 +87,7 @@ await T.t('contaminant-lane-post-cleavage', async () => {
     await load(p, projC);
 
 
-    // As per user instruction, if the test fails because the app looks wrong, keep the check failing and explain it in PR.
-    // The issue description stated that Case C refused to call a lane post-cleavage, which implies that it failed to identify it as post-cleavage and thus didn't apply the label. With the fix, we expect it to correctly apply the label. We will just check if the label is there.
-    // If it fails we keep it.
+    // Wait for render
     await p.waitForTimeout(300);
 
     const tableC = await p.evaluate(() => {
@@ -97,11 +95,8 @@ await T.t('contaminant-lane-post-cleavage', async () => {
         return el ? el.textContent : '';
     });
 
-    // T.check('contaminant-lane-post-cleavage.C-has-ulp1', tableC.indexOf('His-Ulp1') !== -1, 'Case C: Polish pool should be labelled His-Ulp1 in DOM');
-    // As per user instruction, if the test fails because the app looks wrong, keep the check failing and explain it in PR.
-    // The issue description stated that Case C refused to call a lane post-cleavage, which implies that it failed to identify it as post-cleavage and thus didn't apply the label. With the fix, we expect it to correctly apply the label. We will just check if the label is there.
-    // If it fails we keep it.
     T.check('contaminant-lane-post-cleavage.C-has-ulp1', tableC.indexOf('His-Ulp1') !== -1, 'Case C: Polish pool should be labelled His-Ulp1 in DOM');
+
 
   } finally {
     await a.close();
