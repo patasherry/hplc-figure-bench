@@ -1561,14 +1561,19 @@ BG = {  # how each local coding worker is started and labelled
     'agy': {'name': 'the Antigravity CLI', 'who': lambda: 'the Antigravity CLI (agy) on the owner\'s PC, on his Google AI Pro subscription', 'mark': '<!-- agy-job -->', 'exe': 'agy',
             'args': lambda wt, src='': ['-p', f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE} and do not commit, push or open a pull request: the manager does that.',
                                         '--output-format', 'text', '--print-timeout', f'{int(BG_HOURS["agy"] * 3600)}s']
-                                       + (['--sandbox'] if cfg.get('agy_sandbox', True) else [])
+                                       # Off by default: unverified on Windows, and an unsupported flag here fails the way
+                                       # permissions did, silently. Turn it on once a smoke test shows the CLI still edits
+                                       # a file with both flags, and we get containment as well as no prompts.
+                                       + (['--sandbox'] if cfg.get('agy_sandbox', False) else [])
                                        # On Windows the CLI still uses the older permission system, where an unconfigured
                                        # command defaults to Ask, and in headless mode an Ask nobody can answer is
-                                       # soft-denied: the run exits 0 having changed nothing. If scoped permissions.allow
-                                       # rules do not take effect there, agy_yolo approves the calls instead. Safe enough
-                                       # only because the job runs in a throwaway worktree and the manager still checks
-                                       # which files changed before it pushes anything.
-                                       + (['--dangerously-skip-permissions'] if cfg.get('agy_yolo', False) else []),
+                                       # soft-denied: the run exits 0 having changed nothing. Scoped permissions.allow
+                                       # rules do not take effect there: write_file(*) and a concrete write_file(/Users/...)
+                                       # were both ignored on 2026-11-05 and the run auto-denied the write either way, so
+                                       # this flag is the only route and defaults on. Safe enough only because the job runs
+                                       # in a throwaway worktree and the manager still checks which files changed before it
+                                       # pushes anything. It is the least contained worker here: Codex gets workspace-write.
+                                       + (['--dangerously-skip-permissions'] if cfg.get('agy_yolo', True) else []),
             'own': 'for-antigravity', 'takes_claude': False, 'cap': 'agy', 'desc': 'the Antigravity CLI writing code'},
 }
 OC_MARK = BG['openclaw']['mark']
