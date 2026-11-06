@@ -77,7 +77,7 @@ Figure defaults follow publication conventions: the Okabe-Ito colorblind-safe pa
 2. Paste the summary into the PR description: pass and fail counts per suite, and every regression (a check that passed on `main` and fails on your branch).
 3. A regression is either fixed, or explained in the PR as intended.
 4. When you fix a bug or add a feature, add a check for it to the suite it belongs to.
-5. A new suite is a file `tests/suites/NN_name.js`. The Test suite workflow finds it by its file name, so do not edit `.github/workflows/tests.yml` to add it.
+5. A new suite is a file `tests/suites/NN_name.js`, where the number may be any length. The Test suite workflow finds it by its file name, so do not edit `.github/workflows/tests.yml` to add it. `compare.js`, the workflow report and the gate all once matched exactly two digits, so a suite numbered longer ran and passed but was left out of the main-versus-branch comparison: `770_pool_area.js` in PR #1095 failed 2 checks on main and passed all 6 on the branch while the gate reported that nothing failed on main, and `1007_untagged_default.js` had never been compared at all.
 
 The `Test suite` GitHub Action also runs this comparison on every PR that touches the app or the tests, and posts a results table on every PR. A PR with regressions shows a failed check. Running it yourself first is still expected, so problems are found before the PR is opened.
 
