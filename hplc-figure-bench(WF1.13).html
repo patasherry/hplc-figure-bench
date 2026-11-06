@@ -1869,20 +1869,19 @@ function clipXY(xs, ys, a, b){
   const i = lowerBound(xs, a), j = lowerBound(xs, b), xx = xs.slice(i, j), yy = ys.slice(i, j);
   if (xx[0] !== a) { xx.unshift(a); yy.unshift(at(a)); } xx.push(b); yy.push(at(b)); return {xs: xx, ys: yy};
 }
-function integrateBlocks(B, xs, ys, baseMode) {
-  let area = 0, il, ir;
-  if (!B.length) return {area, base: () => 0};
-  const ia = Math.max(0, lowerBound(xs, B[0].a)), ib = Math.min(xs.length - 1, lowerBound(xs, B[B.length - 1].b));
+function getBaseline(xs, ys, a, b, mode) {
+  if (mode === 'zero') return {base: () => 0, il: 0, ir: xs.length - 1};
+  const ia = Math.max(0, lowerBound(xs, a)), ib = Math.min(xs.length - 1, lowerBound(xs, b));
+  const rng = (arrMax(ys) - arrMin(ys)) || 1, tol = rng*0.003, w = Math.max(1, Math.round(xs.length*0.002));
+  const walk = (i, d) => { let j = i; for (let k = 0; k < xs.length; k++) { const n = j + d*w; if (n < 0 || n >= xs.length || ys[n] > ys[j] + tol) break; j = n; } return j; };
+  const il = walk(ia, -1), ir = walk(ib, 1);
+  return {base: x => ys[il] + (ys[ir] - ys[il])*(x - xs[il])/((xs[ir] - xs[il]) || 1), il, ir};
+}
 
-  if (baseMode === 'zero') {
-    il = ia; ir = ib;
-  } else {
-    // outward-walking baseline
-    const rng = (arrMax(ys) - arrMin(ys)) || 1, tol = rng*0.003, w = Math.max(1, Math.round(xs.length*0.002));
-    const walk = (i, d) => { let j = i; for (let k = 0; k < xs.length; k++) { const n = j + d*w; if (n < 0 || n >= xs.length || ys[n] > ys[j] + tol) break; j = n; } return j; };
-    il = walk(ia, -1); ir = walk(ib, 1);
-  }
-  const base = baseMode === 'zero' ? () => 0 : x => ys[il] + (ys[ir] - ys[il])*(x - xs[il])/((xs[ir] - xs[il]) || 1);
+function integrateBlocks(B, xs, ys, baseMode) {
+  if (!B.length) return {area: 0, base: () => 0};
+  const {base, il, ir} = getBaseline(xs, ys, B[0].a, B[B.length - 1].b, baseMode);
+  let area = 0;
   B.forEach(k => {
     const q = clipXY(xs, ys, k.a, k.b);
     for (let i = 0; i < q.xs.length - 1; i++) {
@@ -1897,7 +1896,7 @@ function integrateRegion(xsFull, ysFull, a, b, mode){
   const {area, base} = integrateBlocks([{a, b}], xsFull, ysFull, mode);
   const {xs, ys} = clipXY(xsFull, ysFull, a, b); const i0 = 0, i1 = xs.length - 1;
   if (i1 < 1) return null;
-  const xa = xs[i0], xb = xs[i1], ya = ys[i0], yb = ys[i1];
+  const xa = xs[i0], xb = xs[i1];
   let apex = i0, h = -Infinity;
   for (let i=i0;i<=i1;i++){ const d = ys[i] - base(xs[i]); if (d > h) { h = d; apex = i; } }
   return {a: xa, b: xb, i0, i1, xs, ys, base, area, apex: xs[apex], apexY: ys[apex], height: h};
@@ -2059,8 +2058,7 @@ function gaussRows(uv, regs){
   const tol = (xs[xs.length-1] - xs[0])*0.01, clusters = [];
   regs.forEach(r => { const a = Math.min(r.a, r.b), b = Math.max(r.a, r.b), c = clusters[clusters.length-1];
     if (c && a <= c.b + tol) { c.regs.push(r); c.b = Math.max(c.b, b); } else clusters.push({a, b, regs: [r]}); });
-  const rng = (arrMax(ys) - arrMin(ys)) || 1, tolWalk = rng*0.003, w = Math.max(1, Math.round(xs.length*0.002));
-  const walk = (i, d) => { let j = i; for (let k = 0; k < xs.length; k++) { const n = j + d*w; if (n < 0 || n >= xs.length || ys[n] > ys[j] + tolWalk) break; j = n; } return j; };
+
   clusters.forEach(c => {
     const i0 = Math.max(0, lowerBound(xs, c.a)), i1 = Math.min(xs.length - 1, lowerBound(xs, c.b)); if (i1 - i0 < 6) return;
     const {base, il, ir} = integrateBlocks([{a: xs[i0], b: xs[i1]}], xs, ys, opt.intBase);
@@ -5469,7 +5467,7 @@ function renderIntTable(run){
   const sec = isSec(run), fit = sec ? secFit(secCalFor(run)) : null, hasKav = !!(fit && fit.useKav), hasMw = !!(fit && fit.mw), hasOl = hasMw && secMono() > 0;
   /* A260/A280 at each peak when the run recorded both wavelengths */
   const c280 = run.uvs.find(u => /280/.test(u.name)), c260 = run.uvs.find(u => /260/.test(u.name)), rat = !!(c280 && c260);
-  const baseAt = (c, x, a, b) => { const {base} = integrateBlocks([{a, b}], c.xs, c.ys, opt.intBase); return base(x); };
+  const baseAt = (c, x, a, b) => { const {base} = getBaseline(c.xs, c.ys, a, b, opt.intBase); return base(x); };
   const ratAt = r => { if (!rat) return ''; const x = r.apex; const a = c260.ys[nearestIdx(c260.xs, x)] - baseAt(c260, x, r.a, r.b), b = c280.ys[nearestIdx(c280.xs, x)] - baseAt(c280, x, r.a, r.b); return b > 5 ? fmt(a/b, 2) : ''; };
   const cols = 8 + (rat ? 1 : 0) + (hasMg ? 1 : 0) + (gs ? 2 : 0) + (hasKav ? 1 : 0) + (hasMw ? 1 : 0) + (hasOl ? 1 : 0);
   const head = `<tr><th>Region</th><th>Start (${u})</th><th>End (${u})</th><th>${sec ? (u === 'min' ? 'Elution time' : 'Ve') : gs ? 'Center' : 'Apex'} (${u})</th>${hasKav ? '<th title="(Ve − V0)/(Vt − V0)">Kav</th>' : ''}${hasMw ? '<th>Apparent mass (kDa)</th>' : ''}${hasOl ? '<th title="Apparent MW divided by the monomer mass. SEC sizes are typically good to 10 to 20%, and shape shifts them, so treat this as a guide to the oligomer state">× monomer</th>' : ''}<th>Height (mAU)</th>${gs ? `<th>FWHM (${u})</th>` : ''}<th>Area (mAU·${u})</th><th>% of regions</th>${hasMg ? '<th>Protein (mg)</th>' : ''}${rat ? '<th title="Ratio of absorbance at 260 and 280 nm at the peak. Around 0.57 for pure protein, higher when nucleic acid or bound nucleotide is present">A₂₆₀/A₂₈₀</th>' : ''}${gs ? '<th>Fit R²</th>' : ''}<th></th></tr>`;
