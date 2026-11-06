@@ -1560,7 +1560,15 @@ BG = {  # how each local coding worker is started and labelled
     # has refused every Interactions API call since Nov 1 (HTTP 429). Headless: `agy -p` prints to stdout and exits.
     'agy': {'name': 'the Antigravity CLI', 'who': lambda: 'the Antigravity CLI (agy) on the owner\'s PC, on his Google AI Pro subscription', 'mark': '<!-- agy-job -->', 'exe': 'agy',
             'args': lambda wt, src='': ['-p', f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE} and do not commit, push or open a pull request: the manager does that.',
-                                        '--output-format', 'text', '--print-timeout', f'{int(BG_HOURS["agy"] * 3600)}s'] + (['--sandbox'] if cfg.get('agy_sandbox', True) else []),
+                                        '--output-format', 'text', '--print-timeout', f'{int(BG_HOURS["agy"] * 3600)}s']
+                                       + (['--sandbox'] if cfg.get('agy_sandbox', True) else [])
+                                       # On Windows the CLI still uses the older permission system, where an unconfigured
+                                       # command defaults to Ask, and in headless mode an Ask nobody can answer is
+                                       # soft-denied: the run exits 0 having changed nothing. If scoped permissions.allow
+                                       # rules do not take effect there, agy_yolo approves the calls instead. Safe enough
+                                       # only because the job runs in a throwaway worktree and the manager still checks
+                                       # which files changed before it pushes anything.
+                                       + (['--dangerously-skip-permissions'] if cfg.get('agy_yolo', False) else []),
             'own': 'for-antigravity', 'takes_claude': False, 'cap': 'agy', 'desc': 'the Antigravity CLI writing code'},
 }
 OC_MARK = BG['openclaw']['mark']
