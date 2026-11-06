@@ -20,7 +20,7 @@ Run:  python tools\\local-manager\\manager.py          (keeps running)
       python tools\\local-manager\\manager.py --once   (one pass)
       python tools\\local-manager\\manager.py --dry    (one pass, prints what it would do, changes nothing)
 """
-import base64, datetime as dt, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
+import base64, datetime as dt, json, os, re, shutil, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -955,10 +955,7 @@ def clean_rebuild(pr, files, issue):
         git('fetch', '-q', 'origin', f'+refs/pull/{n}/head:refs/remotes/pr/{n}', 'main')
         base = git('merge-base', 'origin/main', f'pr/{n}')
         patch.write_text(git('diff', '--binary', base, f'pr/{n}', '--', *keep) + '\n', encoding='utf-8')
-        if wt.exists():
-            unlink_deps(wt)
-            git('worktree', 'remove', '--force', str(wt))
-        git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+        fresh_worktree(wt, branch)
         git('apply', '--3way', str(patch), cwd=wt)  # raises on a conflict it can't settle
         if git('diff', '--name-only', '--diff-filter=U', cwd=wt):
             raise RuntimeError('conflicts remain')
@@ -1141,6 +1138,32 @@ def link_deps(wt):
         log(f'could not link the test libraries into {wt}: {e}')
 
 
+def fresh_worktree(wt, branch):
+    """Put a clean worktree at wt on origin/main.
+
+    A leftover directory that git has no record of (a killed manager, a crashed job, a tool that made the folder
+    itself) makes `worktree remove` fail with "<path> is not a working tree". That used to abort the job, and then
+    every retry of it, because the directory stayed behind: #1038 failed this way on its first agy run. So remove it
+    if git knows it, prune the records either way, and delete whatever is left on disk before adding.
+
+    unlink_deps runs first in every path, so the junction to the real tests/node_modules is gone before anything
+    deletes a directory tree here."""
+    wt = Path(wt)
+    if wt.exists():
+        unlink_deps(wt)
+        try:
+            git('worktree', 'remove', '--force', str(wt))
+        except Exception as e:
+            log(f'worktree {wt.name}: {str(e).strip()[:120]}, deleting the folder instead')
+        git('worktree', 'prune')
+        if wt.exists():
+            shutil.rmtree(wt, ignore_errors=True)
+        if wt.exists():
+            raise RuntimeError(f'could not clear the old worktree at {wt}')
+    wt.parent.mkdir(parents=True, exist_ok=True)
+    git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+
+
 def unlink_deps(wt):
     """Remove only the link, before the worktree is deleted, so the real tests/node_modules is never touched."""
     dst = wt / 'tests' / 'node_modules'
@@ -1169,11 +1192,7 @@ def claude_jobs(s):
         label(n, add=['claude-code-running'], remove=['for-claude-code', FIRST])
         try:
             git('fetch', '-q', 'origin')
-            if wt.exists():
-                unlink_deps(wt)
-                git('worktree', 'remove', '--force', str(wt))
-            WORK.mkdir(parents=True, exist_ok=True)
-            git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+            fresh_worktree(wt, branch)
             link_deps(wt)
             run(['claude', '-p', '--permission-mode', 'acceptEdits', '--allowedTools', CC_TOOLS], CC_JOB.format(who='Claude Code', why='It is a numeric fix from an independent audit, sent to you first.' if first else 'Jules (another agent) could not finish it.', n=n, title=i['title'], body=(i.get('body') or '')[:12000]), timeout=3600, cwd=wt, stdin=True)
             body_f = wt / 'PR_BODY.md'
@@ -1227,11 +1246,7 @@ def copilot_cli_job(s, i, retry):
     label(n, add=['copilot-running'], remove=['jules-queue', 'for-copilot'])
     try:
         git('fetch', '-q', 'origin')
-        if wt.exists():
-            unlink_deps(wt)
-            git('worktree', 'remove', '--force', str(wt))
-        WORK.mkdir(parents=True, exist_ok=True)
-        git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+        fresh_worktree(wt, branch)
         link_deps(wt)
         why = 'Jules (another agent) could not finish it.' if retry else 'You are taking it so Jules (another agent) can work on other jobs.'
         (wt / TASK_FILE).write_text(CC_JOB.format(who='the GitHub Copilot CLI', why=why, n=n, title=i['title'], body=(i.get('body') or '')[:12000]), encoding='utf-8')
@@ -1273,7 +1288,8 @@ def copilot_cli_job(s, i, retry):
 
 # ---------- Antigravity agent (Gemini API): a third coding worker that needs no PC ----------
 AG_MARK = '<!-- antigravity-job -->'
-AG_APP = 'for-antigravity-app'  # waiting for Patrick to paste the prompt into the Antigravity desktop app
+AG_APP = 'paste-to-antigravity'   # waiting for Patrick to paste the prompt into the Antigravity desktop app: his action, so the name says so
+AG_APP_OLD = 'for-antigravity-app'  # what it was called until 2026-11-05, moved over once
 AG_AGENT = cfg.get('antigravity_agent', 'antigravity-preview-09-2026')
 AG_AT_ONCE = cfg.get('antigravity_at_once', 6)
 AG_PER_PASS = cfg.get('antigravity_per_pass', 3)  # jobs handed over in one pass
@@ -1411,7 +1427,7 @@ def antigravity(s):
                 post(TRACK, f'**The Antigravity API is refusing every call.** {s["ag_refused"]} attempts in a row have come back `{str(e)[:120]}`, '
                             'each on the first call of the day with no usage behind it, so this is not our traffic: the agent has no quota on this key\'s tier.\n\n'
                             f'The API route is paused for {AG_DEAD_HOURS} hours at a time now rather than 6, so it stops filling the log. '
-                            'Antigravity still gets the app-changing jobs through the desktop app (`for-antigravity-app`), which is the only route that has ever '
+                            'Antigravity still gets the app-changing jobs through the desktop app (`paste-to-antigravity`, see `docs/ANTIGRAVITY.md`), which is the only route that has ever '
                             'landed a PR here (#759, #765). Everything the app route cannot hold goes to Jules within '
                             f'{AG_STALL_MIN} minutes.\n\nTo bring the API route back, the Gemini key needs a tier with quota for `{AG_AGENT}`. '
                             'Once it has one, the next successful call clears this by itself.' + SIGN.format(rv.MODEL))
@@ -1428,8 +1444,11 @@ def antigravity(s):
 AG_REFUSALS = cfg.get('antigravity_refusals_before_dead', 3)  # consecutive API refusals that mean the key has no quota, not a passing rate limit
 AG_DEAD_HOURS = cfg.get('antigravity_dead_hours', 24)        # how long to leave it alone then, instead of retrying every 6 hours forever
 AG_STALL_MIN = cfg.get('antigravity_stall_minutes', 45)  # a for-antigravity job nobody started by then goes to Jules, so a broken API never stalls the queue
-AG_APP_AT_ONCE = cfg.get('antigravity_app_at_once', 2)      # jobs waiting for Patrick to paste into the Antigravity desktop app
-AG_APP_DEAD = cfg.get('antigravity_app_at_once_dead', 4)    # more of them while the API refuses, since the app is then the only Antigravity there is
+# Both default to 0: the scheduled prompt in docs/ANTIGRAVITY.md has the app session find its own work from the
+# for-antigravity label, so a per-issue prompt is a notification that asks Patrick for something already covered.
+# Set antigravity_app_at_once to 2 in the settings file to get per-issue prompts back.
+AG_APP_AT_ONCE = cfg.get('antigravity_app_at_once', 0)      # jobs waiting for Patrick to paste into the Antigravity desktop app
+AG_APP_DEAD = cfg.get('antigravity_app_at_once_dead', 0)    # the same while the API refuses: the scheduled prompt covers that case too
 AG_APP_PROMPT = """**For the Antigravity desktop app.** Paste this into a task in `C:\\Users\\Patrick\\hfb-antigravity`:
 
 ```
@@ -1442,7 +1461,7 @@ Change only hplc-figure-bench(WF1.13).html and files under tests/. Add a check, 
 Then commit, push, and open a pull request whose description says "Closes #{n}", with what you changed, the check that fails on main and passes here, and exactly what you ran. Do not merge.
 ```
 
-The PR goes through the Test suite and the review gate like any other. When it appears, this label clears itself."""
+The PR goes through the Test suite and the review gate like any other. When it appears, this label clears itself.\n\nTo have it check the queue on its own instead of pasting job by job, use the scheduled prompt in `docs/ANTIGRAVITY.md`."""
 
 
 def has_pr(n):
@@ -1452,23 +1471,38 @@ def has_pr(n):
                for pr in gh(f'repos/{REPO}/pulls?state=open&per_page=100'))
 
 
+def ag_app_done(i):
+    """True when a job no longer needs Patrick to paste it: another worker holds it, or a pull request already exists.
+    Both loops in antigravity_app must agree on this, or they fight over the label pass after pass."""
+    lab = {l['name'] for l in i['labels']}
+    return bool(lab & {'antigravity-done', 'jules-running', 'antigravity-running', 'claude-code-running', 'codex-running'}) or has_pr(i['number'])
+
+
 def antigravity_app(s):
     """The desktop app is the only Antigravity path that has actually landed pull requests (#759, #765), so a couple of
     app-changing jobs always carry a ready-to-paste prompt for Patrick. Nothing waits on him: the API route and the
     stall guard run regardless, and a job whose PR appears, or which another worker takes, clears itself."""
     seen = s.setdefault('ag_app', {})
+    if not s.get('ag_app_renamed'):  # one-time: the label was for-antigravity-app until 2026-11-05
+        for i in issues(AG_APP_OLD):
+            label(i['number'], add=[AG_APP], remove=[AG_APP_OLD])
+            log(f'#{i["number"]}: moved to the {AG_APP} label')
+        s['ag_app_renamed'] = 1
     for i in issues(AG_APP):  # done, taken elsewhere, or closed: let it go
-        n, lab = i['number'], {l['name'] for l in i['labels']}
-        if lab & {'antigravity-done', 'jules-running', 'antigravity-running', 'claude-code-running', 'codex-running'} or has_pr(n):
-            label(n, remove=[AG_APP]); seen.pop(str(n), None)
-            log(f'#{n}: cleared the Antigravity app label')
+        if ag_app_done(i):
+            label(i['number'], remove=[AG_APP]); seen.pop(str(i['number']), None)
+            log(f'#{i["number"]}: cleared the {AG_APP} label')
     have = [i for i in issues(AG_APP)]
     cap = AG_APP_DEAD if s.get('ag_refused', 0) >= AG_REFUSALS or s.get('ag_off_until', 0) > time.time() else AG_APP_AT_ONCE
     room = cap - len(have)
     if room <= 0:
         return
     tried = s.get('ag_tried', {})
-    pool = [i for i in issues('for-antigravity') if str(i['number']) not in s.get('antigravity', {}) and str(i['number']) not in seen]
+    # ag_app_done here too, or the loop thrashes: the cleanup above drops the label because a PR exists and pops the
+    # issue from seen, then this pool picks the same issue again and posts another prompt, every single pass. #1038
+    # collected four copies of its prompt that way while PR #1048 was already open.
+    pool = [i for i in issues('for-antigravity')
+            if str(i['number']) not in s.get('antigravity', {}) and str(i['number']) not in seen and not ag_app_done(i)]
     for i in rt.pick(pool, tried, room, AG_MAX_TRIES):
         n = i['number']
         if DRY:
@@ -1509,9 +1543,7 @@ def apply_agent_diff(n, title, diff, body, branch, who):
     patch.write_text(diff, encoding='utf-8')
     try:
         git('fetch', '-q', 'origin')
-        if wt.exists():
-            git('worktree', 'remove', '--force', str(wt))
-        git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+        fresh_worktree(wt, branch)
         git('apply', '--3way', '--whitespace=nowarn', str(patch), cwd=wt)
         changed = sorted(set(git('diff', '--name-only', 'HEAD', cwd=wt).splitlines() + git('ls-files', '--others', '--exclude-standard', cwd=wt).splitlines()) - {''})
         bad = [f for f in changed if not ALLOWED.match(f.strip('"'))]
@@ -1668,11 +1700,7 @@ def bg_worker(s, key):
     n, wt = i['number'], WORK / f'{key}-{i["number"]}'
     try:
         git('fetch', '-q', 'origin')
-        if wt.exists():
-            unlink_deps(wt)
-            git('worktree', 'remove', '--force', str(wt))
-        WORK.mkdir(parents=True, exist_ok=True)
-        git('worktree', 'add', '-B', f'{key}/issue-{n}', str(wt), 'origin/main')
+        fresh_worktree(wt, f'{key}/issue-{n}')
         link_deps(wt)
         why = 'Jules (another agent) could not finish it.' if src not in ('jules-queue', W['own']) else 'You are taking it so Jules (another agent) can work on other jobs.'
         (wt / TASK_FILE).write_text(CC_JOB.format(who=W['who'](), why=why, n=n, title=i['title'], body=(i.get('body') or '')[:12000]), encoding='utf-8')
@@ -2418,8 +2446,48 @@ def heartbeat_check_cloud_yield():
         return False
 
 
+HB_EVERY = 240       # seconds between heartbeat refreshes: comfortably inside CLOUD_STANDBY (20 min)
+HB_ID = None         # the heartbeat comment, found once per process
+HB_THREAD = False    # set once the timer below is running, so the per-pass call stands down
+
+
+def hb_body():
+    return f'{HEARTBEAT}{int(time.time())} -->\n_The local manager on Patrick\'s PC is running (last pass {time.strftime("%Y-%m-%d %H:%M")}). While this is recent, the cloud copy stands aside._'
+
+
+def hb_tick():
+    """Write the heartbeat once. Keeps its comment id in a global, so it touches no state file and is safe off the main thread."""
+    global HB_ID
+    if HB_ID is None:
+        c = next((c for c in comments(TRACK) if c['body'].startswith(HEARTBEAT)), None)
+        HB_ID = c and c['id']
+    if HB_ID:
+        gh(f'repos/{REPO}/issues/comments/{HB_ID}', 'PATCH', {'body': hb_body()})
+    else:
+        HB_ID = gh(f'repos/{REPO}/issues/{TRACK}/comments', 'POST', {'body': hb_body()})['id']
+
+
+def hb_start():
+    """Refresh the heartbeat on its own timer. A duty loop cannot do this: one duty (a board meeting, a hard
+    question through the ladder) runs for 20 to 45 minutes, and while it does, a per-duty heartbeat never fires.
+    The cloud copy then reads a stale heartbeat, decides the PC is off and works the same queue in parallel."""
+    global HB_THREAD
+
+    def loop():
+        global HB_ID
+        while True:
+            try:
+                hb_tick()
+            except Exception as e:
+                HB_ID = None  # find the comment again next time, in case it was deleted
+                log(f'heartbeat failed: {e}')
+            time.sleep(HB_EVERY)
+    HB_THREAD = True
+    threading.Thread(target=loop, daemon=True, name='heartbeat').start()
+
+
 def heartbeat(s):
-    """PC: refresh the heartbeat comment on the tracking issue every 5 minutes. Cloud: return its age in minutes (None if there is none)."""
+    """PC: refresh the heartbeat comment on the tracking issue. Cloud: return its age in minutes (None if there is none)."""
     cid = s.get('hb_id')
     if not cid:
         c = next((c for c in comments(TRACK) if c['body'].startswith(HEARTBEAT)), None)
@@ -2429,9 +2497,9 @@ def heartbeat(s):
             return None
         m = re.search(r'pc-heartbeat (\d+)', gh(f'repos/{REPO}/issues/comments/{cid}')['body'])
         return (time.time() - int(m.group(1))) / 60 if m else None
-    if DRY or time.time() - s.get('hb_at', 0) < 300:
-        return 0
-    body = f'{HEARTBEAT}{int(time.time())} -->\n_The local manager on Patrick\'s PC is running (last pass {time.strftime("%Y-%m-%d %H:%M")}). While this is recent, the cloud copy stands aside._'
+    if HB_THREAD or DRY or time.time() - s.get('hb_at', 0) < 300:
+        return 0  # the timer owns the heartbeat whenever it is running; this path is for --once
+    body = hb_body()
     try:
         if cid:
             gh(f'repos/{REPO}/issues/comments/{cid}', 'PATCH', {'body': body})
@@ -2463,8 +2531,8 @@ def one_pass():
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
             continue  # first-pass notes from the local model: off, its time goes to writing code
         s['busy'] = {'duty': name, 'since': time.time()}
-        if not CLOUD:
-            heartbeat(s)  # a long pass (a hard question, a board meeting) must not look like the PC is off
+        if not CLOUD and not HB_THREAD:
+            heartbeat(s)  # --once only: in the keep-running loop the hb_start timer does this, and from inside long duties too
         save(s)
         try:
             duty(s)
@@ -2529,6 +2597,8 @@ if __name__ == '__main__':
         rv.ask_model = lambda system, user: ask_gemini(system + '\n\n' + user)
         rv.MODEL = 'Gemini'
     log(f'manager started ({rv.MODEL}; caps {CAP}){" DRY RUN" if DRY else ""}{" IN THE CLOUD" if CLOUD else ""}')
+    if not DRY and not CLOUD and '--once' not in sys.argv:
+        hb_start()  # on its own timer, so a 40-minute duty cannot make the PC look off to the cloud copy
     if not DRY and not CLOUD and '--once' not in sys.argv and '--no-console' not in sys.argv:
         import console
         console.start(sys.modules[__name__], cfg.get('console_port', 8765))

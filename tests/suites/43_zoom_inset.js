@@ -48,6 +48,57 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       T.check('overlay/inset-ylabel', hasInsetYLabel, 'Inset has Y-axis label');
 
       T.check('overlay/region-marked', await p.evaluate(() => !!document.querySelector('#paper svg #zoom-region rect') && document.querySelectorAll('#paper svg #zoom-region line').length >= 2), 'region rectangle and connector lines');
+      T.check('overlay/connectors-orthogonal', await p.evaluate(() => {
+        const lines = Array.from(document.querySelectorAll('#paper svg #zoom-region line'));
+        return lines.length >= 2 && lines.every(l => Math.abs(+l.getAttribute('x1') - +l.getAttribute('x2')) < 0.05 || Math.abs(+l.getAttribute('y1') - +l.getAttribute('y2')) < 0.05);
+      }), 'connectors use straight segments or orthogonal elbows');
+
+      const editorGeo = await p.evaluate(() => {
+        const r = document.querySelector('#paper svg #zoom-region rect');
+        const lines = Array.from(document.querySelectorAll('#paper svg #zoom-region line')).map(l => [l.getAttribute('x1'), l.getAttribute('y1'), l.getAttribute('x2'), l.getAttribute('y2')]);
+        const ins = document.querySelector('#paper svg [data-plot=inset]');
+        const insRect = ins ? ins.querySelector('rect') : null;
+        return {
+          bounds: r ? [r.getAttribute('x'), r.getAttribute('y'), r.getAttribute('width'), r.getAttribute('height')] : null,
+          viewport: [ins ? ins.getAttribute('transform') : null, insRect ? [insRect.getAttribute('width'), insRect.getAttribute('height')] : null],
+          connectors: lines
+        };
+      });
+      const [dl] = await Promise.all([
+        p.waitForEvent('download', {timeout: 10000}),
+        p.click('#saveSvg')
+      ]);
+      const stream = await dl.createReadStream();
+      const chunks = [];
+      for await (const chunk of stream) chunks.push(chunk);
+      const exportedSvg = Buffer.concat(chunks).toString('utf8');
+      const exportGeo = await p.evaluate(svgText => {
+        const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+        const r = doc.querySelector('#zoom-region rect');
+        const lines = Array.from(doc.querySelectorAll('#zoom-region line')).map(l => [l.getAttribute('x1'), l.getAttribute('y1'), l.getAttribute('x2'), l.getAttribute('y2')]);
+        const ins = doc.querySelector('[data-plot=inset]');
+        const insRect = ins ? ins.querySelector('rect') : null;
+        return {
+          bounds: r ? [r.getAttribute('x'), r.getAttribute('y'), r.getAttribute('width'), r.getAttribute('height')] : null,
+          viewport: [ins ? ins.getAttribute('transform') : null, insRect ? [insRect.getAttribute('width'), insRect.getAttribute('height')] : null],
+          connectors: lines
+        };
+      }, exportedSvg);
+      T.check('export-parity/overlay-bounds', JSON.stringify(editorGeo.bounds) === JSON.stringify(exportGeo.bounds) && !!editorGeo.bounds, 'overlay bounds parity');
+      T.check('export-parity/inset-viewport', JSON.stringify(editorGeo.viewport) === JSON.stringify(exportGeo.viewport) && !!editorGeo.viewport[0], 'inset viewport parity');
+      T.check('export-parity/connector-endpoints', JSON.stringify(editorGeo.connectors) === JSON.stringify(exportGeo.connectors) && editorGeo.connectors.length >= 2, 'connector endpoints parity');
+
+      await setOpt(p, 'o-xmin', '8'); await setOpt(p, 'o-xmax', '11'); await h.wait(400);
+      T.check('overlay/non-abutting-connectors', await p.evaluate(() => {
+        const lines = Array.from(document.querySelectorAll('#paper svg #zoom-region line'));
+        return lines.length >= 2 && lines.every(l => Math.abs(+l.getAttribute('x1') - +l.getAttribute('x2')) < 0.05 || Math.abs(+l.getAttribute('y1') - +l.getAttribute('y2')) < 0.05);
+      }), 'connectors maintained and orthogonal when geometry does not abut');
+
+      await setOpt(p, 'o-xmin', '5'); await setOpt(p, 'o-xmax', '9'); await h.wait(400);
+      T.check('overlay/abutting-connectors-suppressed', await p.evaluate(() => {
+        return document.querySelectorAll('#paper svg #zoom-region line').length === 0;
+      }), 'connectors suppressed when source and inset visibly abut');
+      await setOpt(p, 'o-xmin', '5'); await setOpt(p, 'o-xmax', '8'); await h.wait(400);
       for (const pos of ['tl', 'br', 'beside']) {
         await setOpt(p, 'o-zoomInsetPos', pos); await h.wait(500);
         const zz = await ticksOf(p, 'inset'), mm = await ticksOf(p, 'main');
