@@ -1580,6 +1580,7 @@ def ship_worktree(wt, n, title, desc, branch, who, mark):
 
 
 BG_HOURS = {'openclaw': cfg.get('openclaw_hours', 1.5), 'codex': cfg.get('codex_hours', 1.5), 'agy': cfg.get('agy_hours', 2)}
+AGY_MODEL = cfg.get('agy_model', 'gemini-3.8-flash')  # the model the Antigravity CLI runs a job on; '' takes the sign-in's own default
 _bg = {'openclaw': {}, 'codex': {}, 'agy': {}}  # issue -> running job, per worker; kept in memory, since the processes belong to this manager
 BG = {  # how each local coding worker is started and labelled
     'openclaw': {'name': 'OpenClaw', 'who': lambda: f'OpenClaw with the local model ({rv.MODEL_LOCAL})', 'mark': '<!-- openclaw-job -->', 'exe': 'openclaw',
@@ -1594,6 +1595,12 @@ BG = {  # how each local coding worker is started and labelled
     'agy': {'name': 'the Antigravity CLI', 'who': lambda: 'the Antigravity CLI (agy) on the owner\'s PC, on his Google AI Pro subscription', 'mark': '<!-- agy-job -->', 'exe': 'agy',
             'args': lambda wt, src='': ['-p', f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE} and do not commit, push or open a pull request: the manager does that.',
                                         '--output-format', 'text', '--print-timeout', f'{int(BG_HOURS["agy"] * 3600)}s']
+                                       # --model picks the model for this run (added in CLI 1.0.5; /model is interactive
+                                       # only, so it is no use headless). Patrick's choice: 3.8 Flash rather than the
+                                       # Gemini 4 Argon the sign-in defaults to, to spend less of the AI Pro quota per
+                                       # job. `agy models` lists the names this build accepts; agy_model: "" drops the
+                                       # flag and takes whatever the sign-in defaults to.
+                                       + (['--model', AGY_MODEL] if AGY_MODEL else [])
                                        # Off by default: unverified on Windows, and an unsupported flag here fails the way
                                        # permissions did, silently. Turn it on once a smoke test shows the CLI still edits
                                        # a file with both flags, and we get containment as well as no prompts.
@@ -1713,6 +1720,8 @@ def bg_worker(s, key):
     jobs[n] = {'proc': proc, 'wt': wt, 't': time.time(), 'src': src, 'title': i['title'], 'log': logf}
     if key == 'codex':
         log(f'#{n}: Codex uses {CODEX_HEAVY if src in ("for-claude-code", "for-codex") else CODEX_LIGHT}')
+    if key == 'agy':
+        log(f'#{n}: the Antigravity CLI uses {AGY_MODEL or "the model its sign-in defaults to"}')  # a name this build rejects shows up here, not as a mystery failure
     label(n, add=[f'{key}-running'], remove=[src])
     post(n, f'Handed to **{W["name"]}** on Patrick\'s PC ({W["desc"]}). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
     log(f'#{n}: handed to {W["name"]}')
