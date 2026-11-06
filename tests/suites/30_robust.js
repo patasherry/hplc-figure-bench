@@ -475,4 +475,37 @@ await T.t('suggest-label', async () => {
   await close();
 });
 
+
+await T.t('prep-name-manual-id', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  const data = {
+    app: 'HPLC Figure Bench',
+    version: 1.0,
+    prep: { name: 'm900', manual: [] },
+    runs: [], gels: []
+  };
+  const filePath = require('path').join(__dirname, '../data/m900_legacy.json');
+  require('fs').writeFileSync(filePath, JSON.stringify(data));
+  await p.locator('#projFile').setInputFiles(filePath);
+  await p.waitForTimeout(500);
+
+  await p.locator('#tl [data-step="construct"]').click();
+  await p.waitForTimeout(300);
+  await p.locator('#tl [data-step="figure"]').click();
+  await p.waitForTimeout(500);
+
+  const methods = await p.locator('#methodsText').inputValue();
+  T.check('prep-name-manual-id.prep-name', methods.includes('m900'), `Expected m900 in methodsText, got: ${methods}`);
+
+  await p.locator('#tl [data-addmenu]').click();
+  await p.waitForTimeout(300);
+  await p.locator('#tl [data-addstep="man:column"]').click();
+  await p.waitForTimeout(500);
+
+  const steps = await p.$eval('#tl button[data-step^="man:"]', els => els.map(e => e.getAttribute('data-step')));
+  T.check('prep-name-manual-id.allocates-m1', steps.includes('man:m1'), `Expected man:m1, got: ${steps.join(', ')}`);
+
+  await close();
+});
+
 T.done(); })();
