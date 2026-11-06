@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<title>HPLC Figure Bench</title>
+<title>Protein Purification Bench</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -509,7 +509,7 @@ button,input,select,textarea{font-family:inherit}
 </style>
 
 <header class="top">
-  <h1><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M1.5 15.5h3.2c1.6 0 2-1.4 2.6-4.4C8 7.6 8.6 3 10 3s2 4.6 2.7 8.1c.6 3 1 4.4 2.6 4.4h5.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><rect x="5.5" y="18.2" width="11" height="2.3" rx="1.15" fill="currentColor" opacity=".55"/></svg>HPLC Figure Bench</h1>
+  <h1><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M1.5 15.5h3.2c1.6 0 2-1.4 2.6-4.4C8 7.6 8.6 3 10 3s2 4.6 2.7 8.1c.6 3 1 4.4 2.6 4.4h5.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><rect x="5.5" y="18.2" width="11" height="2.3" rx="1.15" fill="currentColor" opacity=".55"/></svg>Protein Purification Bench</h1>
   <div class="projbar" id="projBar" hidden>
     <span class="pb-sep" aria-hidden="true">/</span>
     <input type="text" id="projName" class="projname" aria-label="Project name" spellcheck="false">
@@ -2772,15 +2772,15 @@ function processGel(g){
   const sc = Math.min(1, 1400/cw), ow = Math.max(2, Math.round(cw*sc)), oh = Math.max(2, Math.round(ch*sc));
   const c2 = document.createElement('canvas'); c2.width = ow; c2.height = oh; const x2 = c2.getContext('2d');
   x2.imageSmoothingQuality = 'high'; x2.drawImage(c1, cx, cy, cw, ch, 0, 0, ow, oh);
-  const img = x2.getImageData(0, 0, ow, oh), d = img.data, hist = new Uint32Array(256), dk = new Float32Array(ow*oh);
+  const img = x2.getImageData(0, 0, ow, oh), d = img.data, hist = new Uint32Array(256), dk = new Float32Array(ow*oh), dq = new Float32Array(ow*oh);
   const bl = +g.black, wh = Math.max(bl + 1, +g.white), k = 255/(wh - bl);
   for (let i=0;i<d.length;i+=4){
-    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++; dk[i/4] = g.invert ? gray : 255 - gray;
+    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++; dk[i/4] = g.invert ? gray : 255 - gray; dq[i/4] = g.invert ? gray : -Math.log10(Math.max(gray, 1)/255)*255;
     if (g.color) for (let j=0;j<3;j++){ let v = (d[i+j] - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; d[i+j] = g.invert ? 255 - v : v; }
     else { let v = (gray - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; if (g.invert) v = 255 - v; d[i] = d[i+1] = d[i+2] = v; }
   }
   x2.putImageData(img, 0, 0);
-  g.pix = {w: ow, h: oh, d: dk}; g._bands = null;
+  g.pix = {w: ow, h: oh, d: dk, q: dq}; g._bands = null;
   g.out = {url: c2.toDataURL('image/jpeg', 0.92), w: ow, h: oh}; g.hist = hist; g.crop = {l, r: rr, t, b};
 }
 /* ---------- auto crop: find the stained lanes, their spacing, and the top and bottom of the bands ---------- */
@@ -2962,7 +2962,7 @@ function laneTrack(g, i){
 function laneProfile(g, i){
   const P = g.pix, n = gelLabels(g).length, lw = P.w/n, tr = laneTrack(g, i);
   const pr = new Float64Array(P.h);
-  for (let y=0;y<P.h;y++){ const x0 = Math.max(0, Math.floor((i + DET.laneLo)*lw + tr[y])), x1 = Math.min(P.w, Math.ceil((i + DET.laneHi)*lw + tr[y])); let t = 0; const o = y*P.w; for (let x=x0;x<x1;x++) t += P.d[o + x]; pr[y] = x1 > x0 ? t/(x1 - x0) : 0; }
+  for (let y=0;y<P.h;y++){ const x0 = Math.max(0, Math.floor((i + DET.laneLo)*lw + tr[y])), x1 = Math.min(P.w, Math.ceil((i + DET.laneHi)*lw + tr[y])); let t = 0; const o = y*P.w; const src = P.q || P.d; for (let x=x0;x<x1;x++) t += src[o + x]; pr[y] = x1 > x0 ? t/(x1 - x0) : 0; }
   const k = Math.max(1, Math.round(P.h*DET.smooth)), sm = new Float64Array(P.h);
   for (let y=0;y<P.h;y++){ let t = 0, c = 0; for (let j=Math.max(0,y-k); j<=Math.min(P.h-1,y+k); j++){ t += pr[j]; c++; } sm[y] = t/c; }
   /* rolling-minimum background, then smoothed, so broad smears and uneven staining are removed */
@@ -2992,7 +2992,7 @@ function detectBands(g, i, sensPct, gelMax){
       let rm = v; j = y; while (j < h - 1) { j++; if (sig[j] > v) break; if (sig[j] < rm) rm = sig[j]; }
       const prom = v - Math.max(lm, rm); if (prom < Math.max(DET.minAbs*0.6, v*DET.promRel, noise*DET.noiseK*0.6)) continue;
     }
-    let l = y, r = y; while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > 0) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > 0) r++;
+    let l = y, r = y; while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > noise * DET.tail) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > noise * DET.tail) r++;
     let area = 0; for (let j=l;j<=r;j++) area += sig[j];
     let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
     bands.push({row: y, h: v, area, l, r, hl, hr});
@@ -3027,7 +3027,7 @@ function detectBands(g, i, sensPct, gelMax){
     });
     for (let k = bands.length - 1; k >= 0; k--) if (bands[k].drop || (bands[k].shoulder && !(bands[k].area > 0))) bands.splice(k, 1);
   }
-  bands.forEach(b => { if (b.area > 0) return; let lA = b.row, rA = b.row; while (lA > 0 && sig[lA-1] <= sig[lA]) lA--; while (rA < h-1 && sig[rA+1] <= sig[rA]) rA++; let a = 0; for (let j=lA;j<=rA;j++) a += sig[j]; b.area = a; });
+  bands.forEach(b => { if (b.area > 0) return; let lA = b.row, rA = b.row; while (lA > 0 && sig[lA-1] <= sig[lA] && sig[lA-1] > noise * DET.tail) lA--; while (rA < h-1 && sig[rA+1] <= sig[rA] && sig[rA+1] > noise * DET.tail) rA++; let a = 0; for (let j=lA;j<=rA;j++) a += sig[j]; b.area = a; });
   /* saturation: a flat-topped band is wider at 97% of its height than a Gaussian can be */
   bands.forEach(b => { if (b.shoulder) return; let a = b.row, z = b.row; while (a > 0 && sig[a-1] >= 0.97*b.h) a--; while (z < h-1 && sig[z+1] >= 0.97*b.h) z++;
     b.sat = (z - a + 1)/Math.max(1, b.hr - b.hl + 1) > DET.satRatio && (b.hr - b.hl + 1) >= 5 && b.h >= 0.5*Math.max(gelMax || 0, mx); });
@@ -3040,7 +3040,7 @@ function bandAt(g, sig, yRot){
   const h = sig.length, c = g.crop, r0 = Math.round((yRot - c.t)/(c.b - c.t)*h - 0.5), w = Math.max(2, Math.round(h*0.008));
   let y = Math.min(h - 1, Math.max(0, r0)); for (let j=Math.max(0, r0 - w); j<=Math.min(h - 1, r0 + w); j++) if (sig[j] > sig[y]) y = j;
   const v = sig[y]; let l = y, r = y, area = 0;
-  if (v > 0) { while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > v*0.05 && y - l < h*0.04) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > v*0.05 && r - y < h*0.04) r++; }
+  if (v > 0) { const noise = profNoise(sig); while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > noise * DET.tail && y - l < h*0.04) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > noise * DET.tail && r - y < h*0.04) r++; }
   else { l = Math.max(0, y - 2); r = Math.min(h - 1, y + 2); }
   for (let j=l;j<=r;j++) area += sig[j];
   let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
@@ -5451,7 +5451,7 @@ async function loadFiles(files){
         }
       }
     }
-    toast((dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}${msg}` : `Loaded ${n} trace${n > 1 ? 's' : ''}${msg}`) + lostMsg + skipMsg);
+    toast((dup.length ? `${dup.map(d => d.file).join(', ')} is already loaded. Added again, but left out of the workflow` : newRuns.length ? `Loaded ${newRuns.length} ÄKTA run${newRuns.length > 1 ? 's' : ''}${added.length ? ` and ${added.length} trace${added.length > 1 ? 's' : ''}` : ''}${msg}` : `Loaded ${n} trace${n > 1 ? 's' : ''}${msg}`) + (newRuns.length && runs.length > newRuns.length ? `. ${runs.length} runs loaded in all` : '') + lostMsg + skipMsg);
   }
   if (imgs.length) addGelFiles(imgs);
 }
@@ -6097,7 +6097,7 @@ function nextHere(k){ if (!PROJ) return true; const [a, b] = String(k).split(':'
 function nextStep(){
   const real = traces.filter(t => !t.ex);
   if (projUndo) { const _n = {k: 'undoOpen', t: 'Project opened over your previous work.', go: 'Undo', act: () => { const u = projUndo; projUndo = null; openProject(u, 'previous work', true); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
-  if (!runs.length && !real.length && !gels.length) { const _n = {k: 'start', t: 'Drop ÄKTA or HPLC exports, or a gel image, to begin.'}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
+  if (!runs.length && !real.length && !gels.length) { const _n = {k: 'start', t: 'Drop ÄKTA or HPLC exports, or a gel image, to begin.', go: 'Choose data files', act: () => $('#file').click()}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
   const steps = runs.filter(r => r.inWf && !isSec(r) && !r.isStd);
   /* a step for the figure on screen comes first, so the button never edits something out of view */
   const noPools = steps.filter(r => !String(r.shade || '').trim()), noPool = noPools.find(r => r.id === cur) || (curGel() ? null : noPools[0]);
@@ -6137,6 +6137,9 @@ function projectData(){
     let img = g._img || ''; if (!img) { try { img = g.src.toDataURL('image/png'); if (img.length > 12e6) img = g.src.toDataURL('image/jpeg', 0.95); g._img = img; } catch (e) {} } o.image = img; delete o.imageId; return o; });
   /* upload ids belong to one saved project, so a file never carries them */
   const noId = (o, k) => { const c = plain(o); delete c[k]; return c; };
+  /* The name shown to the user is Protein Purification Bench. This schema field stays 'HPLC Figure Bench' for good:
+     change it and every project file saved before the rename fails to import, and every file saved after it fails to
+     open in an older copy. The same goes for the 'hplc-fig-opt' settings key and the 'hfb-projects' database. */
   return {app: 'HPLC Figure Bench', version: 1, saved: new Date().toISOString(), cur, opt: plain(opt), runs: runs.map(r => noId(r, 'blobId')), traces: traces.filter(t => !t.ex).map(t => noId(t, 'blobId')), gels: gs, struct: struct ? noId(struct, 'blobId') : null, nanodrop: ndSamples.map(n => noId(n, 'specId')), prep};
 }
 let projUndo = null, failedGels = [];

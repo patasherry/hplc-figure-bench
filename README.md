@@ -1,6 +1,6 @@
-# HPLC Figure Bench
+# Protein Purification Bench
 
-HPLC Figure Bench is a single-file browser application for making publication-quality protein purification figures: HPLC and ÄKTA chromatograms, SDS-PAGE gels with densitometry, size-exclusion (SEC) calibration, NanoDrop readings and spectra, construct schematics, and composite multi-step purification workflow figures with a quantitative summary table and draft Methods text.
+Protein Purification Bench is a single-file browser application for making publication-quality protein purification figures: HPLC and ÄKTA chromatograms, SDS-PAGE gels with densitometry, size-exclusion (SEC) calibration, NanoDrop readings and spectra, construct schematics, and composite multi-step purification workflow figures with a quantitative summary table and draft Methods text.
 
 ## How to use
 
@@ -126,3 +126,5 @@ Status messages and hints explain missing inputs or unverified numbers. For exam
 *   `AGENTS.md` / `CLAUDE.md`: Shared instructions and rules for coding agents.
 *   `.github/workflows/`: GitHub Actions for automated browser tests and PR reviews.
 *   `tests/`: Automated Playwright browser test suite and synthetic test datasets.
+
+**A note on the name.** The app was called HPLC Figure Bench until November 2026. Project files still carry `"app": "HPLC Figure Bench"` inside them and the browser still stores settings under `hplc-fig-opt`, so everything you saved under the old name keeps working, and a file you save today still opens in an older copy of the app.

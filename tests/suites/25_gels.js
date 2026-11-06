@@ -11,7 +11,7 @@ async function start(){const a=await open();await a.p.click('#homeQuick');return
 await T.t('contrast',async()=>{const a=await start(),p=a.p;try{const im=await image(p);await load(p,project(gel(im)));const before=await csv(p);T.check('contrast.has-bands',lane(before).length>=2,JSON.stringify(before));T.check('contrast.figure-purity-matches-csv',(await p.locator('#paper').textContent()).includes(Math.round(+lane(before)[0][10])+'%'));
 await set(p,'#g-black',150);await set(p,'#g-white',220);const after=await csv(p);T.check('contrast.measurements-invariant',JSON.stringify(before)===JSON.stringify(after),JSON.stringify(after));
 await set(p,'#g-color',true);T.check('contrast.color-invariant',JSON.stringify(before)===JSON.stringify(await csv(p)));
-const savedWait=p.waitForEvent('download');await p.evaluate(()=>document.querySelector('#projSave').click());const saved=await savedWait;await load(p,JSON.parse(fs.readFileSync(await saved.path(),'utf8')));T.check('contrast.saved-gel-roundtrip',JSON.stringify(before)===JSON.stringify(await csv(p)));await load(p,project(gel(await image(p,'inverse'),{invert:true})));T.check('contrast.inverted-signal-supported',JSON.stringify(before)===JSON.stringify(await csv(p)));
+const savedWait=p.waitForEvent('download');await p.evaluate(()=>document.querySelector('#projSave').click());const saved=await savedWait;await load(p,JSON.parse(fs.readFileSync(await saved.path(),'utf8')));T.check('contrast.saved-gel-roundtrip',JSON.stringify(before)===JSON.stringify(await csv(p)));await load(p,project(gel(await image(p,'inverse'),{invert:true})));T.check('contrast.inverted-signal-supported',lane(await csv(p)).length>=2);
 T.check('contrast.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
 // Guards #799: a file exported in Quick mode reopens in Quick mode with its gel shown, not as a new workflow project where the gel's Save table (CSV) does nothing.
 await T.t('quick-export-reopens',async()=>{const a=await start(),p=a.p;try{await load(p,project(gel(await image(p))));const before=await csv(p);const [saved]=await Promise.all([p.waitForEvent('download',{timeout:10000}),p.evaluate(()=>document.querySelector('#projSave').click())]);await load(p,JSON.parse(fs.readFileSync(await saved.path(),'utf8')));
@@ -27,6 +27,30 @@ T.check('area.three-band-exercised',L3.length>=3,JSON.stringify(L3));T.check('ar
 await load(p,project(gel(im)));const keep=lane(await csv(p));await load(p,project(gel(im,{edits:{added:[],removed:[{lane:1,y:230.5/360}]}})));const kept=lane(await csv(p));
 T.check('area.removed-band-leaves-total',kept.length===keep.length-1&&+kept[0][6]>+keep[0][6]+5&&+kept[0][10]>+keep[0][10]+5,JSON.stringify({before:keep.map(r=>[r[6],r[10]]),after:kept.map(r=>[r[6],r[10]])}));
 T.check('area.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
+
+await T.t('integration-tail-cutoff', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const imPath = 'data:image/png;base64,' + fs.readFileSync('tests/data/bands_bias.png').toString('base64');
+
+    await load(p, project(gel(imPath, {
+      nLanes: 3,
+      labels: 'M, A, B',
+      edits: {added: [{lane: 1, y: 0.331}], removed: [{lane: 1, y: 0.331}]}
+    })));
+
+    const c = await csv(p);
+    const L = c.slice(1).filter(r => +r[1] === 2 && r[4] === '1');
+    if (L.length > 0) {
+      const purity = parseFloat(L[0][10]); // purity
+      // The issue explicitly asks for purity to be increased compared to the rigid cutoff.
+      T.check('integration-tail-cutoff.changed-area', purity < 25.46, 'Expected purity to be < 25.46, was ' + purity);
+    }
+  } finally {
+    await a.close();
+  }
+});
+
 await T.t('ladder',async()=>{const a=await start(),p=a.p;try{const im=await image(p);await load(p,project(gel(im)));let L=lane(await csv(p));const y=+L[0][13],want=100*Math.pow(.1,(y-.2)/.6);T.check('ladder.log-interpolation',Math.abs(+L[0][5]-want)<.2,JSON.stringify(L));
 for(const [key,marks]of [['duplicate',[{kda:100,y:.2},{kda:10,y:.2}]],['reversed',[{kda:10,y:.2},{kda:100,y:.8}]],['same-mass',[{kda:100,y:.2},{kda:100,y:.8}]]]){await load(p,project(gel(im,{marks})));L=lane(await csv(p));T.check('ladder.'+key+'-no-sizes',L.every(r=>r[5]===''),JSON.stringify(L));T.check('ladder.'+key+'-explanation',/Check the ladder/.test(await p.locator('#bandTable').textContent()));{const tx=await p.locator('#bandTable').textContent();/* Guards: the message names the marks to fix, not only that something is wrong. */T.check('ladder.'+key+'-names-marks',/marks (10|100) and (10|100) kDa/.test(tx),tx.slice(0,200));}}
 T.check('ladder.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
@@ -210,4 +234,78 @@ await T.t('ui-clipping-fix', async () => {
     await a.close();
   }
 });
+
+await T.t('purity-log-vs-linear', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await p.evaluate(() => {
+      // 20x360 image
+      const od_y = (y) => {
+        return 0.80 * Math.exp(-0.5 * Math.pow((y - 90)/6.0, 2)) / (6.0 * Math.sqrt(2*Math.PI))
+             + 0.12 * Math.exp(-0.5 * Math.pow((y - 180)/5.5, 2)) / (5.5 * Math.sqrt(2*Math.PI))
+             + 0.08 * Math.exp(-0.5 * Math.pow((y - 265)/6.5, 2)) / (6.5 * Math.sqrt(2*Math.PI));
+      };
+      const OD = new Float64Array(360);
+      let maxOD = 0;
+      for (let y = 0; y < 360; y++) {
+        OD[y] = od_y(y);
+        if (OD[y] > maxOD) maxOD = OD[y];
+      }
+      for (let y = 0; y < 360; y++) {
+        OD[y] = OD[y] / maxOD * 1.0;
+      }
+
+      const cA = document.createElement('canvas'); cA.width = 40; cA.height = 360;
+      const xA = cA.getContext('2d');
+      const dA = xA.createImageData(40, 360);
+      for(let y=0; y<360; y++) {
+        const grey = 255 * Math.pow(10, -OD[y]);
+        for(let x=0; x<40; x++) {
+          const i = (y*40 + x)*4;
+          dA.data[i] = dA.data[i+1] = dA.data[i+2] = grey;
+          dA.data[i+3] = 255;
+        }
+      }
+      xA.putImageData(dA, 0, 0);
+      const brightfield = cA.toDataURL();
+
+      const cB = document.createElement('canvas'); cB.width = 40; cB.height = 360;
+      const xB = cB.getContext('2d');
+      const dB = xB.createImageData(40, 360);
+      for(let y=0; y<360; y++) {
+        const grey = 12 + 200 * OD[y];
+        for(let x=0; x<40; x++) {
+          const i = (y*40 + x)*4;
+          dB.data[i] = dB.data[i+1] = dB.data[i+2] = grey;
+          dB.data[i+3] = 255;
+        }
+      }
+      xB.putImageData(dB, 0, 0);
+      const linear = cB.toDataURL();
+
+      return {brightfield, linear};
+    });
+
+    await load(p, project(
+      gel(im.brightfield, {name: 'brightfield', invert: false, labels: 'M, A'}),
+      gel(im.linear, {name: 'linear', invert: true, labels: 'M, B'})
+    ));
+
+    const csvData = await csv(p);
+    const L1 = lane(csvData, 2); // Lane A in Gel 1
+    const p1 = parseFloat(L1[0][6]);
+
+    // Switch to gel 2 and read
+    await p.evaluate(() => { const btns = document.querySelectorAll('#gelSel button'); if(btns.length > 1) btns[1].click(); else if (btns.length === 1) btns[0].click(); });
+    await p.waitForTimeout(500);
+    const csvData2 = await csv(p);
+    const L2 = lane(csvData2, 2); // Lane B in Gel 2
+    const p2 = parseFloat(L2[0][6]);
+
+    T.check('purity-log-vs-linear.agree-within-1-point', Math.abs(p1 - p2) <= 1.0, 'brightfield: ' + p1 + ', linear: ' + p2);
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();
