@@ -946,7 +946,7 @@ def gate_problems(pr, files, diff, rep):
     if '### ✅ No regressions' not in rep:
         out.append('The Test suite reports regressions. Fix them, or explain in the PR why the new result is right.')
     new_fail = rep.split('#### New checks failing', 1)[1].split('Full results', 1)[0] if '#### New checks failing' in rep else ''
-    own = sorted({m for m in re.findall(r'^- (\d\d_\w+)/', new_fail, re.M)} & {re.sub(r'^tests/suites/(\d\d_\w+)\.js$', r'\1', f) for f in files})
+    own = sorted({m for m in re.findall(r'^- (\d+_\w+)/', new_fail, re.M)} & {re.sub(r'^tests/suites/(\d+_\w+)\.js$', r'\1', f) for f in files})
     own_fail = [l[2:].strip() for l in new_fail.splitlines() if l.startswith('- ') and any(l[2:].startswith(o + '/') for o in own) and 'perf.' not in l]
     if own_fail:
         out.append('A check this PR adds fails on the PR itself: ' + '; '.join(own_fail[:3])[:500] + '. Make the test work through the UI.')
@@ -954,7 +954,10 @@ def gate_problems(pr, files, diff, rep):
     app_diff = [b for b in re.split(r'(?m)^diff --git ', diff) if b.startswith(f'a/{APP_}')]
     app_lines = [l[1:] for b in app_diff for l in b.splitlines() if l.startswith(('+', '-')) and not l.startswith(('+++', '---'))]
     is_num = any(re.search(r'\b(Math\.|parseFloat|parseInt|Number|csvSplit|match|replace|split|substring)\b|(?<=\w)\s*[+*/%]=?\s*(?=\w)|(?<=\w)\s*[-+*/%]=?\s*(?=\d)|(?<=\s)-\s*(?=\w)|(?<=\w)\s*-\s+(?=\w)|/.*?/', l) for l in app_lines)
-    if APP_ in files and is_num and not re.search(r'^- \d\d_', fixes, re.M):
+    # \d+ not \d\d: a suite numbered with three or four digits is a suite. tests/suites/770_pool_area.js in PR #1095
+    # failed 2 checks on main and passed all 6 on the branch, and this said no check fails on main, because the
+    # number was not two digits long. 1007_untagged_default.js has never been compared either.
+    if APP_ in files and is_num and not re.search(r'^- \d+_', fixes, re.M):
         out.append('No check fails on main and passes on this PR for this numerical/parsing change, so nothing shows the fix works. Add a check that fails on main, for example one that reads the exact number or text the issue says is wrong.')
     tests = [b for b in re.split(r'(?m)^diff --git ', diff) if b.startswith('a/tests/suites/')]
     removed = [l for b in tests for l in b.splitlines() if l.startswith('-') and not l.startswith('---') and re.search(r'T\.check\(|await T\.t\(', l)]
