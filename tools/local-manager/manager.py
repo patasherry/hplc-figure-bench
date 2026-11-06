@@ -1763,6 +1763,7 @@ def bg_worker(s, key):
     if CLOUD or not exe or not cfg.get(key + '_jobs_on', key != 'openclaw'):  # OpenClaw is off unless openclaw_jobs_on is true: it failed every job (#500, #514, #515)
         return
     tried = s.setdefault(f'{key}_tried', {})
+    handled = set()  # settled in this pass, so the stale listing below must not undo it
     for n, j in list(jobs.items()):  # finished, or over time
         if j['proc'].poll() is None and time.time() - j['t'] < BG_HOURS[key] * 3600:
             continue
@@ -1779,22 +1780,36 @@ def bg_worker(s, key):
             label(n, add=[f'{key}-done'], remove=[f'{key}-running'])
             post(n, f'{W["name"]} opened #{pr}. It goes through the Test suite and the automatic review like any PR.' + SIGN.format(rv.MODEL))
             log(f'#{n}: {W["name"]} opened PR #{pr} after {int((time.time() - j["t"]) / 60)} min')
+            handled.add(n)
         except Exception as e:
             tried[str(n)] = time.time()
             back = 'jules-queue' if j['src'] == W['own'] else j['src']  # a job labelled for this worker gets one try per label, then Jules takes it
             label(n, add=[back], remove=[f'{key}-running'])
             post(n, f'The {W["name"]} job did not produce a usable change ({str(e)[:300]}), so the job goes to `{back}`.' + SIGN.format(rv.MODEL))
             log(f'#{n}: {W["name"]} job failed: {e}')
+            handled.add(n)
         finally:
             try:
                 unlink_deps(wt)
                 git('worktree', 'remove', '--force', str(wt))
             except Exception:
                 pass
-    for i in issues(f'{key}-running'):  # left over from before a restart: the process is gone
-        if i['number'] not in jobs:
-            label(i['number'], add=['jules-queue'], remove=[f'{key}-running'])
-            log(f'#{i["number"]}: {W["name"]} job lost in a restart, back to Jules')
+    # Left over from before a restart: the process is gone, so the job has to go back. Three things are not lost, and
+    # each was being requeued anyway. A job settled earlier in this very pass (`handled`): the label listing is
+    # eventually consistent, so an issue whose label was just removed still comes back in it, and #1065 was sent to
+    # Jules one line after the CLI opened #1107 for it. A job already marked done. And a job with an open PR, whatever
+    # the labels say. Requeueing any of those sets a second worker on finished work, which is how #1038 ended up with
+    # two pull requests.
+    for i in issues(f'{key}-running'):
+        n2, lab = i['number'], {l['name'] for l in i['labels']}
+        if n2 in jobs or n2 in handled:
+            continue
+        if f'{key}-done' in lab or has_pr(n2):
+            label(n2, remove=[f'{key}-running'])
+            log(f'#{n2}: {W["name"]} job is finished, clearing the stale running label')
+            continue
+        label(n2, add=['jules-queue'], remove=[f'{key}-running'])
+        log(f'#{n2}: {W["name"]} job lost in a restart, back to Jules')
     if jobs or DRY:
         return
     if s.get('update_wanted'):  # an update is overdue: start no new job, so the manager can update between jobs
