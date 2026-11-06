@@ -740,6 +740,23 @@ def relay_send(n, issue, app_text, base, ranges, board=False):
     return rid
 
 
+def relay_base_app(body, reqs):
+    """The app file as it stood at the base of the request this response answers, or None.
+
+    Check 4 accepts a hunk cut from that base when main has since moved, which a hand-carried round trip makes likely:
+    #1064's request went out at 08:13 and its answer came back at 18:03. Read from git, so it costs one cheap command and
+    cannot be influenced by the response itself."""
+    m = re.search(r'^id:\s*(\S+)', body, re.M)
+    base = (reqs.get(m.group(1)) or {}).get('base') if m else None
+    if not base or not re.fullmatch(r'[0-9a-f]{7,40}', base):
+        return None
+    try:
+        return git('show', f'{base}:{APP_}')
+    except Exception as e:
+        log(f'relay: could not read the app at {base} ({str(e)[:100]}), so only current main is checked')
+        return None
+
+
 def relay_ranges_of(cs, rid):
     """The excerpt ranges of an earlier request, read back from its comment."""
     for c in cs:
@@ -809,7 +826,8 @@ def relay_collect(n, issue):
         if app is None:
             app, base = relay_app()
         try:
-            r = rl.validate(c['body'], reqs, app)
+            # the app as it was at the request's base, so an answer that main has moved under is still usable
+            r = rl.validate(c['body'], reqs, app, relay_base_app(c['body'], reqs))
         except rl.Bad as b:
             if b.kind == 'reply':
                 post(n, f'Response not accepted: {b.msg}. Nothing was filed.' + sig + SIGN.format(rv.MODEL)); log(f'relay #{n}: rejected: {b.msg}'); continue
