@@ -103,6 +103,10 @@ async function fresh(id, fn){
     const table = await h.peakTable(), ve = table[0].findIndex(c => /^(Ve|Center|Apex|Elution time)\b/.test(c));
     const vals = table.slice(1).filter(r => r.length > 3).map(r => +String(r[ve]).replace(/[^0-9.-]/g, ''));
     T.check(`matrix/${tc.id}/peaks`, ve >= 0 && tc.peaks.every(x => vals.some(v => Math.abs(v - x) <= 0.3)), `expected ${tc.peaks.join(', ')}, peak table has ${vals.join(', ') || 'none'}`);
+    if (tc.id === 'unicorn-semicolon') {
+      const areas = table.slice(1).filter(r => r.length > 4).map(r => +String(r[ve+1]).replace(/[^0-9.-]/g, ''));
+      T.check('matrix/unicorn-semicolon/area-valid', areas.length > 0 && areas.every(a => a > 20), 'Semicolon files successfully integrate peak areas instead of flatlines');
+    }
   });
   for (const size of [75, 200]) await fresh('column-' + size, async (p, h) => {
     await h.newProject('Synthetic column ' + size);
