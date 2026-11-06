@@ -83,6 +83,29 @@ const {open, H, suite, src} = require('../lib/harness');
     // 6. Check search placeholder text (#895)
     const searchPlaceholder = await p.getAttribute('#panelSearch', 'placeholder');
     T.check('search_placeholder_text', searchPlaceholder === 'Search settings/data/files', 'Search placeholder should be "Search settings/data/files" to reduce ambiguity');
+
+    // 7. Project name field has an explicit visible label beside it that stays visible at narrow width (#1038)
+    const projLab = p.locator('label[for="projName"]');
+    const projLabText = (await projLab.count()) ? (await projLab.textContent()).trim() : '';
+    const projPlaceholder = await p.getAttribute('#projName', 'placeholder');
+    T.check('proj_name_label_visible', (await projLab.count()) === 1 && (await projLab.isVisible()) && /^project(\s+name)?$/i.test(projLabText) && /^project(\s+name)?$/i.test(projPlaceholder || ''), `label="${projLabText}" placeholder="${projPlaceholder}"`);
+    const {p: pNarrow, errs: errsN, close: closeN} = await open({width: 390, height: 844}), hN = H(pNarrow);
+    await hN.newProject('UX save');
+    const narrowGeom = await pNarrow.evaluate(() => {
+      const lab = document.querySelector('label[for="projName"]'), inp = document.getElementById('projName');
+      if (!lab || !inp) return null;
+      const lr = lab.getBoundingClientRect(), ir = inp.getBoundingClientRect(), cs = getComputedStyle(lab);
+      return {
+        vis: lr.width > 0 && lr.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity > 0,
+        inView: lr.left >= 0 && lr.right <= window.innerWidth && ir.left >= 0 && ir.right <= window.innerWidth,
+        beside: lr.right <= ir.left + 2 && Math.abs((lr.top + lr.bottom) / 2 - (ir.top + ir.bottom) / 2) < 16,
+        inpW: ir.width,
+        noHScroll: document.documentElement.scrollWidth <= window.innerWidth + 1
+      };
+    });
+    T.check('proj_name_label_narrow_visible', !!narrowGeom && narrowGeom.vis && narrowGeom.inView && narrowGeom.beside && narrowGeom.inpW >= 60 && narrowGeom.noHScroll, JSON.stringify(narrowGeom));
+    errs.push(...errsN);
+    await closeN();
   });
 
   T.check('no_errors', !errs.length, errs.join('|'));
