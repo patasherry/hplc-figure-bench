@@ -1514,13 +1514,46 @@ def antigravity_app(s):
         log(f'#{n}: prompt posted for the Antigravity desktop app')
 
 
+AGY_SEEN_DAYS = 7  # how long a successful agy start vouches for the CLI being there
+
+
+def agy_exe():
+    """The Antigravity CLI on PATH. On Windows it is usually a shim (agy.cmd from npm), and a PATH that lost it, or a
+    manager started from a shell whose PATH predates the install, makes a bare which('agy') miss something that works.
+    agy_exe in the settings file names it outright."""
+    named = cfg.get('agy_exe')
+    if named:
+        return named if (os.path.isfile(named) or shutil.which(named)) else None
+    for name in ('agy', 'agy.cmd', 'agy.exe', 'agy.ps1', 'agy.bat'):
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+def have_agy(s):
+    """(usable, why not). A missed PATH lookup must not look like "not installed": on 2026-11-05 the CLI opened #1070 at
+    21:26 and two hours later the stall guard swept six jobs to Jules saying it was not installed. So a start that
+    actually worked vouches for it for AGY_SEEN_DAYS, and the reason is reported exactly rather than guessed."""
+    if CLOUD:
+        return False, 'this is the cloud copy, which has no PC to run it on'
+    if not cfg.get('agy_jobs_on', True):
+        return False, 'the Antigravity CLI is turned off (agy_jobs_on)'
+    if agy_exe():
+        return True, ''
+    seen = s.get('agy_seen', 0)
+    if seen and time.time() - seen < AGY_SEEN_DAYS * 86400:
+        return True, ''  # it ran for us recently, so believe that over a PATH lookup
+    return False, 'the Antigravity CLI is not on PATH (set agy_exe to its full path if it is installed)'
+
+
 def antigravity_stall(s):
     """Hand a for-antigravity job to Jules when Antigravity has not started it. Patrick's split gives Antigravity every
     app-changing job, so without this a paused API (6 hours after one refusal) would stop all app work."""
     a = s.get('antigravity', {})
     paused = s.get('ag_off_until', 0) > time.time() or not GEMINI_KEY
     # the Antigravity CLI on the PC serves the same queue and takes one job at a time, so a backlog for it is not a stall
-    cli = bool(shutil.which('agy')) and not CLOUD and cfg.get('agy_jobs_on', True)
+    cli, why_no_cli = have_agy(s)
     waiting = [i for i in issues('for-antigravity') if str(i['number']) not in a and AG_APP not in {l['name'] for l in i['labels']}]
     keep = cfg.get('agy_backlog', 6) if cli else 0
     if keep:
@@ -1530,7 +1563,7 @@ def antigravity_stall(s):
         waited = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(i['updated_at'].replace('Z', '+00:00'))).total_seconds() / 60
         if waited < AG_STALL_MIN and not (paused and not cli):
             continue
-        why = ('the Gemini API is paused and the Antigravity CLI is not installed' if paused and not cli
+        why = (f'the Gemini API is paused and {why_no_cli}' if paused and not cli
                else f'Antigravity has not started it in {int(waited)} minutes')
         label(n, add=['jules-queue', 'ag-returned'], remove=['for-antigravity'])
         post(n, f'Back to Jules: {why}. Antigravity keeps the app-changing jobs it can take, and this one was waiting.' + SIGN.format(rv.MODEL))
@@ -1645,7 +1678,7 @@ def small_job(s, i):
 def bg_worker(s, key):
     """Run one local coding worker (OpenClaw or Codex) on one job at a time, in the background, so the manager's passes keep going while it codes."""
     W, jobs = BG[key], _bg[key]
-    exe = shutil.which(W['exe'])
+    exe = agy_exe() if key == 'agy' else shutil.which(W['exe'])  # agy may be a shim, or named outright in the settings file
     if CLOUD or not exe or not cfg.get(key + '_jobs_on', key != 'openclaw'):  # OpenClaw is off unless openclaw_jobs_on is true: it failed every job (#500, #514, #515)
         return
     tried = s.setdefault(f'{key}_tried', {})
@@ -1722,6 +1755,7 @@ def bg_worker(s, key):
         log(f'#{n}: Codex uses {CODEX_HEAVY if src in ("for-claude-code", "for-codex") else CODEX_LIGHT}')
     if key == 'agy':
         log(f'#{n}: the Antigravity CLI uses {AGY_MODEL or "the model its sign-in defaults to"}')  # a name this build rejects shows up here, not as a mystery failure
+        s['agy_seen'] = time.time()  # it started, so a later PATH lookup that misses must not report it as uninstalled
     label(n, add=[f'{key}-running'], remove=[src])
     post(n, f'Handed to **{W["name"]}** on Patrick\'s PC ({W["desc"]}). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
     log(f'#{n}: handed to {W["name"]}')
