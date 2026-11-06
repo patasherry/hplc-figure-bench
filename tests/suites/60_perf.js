@@ -175,7 +175,7 @@ function makePNG(w, h) {
     await h2.step('figure');
 
     const groups = await p2.evaluate(() => document.querySelectorAll('#paper svg g[data-wfp]').length);
-    T.check('structural-correctness', groups === 8, `${groups} SVG groups rendered for the 8-step workflow`);
+    T.check('perf.workflow-8-steps-structural-correctness', groups === 8, `${groups} SVG groups rendered for the 8-step workflow`);
     await close2();
   });
 
