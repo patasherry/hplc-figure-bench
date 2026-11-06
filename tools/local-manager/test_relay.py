@@ -69,8 +69,10 @@ bad(resp(drop='verdict'), 'reply', 'verdict')
 bad('no block here', 'reply', 'RELAY RESPONSE')
 # 1: a patch verdict without a patch block
 bad(resp(diff='   ').replace('```diff\n   \n```', ''), 'reply', 'patch')
-# 2: unknown id
-bad(resp(rid='7-ffff'), 'reply', 'no open request with the id')
+# 2: an unknown id is only refused when there is more than one open request to confuse it with. With a single open
+# request the answer can only be about that one, and #1090's was discarded for echoing an id from another issue.
+bad(resp(rid='7-ffff'), 'reply', 'no open request with the id',
+    reqs={**REQS, '7-0002': dict(next(iter(REQS.values())))})
 # 3: a different base
 bad(resp(base='deadbeef00'), 'stale', 'base')
 # 4: context absent from the app at current main (the hunk drifted)
@@ -286,5 +288,57 @@ assert not rl.hunk_present(APP_SRC, ["  if (s.kind === 'nucleic') return {v: 1};
 assert not rl.hunk_present(APP_SRC, ['', '  ']), 'a hunk with nothing but blanks is not present'
 # a line that only matches once its own whitespace is stripped must not match a different line
 assert not rl.hunk_present(APP_SRC, ["  if (s.kind === 'nucleic') return {v: 99};"])
+
+# #1090: the agent echoed `1064-1bab`, an id from an exchange on another issue, and its base too. The answer named the
+# four functions it still needed and was thrown away. With one open request there is nothing else it could answer.
+ONE = {'1090-a04d': {'base': '6fb3cdaea1'}}
+INSUF = """=== HFB-RELAY RESPONSE v1 ===
+id: 1064-1bab
+base: f3b0458558
+verdict: insufficient
+summary: Missing NanoDrop parsing and calculation functions
+changes-a-reported-number: no
+
+need: |
+  ndConc ndConcRaw ndEpsFor massOf
+=== END RESPONSE ===
+"""
+r = rl.validate(INSUF, ONE, 'irrelevant app text')
+assert r['id'] == '1090-a04d', r['id']
+assert r.get('id_fixed') is True
+assert r['verdict'] == 'insufficient'
+
+# two open requests is genuinely ambiguous, so it must still be refused
+TWO = {'1090-a04d': {'base': '6fb3cdaea1'}, '1090-b11e': {'base': '6fb3cdaea1'}}
+try:
+    rl.validate(INSUF, TWO, 'irrelevant app text'); raise AssertionError('two open requests must not be guessed')
+except rl.Bad as b:
+    assert b.kind == 'reply' and 'more than one' in b.msg, b.msg
+
+# a patch still has to name the right base, because it has to apply to known code
+PATCH = """=== HFB-RELAY RESPONSE v1 ===
+id: 1090-a04d
+base: deadbeef12
+verdict: patch
+summary: x
+changes-a-reported-number: no
+
+patch:
+```diff
+--- hplc-figure-bench(WF1.13).html
++++ hplc-figure-bench(WF1.13).html
+@@ -1,2 +1,2 @@
+-a
++b
+```
+
+test: |
+  some UI-level case
+=== END RESPONSE ===
+"""
+try:
+    rl.validate(PATCH, ONE, 'a\nb\n'); raise AssertionError('a patch on the wrong base must be refused')
+except rl.Bad as b:
+    assert b.kind == 'stale' and 'base' in b.msg, b.msg
 
 print('ok')
