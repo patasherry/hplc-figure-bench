@@ -1164,7 +1164,7 @@ button,input,select,textarea{font-family:inherit}
         </label>
         <label class="f">Inset size (fraction of width)<input type="number" step="0.05" min="0.15" max="0.6" id="o-zoomInsetSize" data-opt="zoomInsetSize"></label>
       </div>
-      <div class="btns"><button class="btn quiet" id="resetRange" type="button">Reset to auto</button></div>
+      <div class="btns"><button class="btn quiet" id="resetRange" type="button">Reset to auto</button><button class="btn quiet" id="zoomPeak" type="button" title="Zoom to selected peak">Zoom to peak</button></div>
       <p class="hint" data-for="run">The window is saved per run and also applies in the workflow figure.</p>
     </section>
 
@@ -4914,6 +4914,7 @@ document.querySelectorAll('details.sub[data-sub]').forEach(d => { try { const v 
 $('#panel').addEventListener('change', e => { if (e.target.type === 'radio') onOpt(e); });
 $('#o-dpi').addEventListener('change', onOpt);
 $('#resetRange').addEventListener('click', () => { const ro = rangeObj(); RANGE.forEach(k => ro[k] = ''); syncControls(); render(); });
+$('#zoomPeak').addEventListener('click', () => { const ro = rangeObj(); const rs = curRun() ? [curRun()] : traces; for (const r of rs) { let pk = null; if (r.integ && r.integ.length) { const q = r.integ[r.integ.length-1]; pk = {a: q.a, b: q.b}; } else if (r.peaks && r.peaks.length) { const p = r.peaks.find(x => x.label) || r.peaks.slice().sort((p1,p2)=>p2.prom-p1.prom)[0]; if (p) { const pr = processTrace(r); const idx = peakApex(pr.xs, pr.ys, p.x); let l = idx, r_idx = idx; while(l > 0 && pr.ys[l] > pr.ys[idx]*0.1) l--; while(r_idx < pr.ys.length-1 && pr.ys[r_idx] > pr.ys[idx]*0.1) r_idx++; pk = {a: pr.xs[l], b: pr.xs[r_idx]}; } } if (pk && pk.a != null && pk.b != null) { const w = pk.b - pk.a; ro.xmin = pk.a - w*0.1; ro.xmax = pk.b + w*0.1; syncControls(); render(); return; } } });
 $('#detectAll').addEventListener('click', () => { traces.forEach(detectPeaks); renderList(); render(); });
 $('#clearAll').addEventListener('click', () => { traces.forEach(t => t.peaks = []); renderList(); render(); });
 
