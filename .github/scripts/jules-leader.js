@@ -68,9 +68,23 @@ module.exports = async ({github, context, core}) => {
   for (const i of running) { const {s} = await getState(i.number); if (!s.session) continue; let ses;
     try { ses = await jules(s.session); } catch (e) { say(`#${i.number}: could not read session: ${e.message}`); continue; }
     const st = String(ses.state || '').toUpperCase(), pr = (ses.outputs || []).map(o => o.pullRequest && o.pullRequest.url).find(Boolean);
-    /* relay the coordinator's or owner's own answers: a human comment starting "Answer for Jules:" goes to the session as written */
+    /* Relay the coordinator's or owner's own answers: a human comment starting "Answer for Jules:" goes to the session
+       as written. TRUSTED is the point of this filter. The repository is public, so anyone with a GitHub account can
+       comment on an open issue, and this text is sent verbatim as an instruction to an agent that can push. Until
+       2026-11-05 the only test was `type !== 'Bot'`, so any stranger could steer a running session. An outside comment
+       did appear on #1066 that day (deleted by the owner). author_association is GitHub's own answer to "may this
+       person speak for the repository", and it cannot be set by the commenter. */
     { const cs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: i.number, per_page: 100});
-      const ans = cs.filter(c => c.id > (s.relayed || 0) && c.user && c.user.type !== 'Bot' && /^answer for jules:/i.test(c.body.trim()));
+      const TRUSTED = new Set(['OWNER', 'COLLABORATOR', 'MEMBER']);
+      const trusted = c => TRUSTED.has(String(c.author_association || '').toUpperCase());
+      const fresh = cs.filter(c => c.id > (s.relayed || 0) && c.user && c.user.type !== 'Bot' && /^answer for jules:/i.test(c.body.trim()));
+      const ans = fresh.filter(trusted);
+      /* say it once, not every three minutes: its own watermark, so ignoring never advances the relay one */
+      for (const c of fresh.filter(c => !trusted(c) && c.id > (s.ignored || 0))) {
+        s.ignored = Math.max(s.ignored || 0, c.id);
+        say(`#${i.number}: ignored an "Answer for Jules:" comment from @${c.user.login} (${c.author_association}): only the owner and collaborators can steer a session`);
+        await putState(i.number, s, `Jules leader: ignored an answer from @${c.user.login}, who is not the owner or a collaborator. Only they can steer a running session.`);
+      }
       for (const c of ans) { await jules(`${s.session}:sendMessage`, {prompt: c.body.trim().replace(/^answer for jules:\s*/i, '') + '\n\nThen finish, commit and open the pull request.'}).catch(e => say(`#${i.number}: relay failed: ${e.message}`));
         s.relayed = c.id; s.relayedAt = c.created_at; await putState(i.number, s, `Jules leader: relayed an answer from @${c.user.login} to Jules.`); say(`#${i.number}: relayed answer`); } }
     /* keep the last seen state on the issue, so a stuck session is easy to spot */
