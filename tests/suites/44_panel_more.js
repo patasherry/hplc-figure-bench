@@ -85,6 +85,34 @@ const {open, H, suite, src} = require('../lib/harness');
     T.check('search_placeholder_text', searchPlaceholder === 'Search settings/data/files', 'Search placeholder should be "Search settings/data/files" to reduce ambiguity');
   });
 
+
+  await T.t('gel-meta-tooltip', async () => {
+    try {
+        await p.setInputFiles('#file', [require('path').join(__dirname, '../data/chrom/fixture_gauss_resolved.csv')]);
+        await p.waitForTimeout(500);
+
+        await p.setInputFiles('#file', [require('path').join(__dirname, '../data/qa/picture.jpg')]);
+        await p.waitForTimeout(500);
+
+        await p.evaluate(() => {
+          const selectEl = document.querySelector('#laneTable .lrow select[data-lk="assign"]');
+          if (selectEl) {
+             selectEl.selectedIndex = 2; // the run
+             selectEl.dispatchEvent(new Event('change', {bubbles: true}));
+          }
+        });
+        await p.waitForTimeout(500);
+
+        const htmlContent = await p.evaluate(() => {
+           const el = document.querySelector('.gelc .meta');
+           return el ? el.innerHTML : 'no-meta';
+        });
+        T.check('gel-meta-tooltip.has-title', htmlContent.includes('<span title="fixture gauss resolved">fixture gauss res…</span>'), 'HTML: ' + htmlContent);
+    } catch(e) {
+        T.check('gel-meta-tooltip.has-title', false, 'Timeout or Error: ' + e.message);
+    }
+  });
+
   T.check('no_errors', !errs.length, errs.join('|'));
   await close();
   if (T.done) T.done();

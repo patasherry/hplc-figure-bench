@@ -4671,7 +4671,7 @@ $('#figtabs').addEventListener('keydown', e => { const k = {ArrowRight: 1, Arrow
 
 function gelMeta(g){
   const asg = gelLabels(g).map((_, i) => laneAssign(g, i)), short = t => t.length > 18 ? t.slice(0, 17) + '…' : t;
-  const parts = PREP_LANE.map(k => { const c = asg.filter(a => a === k).length; return c ? `${PREP_NAME[k]} ×${c}` : ''; }).concat(runs.map(r => { const c = asg.filter(a => a === r.id).length; return c ? `${esc(short(shortRunName(r)))} ×${c}` : ''; })).filter(Boolean), nm = asg.filter(a => a === 'marker').length;
+  const parts = PREP_LANE.map(k => { const c = asg.filter(a => a === k).length; return c ? `${PREP_NAME[k]} ×${c}` : ''; }).concat(runs.map(r => { const c = asg.filter(a => a === r.id).length; return c ? `<span title="${esc(r.name)}">${esc(short(shortRunName(r)))}</span> ×${c}` : ''; })).filter(Boolean), nm = asg.filter(a => a === 'marker').length;
   return (parts.length ? parts.join(', ') : 'No lanes assigned to a run') + (nm ? `, ladder ×${nm}` : ''); }
 function gelCardBody(g){
   const labs = gelLabels(g), asg = labs.map((_, i) => laneAssign(g, i)), samp = new Set(asg.filter(a => a !== 'marker'));
