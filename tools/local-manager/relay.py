@@ -534,11 +534,19 @@ def validate(resp_text, requests, app_text, base_text=None):
     This fallback is a safety net, not the fix for #1064. That one failed on indentation, in hunk_present."""
     r = parse_response(resp_text)                                                    # 1
     req = requests.get(r['id'])
+    if req is None and len(requests) == 1:
+        # One open request on the issue, so there is nothing for this answer to be about but that one. On #1090 the agent
+        # echoed `1064-1bab`, the id of an exchange on another issue entirely, and a usable answer was thrown away over
+        # it. Ambiguity is the only thing the id protects against, and with a single open request there is none.
+        r['id'], req = next(iter(requests)), next(iter(requests.values()))
+        r['id_fixed'] = True
     if req is None:                                                                  # 2
-        raise Bad('reply', f'there is no open request with the id "{r["id"]}" on this issue. '
-                           'Either it was already answered and filed, or it expired, or the id was mistyped: '
-                           'check the newest request comment for the id to echo')
-    if not same_sha(r['base'], req['base']):                                         # 3
+        raise Bad('reply', f'there is no open request with the id "{r["id"]}" on this issue, and there is more than one '
+                           'open, so I cannot tell which it answers. Check the newest request comment for the id to echo')
+    # The base only matters for a patch, which has to apply to known code. An 'insufficient' or 'answer' carries no hunks,
+    # so refusing it over a stale base throws away the one thing it is for: naming what the agent still needs. #1090's
+    # answer named four functions and was discarded because its base came from an older exchange.
+    if r['verdict'] == 'patch' and not same_sha(r['base'], req['base']):             # 3
         raise Bad('stale', f'base "{r["base"]}" is not the request\'s base "{req["base"]}"')
     files = parse_diff(r['patch']) if r['verdict'] == 'patch' else []
     if r['verdict'] == 'patch':

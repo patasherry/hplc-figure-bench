@@ -693,18 +693,29 @@ def relay_file(path):
 
 
 HARNESS = ['tests/lib/harness.js', 'tests/suites/25_gels.js']
+RELAY_TOTAL_CHARS = cfg.get('relay_max_request_chars', 30000)  # the whole request, so what Patrick pastes stays something an agent will read
+RELAY_EXTRA_CHARS = cfg.get('relay_max_extra_chars', 12000)    # all attached files together
+RELAY_FILE_CHARS = cfg.get('relay_max_file_chars', 8000)       # any one of them
 
 
-def relay_extra(title, body):
+def relay_extra(title, body, room=None):
     """The whole files a request carries beside the excerpt. Every patch response has to bring a test with it, so the harness
     always rides along: without it an agent writes the test against @playwright/test, which this repository does not use.
-    A job that is about checks in its own right gets a worked suite too."""
+    A job that is about checks in its own right gets a worked suite too.
+
+    `room` is the characters left for these after the excerpt. The excerpt is the point of the request, so the attachments
+    give way, not the code the question is about. #1090's request went out at 43,166 characters with a whole gel
+    densitometry suite attached to a job about the Construct sequence field, and the agent answered that it could not work
+    with what it had been given."""
     want = HARNESS if rl.wants_tests(title, body) else HARNESS[:1]
-    out = []
+    out, left = [], RELAY_EXTRA_CHARS if room is None else max(0, room)
     for path in want:
         t = relay_file(path)
-        if t:
-            out.append((path, t if len(t) < 8000 else t[:8000] + '\n... (truncated)'))  # the excerpt is capped too (rl.MAX_CHARS): a request has to stay pasteable
+        if not t or left < 1200:  # a file cut below this teaches an agent nothing
+            continue
+        cut = min(len(t), left, RELAY_FILE_CHARS)
+        out.append((path, t if cut >= len(t) else t[:cut] + '\n... (truncated)'))
+        left -= cut
     return out
 
 
@@ -733,7 +744,13 @@ def relay_send(n, issue, app_text, base, ranges, board=False):
            'so it comes here for a bigger reasoning budget before it goes to the work queue.\n\n' + rl.BOARD_MARK + '\n') if board else ''
     body = re.sub(r'^.*relay-lines:.*$', '', issue.get('body') or '', flags=re.M).strip()[:6000]
     exp = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=RELAY_HOURS)
-    req = rl.build_request(rid, base, app_text, n, exp, issue['title'], body or issue['title'], ranges, relay_extra(issue['title'], body))
+    # The excerpt first, then whatever room is left for the attached files: a request has to stay something an agent will
+    # read in one go. #1090's went out at 43,166 characters and came back "insufficient".
+    used = rl.chars_of(app_text.split('\n'), ranges or [])
+    req = rl.build_request(rid, base, app_text, n, exp, issue['title'], body or issue['title'], ranges,
+                           relay_extra(issue['title'], body, room=min(RELAY_EXTRA_CHARS, RELAY_TOTAL_CHARS - used - 3000)))
+    if len(req) > RELAY_TOTAL_CHARS * 1.2:
+        log(f'relay request {rid} is {len(req)} characters, over the {RELAY_TOTAL_CHARS} budget')
     post(n, why + f'**Relay request `{rid}`.** Paste the block below into the offline agent as its whole prompt, then paste its reply back here as a comment. Valid until {rl.iso(exp)}.\n\n'
             + rl.MARK.format(rid, base) + '\n````\n' + req + '\n````' + SIGN.format(rv.MODEL))
     log(f'relay request {rid} posted on #{n}')
