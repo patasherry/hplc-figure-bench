@@ -756,6 +756,14 @@ button,input,select,textarea{font-family:inherit}
           <div class="btns"><button type="button" class="btn primary" id="btwNdAdd">Load NanoDrop export</button><input type="file" id="btwNdFile" hidden></div>
           <div id="btwNdList"></div>
           <label class="f" title="The volume left in the concentrator, the one your NanoDrop readings were taken in">Volume after concentrating (mL)<input type="number" id="btw-vOut" data-btw="vOut" min="0" step="any" placeholder="e.g. 0.25"></label>
+          <label class="check f"><input type="checkbox" id="btw-doKeep" data-btw="doKeep"> Save some of the sample</label>
+          <div id="btwKeepGroup" hidden>
+            <div class="row">
+              <label class="f" title="Volume loaded onto the next step">Volume loaded (mL)<input type="number" id="btw-vLoad" data-btw="vLoad" min="0" step="any"></label>
+              <label class="f" title="Volume retained">Volume stored (mL)<input type="number" id="btw-vKeep" data-btw="vKeep" min="0" step="any"></label>
+            </div>
+            <label class="f">Storage details<input type="text" id="btw-keptHow" data-btw="keptHow" placeholder="e.g. frozen at -80 °C"></label>
+          </div>
           <p class="hint" id="btwCarry"></p>
         </div>
         <details class="cardtext" id="btwMore"><summary>Details for the methods (optional)</summary>
@@ -4338,7 +4346,7 @@ const BTW_T = {conc: 'Concentrated', dil: 'Diluted', exch: 'Buffer exchanged', f
 const btwOf = r => { if (!r || !prep.btw || !prep.btw[r.id]) return null; const p = r.fracs ? poolRows(r) : null; return Object.assign({how: 'conc', _poolVol: p && xUnit(r) === 'mL' && p.vol > 0 ? +fmt(p.vol, 1) : 0}, prep.btw[r.id]); };
 const btwShort = b => { const vo = numOr(b.vOut, 0); return b.how === 'dil' ? (vo > 0 ? `Diluted to ${fmtAuto(vo)} mL` : 'Diluted') : b.how === 'exch' ? 'Buffer exchanged' : b.how === 'filt' ? 'Filtered' : b.how === 'hold' ? 'Held overnight' : vo > 0 ? `Conc. to ${fmtAuto(vo)} mL` : 'Concentrated'; };
 const arrowNote = r => String(r.note || '').trim();
-function btwMg(r){ const b = btwOf(r); if (!b) return null; const ms = poolMeas(r), c = ms.src === 'btw' ? ms.c : null, vo = numOr(b.vOut, null); if (c == null || vo == null) return null; const p = poolRows(r), mg = c*vo; return {mg, pct: p && p.mgArea > 0 ? 100*mg/p.mgArea : null}; }
+function btwMg(r){ const b = btwOf(r); if (!b) return null; const ms = poolMeas(r), c = ms.src === 'btw' ? ms.c : null, vo = numOr(b.vOut, null); if (c == null || vo == null) return null; const p = poolRows(r); const vLoad = b.doKeep && numOr(b.vLoad, null) !== null ? numOr(b.vLoad, 0) : vo; const mg = c*vLoad; return {mg, pct: p && p.mgArea > 0 ? 100*mg/p.mgArea : null, mgOut: c*vo, vLoad, vKeep: b.doKeep ? numOr(b.vKeep, null) : null, keptHow: b.doKeep ? String(b.keptHow || '') : ''}; }
 function btwSentence(b){
   const dv = String(b.device || '').trim(), mw = String(b.mwco || '').trim(), nt = String(b.note || '').trim().replace(/\.$/, ''), vi = numOr(b.vIn, 0) || numOr(b._poolVol, 0), vo = numOr(b.vOut, 0);
   const how = {conc: 'concentrated', dil: 'diluted', exch: 'buffer exchanged', filt: 'filtered', hold: 'held overnight'}[b.how] || 'concentrated';
@@ -6717,7 +6725,7 @@ $('#tl').addEventListener('click', e => { const ad = e.target.closest('[data-add
 /* the between-columns fields edit the pool the current step follows */
 function syncBtw(){ const rid = curStep.startsWith('btw:') ? curStep.slice(4) : '', b = (prep.btw || {})[rid] || {};
   { const r = runs.find(x => x.id === rid), p = r ? poolRows(r) : null; $('#btw-vIn').placeholder = p && xUnit(r) === 'mL' && p.vol > 0 ? `auto: ${fmt(p.vol, 1)}` : ''; }
-  document.querySelectorAll('#prepPanel [data-btw]').forEach(el => { if (el === document.activeElement) return; const v = b[el.dataset.btw] ?? (el.dataset.btw === 'how' ? 'conc' : ''); if (el.value !== String(v)) el.value = v; }); btwCarry(); }
+  document.querySelectorAll('#prepPanel [data-btw]').forEach(el => { if (el === document.activeElement) return; const v = b[el.dataset.btw] ?? (el.dataset.btw === 'how' ? 'conc' : el.type === 'checkbox' ? false : ''); if (el.type === 'checkbox') el.checked = !!v; else if (el.value !== String(v)) el.value = v; }); $('#btwKeepGroup').hidden = !$('#btw-doKeep').checked; btwCarry(); }
 /* what the reading does to the column run before it */
 function btwCarry(){ const el = $('#btwCarry'), rid = curStep.startsWith('btw:') ? curStep.slice(4) : '', r = runs.find(x => x.id === rid), p = r ? poolRows(r) : null; if (!el) return;
   const nm = r ? shortRunName(r) : 'the run', F = r ? ndFinalOf(r) : [], ms = r ? poolMeas(r) : {}, b = (prep.btw || {})[rid] || {}, card = r && numOr(r.poolConc, 0) > 0;
@@ -6741,10 +6749,14 @@ $('#btwNdFile').addEventListener('change', async e => { const f = e.target.files
   addNanoDrop(list, f.name, rid); syncBtw(); renderList(); render(); if (!(numOr(prep.btw[rid].vOut, 0) > 0)) $('#btw-vOut').focus(); });
 $('#btwNdList').addEventListener('click', e => { const b = e.target.closest('[data-btwndx]'); if (!b) return; ndSamples = ndSamples.filter(x => x.id !== b.dataset.btwndx); $('#ndList')._n = -1; renderND(); btwCarry(); renderList(); render(); });
 const btwEdit = e => { const el = e.target.closest('[data-btw]'); if (!el || !curStep.startsWith('btw:')) return; const rid = curStep.slice(4); prep.btw = prep.btw || {};
-  prep.btw[rid] = Object.assign({how: 'conc'}, prep.btw[rid], {[el.dataset.btw]: el.value}); const r = runs.find(x => x.id === rid);
+  prep.btw[rid] = Object.assign({how: 'conc'}, prep.btw[rid], {[el.dataset.btw]: el.type === 'checkbox' ? el.checked : el.value}); const r = runs.find(x => x.id === rid);
+  if (el.dataset.btw === 'doKeep') $('#btwKeepGroup').hidden = !el.checked;
   /* one reading per pool: a value typed here replaces one left on the run card */
   if (r && ['conc', 'vOut'].includes(el.dataset.btw) && (r.poolConc != null || r.poolFinalVol != null)) { if (r.poolConc != null && prep.btw[rid].conc === '' && el.dataset.btw !== 'conc') prep.btw[rid].conc = r.poolConc; delete r.poolConc; delete r.poolFinalVol; }
-  btwCarry(); render(); if (e.type === 'change' && ['conc', 'vOut'].includes(el.dataset.btw)) setTimeout(() => { renderList(); render(); }, 0); };
+  if (el.dataset.btw === 'vLoad' && el.value !== '') { const vO = numOr($('#btw-vOut').value, null), vL = numOr(el.value, null); if (vO !== null && vL !== null && vL <= vO) { $('#btw-vKeep').value = (vO - vL).toFixed(2); prep.btw[rid].vKeep = $('#btw-vKeep').value; } }
+  if (el.dataset.btw === 'vKeep' && el.value !== '') { const vO = numOr($('#btw-vOut').value, null), vK = numOr(el.value, null); if (vO !== null && vK !== null && vK <= vO) { $('#btw-vLoad').value = (vO - vK).toFixed(2); prep.btw[rid].vLoad = $('#btw-vLoad').value; } }
+  if (el.dataset.btw === 'vOut' && el.value !== '') { const vO = numOr(el.value, null), vL = numOr($('#btw-vLoad').value, null); if (vO !== null && vL !== null && vL <= vO) { $('#btw-vKeep').value = (vO - vL).toFixed(2); prep.btw[rid].vKeep = $('#btw-vKeep').value; } }
+  btwCarry(); render(); if (e.type === 'change' && ['conc', 'vOut', 'doKeep', 'vLoad', 'vKeep'].includes(el.dataset.btw)) setTimeout(() => { renderList(); render(); }, 0); };
 $('#prepPanel').addEventListener('input', btwEdit); $('#prepPanel').addEventListener('change', btwEdit);
 const metaSet = (k, f, v) => { const all = prep.stepMeta = prep.stepMeta || {}; all[k] = Object.assign({}, all[k], {[f]: v}); };
 $('#ssDate').addEventListener('change', e => { metaSet(curStep, 'date', e.target.value); render(); });

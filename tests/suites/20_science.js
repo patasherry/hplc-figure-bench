@@ -421,4 +421,31 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
 
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
+
+  await T.t('p9_allocation_retention', async () => {
+    const {p, errs, close} = await open(), h = H(p); await h.newProject('Alloc');
+    await h.addRun(F.fdh); await h.addRun(F.imac); await h.pool('A2-A6');
+    await h.step('run:1'); await h.pool('T1-T6');
+    await h.step('run:2');
+
+    await p.evaluate(() => { window.__HFB.prep.btw = window.__HFB.prep.btw || {}; window.__HFB.prep.btw[Object.keys(window.__HFB.prep.btw)[0]] = {how: 'conc', conc: 10.0, vOut: 5.0}; });
+    await h.wait(400);
+
+    await h.step('figure');
+    const table = async () => { await h.step('figure'); const rs = await h.sumTable(); if (!rs.length) return {head: [], rows: []}; const head = rs[0];
+      return {head, rows: rs.slice(1).filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((k, i) => [k, r[i]])))}; };
+    const sum = await table();
+    const initialYield = Number(sum.rows[sum.rows.length - 1]['Step yield (%)']);
+
+    await p.evaluate(() => { window.__HFB.prep.btw[Object.keys(window.__HFB.prep.btw)[0]].doKeep = true; window.__HFB.prep.btw[Object.keys(window.__HFB.prep.btw)[0]].vLoad = 1.0; });
+    await h.wait(400);
+
+    await h.step('figure');
+    const sumPost = await table();
+    const postAllocStepY = Number(sumPost.rows[sumPost.rows.length - 1]['Step yield (%)']);
+
+    T.check('allocation_scales_step_yield', postAllocStepY < initialYield * 0.3, `post-alloc yield ${postAllocStepY} should be significantly lower than ${initialYield}`);
+    await close();
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
