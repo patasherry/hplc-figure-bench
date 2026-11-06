@@ -139,5 +139,110 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       T.check('wf/no-errors', errs.length === 0, errs.join(' | '));
     } catch (e) { T.check('wf/threw', false, String(e).slice(0, 300)); } finally { await close(); }
   }
+  /* Aspect-ratio locked resizing and boundary clamping for zoom inset (Issue #1035) */
+  {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await p.click('#homeQuick'); await h.wait(900);
+      await setOpt(p, 'o-zoomInset', true); await h.wait(500);
+
+      const hasContainer = await p.evaluate(() => !!document.getElementById('zoomInsetContainer'));
+      T.check('resize/container-id', hasContainer, '#zoomInsetContainer element exists');
+
+      const handles = await p.evaluate(() => [...document.querySelectorAll('#zoomInsetContainer .zoom-inset-handles rect[data-handle]')].map(el => el.getAttribute('data-handle')));
+      T.check('resize/handles-exist', handles.includes('se') && handles.includes('nw'), 'handles present: ' + handles.join(','));
+
+      // Initial dimensions and aspect ratio
+      const initBox = await p.evaluate(() => {
+        const c = document.getElementById('zoomInsetContainer');
+        const r = c.getBoundingClientRect();
+        return { w: r.width, h: r.height, ratio: r.width / r.height };
+      });
+
+      // Drag 'se' handle to resize - without Shift (aspect ratio locked by default)
+      const seBox = await p.evaluate(() => {
+        const h = document.querySelector('#zoomInsetContainer [data-handle="se"]');
+        const r = h.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      });
+
+      await p.mouse.move(seBox.x, seBox.y);
+      await p.mouse.down();
+      // Move diagonally with unequal delta X and Y to test aspect ratio locking
+      await p.mouse.move(seBox.x + 60, seBox.y + 50, {steps: 5});
+      await p.mouse.up();
+      await h.wait(400);
+
+      const lockedBox = await p.evaluate(() => {
+        const c = document.getElementById('zoomInsetContainer');
+        const r = c.getBoundingClientRect();
+        return { w: r.width, h: r.height, ratio: r.width / r.height };
+      });
+
+      T.check('resize/aspect-ratio-locked-by-default',
+        lockedBox.w > initBox.w && Math.abs(lockedBox.ratio - initBox.ratio) < 0.05,
+        'initial ratio: ' + initBox.ratio.toFixed(3) + ', locked ratio: ' + lockedBox.ratio.toFixed(3) + ', w: ' + initBox.w.toFixed(1) + ' -> ' + lockedBox.w.toFixed(1));
+
+      // Drag 'se' handle with Shift held - aspect ratio should be unlocked (freeform)
+      const seBox2 = await p.evaluate(() => {
+        const h = document.querySelector('#zoomInsetContainer [data-handle="se"]');
+        const r = h.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      });
+
+      await p.keyboard.down('Shift');
+      await p.mouse.move(seBox2.x, seBox2.y);
+      await p.mouse.down();
+      // Drag vertically downwards by 70px to change height independently of width
+      await p.mouse.move(seBox2.x, seBox2.y + 70, {steps: 5});
+      await p.mouse.up();
+      await p.keyboard.up('Shift');
+      await h.wait(400);
+
+      const unlockedBox = await p.evaluate(() => {
+        const c = document.getElementById('zoomInsetContainer');
+        const r = c.getBoundingClientRect();
+        return { w: r.width, h: r.height, ratio: r.width / r.height };
+      });
+
+      T.check('resize/aspect-ratio-unlocked-with-shift',
+        Math.abs(unlockedBox.ratio - lockedBox.ratio) > 0.15,
+        'unlocked ratio: ' + unlockedBox.ratio.toFixed(3) + ' vs locked ratio: ' + lockedBox.ratio.toFixed(3));
+
+      // Boundary clamping: drag inset far beyond figure bottom-right bounds
+      const seBox3 = await p.evaluate(() => {
+        const h = document.querySelector('#zoomInsetContainer [data-handle="se"]');
+        const r = h.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      });
+
+      await p.mouse.move(seBox3.x, seBox3.y);
+      await p.mouse.down();
+      await p.mouse.move(seBox3.x + 1000, seBox3.y + 1000, {steps: 5});
+      await p.mouse.up();
+      await h.wait(400);
+
+      const clamped = await p.evaluate(() => {
+        const svg = document.querySelector('#paper svg');
+        const c = document.getElementById('zoomInsetContainer');
+        const sRect = svg.getBoundingClientRect();
+        const cRect = c.getBoundingClientRect();
+        return {
+          insideRight: cRect.right <= sRect.right + 1.5,
+          insideBottom: cRect.bottom <= sRect.bottom + 1.5,
+          insideLeft: cRect.left >= sRect.left - 1.5,
+          insideTop: cRect.top >= sRect.top - 1.5,
+          cRect: { right: cRect.right, bottom: cRect.bottom },
+          sRect: { right: sRect.right, bottom: sRect.bottom }
+        };
+      });
+
+      T.check('resize/boundary-clamped-inside-figure',
+        clamped.insideRight && clamped.insideBottom && clamped.insideLeft && clamped.insideTop,
+        'clamped within figure: ' + JSON.stringify(clamped));
+
+      T.check('resize/no-errors', errs.length === 0, errs.join(' | '));
+    } catch (e) { T.check('resize/threw', false, String(e).slice(0, 300)); } finally { await close(); }
+  }
   T.done();
 })();

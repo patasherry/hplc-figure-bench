@@ -1361,7 +1361,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
   intMethod:'gauss', poolStyle:'band', poolColor:'#E69F00', poolAlpha:0.3, intBase:'line', intLabel:'num', intProm:5, intFill:true, eps:'', path:2,
   wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfFull:false, wfArrows:true, gelFrame:true, ladder:'biorad',
-  zoomMode:false, zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4,
+  zoomMode:false, zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4, zoomInsetW:0, zoomInsetH:0, zoomInsetX:null, zoomInsetY:null,
   preset:'single', w:3.5, h:2.6, fs:8, lw:0.75, font:'Arial', palette:'okabe', bg:true, dpi:600};
 const RANGE = ['xmin','xmax','ymin','ymax'];
 /* Native E. coli proteins commonly co-purified by IMAC (Bolanos-Garcia & Davies 2006, Table 1), DnaK, and common purification additives.
@@ -2207,11 +2207,19 @@ function zoomWindow(lo, hi, a, b){
   const za = Math.max(lo, hasA ? +a : hasB ? lo : lo + (hi - lo)/3), zb = Math.min(hi, hasB ? +b : hasA ? hi : lo + (hi - lo)*2/3);
   return zb > za ? {a: za, b: zb} : null;
 }
-function zoomCompose(S, m, win, buildIn){
+function zoomCompose(S, m, win, buildIn, zObj){
   const o = opt, pos = zoomPos(), beside = pos === 'beside', g = m.geo, {L, R, T, B} = g;
-  const iw = beside ? S.W*zoomSize() : (R - L)*zoomSize(), ih = beside ? S.H : Math.min((B - T)*0.8, iw*S.H/S.W*1.15);
+  zObj = zObj || opt;
+  let iw = (zObj && numOr(zObj.zoomInsetW, 0) > 0) ? +zObj.zoomInsetW : (beside ? S.W*zoomSize() : (R - L)*zoomSize());
+  let ih = (zObj && numOr(zObj.zoomInsetH, 0) > 0) ? +zObj.zoomInsetH : (beside ? S.H : Math.min((B - T)*0.8, iw*S.H/S.W*1.15));
+  iw = Math.max(30, Math.min(S.W, iw)); ih = Math.max(20, Math.min(S.H, ih));
+  const pad = 3;
+  let ix = (zObj && zObj.zoomInsetX !== null && zObj.zoomInsetX !== undefined && isFinite(+zObj.zoomInsetX)) ? +zObj.zoomInsetX : (beside ? S.W - iw : pos === 'tl' ? L + pad : R - iw - pad);
+  let iy = (zObj && zObj.zoomInsetY !== null && zObj.zoomInsetY !== undefined && isFinite(+zObj.zoomInsetY)) ? +zObj.zoomInsetY : (beside ? 0 : pos === 'br' ? B - ih - pad : T + pad);
+  ix = Math.max(0, Math.min(S.W - iw, ix)); iy = Math.max(0, Math.min(S.H - ih, iy));
+  if (ix + iw > S.W) iw = Math.max(30, S.W - ix);
+  if (iy + ih > S.H) ih = Math.max(20, S.H - iy);
   const ins = buildIn(iw, ih); if (!ins || !ins.svg) return null;
-  const pad = 3, ix = beside ? S.W - iw : pos === 'tl' ? L + pad : R - iw - pad, iy = beside ? 0 : pos === 'br' ? B - ih - pad : T + pad;
   const src = g.uv ? [{xs: g.uv.xs, yp: g.uv.ys}] : g.P; let mx = -Infinity;
   src.forEach(p => { for (let i = Math.max(0, lowerBound(p.xs, win.a)); i < p.xs.length && p.xs[i] <= win.b; i++) if (p.yp[i] > mx) mx = p.yp[i]; });
   const rTop = isFinite(mx) ? Math.max(T, Math.min(B - 4, g.py(mx) - 3)) : T, xa = g.px(win.a), xb = g.px(win.b);
@@ -2226,8 +2234,22 @@ function zoomCompose(S, m, win, buildIn){
   if (beside && o.bg) out.push(`<rect width="${r2(S.W)}" height="${r2(S.H)}" fill="#ffffff"/>`);
   out.push(`<g data-plot="main">${inner}</g>`);
   out.push(`<g id="zoom-region" stroke="#777777" stroke-width="${r2(Math.max(0.3, S.aw*0.6))}" fill="none"><rect x="${r2(xa)}" y="${r2(rTop)}" width="${r2(xb - xa)}" height="${r2(B - rTop)}" fill="#000000" fill-opacity="0.05"/>${con}</g>`);
-  out.push(`<g id="zoom-inset" data-plot="inset" transform="translate(${r2(ix)} ${r2(iy)})">${beside ? '' : `<rect width="${r2(iw)}" height="${r2(ih)}" fill="#ffffff" stroke="#999999" stroke-width="0.4"/>`}${ins.svg}</g></svg>`);
-  return {svg: out.join(''), geo: g};
+  let handles = '';
+  if (FIG_SCREEN && !beside) {
+    const hw = 7, hit = 14;
+    handles = `<g class="zoom-inset-handles">`
+      + `<rect class="zoom-inset-handle" data-handle="se" x="${r2(iw - hw)}" y="${r2(ih - hw)}" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:se-resize;pointer-events:all;"/>`
+      + `<rect data-handle="se" x="${r2(iw - hit)}" y="${r2(ih - hit)}" width="${hit}" height="${hit}" fill="transparent" style="cursor:se-resize;pointer-events:all;"/>`
+      + `<rect class="zoom-inset-handle" data-handle="sw" x="0" y="${r2(ih - hw)}" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:sw-resize;pointer-events:all;"/>`
+      + `<rect data-handle="sw" x="0" y="${r2(ih - hit)}" width="${hit}" height="${hit}" fill="transparent" style="cursor:sw-resize;pointer-events:all;"/>`
+      + `<rect class="zoom-inset-handle" data-handle="ne" x="${r2(iw - hw)}" y="0" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:ne-resize;pointer-events:all;"/>`
+      + `<rect data-handle="ne" x="${r2(iw - hit)}" y="0" width="${hit}" height="${hit}" fill="transparent" style="cursor:ne-resize;pointer-events:all;"/>`
+      + `<rect class="zoom-inset-handle" data-handle="nw" x="0" y="0" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:nw-resize;pointer-events:all;"/>`
+      + `<rect data-handle="nw" x="0" y="0" width="${hit}" height="${hit}" fill="transparent" style="cursor:nw-resize;pointer-events:all;"/>`
+      + `</g>`;
+  }
+  out.push(`<g id="zoomInsetContainer" class="zoom-inset" data-plot="inset" transform="translate(${r2(ix)} ${r2(iy)})"><g id="zoom-inset">${beside ? '' : `<rect class="zoom-inset-bg" width="${r2(iw)}" height="${r2(ih)}" fill="#ffffff" stroke="#999999" stroke-width="0.4"/>`}${ins.svg}</g>${handles}</g></svg>`);
+  return {svg: out.join(''), geo: Object.assign({}, g, {zoomInset: {x: ix, y: iy, w: iw, h: ih, figW: S.W, figH: S.H, zObj}})};
 }
 
 /* ---------- figure: HPLC overlay ---------- */
@@ -2374,7 +2396,7 @@ function buildSVG(ov){
   const m = withOpt({xmin: '', xmax: ''}, () => buildOverlaySVG(beside ? {noZoom: true, nest: true, wPt: S.W*(1 - zoomSize()), hPt: S.H} : {noZoom: true}));
   if (!m.svg) return m;
   const win = zoomWindow(m.geo.xlo, m.geo.xhi, wa, wb);
-  const z = win && zoomCompose(S, m, win, (w, h) => withOpt({xmin: win.a, xmax: win.b, legend: 'none', scalebar: false, xlabel: '', showY: true, ylabel: opt.ylabel === DEF.ylabel ? 'Absorbance (mAU)' : opt.ylabel, ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildOverlaySVG({noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})));
+  const z = win && zoomCompose(S, m, win, (w, h) => withOpt({xmin: win.a, xmax: win.b, legend: 'none', scalebar: false, xlabel: '', showY: true, ylabel: opt.ylabel === DEF.ylabel ? 'Absorbance (mAU)' : opt.ylabel, ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildOverlaySVG({noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})), opt);
   return z || buildOverlaySVG({noZoom: true});
 }
 
@@ -2391,7 +2413,7 @@ function buildRunSVG(run, ov){
   if (!m.svg) return m;
   const win = zoomWindow(m.geo.xlo, m.geo.xhi, wa, wb);
   const z = win && zoomCompose(S, m, win, (w, h) => { try { put(win.a, win.b);
-    return withOpt({rxlabel: '', rylabel: opt.rylabel === DEF.rylabel ? uvTitle(DEF.rylabel, uvOf(run)) : opt.rylabel, showY: true, runCond: 'none', ndFig: 'none', runTitle: false, ymin: m.geo.y0, ymax: m.geo.y1, fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true, wPt: w, hPt: h, idp: 'zi-'}))); } finally { put(wa, wb); } });
+    return withOpt({rxlabel: '', rylabel: opt.rylabel === DEF.rylabel ? uvTitle(DEF.rylabel, uvOf(run)) : opt.rylabel, showY: true, runCond: 'none', ndFig: 'none', runTitle: false, ymin: m.geo.y0, ymax: m.geo.y1, fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true, wPt: w, hPt: h, idp: 'zi-'}))); } finally { put(wa, wb); } }, ov.nest ? run : (curRun() || opt));
   return z || buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true}));
 }
 function buildRunPlainSVG(run, ov){
@@ -4893,6 +4915,7 @@ function onOpt(e){
     else { opt.showY = true; opt.scalebar = false; if (opt.legend === 'direct') opt.legend = 'inside'; }
     syncControls();
   }
+  if (['zoomInsetPos', 'zoomInsetSize'].includes(k)) { opt.zoomInsetW = opt.zoomInsetH = opt.zoomInsetX = opt.zoomInsetY = null; const cr = curRun(); if (cr) cr.zoomInsetW = cr.zoomInsetH = cr.zoomInsetX = cr.zoomInsetY = null; }
   if (k === 'peakDec') renderList();
   if (k === 'runCond') syncControls();
   render();
@@ -5040,7 +5063,13 @@ function svgPoint(e){ const svg = paper.querySelector('svg'); if (!svg || !G) re
 function chartAt(){ if (!G || G.cal) return null; if (G.run && G.L !== undefined) return {g: G, ox: 0, oy: 0, run: curRun()}; if (G.chart) return G.chart; if (G.L !== undefined) return {g: G, ox: 0, oy: 0, run: null}; return null; }
 const invx = X => G.xlo + (X - G.L)/(G.R - G.L)*(G.xhi - G.xlo);
 paper.addEventListener('mousemove', e => {
-  const ro = $('#readout'), c = chartAt(); if (!c) { ro.textContent = ''; return; }
+  const ro = $('#readout');
+  if (G && G.zoomInset) {
+    const p = svgPoint(e), act = insetHit(p, G.zoomInset);
+    if (act && act !== 'move') { ro.textContent = 'drag to resize inset (Shift to unlock aspect ratio)'; return; }
+    if (act === 'move') { ro.textContent = 'drag inset to position'; return; }
+  }
+  const c = chartAt(); if (!c) { ro.textContent = ''; return; }
   const p = svgPoint(e); if (!p) return; const g = c.g, lx = p.x - c.ox, ly = p.y - c.oy;
   if (lx < g.L || lx > g.R || ly < g.T || ly > g.B) { ro.textContent = ''; return; }
   const xv = g.xlo + (lx - g.L)/(g.R - g.L)*(g.xhi - g.xlo), yv = g.y0 + (g.B - ly)/(g.B - g.T)*(g.y1 - g.y0);
@@ -5092,6 +5121,127 @@ addEventListener('resize', () => { if (wfSel) renderWfTool(); });
 /* drag across a run chromatogram to add an integration region */
 const dragBox = $('#dragBox'), wrap = $('#paperwrap'); let drag = null;
 let gelDrag = null, gelRaf2 = 0;
+let insetDrag = null, insetRaf = 0;
+function insetHit(p, zi){
+  if (!p || !zi) return null;
+  const hitTol = 14;
+  if (Math.hypot(p.x - (zi.x + zi.w), p.y - (zi.y + zi.h)) <= hitTol) return 'se';
+  if (Math.hypot(p.x - zi.x, p.y - (zi.y + zi.h)) <= hitTol) return 'sw';
+  if (Math.hypot(p.x - (zi.x + zi.w), p.y - zi.y) <= hitTol) return 'ne';
+  if (Math.hypot(p.x - zi.x, p.y - zi.y) <= hitTol) return 'nw';
+  if (p.x >= zi.x && p.x <= zi.x + zi.w && p.y >= zi.y && p.y <= zi.y + zi.h) return 'move';
+  return null;
+}
+paper.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || !G || !G.zoomInset) return;
+  const p0 = svgPoint(e); if (!p0) return;
+  const zi = G.zoomInset;
+  const targetHandle = e.target && e.target.dataset && e.target.dataset.handle;
+  const action = targetHandle || insetHit(p0, zi);
+  if (!action) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  insetDrag = {
+    action, p0, x0: zi.x, y0: zi.y, w0: zi.w, h0: zi.h,
+    aspect: zi.w / zi.h, figW: zi.figW, figH: zi.figH, zObj: zi.zObj
+  };
+}, true);
+window.addEventListener('pointermove', e => {
+  if (!insetDrag) {
+    if (G && G.zoomInset) {
+      const p = svgPoint(e), act = insetHit(p, G.zoomInset);
+      if (act === 'se' || act === 'nw') paper.style.cursor = 'nwse-resize';
+      else if (act === 'sw' || act === 'ne') paper.style.cursor = 'nesw-resize';
+      else if (act === 'move') paper.style.cursor = 'move';
+    }
+    return;
+  }
+  const d = insetDrag, p = svgPoint(e); if (!p) return;
+  const dx = p.x - d.p0.x, dy = p.y - d.p0.y, shift = e.shiftKey;
+  if (d.action === 'move') {
+    let newX = Math.max(0, Math.min(d.figW - d.w0, d.x0 + dx));
+    let newY = Math.max(0, Math.min(d.figH - d.h0, d.y0 + dy));
+    d.zObj.zoomInsetX = r2(newX);
+    d.zObj.zoomInsetY = r2(newY);
+  } else {
+    let newW = d.w0, newH = d.h0, newX = d.x0, newY = d.y0;
+    const minW = 30, minH = 20;
+    if (d.action === 'se') {
+      const rawW = Math.max(minW, d.w0 + dx), rawH = Math.max(minH, d.h0 + dy);
+      if (!shift) {
+        if (Math.abs(dx) >= Math.abs(dy * d.aspect)) { newW = rawW; newH = newW / d.aspect; }
+        else { newH = rawH; newW = newH * d.aspect; }
+        const maxW = d.figW - d.x0, maxH = d.figH - d.y0;
+        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
+        if (newH > maxH) { newH = maxH; newW = newH * d.aspect; }
+        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
+      } else {
+        newW = Math.max(minW, Math.min(d.figW - d.x0, rawW));
+        newH = Math.max(minH, Math.min(d.figH - d.y0, rawH));
+      }
+    } else if (d.action === 'sw') {
+      const rawW = Math.max(minW, d.w0 - dx), rawH = Math.max(minH, d.h0 + dy);
+      const rightX = d.x0 + d.w0;
+      if (!shift) {
+        if (Math.abs(dx) >= Math.abs(dy * d.aspect)) { newW = rawW; newH = newW / d.aspect; }
+        else { newH = rawH; newW = newH * d.aspect; }
+        const maxW = rightX, maxH = d.figH - d.y0;
+        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
+        if (newH > maxH) { newH = maxH; newW = newH * d.aspect; }
+        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
+      } else {
+        newW = Math.max(minW, Math.min(rightX, rawW));
+        newH = Math.max(minH, Math.min(d.figH - d.y0, rawH));
+      }
+      newX = rightX - newW;
+    } else if (d.action === 'ne') {
+      const rawW = Math.max(minW, d.w0 + dx), rawH = Math.max(minH, d.h0 - dy);
+      const bottomY = d.y0 + d.h0;
+      if (!shift) {
+        if (Math.abs(dx) >= Math.abs(dy * d.aspect)) { newW = rawW; newH = newW / d.aspect; }
+        else { newH = rawH; newW = newH * d.aspect; }
+        const maxW = d.figW - d.x0, maxH = bottomY;
+        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
+        if (newH > maxH) { newH = maxH; newW = newH * d.aspect; }
+        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
+      } else {
+        newW = Math.max(minW, Math.min(d.figW - d.x0, rawW));
+        newH = Math.max(minH, Math.min(bottomY, rawH));
+      }
+      newY = bottomY - newH;
+    } else if (d.action === 'nw') {
+      const rawW = Math.max(minW, d.w0 - dx), rawH = Math.max(minH, d.h0 - dy);
+      const rightX = d.x0 + d.w0, bottomY = d.y0 + d.h0;
+      if (!shift) {
+        if (Math.abs(dx) >= Math.abs(dy * d.aspect)) { newW = rawW; newH = newW / d.aspect; }
+        else { newH = rawH; newW = newH * d.aspect; }
+        const maxW = rightX, maxH = bottomY;
+        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
+        if (newH > maxH) { newH = maxH; newW = newH * d.aspect; }
+        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
+      } else {
+        newW = Math.max(minW, Math.min(rightX, rawW));
+        newH = Math.max(minH, Math.min(bottomY, rawH));
+      }
+      newX = rightX - newW; newY = bottomY - newH;
+    }
+    newX = Math.max(0, Math.min(d.figW - newW, newX));
+    newY = Math.max(0, Math.min(d.figH - newH, newY));
+    d.zObj.zoomInsetX = r2(newX);
+    d.zObj.zoomInsetY = r2(newY);
+    d.zObj.zoomInsetW = r2(newW);
+    d.zObj.zoomInsetH = r2(newH);
+  }
+  cancelAnimationFrame(insetRaf);
+  insetRaf = requestAnimationFrame(render);
+});
+['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => {
+  if (insetDrag) {
+    insetDrag = null;
+    paper.style.cursor = '';
+    render();
+    saveOpt();
+  }
+}));
 function gelBoxAt(p){ return G && G.gelBoxes ? G.gelBoxes.slice().reverse().find(b => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) : null; }
 paper.addEventListener('pointerdown', e => {
   if (e.button !== 0) return; const p0 = svgPoint(e); const gb = p0 && gelBoxAt(p0); if (!gb) return;
