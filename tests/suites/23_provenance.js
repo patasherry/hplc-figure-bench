@@ -98,6 +98,78 @@ const F = {gb: src('gb'), imac: src('his'), grad: path.join(DATA, 'chrom/imac_Hi
     T.check('cond_schema.typed_kept', /2\.5 mL\/min/.test(m2) && /0–50% B/.test(m2), `the typed values are still what Methods states: ${m2}`); /* guards: the check flags, it does not overwrite */
   });
 
+  await T.t('source_import_diagnostics', async () => {
+    const F_SEC = require('../data/gen_import_sec');
+    await p.click('text=All projects').catch(() => {}); await h.wait(600);
+    await h.newProject('Source Diagnostics');
+
+    const brokenCsv = {
+      name: 'interrupted.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from('Time,UV\n0.0,0.1\n1.0,0.5\n2.0,bad\n3.0,1.2\n4.0,2.0\n5.0,2.5\n6.0,1.8\n7.0,0.9\n')
+    };
+    await p.setInputFiles('#file', brokenCsv);
+    await h.wait(1500);
+
+    const incompleteZip = F_SEC.unicornZip('incomplete.zip', [2]);
+    await p.setInputFiles('#file', incompleteZip);
+    await h.wait(2000);
+
+    // 1. Source-level warning/details view in DOM
+    const csvDiag = p.locator('#sourceDiags .source-diag[data-source="interrupted.csv"]');
+    T.check('csv_diag_visible', await csvDiag.isVisible(), 'Source-level diagnostic for interrupted CSV should be visible');
+    const csvText = await csvDiag.textContent();
+    T.check('csv_diag_text', /3 rows skipped/i.test(csvText) && /Left out 3 rows of interrupted/i.test(csvText), `Expected skipped rows in diagnostic, got: ${csvText}`);
+
+    const zipDiag = p.locator('#sourceDiags .source-diag[data-source="incomplete.zip"]');
+    T.check('zip_diag_visible', await zipDiag.isVisible(), 'Source-level diagnostic for UNICORN archive should be visible');
+    const zipText = await zipDiag.textContent();
+    T.check('zip_diag_text', /unreadable curve/i.test(zipText) && /Curves with no readable data points were left out: Conductivity/i.test(zipText), `Expected lost curves in diagnostic, got: ${zipText}`);
+
+    // 2. Run card has non-cluttering details warning view
+    const runCardDiag = p.locator('.trace.run[data-kind="run"] .srcdiag');
+    T.check('run_card_diag', (await runCardDiag.count()) > 0 && /Import warning/i.test(await runCardDiag.first().innerText()), 'Run card should show compact import warning details');
+
+    // 3. Project export persists source diagnostics
+    const downloadPromise = p.waitForEvent('download');
+    await p.click('#projSave');
+    const dl = await downloadPromise;
+    const projData = JSON.parse(fs.readFileSync(await dl.path(), 'utf8'));
+    T.check('export_has_sources', Array.isArray(projData.sources) && projData.sources.length === 2, `Expected 2 sources in export, got: ${JSON.stringify(projData.sources)}`);
+    const expCsv = (projData.sources || []).find(s => s.file === 'interrupted.csv');
+    T.check('export_csv_diagnostic', expCsv && expCsv.skipped === 3, `Exported CSV diagnostic should record 3 skipped rows: ${JSON.stringify(expCsv)}`);
+    const expZip = (projData.sources || []).find(s => s.file === 'incomplete.zip');
+    T.check('export_zip_diagnostic', expZip && Array.isArray(expZip.lost) && expZip.lost.includes('Conductivity'), `Exported ZIP diagnostic should record Conductivity lost curve: ${JSON.stringify(expZip)}`);
+
+    // 4. Project import restores source diagnostics
+    await p.click('text=All projects').catch(() => {}); await h.wait(600);
+    await p.click('#homeQuick'); await h.wait(1000);
+    await p.setInputFiles('#projFile', await dl.path());
+    await h.wait(2000);
+
+    const reloadedCsvDiag = p.locator('#sourceDiags .source-diag[data-source="interrupted.csv"]');
+    T.check('import_restores_csv_diag', await reloadedCsvDiag.isVisible(), 'Importing project should restore CSV source diagnostic');
+    const reloadedZipDiag = p.locator('#sourceDiags .source-diag[data-source="incomplete.zip"]');
+    T.check('import_restores_zip_diag', await reloadedZipDiag.isVisible(), 'Importing project should restore UNICORN archive source diagnostic');
+
+
+    // 5. Successful reimport replaces/clears diagnostic for that source
+    const cleanCsv = {
+      name: 'interrupted.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from('Time,UV\n0.0,0.1\n1.0,0.5\n2.0,0.8\n3.0,1.2\n4.0,2.0\n5.0,2.5\n6.0,1.8\n7.0,0.9\n')
+    };
+    await p.setInputFiles('#file', cleanCsv);
+    await h.wait(1500);
+
+    const runStep = p.locator('#tl button[data-step^="run:"]');
+    if (await runStep.count()) await runStep.first().click();
+    await h.wait(500);
+
+    T.check('reimport_clears_csv_diag', (await p.locator('#sourceDiags .source-diag[data-source="interrupted.csv"]').count()) === 0, 'Clean reimport should clear the diagnostic for that source');
+    T.check('zip_diag_persists_after_csv_reimport', await p.locator('#sourceDiags .source-diag[data-source="incomplete.zip"]').isVisible(), 'Other source diagnostics should remain');
+  });
+
   await close();
   T.done();
 })();
