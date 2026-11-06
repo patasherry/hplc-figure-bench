@@ -1302,8 +1302,18 @@ Issue #{n}: {title}
 def gem_api(path, method='GET', body=None):
     req = urllib.request.Request(f'https://generativelanguage.googleapis.com/v1beta/{path}', method=method, data=json.dumps(body).encode() if body is not None else None,
                                  headers={'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return json.loads(r.read() or b'{}')
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.loads(r.read() or b'{}')
+    except urllib.error.HTTPError as e:
+        # The body is the whole diagnosis and urllib's str(e) drops it. A 429 names the quota it counted against:
+        # "free_tier" with "limit: 0" means no free allowance for this agent, anything else is a rate or daily limit
+        # we are tripping ourselves. Without this the log only ever said "HTTP Error 429: Too Many Requests".
+        try:
+            detail = (e.read() or b'')[:600].decode('utf-8', 'replace').replace('\n', ' ')
+        except Exception:
+            detail = ''
+        raise RuntimeError(f'HTTP {e.code} {e.reason}' + (f': {detail}' if detail else '')) from None
 
 
 def all_text(o):
