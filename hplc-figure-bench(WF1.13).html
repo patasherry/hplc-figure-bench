@@ -755,8 +755,15 @@ button,input,select,textarea{font-family:inherit}
         <div class="btwnd">
           <div class="btns"><button type="button" class="btn primary" id="btwNdAdd">Load NanoDrop export</button><input type="file" id="btwNdFile" hidden></div>
           <div id="btwNdList"></div>
-          <label class="f" title="The volume left in the concentrator, the one your NanoDrop readings were taken in">Volume after concentrating (mL)<input type="number" id="btw-vOut" data-btw="vOut" min="0" step="any" placeholder="e.g. 0.25"></label>
+          <label class="f" title="The total prepared sample volume, before allocating it; the one your concentration reading was taken in">Measured output volume (mL)<input type="number" id="btw-vOut" data-btw="vOut" min="0" step="any" placeholder="e.g. 0.25"></label>
           <p class="hint" id="btwCarry"></p>
+          <div class="row">
+            <label class="f">Loaded next (mL)<input type="number" id="btw-vLoad" data-btw="vLoad" min="0" step="any" aria-describedby="btwAllocation" placeholder="All output if allocation is blank"></label>
+            <label class="f">Retained (mL)<input type="number" id="btw-vRetain" data-btw="vRetain" min="0" step="any" aria-describedby="btwAllocation" placeholder="Optional"></label>
+          </div>
+          <label class="f">Retained sample disposition<input type="text" id="btw-retainDisposition" data-btw="retainDisposition" placeholder="e.g. Stored at 4 °C"></label>
+          <p class="hint" id="btwAllocation" role="status"></p>
+          <p class="hint">Allocation assumes a homogeneous sample. It is saved here; summary yields, figures and Methods do not yet use it.</p>
         </div>
         <details class="cardtext" id="btwMore"><summary>Details for the methods (optional)</summary>
           <div class="row">
@@ -3907,7 +3914,7 @@ function finalYield(path){
   const poolVol = fin.nd && fin.nd.mg !== null ? fin.nd.vol : fin.p && fin.p.measured ? fin.p.measVol : fin.p && fin.p.vol >= 0 ? fin.p.vol : null;
   return {fin, k: allRows.indexOf(fin), mg, poolMg: pm, poolVol, poolPerL: cL > 0 ? pm/cL : null, meas, fc, fv, perL: cL > 0 ? mg/cL : null, perG, cL, basis: meas ? 'final' : allRows.basis, poolBasis: allRows.basis, pur: fin.pur, purEst: fin.purEst,
     perGTxt: perG == null ? '' : `${sig2(perG)} mg per g of wet cells`, odd: rows.some(x => x.yld > 100 || x.stepY > 105),
-    loaded: (() => { if (manLoad > 0) return {mg: manLoad, kept: false, r: fin.r}; const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r) : null; return k ? {mg: k, kept: true, r: fin.r} : mgOf(pr) > 0 ? {mg: mgOf(pr), kept: false, r: fin.r} : null; })(),
+    loaded: (() => { if (manLoad > 0) return {mg: manLoad, kept: false, r: fin.r}; const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r, false) : null; return k ? {mg: k, kept: true, r: fin.r} : mgOf(pr) > 0 ? {mg: mgOf(pr), kept: false, r: fin.r} : null; })(),
     purTyped: prep.on && hasTxt(prep.qcPurity) && fin.pur == null}; }
 function finalYields(){
   const paths = wfBranches(); if (paths.length <= 1) { const y = finalYield(); return y ? [y] : []; }
@@ -4055,7 +4062,7 @@ function manLines(m){ const t = x => String(x == null ? '' : x).trim(), out = []
   if (v != null || c != null) out.push([v != null ? `${fmtAuto(v)} mL` : '', c != null ? `${fmtAuto(c)} mg/mL` : '', c != null && v != null ? `${sig2(c*v)} mg` : ''].filter(Boolean).join(', '));
   if (t(m.note)) out.push({t: t(m.note), c: '#555555'}); return out; }
 /* the amount loaded on the next column: the last measured amount after this step and before the next column */
-function loadedAfter(r){ const wf = wfList(), i = wf.indexOf(r); let mg = r && r.id ? (btwMg(r) || {}).mg || null : null;
+function loadedAfter(r, allocated = true){ const wf = wfList(), i = wf.indexOf(r), output = r && r.id ? (btwMg(r) || {}).mg ?? null : null; let mg = allocated ? transferAllocation((prep.btw || {})[r && r.id] || {}, output).loadedMg : output || null;
   for (let j = i + 1; i >= 0 && j < wf.length && wf[j].prep; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a !== null) mg = a; }
   return mg; }
 /* cleavage gel lanes: before and after the protease */
@@ -4361,6 +4368,24 @@ const btwOf = r => { if (!r || !prep.btw || !prep.btw[r.id]) return null; const 
 const btwShort = b => { const vo = numOr(b.vOut, 0); return b.how === 'dil' ? (vo > 0 ? `Diluted to ${fmtAuto(vo)} mL` : 'Diluted') : b.how === 'exch' ? 'Buffer exchanged' : b.how === 'filt' ? 'Filtered' : b.how === 'hold' ? 'Held overnight' : vo > 0 ? `Conc. to ${fmtAuto(vo)} mL` : 'Concentrated'; };
 const arrowNote = r => String(r.note || '').trim();
 function btwMg(r){ const b = btwOf(r); if (!b) return null; const ms = poolMeas(r), c = ms.src === 'btw' ? ms.c : null, vo = numOr(b.vOut, null); if (c == null || vo == null) return null; const p = poolRows(r), mg = c*vo; return {mg, pct: p && p.mgArea > 0 ? 100*mg/p.mgArea : null}; }
+/* Canonical transfer allocation: vOut is the existing measured output (mL); vLoad and vRetain are optional mL,
+   retainDisposition is free text. Missing allocation preserves full carryover. Invalid drafts never supply a load.
+   Reporting callers keep their pre-allocation amounts until P8's displayed-yield semantics are agreed. */
+function transferAllocation(b, outputMg){
+  const has = k => b[k] != null && String(b[k]).trim() !== '', value = k => has(k) ? Number(b[k]) : null;
+  const output = value('vOut'), loaded = value('vLoad'), retained = value('vRetain'), explicit = has('vLoad') || has('vRetain');
+  const mg = Number.isFinite(outputMg) && outputMg >= 0 ? outputMg : null, tolerance = 8*Number.EPSILON*Math.max(output || 0, loaded || 0, retained || 0);
+  if (!explicit) return {explicit: false, loaded: output, retained: null, loadedMg: mg, error: ''};
+  let error = '';
+  if ([output, loaded, retained].some(v => v !== null && (!Number.isFinite(v) || v < 0))) error = 'Allocation volumes must be finite and non-negative.';
+  else if (output === null) error = 'Enter the measured output volume before allocating it.';
+  else if (loaded === null) error = 'Enter the volume loaded next (use 0 if all material is retained).';
+  else if (loaded + (retained ?? 0) - output > tolerance) error = 'Loaded plus retained volume must not exceed the measured output.';
+  const fraction = !error ? output > 0 ? loaded/output : 0 : null;
+  return {explicit, loaded, retained, error, loadedMg: error || mg === null ? null : mg*fraction,
+    retainedMg: error || mg === null || retained === null ? null : output > 0 ? mg*(retained/output) : 0,
+    unallocated: error ? null : output - loaded - (retained ?? 0) > tolerance ? output - loaded - (retained ?? 0) : 0};
+}
 function btwSentence(b){
   const dv = String(b.device || '').trim(), mw = String(b.mwco || '').trim(), nt = String(b.note || '').trim().replace(/\.$/, ''), vi = numOr(b.vIn, 0) || numOr(b._poolVol, 0), vo = numOr(b.vOut, 0);
   const how = {conc: 'concentrated', dil: 'diluted', exch: 'buffer exchanged', filt: 'filtered', hold: 'held overnight'}[b.how] || 'concentrated';
@@ -5369,7 +5394,7 @@ function sumRows(){
   if (out.length && prep.on) { const wf = wfList(), i = wf.indexOf(out[0].r); for (let j = 0; j < i; j++) if (wf[j].prep === 'manual') { const v = out.toAmt(manMg(wf[j].man), out[0]); if (v > 0) { base = v; out.baseMan = wf[j]; break; } } }
   out.base = base; out.amtOf = amt; out.kept = x => kept(x);
   /* a measured concentration or exchange between columns is what the next column was loaded with */
-  const kept = x => { const k = prep.on ? loadedAfter(x.r) : null; if (!(k > 0)) return null; return ['mg', 'nd'].includes(basis) ? k : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? k/kd(x) : null; };
+  const kept = x => { const k = prep.on ? loadedAfter(x.r, false) : null; if (!(k > 0)) return null; return ['mg', 'nd'].includes(basis) ? k : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? k/kd(x) : null; };
   const wf = prep.on ? wfList() : runs.filter(r => r.inWf), hasBranches = wf.some(x => x.wfFrom);
   if (!hasBranches) {
     out.forEach(x => { const a = amt(x); x.yld = base > 0 && a > 0 ? 100*a/base : null; x.stepY = prev > 0 && a > 0 ? 100*a/prev : null; x.fromKept = !!x.stepY && prevKept; x.loadedAmt = prevKept ? prev : null; if (a > 0) { const k = kept(x); prev = k > 0 ? k : a; prevKept = k > 0; } });
@@ -6878,6 +6903,10 @@ function btwCarry(){ const el = $('#btwCarry'), rid = curStep.startsWith('btw:')
   if (li._h !== lh) { li._h = lh; li.innerHTML = lh; }
   $('#btwNdAdd').textContent = F.length ? 'Load another NanoDrop export' : 'Load NanoDrop export'; $('#btwNdAdd').classList.toggle('primary', !F.length);
   const tb = $('#btwTypeBox'); tb.hidden = F.length > 0; if (numOr(b.conc, 0) > 0 && !F.length) $('#btwMore').open = true;
+  const allocation = transferAllocation(b, r ? (btwMg(r) || {}).mg : null), al = $('#btwAllocation');
+  ['vOut', 'vLoad', 'vRetain'].forEach(k => { const input = $('#btw-' + k); input.setCustomValidity(allocation.error); input.setAttribute('aria-invalid', String(!!allocation.error)); });
+  al.textContent = allocation.error || (!allocation.explicit ? `No allocation entered: all measured output carries forward${allocation.loadedMg !== null ? ` (${sig2(allocation.loadedMg)} mg)` : ''}.`
+    : `Loaded next: ${fmtAuto(allocation.loaded)} mL${allocation.loadedMg !== null ? ` (${sig2(allocation.loadedMg)} mg)` : ' (mass unknown)'}; retained: ${fmtAuto(allocation.retained ?? 0)} mL${allocation.retainedMg !== null ? ` (${sig2(allocation.retainedMg)} mg)` : ''}${hasTxt(b.retainDisposition) ? `, ${String(b.retainDisposition).trim()}` : ''}.${allocation.unallocated > 0 ? ` Unallocated: ${fmtAuto(allocation.unallocated)} mL.` : ''}`);
   el.textContent = !r ? '' : card ? `${stepTitle(r)} has a reading typed on its run card, which is used instead.`
     : !p ? `Pool the fractions on ${stepTitle(r)} first.`
     : p.measured && p.src === 'btw' ? `${sig2(p.mg)} mg (${fmt(p.conc, 2)} mg/mL × ${fmtAuto(p.measVol)} mL)${p.mgArea > 0 ? `. The UV area of ${stepTitle(r)} estimated ${sig2(p.mgArea)} mg` : ''}.`
