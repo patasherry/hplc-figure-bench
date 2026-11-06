@@ -1,4 +1,4 @@
-const {open, H, suite, fs, path, DATA} = require('../lib/harness');
+const {open, H, suite, fs, path, DATA, src} = require('../lib/harness');
 const T = suite('45_yield_semantic');
 
 async function fresh(id, fn){
@@ -80,6 +80,32 @@ async function fresh(id, fn){
     await h.wait(500);
     html2 = await p.evaluate(() => document.querySelector('#paper').innerHTML);
     T.check('purity_missing_not_shown_in_svg', !html2.includes('0% pure'), `SVG does not include 0% pure`);
+  });
+
+  await fresh('measured_output_allocation', async (p, h) => {
+    const set = async (sel, value) => { const el = p.locator(sel); await el.fill(String(value)); await el.dispatchEvent('input'); await el.dispatchEvent('change'); await h.wait(250); };
+    const stepYield = async () => { const t = await h.sumTable(), k = (t[0] || []).findIndex(x => /Step yield/.test(x)), row = t.find(r => /anion|exchange|resource q/i.test(r[0] || '')); return k >= 0 && row ? Number(String(row[k]).replace(/[^0-9.-]/g, '')) : NaN; };
+
+    await h.newProject('Measured output allocation');
+    await h.gb(src('gb'));
+    await h.addRun(src('his')); await h.pool('T1-T6'); await h.addConc(null, '5');
+    const conc = (await h.timeline()).find(x => x.k.startsWith('btw:'));
+    await h.step(conc.k); await p.locator('#btwMore').evaluate(e => e.open = true); await set('#btw-conc', '2');
+    await h.addRun(src('q')); await h.pool('T11-T16'); await h.step('figure');
+    const before = await stepYield();
+
+    const controls = await p.locator('#btw-vLoad, #btw-vRetain, #btw-retain').count() === 3;
+    T.check('allocation/controls-present', controls, 'Measured-output allocation controls are available on the transfer card');
+    if (!controls) { T.check('allocation/scales-step-yield', false, 'No allocation fields to represent a 1 mL load from 5 mL output'); return; }
+    await h.step(conc.k); await p.locator('#btwAlloc').evaluate(e => e.open = true); await set('#btw-vLoad', '1'); await set('#btw-vRetain', '4'); await set('#btw-retain', 'stored at -80 C');
+    const invalid = await p.locator('#btw-vRetain').evaluate(e => e.validationMessage);
+    T.check('allocation/valid-split', !invalid, invalid || '1 mL loaded + 4 mL retained is within 5 mL output');
+    await h.step('figure'); const after = await stepYield();
+    T.check('allocation/scales-step-yield', Number.isFinite(before) && Number.isFinite(after) && Math.abs(after - before*5) <= 3, `before ${before}%, after ${after}% (1 of 5 mL loaded)`);
+
+    await h.step(conc.k); await set('#btw-vRetain', '4.1');
+    const over = await p.locator('#btw-vRetain').evaluate(e => e.validationMessage);
+    T.check('allocation/rejects-over-output', /cannot exceed the measured output/i.test(over), over || 'no allocation validation message');
   });
 
   T.done();
