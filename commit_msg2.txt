@@ -1,0 +1,6 @@
+Fix prep name corruption during manual step ID allocation
+
+Closes #378
+
+- Modified addMan in hplc-figure-bench(WF1.13).html to safely scan only prep.manual IDs with regex /^m(\d+)$/ to prevent collision with legacy free-text prep names.
+- Checked that tests run well with the fix in place.

@@ -484,9 +484,7 @@ await T.t('prep-name-manual-id', async () => {
     prep: { name: 'm900', manual: [] },
     runs: [], gels: []
   };
-  const filePath = require('path').join(__dirname, '../data/m900_legacy.json');
-  require('fs').writeFileSync(filePath, JSON.stringify(data));
-  await p.locator('#projFile').setInputFiles(filePath);
+  await p.setInputFiles('#projFile', {name: 'm900_legacy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data))});
   await p.waitForTimeout(500);
 
   await p.locator('#tl [data-step="construct"]').click();
