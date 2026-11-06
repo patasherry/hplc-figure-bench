@@ -145,6 +145,29 @@ await T.t('lane-run-full-name', async () => {
 });
 
 
+await T.t('od-conversion-applied', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    // Create a gel where we mark the target in lane 2. Lane 1 is M, Lane 2 is A, Lane 3 is B.
+    // The previous test logic for OD conversion:
+    await load(p, project(gel(im, {
+      labels: 'M, A, B',
+      marks: [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}],
+      tags: [{kind: 'target', lane: 2, y: 120.5/360}] // Tag target in lane 2
+    })));
+    await p.waitForTimeout(500);
+
+    const txt = await p.locator('#paper').textContent();
+    // With raw grey-value densitometry, the purity in the "A" lane is 64%.
+    // With optical density conversion, the peak shape and total changes, so the percentage changes.
+    // Ensure we are testing exactly through the UI.
+    T.check('od-conversion-applied.changed-area', !txt.includes('64%') && !txt.includes('63%') && txt.match(/\d+%/), 'Expected purity to change from 64% (OD applied), got text: ' + txt);
+  } finally {
+    await a.close();
+  }
+});
+
 await T.t('integration-tail-cutoff', async () => {
   const a = await start(), p = a.p;
   try {
