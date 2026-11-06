@@ -475,4 +475,22 @@ await T.t('suggest-label', async () => {
   await close();
 });
 
+
+await T.t('prep-name-manual-id', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  const d1 = {app: 'HPLC Figure Bench', version: 1, runs: [], prep: {name: 'm900'}};
+  await p.setInputFiles('#projFile', {name: 'prep_m900.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d1))});
+  await p.waitForTimeout(1000);
+
+  await p.waitForSelector('#tl [data-addmenu]', { state: 'visible' });
+  await p.locator('#tl [data-addmenu]').click();
+  await p.waitForTimeout(300);
+  await p.locator('#tl [data-addstep="man:column"]').click();
+  await p.waitForSelector('#tl button[data-step^="man:"]', { state: 'visible' });
+
+  const steps = await p.$$eval('#tl button[data-step^="man:"]', els => Array.from(els).map(e => e.getAttribute('data-step')));
+  T.check('prep-name-manual-id.allocates-m1', steps.includes('man:m1'), `Expected man:m1, got: ${steps.join(', ')}`);
+  await close();
+});
+
 T.done(); })();
