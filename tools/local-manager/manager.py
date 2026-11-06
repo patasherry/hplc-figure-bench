@@ -39,7 +39,7 @@ AUTO_MAX, AUTO_QUEUE, AUTO_AVG = cfg.get('board_adopt_max', 5), cfg.get('board_q
 BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
 COPILOT_MODE = cfg.get('copilot_mode', 'off')  # off (Patrick has no Copilot credits): no Copilot jobs at all, and its turn goes to Claude Code. auto: the cloud agent, and the Copilot CLI while it is paused. cloud or cli: only that one
-CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 40), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
+CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 40), 'agy': cfg.get('max_agy_jobs', 8), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
 TRACK = cfg.get('tracking_issue', 17)
 CLOUD_STANDBY = cfg.get('cloud_standby_minutes', 20)  # the cloud copy works only when the PC manager has been quiet this long
 DIGEST_HOUR = cfg.get('digest_hour', 7)
@@ -1484,14 +1484,19 @@ def antigravity_stall(s):
     app-changing job, so without this a paused API (6 hours after one refusal) would stop all app work."""
     a = s.get('antigravity', {})
     paused = s.get('ag_off_until', 0) > time.time() or not GEMINI_KEY
-    for i in issues('for-antigravity'):
+    # the Antigravity CLI on the PC serves the same queue and takes one job at a time, so a backlog for it is not a stall
+    cli = bool(shutil.which('agy')) and not CLOUD and cfg.get('agy_jobs_on', True)
+    waiting = [i for i in issues('for-antigravity') if str(i['number']) not in a and AG_APP not in {l['name'] for l in i['labels']}]
+    keep = cfg.get('agy_backlog', 6) if cli else 0
+    if keep:
+        waiting = sorted(waiting, key=lambda i: -i['number'])[keep:]  # newest stay for the CLI, the rest go to Jules
+    for i in waiting:
         n = i['number']
-        if str(n) in a or AG_APP in {l['name'] for l in i['labels']}:
-            continue  # running, or waiting for Patrick to paste it
         waited = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(i['updated_at'].replace('Z', '+00:00'))).total_seconds() / 60
-        if waited < AG_STALL_MIN and not paused:
+        if waited < AG_STALL_MIN and not (paused and not cli):
             continue
-        why = 'the Gemini API is paused' if paused else f'Antigravity has not started it in {int(waited)} minutes'
+        why = ('the Gemini API is paused and the Antigravity CLI is not installed' if paused and not cli
+               else f'Antigravity has not started it in {int(waited)} minutes')
         label(n, add=['jules-queue', 'ag-returned'], remove=['for-antigravity'])
         post(n, f'Back to Jules: {why}. Antigravity keeps the app-changing jobs it can take, and this one was waiting.' + SIGN.format(rv.MODEL))
         log(f'#{n}: for-antigravity -> jules-queue ({why})')
@@ -1541,8 +1546,8 @@ def ship_worktree(wt, n, title, desc, branch, who, mark):
     return gh(f'repos/{REPO}/pulls', 'POST', {'title': f'{title} (#{n})', 'head': branch, 'base': 'main', 'body': f'{mark}\nCloses #{n}. Made by **{who}**, started by the local manager.\n\n{desc}'})['number']
 
 
-BG_HOURS = {'openclaw': cfg.get('openclaw_hours', 1.5), 'codex': cfg.get('codex_hours', 1.5)}
-_bg = {'openclaw': {}, 'codex': {}}  # issue -> running job, per worker; kept in memory, since the processes belong to this manager
+BG_HOURS = {'openclaw': cfg.get('openclaw_hours', 1.5), 'codex': cfg.get('codex_hours', 1.5), 'agy': cfg.get('agy_hours', 2)}
+_bg = {'openclaw': {}, 'codex': {}, 'agy': {}}  # issue -> running job, per worker; kept in memory, since the processes belong to this manager
 BG = {  # how each local coding worker is started and labelled
     'openclaw': {'name': 'OpenClaw', 'who': lambda: f'OpenClaw with the local model ({rv.MODEL_LOCAL})', 'mark': '<!-- openclaw-job -->', 'exe': 'openclaw',
                  'args': lambda wt, src='': ['agent', 'exec', '--message-file', str(wt / TASK_FILE), '--cwd', str(wt)],
@@ -1550,6 +1555,13 @@ BG = {  # how each local coding worker is started and labelled
     'codex': {'name': 'Codex', 'who': lambda: 'ChatGPT Codex on the owner\'s PC', 'mark': '<!-- codex-job -->', 'exe': 'codex',
               'args': lambda wt, src='': ['exec', '--sandbox', 'workspace-write'] + codex_opts(src in ('for-claude-code', 'for-codex')) + ['-C', str(wt), f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE}.'],
               'own': 'for-codex', 'takes_claude': True, 'cap': 'codex_jobs', 'desc': 'ChatGPT Codex writing code'},
+    # The Antigravity CLI, covered by Patrick's Google AI Pro subscription: the CLI is included at every tier and draws on the
+    # subscription quota through the sign-in cached by an interactive `agy` session, not on the Gemini API key whose project
+    # has refused every Interactions API call since Nov 1 (HTTP 429). Headless: `agy -p` prints to stdout and exits.
+    'agy': {'name': 'the Antigravity CLI', 'who': lambda: 'the Antigravity CLI (agy) on the owner\'s PC, on his Google AI Pro subscription', 'mark': '<!-- agy-job -->', 'exe': 'agy',
+            'args': lambda wt, src='': ['-p', f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE} and do not commit, push or open a pull request: the manager does that.',
+                                        '--output-format', 'text', '--print-timeout', f'{int(BG_HOURS["agy"] * 3600)}s'] + (['--sandbox'] if cfg.get('agy_sandbox', True) else []),
+            'own': 'for-antigravity', 'takes_claude': False, 'cap': 'agy', 'desc': 'the Antigravity CLI writing code'},
 }
 OC_MARK = BG['openclaw']['mark']
 
@@ -2432,7 +2444,7 @@ def one_pass():
         log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
     else:
         heartbeat(s)
-    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('science inbox', science_inbox), ('relay', relay),('owner merge', owner_merge_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('science inbox', science_inbox), ('relay', relay),('owner merge', owner_merge_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('agy jobs', lambda s: bg_worker(s, 'agy')), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
