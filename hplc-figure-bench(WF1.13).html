@@ -555,6 +555,10 @@ button,input,select,textarea{font-family:inherit}
       <div class="ss-acts" id="ssActs"></div>
     </section>
 
+    <section class="grp raw" id="rawPanel" hidden>
+      <h2>Raw files</h2>
+      <div id="rawFileList"></div>
+    </section>
     <section class="grp" id="dataPanel" data-step="run gel">
       <h2>Data</h2>
       <div class="drop" id="drop">
@@ -2082,7 +2086,7 @@ function ndMigrate(){ if (!prep.btw) return; ndSamples.forEach(x => { if (x.stag
 /* a reading typed on the run card: with a volume after concentrating it is the Concentrated step after the column, which shows in the timeline */
 function measToStep(r){ const b = prep.btw && prep.btw[r.id], c = numOr(r.poolConc, 0), v = numOr(r.poolFinalVol, 0), p = poolRows(Object.assign({}, r, {poolConc: '', poolFinalVol: ''})), pv = p && xUnit(r) === 'mL' ? p.vol : 0;
   const conc = v > 0 && !(pv > 0 && Math.abs(v - pv) < 0.05*pv); if (!b && !conc) return;
-  prep.btw = prep.btw || {}; prep.btw[r.id] = Object.assign({how: 'conc'}, b, {conc: 'poolConc' in r ? r.poolConc : (b && b.conc) ?? '', vOut: 'poolFinalVol' in r ? r.poolFinalVol : (b && b.vOut) ?? ''}); delete r.poolConc; delete r.poolFinalVol; if (typeof renderSteps === 'function') renderSteps(); }
+  prep.btw = prep.btw || {}; prep.btw[r.id] = Object.assign({how: 'conc'}, b, {conc: 'poolConc' in r ? r.poolConc : (b && b.conc) ?? '', vOut: 'poolFinalVol' in r ? r.poolFinalVol : (b && b.vOut) ?? ''}); delete r.poolConc; delete r.poolFinalVol; if (typeof renderSteps === 'function') renderSteps(); renderRawFiles(); renderRawFiles(); renderRawFiles(); renderRawFiles(); renderRawFiles(); renderRawFiles(); }
 /* pooled UV uses the same baseline choice as the peak regions: a line across each pooled block, or 0 mAU */
 function poolRows(run){
   const uv = uvOf(run), xs = uv.xs, ys = uv.ys, B = poolBlocks(run); if (!B.length) return null;
@@ -4564,6 +4568,60 @@ function stepStatus(g){
     set('st-known', opt.knownOn ? `${(opt.known || []).filter(k => k.on).length} active${g0 && g0.pix ? `, ${nf} flagged` : ''}` : 'off'); }
   { const ko = $('#knownOpts'), kc = $('#o-knownCount'), d = document.querySelector('details[data-sub="gknown"]'); if (ko) ko.hidden = !opt.knownOn; if (kc) kc.closest('label').hidden = !opt.knownOn; if (d) d.classList.toggle('koff', !opt.knownOn); }
 }
+function renderRawFiles(){
+  const p = document.getElementById('rawFileList');
+  const rp = document.getElementById('rawPanel');
+  if (!p || !rp) return;
+  if (!PROJ || MODE !== 'proj') { rp.hidden = true; return; }
+  rp.hidden = false;
+  if (!rawFiles.length) { p.innerHTML = '<p class="hint">No raw files uploaded to this project yet.</p>'; return; }
+  p.innerHTML = '<table class="sumtable"><thead><tr><th>File</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>' + rawFiles.map(f => `<tr><td>${esc(f.name)}</td><td>${fmtAuto(f.size/1024)} KB</td><td>${new Date(f.time).toLocaleDateString()}</td><td style="text-align: right;"><button type="button" class="btn quiet" data-rawdown="${esc(f.id)}">Download</button> <button type="button" class="btn quiet danger" data-rawdel="${esc(f.id)}">×</button></td></tr>`).join('') + '</tbody></table>';
+}
+function renderRawFiles(){
+  const p = document.getElementById('rawFileList');
+  const rp = document.getElementById('rawPanel');
+  if (!p || !rp) return;
+  if (!PROJ || MODE !== 'proj') { rp.hidden = true; return; }
+  rp.hidden = false;
+  if (!rawFiles.length) { p.innerHTML = '<p class="hint">No raw files uploaded to this project yet.</p>'; return; }
+  p.innerHTML = '<table class="sumtable"><thead><tr><th>File</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>' + rawFiles.map(f => `<tr><td>${esc(f.name)}</td><td>${fmtAuto(f.size/1024)} KB</td><td>${new Date(f.time).toLocaleDateString()}</td><td style="text-align: right;"><button type="button" class="btn quiet" data-rawdown="${esc(f.id)}">Download</button> <button type="button" class="btn quiet danger" data-rawdel="${esc(f.id)}">×</button></td></tr>`).join('') + '</tbody></table>';
+}
+function renderRawFiles(){
+  const p = document.getElementById('rawFileList');
+  const rp = document.getElementById('rawPanel');
+  if (!p || !rp) return;
+  if (!PROJ || MODE !== 'proj') { rp.hidden = true; return; }
+  rp.hidden = false;
+  if (!rawFiles.length) { p.innerHTML = '<p class="hint">No raw files uploaded to this project yet.</p>'; return; }
+  p.innerHTML = '<table class="sumtable"><thead><tr><th>File</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>' + rawFiles.map(f => `<tr><td>${esc(f.name)}</td><td>${fmtAuto(f.size/1024)} KB</td><td>${new Date(f.time).toLocaleDateString()}</td><td style="text-align: right;"><button type="button" class="btn quiet" data-rawdown="${esc(f.id)}">Download</button> <button type="button" class="btn quiet danger" data-rawdel="${esc(f.id)}">×</button></td></tr>`).join('') + '</tbody></table>';
+}
+function renderRawFiles(){
+  const p = document.getElementById('rawFileList');
+  const rp = document.getElementById('rawPanel');
+  if (!p || !rp) return;
+  if (!PROJ || MODE !== 'proj') { rp.hidden = true; return; }
+  rp.hidden = false;
+  if (!rawFiles.length) { p.innerHTML = '<p class="hint">No raw files uploaded to this project yet.</p>'; return; }
+  p.innerHTML = '<table class="sumtable"><thead><tr><th>File</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>' + rawFiles.map(f => `<tr><td>${esc(f.name)}</td><td>${fmtAuto(f.size/1024)} KB</td><td>${new Date(f.time).toLocaleDateString()}</td><td style="text-align: right;"><button type="button" class="btn quiet" data-rawdown="${esc(f.id)}">Download</button> <button type="button" class="btn quiet danger" data-rawdel="${esc(f.id)}">×</button></td></tr>`).join('') + '</tbody></table>';
+}
+function renderRawFiles(){
+  const p = document.getElementById('rawFileList');
+  const rp = document.getElementById('rawPanel');
+  if (!p || !rp) return;
+  if (!PROJ || MODE !== 'proj') { rp.hidden = true; return; }
+  rp.hidden = false;
+  if (!rawFiles.length) { p.innerHTML = '<p class="hint">No raw files uploaded to this project yet.</p>'; return; }
+  p.innerHTML = '<table class="sumtable"><thead><tr><th>File</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>' + rawFiles.map(f => `<tr><td>${esc(f.name)}</td><td>${fmtAuto(f.size/1024)} KB</td><td>${new Date(f.time).toLocaleDateString()}</td><td style="text-align: right;"><button type="button" class="btn quiet" data-rawdown="${esc(f.id)}">Download</button> <button type="button" class="btn quiet danger" data-rawdel="${esc(f.id)}">×</button></td></tr>`).join('') + '</tbody></table>';
+}
+function renderRawFiles(){
+  const p = document.getElementById('rawFileList');
+  const rp = document.getElementById('rawPanel');
+  if (!p || !rp) return;
+  if (!PROJ || MODE !== 'proj') { rp.hidden = true; return; }
+  rp.hidden = false;
+  if (!rawFiles.length) { p.innerHTML = '<p class="hint">No raw files uploaded to this project yet.</p>'; return; }
+  p.innerHTML = '<table class="sumtable"><thead><tr><th>File</th><th>Size</th><th>Added</th><th></th></tr></thead><tbody>' + rawFiles.map(f => `<tr><td>${esc(f.name)}</td><td>${fmtAuto(f.size/1024)} KB</td><td>${new Date(f.time).toLocaleDateString()}</td><td style="text-align: right;"><button type="button" class="btn quiet" data-rawdown="${esc(f.id)}">Download</button> <button type="button" class="btn quiet danger" data-rawdel="${esc(f.id)}">×</button></td></tr>`).join('') + '</tbody></table>';
+}
 function render(){
   document.body.classList.toggle('secstds', !!opt.secStds);
   gels.forEach(ensureLadder);
@@ -4630,7 +4688,7 @@ function render(){
   else { $('#o-xmin').placeholder = 'auto'; $('#o-xmax').placeholder = 'auto'; }
   if (kind === 'gel' && f) { const cp = cleavePlan(f.gel), el = $('#cleaveInfo'); $('#o-tagKda').placeholder = (TAG_PRESETS[opt.tagPreset] || [])[1] ? String(TAG_PRESETS[opt.tagPreset][1]) : 'kDa';
     el.textContent = cp ? `Looking for cleaved ${fmt(cp.P, 1)} kDa, uncleaved ${fmt(cp.P + cp.T, 1)} kDa and free ${cp.tagName} ${fmt(cp.T, 1)} kDa (±${numOr(opt.knownTol, 7)}%). Tags often run off their calculated size, so adjust the tag size to what you see on your gels.` : 'Enter the protein size, or mark its band as the target, and the expected sizes appear here.'; }
-  $('#sumPanel').hidden = kind !== 'workflow' || !runs.some(r => r.inWf && (poolRows(r) || ndForRun(r))); if (kind === 'workflow') renderSumTable();
+  $('#sumPanel').hidden = kind !== 'workflow' || !runs.some(r => r.inWf && (poolRows(r) || ndForRun(r))); if (kind === 'workflow') renderSumTable(); renderRawFiles(); renderRawFiles(); renderRawFiles(); renderRawFiles(); renderRawFiles(); renderRawFiles();
   const ip = $('#intPanel'); ip.hidden = kind !== 'run'; if (kind === 'run' && f) renderIntTable(f.run);
   $('#bandPanel').hidden = kind !== 'gel'; if (kind === 'gel' && f) renderBandTable(f.gel);
   updatePrompt();
@@ -5354,6 +5412,7 @@ async function imageToCanvas(file){
   finally { URL.revokeObjectURL(url); }
 }
 async function addGelFiles(files){
+  if (MODE === 'proj') { files.forEach(f => { rawFiles.push({ id: hashStr(f.name + f.size + Date.now()) + '-' + Date.now(), name: f.name, size: f.size, time: Date.now(), _blob: f }); }); if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1; }
   let last = null; const bad = [];
   for (const f of files) {
     try { const c = await imageToCanvas(f); const g = makeGel(f.name.replace(/\.[^.]+$/, ''), c);
@@ -5366,6 +5425,7 @@ async function addGelFiles(files){
   if (bad.length) toast(`Could not open ${bad.join(', ')}. Try exporting the gel as PNG or JPEG.`);
 }
 async function loadFiles(files){
+  if (MODE === 'proj') { files.filter(f => !/\.json$/i.test(f.name)).forEach(f => { rawFiles.push({ id: hashStr(f.name + f.size + Date.now()) + '-' + Date.now(), name: f.name, size: f.size, time: Date.now(), _blob: f }); }); if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1; }
   const proj = files.find(f => /\.json$/i.test(f.name)); if (proj && MODE !== 'quick') { let d = null; try { d = JSON.parse(await proj.text()); } catch (e) { toast(`Could not open ${proj.name}`); } if (d) await importAsProject(d, proj.name);
     const rest = files.length - 1; if (rest) toast(`${rest} other file${rest === 1 ? ' was' : 's were'} dropped with the project and not loaded. Drop ${rest === 1 ? 'it' : 'them'} again once the project is open.`); return; }
   if (proj) { try { await openProject(JSON.parse(await proj.text()), proj.name); } catch (e) { toast(`Could not open ${proj.name}`); } files = files.filter(f => f !== proj); if (!files.length) return; }
@@ -6059,6 +6119,150 @@ function grpStatus(){
   { const F = protForms(); set('Protein', F.length ? `${fmt(F[0].mass/1000, 1)} kDa, pI ${fmt(F[0].pi, 1)}${struct ? ', ' + struct.code : ''}` : struct ? struct.code : 'no sequence yet'); }
   set('NanoDrop', ndSamples.length ? `${ndSamples.length} reading${ndSamples.length === 1 ? '' : 's'}, ${new Set(ndSamples.filter(s => s.runId).map(s => s.runId)).size} steps` : 'none yet');
 }
+
+document.addEventListener('click', async e => {
+  const bd = e.target.closest('[data-rawdown]');
+  if (bd) {
+    const id = bd.dataset.rawdown;
+    const f = rawFiles.find(x => x.id === id);
+    if (!f) return;
+    let b = f._blob;
+    if (!b && STORE.mode === 'local') {
+      try { const r = await idbRawDo('readonly', st => st.get(id)); if (r && r.blob) b = r.blob; } catch (err) {}
+    }
+    if (b) saveFile(f.name, b); else toast('File not found in storage');
+  }
+  const bx = e.target.closest('[data-rawdel]');
+  if (bx) {
+    const id = bx.dataset.rawdel;
+    rawFiles = rawFiles.filter(x => x.id !== id);
+    if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1;
+    renderRawFiles();
+    queueSave();
+    if (STORE.mode === 'local') { try { await idbRawDo('readwrite', st => st.delete(id)); } catch (err) {} }
+  }
+});
+
+
+document.addEventListener('click', async e => {
+  const bd = e.target.closest('[data-rawdown]');
+  if (bd) {
+    const id = bd.dataset.rawdown;
+    const f = rawFiles.find(x => x.id === id);
+    if (!f) return;
+    let b = f._blob;
+    if (!b && STORE.mode === 'local') {
+      try { const r = await idbRawDo('readonly', st => st.get(id)); if (r && r.blob) b = r.blob; } catch (err) {}
+    }
+    if (b) saveFile(f.name, b); else toast('File not found in storage');
+  }
+  const bx = e.target.closest('[data-rawdel]');
+  if (bx) {
+    const id = bx.dataset.rawdel;
+    rawFiles = rawFiles.filter(x => x.id !== id);
+    if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1;
+    renderRawFiles();
+    queueSave();
+    if (STORE.mode === 'local') { try { await idbRawDo('readwrite', st => st.delete(id)); } catch (err) {} }
+  }
+});
+
+
+document.addEventListener('click', async e => {
+  const bd = e.target.closest('[data-rawdown]');
+  if (bd) {
+    const id = bd.dataset.rawdown;
+    const f = rawFiles.find(x => x.id === id);
+    if (!f) return;
+    let b = f._blob;
+    if (!b && STORE.mode === 'local') {
+      try { const r = await idbRawDo('readonly', st => st.get(id)); if (r && r.blob) b = r.blob; } catch (err) {}
+    }
+    if (b) saveFile(f.name, b); else toast('File not found in storage');
+  }
+  const bx = e.target.closest('[data-rawdel]');
+  if (bx) {
+    const id = bx.dataset.rawdel;
+    rawFiles = rawFiles.filter(x => x.id !== id);
+    if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1;
+    renderRawFiles();
+    queueSave();
+    if (STORE.mode === 'local') { try { await idbRawDo('readwrite', st => st.delete(id)); } catch (err) {} }
+  }
+});
+
+
+document.addEventListener('click', async e => {
+  const bd = e.target.closest('[data-rawdown]');
+  if (bd) {
+    const id = bd.dataset.rawdown;
+    const f = rawFiles.find(x => x.id === id);
+    if (!f) return;
+    let b = f._blob;
+    if (!b && STORE.mode === 'local') {
+      try { const r = await idbRawDo('readonly', st => st.get(id)); if (r && r.blob) b = r.blob; } catch (err) {}
+    }
+    if (b) saveFile(f.name, b); else toast('File not found in storage');
+  }
+  const bx = e.target.closest('[data-rawdel]');
+  if (bx) {
+    const id = bx.dataset.rawdel;
+    rawFiles = rawFiles.filter(x => x.id !== id);
+    if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1;
+    renderRawFiles();
+    queueSave();
+    if (STORE.mode === 'local') { try { await idbRawDo('readwrite', st => st.delete(id)); } catch (err) {} }
+  }
+});
+
+
+document.addEventListener('click', async e => {
+  const bd = e.target.closest('[data-rawdown]');
+  if (bd) {
+    const id = bd.dataset.rawdown;
+    const f = rawFiles.find(x => x.id === id);
+    if (!f) return;
+    let b = f._blob;
+    if (!b && STORE.mode === 'local') {
+      try { const r = await idbRawDo('readonly', st => st.get(id)); if (r && r.blob) b = r.blob; } catch (err) {}
+    }
+    if (b) saveFile(f.name, b); else toast('File not found in storage');
+  }
+  const bx = e.target.closest('[data-rawdel]');
+  if (bx) {
+    const id = bx.dataset.rawdel;
+    rawFiles = rawFiles.filter(x => x.id !== id);
+    if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1;
+    renderRawFiles();
+    queueSave();
+    if (STORE.mode === 'local') { try { await idbRawDo('readwrite', st => st.delete(id)); } catch (err) {} }
+  }
+});
+
+
+document.addEventListener('click', async e => {
+  const bd = e.target.closest('[data-rawdown]');
+  if (bd) {
+    const id = bd.dataset.rawdown;
+    const f = rawFiles.find(x => x.id === id);
+    if (!f) return;
+    let b = f._blob;
+    if (!b && STORE.mode === 'local') {
+      try { const r = await idbRawDo('readonly', st => st.get(id)); if (r && r.blob) b = r.blob; } catch (err) {}
+    }
+    if (b) saveFile(f.name, b); else toast('File not found in storage');
+  }
+  const bx = e.target.closest('[data-rawdel]');
+  if (bx) {
+    const id = bx.dataset.rawdel;
+    rawFiles = rawFiles.filter(x => x.id !== id);
+    if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1;
+    renderRawFiles();
+    queueSave();
+    if (STORE.mode === 'local') { try { await idbRawDo('readwrite', st => st.delete(id)); } catch (err) {} }
+  }
+});
+
 /* ---------- what to do next: one suggestion above the figure, with a button that takes you there ---------- */
 const nextHidden = new Set(), smooth = () => matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 /* in a project, only suggestions about the step on screen show, so the bar never talks about another step */
@@ -6110,7 +6314,7 @@ function projectData(){
     let img = g._img || ''; if (!img) { try { img = g.src.toDataURL('image/png'); if (img.length > 12e6) img = g.src.toDataURL('image/jpeg', 0.95); g._img = img; } catch (e) {} } o.image = img; delete o.imageId; return o; });
   /* upload ids belong to one saved project, so a file never carries them */
   const noId = (o, k) => { const c = plain(o); delete c[k]; return c; };
-  return {app: 'HPLC Figure Bench', version: 1, saved: new Date().toISOString(), cur, opt: plain(opt), runs: runs.map(r => noId(r, 'blobId')), traces: traces.filter(t => !t.ex).map(t => noId(t, 'blobId')), gels: gs, struct: struct ? noId(struct, 'blobId') : null, nanodrop: ndSamples.map(n => noId(n, 'specId')), prep};
+  return {app: 'HPLC Figure Bench', version: 1, saved: new Date().toISOString(), cur, opt: plain(opt), runs: runs.map(r => noId(r, 'blobId')), traces: traces.filter(t => !t.ex).map(t => noId(t, 'blobId')), gels: gs, struct: struct ? noId(struct, 'blobId') : null, nanodrop: ndSamples.map(n => noId(n, 'specId')), prep, rawFiles: rawFiles.map(f => plain(f))};
 }
 let projUndo = null, failedGels = [];
 /* a project file can be partial or damaged: keep what can be used and count what was skipped */
@@ -6140,7 +6344,7 @@ async function openProject(data, name, noUndo){
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
       Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
-  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: Array.isArray(t.peaks) ? t.peaks : []})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
+  rawFiles = data.rawFiles || []; rawFiles = data.rawFiles || []; runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: Array.isArray(t.peaks) ? t.peaks : []})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
     { const pq = Array.isArray(opt.myQuick) ? opt.myQuick : [], del = new Set([...(myQDel || []), ...(Array.isArray(opt.myQuickDel) ? opt.myQuickDel : [])]); opt.myQuickDel = [...del]; opt.myQuick = myQ.concat(pq.filter(q => !myQ.some(m => m.id === q.id))).filter(q => !del.has(q.id)); }
@@ -6170,10 +6374,11 @@ async function importAsProject(data, fname){
   const defStep = stepList().some(s => s.k === data.step) ? data.step : (data.cur && stepList().some(s => s.k === 'run:' + data.cur)) ? 'run:' + data.cur : (data.cur && stepList().some(s => s.k === data.cur)) ? data.cur : (runs.some(r => r.inWf) ? 'run:' + runs.find(r => r.inWf).id : 'construct');
   selectStep(defStep); await flushSave(true); toast(`Opened ${PROJ.name} as a new project`); }
 /* ---------- projects: a project per purification, saved with the page (db + assets) or in this browser ---------- */
-let PROJ = null, MODE = 'quick', curStep = 'construct';
+let PROJ = null, MODE = 'quick', curStep = 'construct', rawFiles = [];
 const STORE = {mode: 'pending', db: null, assets: null, uid: null, idb: null, ready: null};
-function idbOpen(){ return new Promise((res, rej) => { if (!window.indexedDB) return rej(new Error('no idb')); const q = indexedDB.open('hfb-projects', 1);
-  q.onupgradeneeded = () => { q.result.createObjectStore('projects', {keyPath: 'id'}); }; q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+function idbOpen(){ return new Promise((res, rej) => { if (!window.indexedDB) return rej(new Error('no idb')); const q = indexedDB.open('hfb-projects', 2);
+  q.onupgradeneeded = (e) => { const db = e.target.result; if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', {keyPath: 'id'}); if (!db.objectStoreNames.contains('rawFiles')) db.createObjectStore('rawFiles', {keyPath: 'id'}); }; q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+function idbRawDo(mode, fn){ return new Promise((res, rej) => { const tx = STORE.idb.transaction('rawFiles', mode), st = tx.objectStore('rawFiles'), q = fn(st); tx.oncomplete = () => res(q && q.result); tx.onerror = () => rej(tx.error); }); }
 function idbDo(mode, fn){ return new Promise((res, rej) => { const tx = STORE.idb.transaction('projects', mode), st = tx.objectStore('projects'), q = fn(st); tx.oncomplete = () => res(q && q.result); tx.onerror = () => rej(tx.error); }); }
 function storeInit(){
   if (STORE.ready) return STORE.ready;
@@ -6284,7 +6489,7 @@ async function saveOne(P, S, force){
     } else if (STORE.mode === 'local') {
       const js = pk.js; show('Saving…');
       const now = await idbDo('readonly', st => st.get(P.id)); if (!now && P.rev > 0) return stop('gone'); if (now && (now.rev || 0) !== P.rev) return stop('newer');
-      await idbDo('readwrite', st => st.put(Object.assign({id: P.id}, S.meta, {updated: Date.now(), rev: P.rev + 1, data: js}))); P.rev++; P.sig = sig; savedTo(P, S.seq);
+      await idbDo('readwrite', st => st.put(Object.assign({id: P.id}, S.meta, {updated: Date.now(), rev: P.rev + 1, data: js}))); for (const f of rawFiles) { if (f._blob) { await idbRawDo('readwrite', st => st.put({id: f.id, projId: P.id, blob: f._blob})); delete f._blob; } } P.rev++; P.sig = sig; savedTo(P, S.seq);
     }
     const n = lostCount(P); show(n ? `Saved. ${n} item${n === 1 ? '' : 's'} did not load and ${n === 1 ? 'is' : 'are'} kept for next time` : STORE.mode === 'cloud' ? 'Saved' : 'Saved in this browser');
   } catch (e) { const c = e && e.code;
@@ -6302,7 +6507,7 @@ async function storeLoad(id){
 async function storeDelete(id){
   await storeInit();
   if (STORE.mode === 'cloud') { const ref = projCol().doc(id), d = await ref.get(); const refs = d.exists ? (d.data().refs || []) : []; await ref.delete(); refs.forEach(x => STORE.assets.delete(x).catch(() => {})); return; }
-  if (STORE.mode === 'local') await idbDo('readwrite', st => st.delete(id));
+  if (STORE.mode === 'local') { await idbDo('readwrite', st => st.delete(id)); try { const allRaw = await idbRawDo('readonly', st => st.getAll()); for (const r of allRaw) if (r.projId === id) await idbRawDo('readwrite', st => st.delete(r.id)); } catch (e) {} }
 }
 /* upload ids belong to the project they were uploaded for: a file or quick work uploads again */
 function stripBlobIds(){ runs.forEach(r => delete r.blobId); traces.forEach(t => delete t.blobId); gels.forEach(g => delete g.imageId); if (struct) delete struct.blobId; ndSamples.forEach(n => delete n.specId); }
