@@ -39,7 +39,7 @@ AUTO_MAX, AUTO_QUEUE, AUTO_AVG = cfg.get('board_adopt_max', 5), cfg.get('board_q
 BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
 COPILOT_MODE = cfg.get('copilot_mode', 'off')  # off (Patrick has no Copilot credits): no Copilot jobs at all, and its turn goes to Claude Code. auto: the cloud agent, and the Copilot CLI while it is paused. cloud or cli: only that one
-CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 15), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
+CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 40), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
 TRACK = cfg.get('tracking_issue', 17)
 CLOUD_STANDBY = cfg.get('cloud_standby_minutes', 20)  # the cloud copy works only when the PC manager has been quiet this long
 DIGEST_HOUR = cfg.get('digest_hour', 7)
@@ -1273,11 +1273,12 @@ def copilot_cli_job(s, i, retry):
 
 # ---------- Antigravity agent (Gemini API): a third coding worker that needs no PC ----------
 AG_MARK = '<!-- antigravity-job -->'
+AG_APP = 'for-antigravity-app'  # waiting for Patrick to paste the prompt into the Antigravity desktop app
 AG_AGENT = cfg.get('antigravity_agent', 'antigravity-preview-09-2026')
-AG_AT_ONCE = cfg.get('antigravity_at_once', 4)
-AG_PER_PASS = cfg.get('antigravity_per_pass', 2)  # jobs handed over in one pass
+AG_AT_ONCE = cfg.get('antigravity_at_once', 6)
+AG_PER_PASS = cfg.get('antigravity_per_pass', 3)  # jobs handed over in one pass
 AG_MAX_TRIES = cfg.get('antigravity_max_tries', 2)  # attempts per issue before it stays with Jules
-AG_WHEN_QUEUE = cfg.get('antigravity_when_queue', 2)  # hand a job over while at least this many wait for Jules
+AG_WHEN_QUEUE = cfg.get('antigravity_when_queue', 1)  # hand a job over while at least this many wait for Jules
 AG_TOKENS = cfg.get('antigravity_max_tokens', 1500000)  # the app file alone is large; 400k ran out before the first job finished
 AG_JOB = """You are the Google Antigravity agent working on issue #{n} of Protein Purification Bench, a public GitHub repository.
 1. Clone it: git clone --depth 50 https://github.com/{repo}.git && cd {name}
@@ -1327,7 +1328,10 @@ def antigravity(s):
         except Exception as e:
             log(f'#{n}: Antigravity status check failed: {str(e)[:200]}')
             if time.time() - job['at'] > 3 * 3600:
-                label(int(n), add=[job.get('src', 'jules-queue')], remove=['antigravity-running']); a.pop(n); s.setdefault('ag_tried', {})[n] = rt.tries(s['ag_tried'].get(n)) + 1
+                s.setdefault('ag_tried', {})[n] = rt.tries(s['ag_tried'].get(n)) + 1
+                lost_more = s['ag_tried'][n] < AG_MAX_TRIES
+                label(int(n), add=['for-antigravity' if lost_more else 'jules-queue'] + ([] if lost_more else ['ag-returned']), remove=['antigravity-running', 'for-antigravity'])
+                a.pop(n)
                 log(f'#{n}: Antigravity job lost ({e}), back to Jules')
             continue
         st = it.get('status', '')
@@ -1351,14 +1355,15 @@ def antigravity(s):
             log(f'#{n}: Antigravity opened PR #{pr}')
         except Exception as e:
             s.setdefault('ag_tried', {})[n] = rt.tries(s['ag_tried'].get(n)) + 1
-            more = s['ag_tried'][n] < AG_MAX_TRIES and job.get('src', 'jules-queue') == 'jules-queue'
-            back = job.get('src', 'jules-queue')  # a second try stays in the queue, where Antigravity can take it again; after the last one the job is Jules'
-            label(int(n), add=[back], remove=['antigravity-running'])
-            post(int(n), f'The Antigravity job did not produce a usable change ({str(e)[:300]}), so the job goes back to `{back}`' + (' (Antigravity may try once more).' if more else '.') + SIGN.format(rv.MODEL))
+            more = s['ag_tried'][n] < AG_MAX_TRIES
+            back = 'for-antigravity' if more else 'jules-queue'
+            # Jules takes it after the last try, and ag-returned stops the leader routing it straight back to Antigravity
+            label(int(n), add=[back] + ([] if more else ['ag-returned']), remove=['antigravity-running', 'for-antigravity'])
+            post(int(n), f'The Antigravity job did not produce a usable change ({str(e)[:300]}), so the job goes ' + ('back to Antigravity for one more try.' if more else 'to Jules instead.') + SIGN.format(rv.MODEL))
             log(f'#{n}: Antigravity job failed: {e}')
     for i in issues('antigravity-running'):  # labelled, but the manager has no job for it (its memory was lost): put it back
         if str(i['number']) not in a:
-            label(i['number'], add=['jules-queue'], remove=['antigravity-running'])
+            label(i['number'], add=['jules-queue', 'ag-returned'], remove=['antigravity-running', 'for-antigravity'])
             log(f'#{i["number"]}: Antigravity job not tracked any more, back to Jules')
     # hand out: first jobs that wait for a worker that isn't there (Copilot while it is paused, Claude Code while the PC is off), then Jules' backlog
     tried = s.get('ag_tried', {})
@@ -1393,6 +1398,74 @@ def antigravity(s):
         why = {'for-copilot': 'Copilot is paused', 'for-claude-code': "Claude Code needs Patrick's PC, which is off"}.get(src, f'Jules has {len(queue)} jobs waiting')
         post(n, f'Handed to the **Google Antigravity agent** through the Gemini API ({why}; {kind} job). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
         log(f'#{n}: handed to Antigravity ({kind}, attempt {rt.tries(tried.get(str(n))) + 1})')
+
+
+AG_STALL_MIN = cfg.get('antigravity_stall_minutes', 45)  # a for-antigravity job nobody started by then goes to Jules, so a broken API never stalls the queue
+AG_APP_AT_ONCE = cfg.get('antigravity_app_at_once', 2)  # jobs waiting for Patrick to paste into the Antigravity desktop app
+AG_APP_PROMPT = """**For the Antigravity desktop app.** Paste this into a task in `C:\\Users\\Patrick\\hfb-antigravity`:
+
+```
+First: git checkout main && git pull, then read AGENTS.md, docs/CODEMAP.md and docs/AGENT_TIPS.md. Give every step a time limit, and if something fails twice the same way, record it, move on, and report it in the PR instead of retrying.
+
+Work on GitHub issue #{n} in this repository ({repo}): "{title}". Read the issue and do what it asks. Create the branch antigravity/issue-{n}.
+
+Change only hplc-figure-bench(WF1.13).html and files under tests/. Add a check, driven only through the UI and DOM, that fails on current main and passes with your change, and keep every existing check. Run the suites you touched (cd tests && node suites/NN_name.js). Never add real lab data.
+
+Then commit, push, and open a pull request whose description says "Closes #{n}", with what you changed, the check that fails on main and passes here, and exactly what you ran. Do not merge.
+```
+
+The PR goes through the Test suite and the review gate like any other. When it appears, this label clears itself."""
+
+
+def has_pr(n):
+    """An open pull request for issue n: its branch, or a "Closes #n" in its body."""
+    pat = re.compile(rf'(?:closes|fixes|resolves)\s+#{n}\b', re.I)
+    return any(pr['head']['ref'].endswith(f'/issue-{n}') or pat.search(pr.get('body') or '')
+               for pr in gh(f'repos/{REPO}/pulls?state=open&per_page=100'))
+
+
+def antigravity_app(s):
+    """The desktop app is the only Antigravity path that has actually landed pull requests (#759, #765), so a couple of
+    app-changing jobs always carry a ready-to-paste prompt for Patrick. Nothing waits on him: the API route and the
+    stall guard run regardless, and a job whose PR appears, or which another worker takes, clears itself."""
+    seen = s.setdefault('ag_app', {})
+    for i in issues(AG_APP):  # done, taken elsewhere, or closed: let it go
+        n, lab = i['number'], {l['name'] for l in i['labels']}
+        if lab & {'antigravity-done', 'jules-running', 'antigravity-running', 'claude-code-running', 'codex-running'} or has_pr(n):
+            label(n, remove=[AG_APP]); seen.pop(str(n), None)
+            log(f'#{n}: cleared the Antigravity app label')
+    have = [i for i in issues(AG_APP)]
+    room = AG_APP_AT_ONCE - len(have)
+    if room <= 0:
+        return
+    tried = s.get('ag_tried', {})
+    pool = [i for i in issues('for-antigravity') if str(i['number']) not in s.get('antigravity', {}) and str(i['number']) not in seen]
+    for i in rt.pick(pool, tried, room, AG_MAX_TRIES):
+        n = i['number']
+        if DRY:
+            log(f'[dry] would ask Patrick to paste #{n}'); continue
+        seen[str(n)] = time.time()
+        label(n, add=[AG_APP])
+        post(n, AG_APP_PROMPT.format(n=n, repo=REPO, title=i['title'].replace('"', "'")) + SIGN.format(rv.MODEL))
+        log(f'#{n}: prompt posted for the Antigravity desktop app')
+
+
+def antigravity_stall(s):
+    """Hand a for-antigravity job to Jules when Antigravity has not started it. Patrick's split gives Antigravity every
+    app-changing job, so without this a paused API (6 hours after one refusal) would stop all app work."""
+    a = s.get('antigravity', {})
+    paused = s.get('ag_off_until', 0) > time.time() or not GEMINI_KEY
+    for i in issues('for-antigravity'):
+        n = i['number']
+        if str(n) in a or AG_APP in {l['name'] for l in i['labels']}:
+            continue  # running, or waiting for Patrick to paste it
+        waited = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(i['updated_at'].replace('Z', '+00:00'))).total_seconds() / 60
+        if waited < AG_STALL_MIN and not paused:
+            continue
+        why = 'the Gemini API is paused' if paused else f'Antigravity has not started it in {int(waited)} minutes'
+        label(n, add=['jules-queue', 'ag-returned'], remove=['for-antigravity'])
+        post(n, f'Back to Jules: {why}. Antigravity keeps the app-changing jobs it can take, and this one was waiting.' + SIGN.format(rv.MODEL))
+        log(f'#{n}: for-antigravity -> jules-queue ({why})')
 
 
 def apply_agent_diff(n, title, diff, body, branch, who):
@@ -2330,7 +2403,7 @@ def one_pass():
         log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
     else:
         heartbeat(s)
-    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('science inbox', science_inbox), ('relay', relay),('owner merge', owner_merge_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('science inbox', science_inbox), ('relay', relay),('owner merge', owner_merge_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
