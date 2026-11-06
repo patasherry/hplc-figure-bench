@@ -916,7 +916,7 @@ button,input,select,textarea{font-family:inherit}
       <div class="row">
         <label class="f">Integration baseline
           <select id="o-intBase" data-opt="intBase">
-            <option value="line">Valley to valley</option>
+            <option value="line" title="Draws a line between the lowest points just outside the interval, walking out while the trace keeps falling">Valley to valley (outward)</option>
             <option value="zero">Zero (0 mAU)</option>
           </select>
         </label>
@@ -1869,14 +1869,36 @@ function clipXY(xs, ys, a, b){
   const i = lowerBound(xs, a), j = lowerBound(xs, b), xx = xs.slice(i, j), yy = ys.slice(i, j);
   if (xx[0] !== a) { xx.unshift(a); yy.unshift(at(a)); } xx.push(b); yy.push(at(b)); return {xs: xx, ys: yy};
 }
-function integrateRegion(xs, ys, a, b, mode){
+function integrateBlocks(B, xs, ys, baseMode) {
+  let area = 0, il, ir;
+  if (!B.length) return {area, base: () => 0};
+  const ia = Math.max(0, lowerBound(xs, B[0].a)), ib = Math.min(xs.length - 1, lowerBound(xs, B[B.length - 1].b));
+
+  if (baseMode === 'zero') {
+    il = ia; ir = ib;
+  } else {
+    // outward-walking baseline
+    const rng = (arrMax(ys) - arrMin(ys)) || 1, tol = rng*0.003, w = Math.max(1, Math.round(xs.length*0.002));
+    const walk = (i, d) => { let j = i; for (let k = 0; k < xs.length; k++) { const n = j + d*w; if (n < 0 || n >= xs.length || ys[n] > ys[j] + tol) break; j = n; } return j; };
+    il = walk(ia, -1); ir = walk(ib, 1);
+  }
+  const base = baseMode === 'zero' ? () => 0 : x => ys[il] + (ys[ir] - ys[il])*(x - xs[il])/((xs[ir] - xs[il]) || 1);
+  B.forEach(k => {
+    const q = clipXY(xs, ys, k.a, k.b);
+    for (let i = 0; i < q.xs.length - 1; i++) {
+      area += (q.ys[i] - base(q.xs[i]) + q.ys[i+1] - base(q.xs[i+1]))/2*(q.xs[i+1] - q.xs[i]);
+    }
+  });
+  return {area, base, il, ir};
+}
+
+function integrateRegion(xsFull, ysFull, a, b, mode){
   if (b < a) [a, b] = [b, a];
-  ({xs, ys} = clipXY(xs, ys, a, b)); const i0 = 0, i1 = xs.length - 1;
+  const {area, base} = integrateBlocks([{a, b}], xsFull, ysFull, mode);
+  const {xs, ys} = clipXY(xsFull, ysFull, a, b); const i0 = 0, i1 = xs.length - 1;
   if (i1 < 1) return null;
   const xa = xs[i0], xb = xs[i1], ya = ys[i0], yb = ys[i1];
-  const base = mode === 'zero' ? () => 0 : x => ya + (yb - ya)*(x - xa)/((xb - xa) || 1);
-  let area = 0, apex = i0, h = -Infinity;
-  for (let i=i0;i<i1;i++) area += ((ys[i] - base(xs[i])) + (ys[i+1] - base(xs[i+1])))/2*(xs[i+1] - xs[i]);
+  let apex = i0, h = -Infinity;
   for (let i=i0;i<=i1;i++){ const d = ys[i] - base(xs[i]); if (d > h) { h = d; apex = i; } }
   return {a: xa, b: xb, i0, i1, xs, ys, base, area, apex: xs[apex], apexY: ys[apex], height: h};
 }
@@ -2041,8 +2063,8 @@ function gaussRows(uv, regs){
   const walk = (i, d) => { let j = i; for (let k = 0; k < xs.length; k++) { const n = j + d*w; if (n < 0 || n >= xs.length || ys[n] > ys[j] + tolWalk) break; j = n; } return j; };
   clusters.forEach(c => {
     const i0 = Math.max(0, lowerBound(xs, c.a)), i1 = Math.min(xs.length - 1, lowerBound(xs, c.b)); if (i1 - i0 < 6) return;
-    const il = walk(i0, -1), ir = walk(i1, 1);
-    const xa = xs[i0], xb = xs[i1], base = opt.intBase === 'zero' ? () => 0 : x => ys[il] + (ys[ir] - ys[il])*(x - xs[il])/((xs[ir] - xs[il]) || 1);
+    const {base, il, ir} = integrateBlocks([{a: xs[i0], b: xs[i1]}], xs, ys, opt.intBase);
+    const xa = xs[i0], xb = xs[i1];
     const st = Math.max(1, Math.floor((i1 - i0)/800)), fx = [], fy = [];
     for (let i=i0;i<=i1;i+=st){ fx.push(xs[i]); fy.push(ys[i] - base(xs[i])); }
     const dx = (xb - xa)/Math.max(1, fx.length - 1);
@@ -2096,11 +2118,7 @@ function measToStep(r){ const b = prep.btw && prep.btw[r.id], c = numOr(r.poolCo
 function poolRows(run){
   const uv = uvOf(run), xs = uv.xs, ys = uv.ys, B = poolBlocks(run); if (!B.length) return null;
   const a = B[0].a, b = B[B.length - 1].b, ia = Math.max(0, lowerBound(xs, a)), ib = Math.min(xs.length - 1, lowerBound(xs, b)); if (xs.length < 2 || !(b > a) || b <= xs[0] || a >= xs[xs.length - 1]) return null;
-  /* baseline: zero, or a line between the lowest points just outside the pool, walking out while the trace keeps falling */
-  const rng = (arrMax(ys) - arrMin(ys)) || 1, tol = rng*0.003, w = Math.max(1, Math.round(xs.length*0.002));
-  const walk = (i, d) => { let j = i; for (let k = 0; k < xs.length; k++) { const n = j + d*w; if (n < 0 || n >= xs.length || ys[n] > ys[j] + tol) break; j = n; } return j; };
-  const il = walk(ia, -1), ir = walk(ib, 1), base = opt.intBase === 'zero' ? () => 0 : x => ys[il] + (ys[ir] - ys[il])*(x - xs[il])/((xs[ir] - xs[il]) || 1);
-  let area = 0; B.forEach(k => { const q = clipXY(xs, ys, k.a, k.b); for (let i = 0; i < q.xs.length - 1; i++) area += (Math.max(0, q.ys[i] - base(q.xs[i])) + Math.max(0, q.ys[i+1] - base(q.xs[i+1])))/2*(q.xs[i+1] - q.xs[i]); });
+  const {area} = integrateBlocks(B, xs, ys, opt.intBase);
   const vol = B.reduce((t, k) => t + k.b - k.a, 0), mgA = massOf(area, run), ms = poolMeas(run), pc = ms.c, fv = ms.v, mv = fv !== null && fv >= 0 ? fv : xUnit(run) === 'mL' ? vol : (xUnit(run) === 'min' && uvFlow(run) > 0) ? vol * uvFlow(run) : 0;
   /* a NanoDrop reading of the pool, often after it was concentrated, beats the estimate from the UV area; its volume is the one measured */
   /* a reading on the Concentrated step needs the volume after concentrating, never the pool volume */
@@ -5451,7 +5469,7 @@ function renderIntTable(run){
   const sec = isSec(run), fit = sec ? secFit(secCalFor(run)) : null, hasKav = !!(fit && fit.useKav), hasMw = !!(fit && fit.mw), hasOl = hasMw && secMono() > 0;
   /* A260/A280 at each peak when the run recorded both wavelengths */
   const c280 = run.uvs.find(u => /280/.test(u.name)), c260 = run.uvs.find(u => /260/.test(u.name)), rat = !!(c280 && c260);
-  const baseAt = (c, x, a, b) => { if (opt.intBase === 'zero') return 0; const ia = nearestIdx(c.xs, a), ib = nearestIdx(c.xs, b); const xa = c.xs[ia], xb = c.xs[ib], ya = c.ys[ia], yb = c.ys[ib]; return ya + (yb - ya) * (x - xa) / ((xb - xa) || 1); };
+  const baseAt = (c, x, a, b) => { const {base} = integrateBlocks([{a, b}], c.xs, c.ys, opt.intBase); return base(x); };
   const ratAt = r => { if (!rat) return ''; const x = r.apex; const a = c260.ys[nearestIdx(c260.xs, x)] - baseAt(c260, x, r.a, r.b), b = c280.ys[nearestIdx(c280.xs, x)] - baseAt(c280, x, r.a, r.b); return b > 5 ? fmt(a/b, 2) : ''; };
   const cols = 8 + (rat ? 1 : 0) + (hasMg ? 1 : 0) + (gs ? 2 : 0) + (hasKav ? 1 : 0) + (hasMw ? 1 : 0) + (hasOl ? 1 : 0);
   const head = `<tr><th>Region</th><th>Start (${u})</th><th>End (${u})</th><th>${sec ? (u === 'min' ? 'Elution time' : 'Ve') : gs ? 'Center' : 'Apex'} (${u})</th>${hasKav ? '<th title="(Ve − V0)/(Vt − V0)">Kav</th>' : ''}${hasMw ? '<th>Apparent mass (kDa)</th>' : ''}${hasOl ? '<th title="Apparent MW divided by the monomer mass. SEC sizes are typically good to 10 to 20%, and shape shifts them, so treat this as a guide to the oligomer state">× monomer</th>' : ''}<th>Height (mAU)</th>${gs ? `<th>FWHM (${u})</th>` : ''}<th>Area (mAU·${u})</th><th>% of regions</th>${hasMg ? '<th>Protein (mg)</th>' : ''}${rat ? '<th title="Ratio of absorbance at 260 and 280 nm at the peak. Around 0.57 for pure protein, higher when nucleic acid or bound nucleotide is present">A₂₆₀/A₂₈₀</th>' : ''}${gs ? '<th>Fit R²</th>' : ''}<th></th></tr>`;
@@ -5482,9 +5500,9 @@ $('#intClear').addEventListener('click', () => { const r = curRun(); if (!r) ret
 $('#intCsv').addEventListener('click', () => {
   const q = csvQuote, lines = [['Run','Region','Start','End','Apex or center','X unit','Height (mAU)','Area (mAU*x unit)','% of regions','Protein (mg)','Baseline','Method','FWHM','Fit R2','SEC calibration','Kav','Apparent MW (kDa)','Oligomer (MW / monomer)'].join(',')];
   runs.forEach(r => { const u = xUnit(r), cal = isSec(r) ? secCalFor(r) : null;
-    integRows(r).forEach(x => { const si = x.sec || {}; lines.push([q(r.name), x.name, x.a.toFixed(3), x.b.toFixed(3), x.apex.toFixed(3), u, x.height.toFixed(2), x.area.toFixed(3), x.pct == null ? '' : x.pct.toFixed(2), x.mg == null ? '' : x.mg.toFixed(4), opt.intBase === 'zero' ? 'zero' : 'valley to valley', x.gauss ? 'Gaussian fit' : 'trapezoid', x.fwhm == null ? '' : x.fwhm.toFixed(3), x.r2 == null ? '' : x.r2.toFixed(4),
+    integRows(r).forEach(x => { const si = x.sec || {}; lines.push([q(r.name), x.name, x.a.toFixed(3), x.b.toFixed(3), x.apex.toFixed(3), u, x.height.toFixed(2), x.area.toFixed(3), x.pct == null ? '' : x.pct.toFixed(2), x.mg == null ? '' : x.mg.toFixed(4), opt.intBase === 'zero' ? 'zero' : 'valley to valley (outward)', x.gauss ? 'Gaussian fit' : 'trapezoid', x.fwhm == null ? '' : x.fwhm.toFixed(3), x.r2 == null ? '' : x.r2.toFixed(4),
       cal ? q(cal.name) : '', si.kav == null ? '' : si.kav.toFixed(4), si.void ? 'void' : si.mw == null ? '' : (si.extrap ? '~' : '') + si.mw.toFixed(1), si.ratio == null ? '' : si.ratio.toFixed(2)].join(',')); });
-    const p = poolRows(r); if (p) lines.push([q(r.name), q('Pool ' + p.label), p.a.toFixed(3), p.b.toFixed(3), '', u, '', p.area.toFixed(3), '', p.mg == null ? '' : p.mg.toFixed(4), opt.intBase === 'zero' ? 'zero' : 'line across pool', 'trapezoid', '', '', '', '', '', ''].join(','));
+    const p = poolRows(r); if (p) lines.push([q(r.name), q('Pool ' + p.label), p.a.toFixed(3), p.b.toFixed(3), '', u, '', p.area.toFixed(3), '', p.mg == null ? '' : p.mg.toFixed(4), opt.intBase === 'zero' ? 'zero' : 'valley to valley (outward)', 'trapezoid', '', '', '', '', '', ''].join(','));
   });
   if (lines.length < 2) return toast('No integrated regions or pools yet');
   saveFile('peak_integration.csv', lines.join('\r\n'));
