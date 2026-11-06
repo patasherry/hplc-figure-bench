@@ -1390,8 +1390,23 @@ def antigravity(s):
                                                   'input': AG_JOB.format(n=n, repo=REPO, name=REPO.split('/')[1], title=i['title'], body=(i.get('body') or '')[:12000])})
         except Exception as e:
             s['count']['antigravity'] -= 1
-            s['ag_off_until'] = time.time() + 6 * 3600
-            return log(f'Antigravity not available ({str(e)[:200]}), paused for 6 hours')
+            # Every call from Nov 1 to Nov 5 came back 429 on the first attempt of the day, with no usage behind it: the
+            # agent has no quota on this key's tier, so retrying every 6 hours forever only hides it. Back off hard after
+            # AG_REFUSALS in a row and say so once, instead of a 6-hour cycle that never ends.
+            s['ag_refused'] = s.get('ag_refused', 0) + 1
+            dead = s['ag_refused'] >= AG_REFUSALS
+            s['ag_off_until'] = time.time() + (AG_DEAD_HOURS if dead else 6) * 3600
+            if dead and not s.get('ag_said_dead'):
+                s['ag_said_dead'] = True
+                post(TRACK, f'**The Antigravity API is refusing every call.** {s["ag_refused"]} attempts in a row have come back `{str(e)[:120]}`, '
+                            'each on the first call of the day with no usage behind it, so this is not our traffic: the agent has no quota on this key\'s tier.\n\n'
+                            f'The API route is paused for {AG_DEAD_HOURS} hours at a time now rather than 6, so it stops filling the log. '
+                            'Antigravity still gets the app-changing jobs through the desktop app (`for-antigravity-app`), which is the only route that has ever '
+                            'landed a PR here (#759, #765). Everything the app route cannot hold goes to Jules within '
+                            f'{AG_STALL_MIN} minutes.\n\nTo bring the API route back, the Gemini key needs a tier with quota for `{AG_AGENT}`. '
+                            'Once it has one, the next successful call clears this by itself.' + SIGN.format(rv.MODEL))
+            return log(f'Antigravity not available ({str(e)[:200]}), refusal {s["ag_refused"]}, paused for {AG_DEAD_HOURS if dead else 6} hours')
+        s['ag_refused'], s['ag_said_dead'] = 0, False  # it answered, so whatever was wrong with the quota is fixed
         kind = rt.kind(i['title'])
         a[str(n)] = {'id': it['id'], 'at': time.time(), 'title': i['title'], 'src': src, 'kind': kind}
         label(n, add=['antigravity-running'], remove=[src])
@@ -1400,8 +1415,11 @@ def antigravity(s):
         log(f'#{n}: handed to Antigravity ({kind}, attempt {rt.tries(tried.get(str(n))) + 1})')
 
 
+AG_REFUSALS = cfg.get('antigravity_refusals_before_dead', 3)  # consecutive API refusals that mean the key has no quota, not a passing rate limit
+AG_DEAD_HOURS = cfg.get('antigravity_dead_hours', 24)        # how long to leave it alone then, instead of retrying every 6 hours forever
 AG_STALL_MIN = cfg.get('antigravity_stall_minutes', 45)  # a for-antigravity job nobody started by then goes to Jules, so a broken API never stalls the queue
-AG_APP_AT_ONCE = cfg.get('antigravity_app_at_once', 2)  # jobs waiting for Patrick to paste into the Antigravity desktop app
+AG_APP_AT_ONCE = cfg.get('antigravity_app_at_once', 2)      # jobs waiting for Patrick to paste into the Antigravity desktop app
+AG_APP_DEAD = cfg.get('antigravity_app_at_once_dead', 4)    # more of them while the API refuses, since the app is then the only Antigravity there is
 AG_APP_PROMPT = """**For the Antigravity desktop app.** Paste this into a task in `C:\\Users\\Patrick\\hfb-antigravity`:
 
 ```
@@ -1435,7 +1453,8 @@ def antigravity_app(s):
             label(n, remove=[AG_APP]); seen.pop(str(n), None)
             log(f'#{n}: cleared the Antigravity app label')
     have = [i for i in issues(AG_APP)]
-    room = AG_APP_AT_ONCE - len(have)
+    cap = AG_APP_DEAD if s.get('ag_refused', 0) >= AG_REFUSALS or s.get('ag_off_until', 0) > time.time() else AG_APP_AT_ONCE
+    room = cap - len(have)
     if room <= 0:
         return
     tried = s.get('ag_tried', {})
