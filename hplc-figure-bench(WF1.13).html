@@ -1339,7 +1339,7 @@ button,input,select,textarea{font-family:inherit}
     </div>
     <div class="intp" id="intPanel" hidden>
       <div class="intp-head"><strong>Peak integration</strong>
-        <div class="btns"><button type="button" class="mini" id="intAuto">Detect peaks</button><button type="button" class="mini" id="intClear">Clear regions</button><button type="button" class="mini" id="intMore" hidden></button><button type="button" class="mini" id="intCsv">Save table (CSV, all runs)</button></div></div>
+        <div class="btns"><button type="button" class="mini" id="intAuto">Detect peaks</button><button type="button" class="mini" id="intClear">Clear regions</button><button type="button" class="mini" id="intMore" hidden></button><button type="button" class="mini" id="intCsv" aria-label="Save table CSV">Save table CSV</button></div></div>
       <div class="tablewrap"><table class="itab mono" id="intTable"></table></div>
     </div>
   </main>
@@ -6939,7 +6939,8 @@ async function saveFile(name, data){
   anchorSave(name, data);
 }
 function anchorSave(name, data){
-  const blob = data instanceof Blob ? data : new Blob([data], {type: 'image/svg+xml'});
+  const mime = /\.csv$/i.test(name) ? 'text/csv' : (/\.json$/i.test(name) ? 'application/json' : 'image/svg+xml');
+  const blob = data instanceof Blob ? data : new Blob([data], {type: mime});
   try { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
   catch (e) { toast(/\.svg$/.test(name) ? 'Saving is blocked in this view. Copy SVG still works.' : 'Saving is blocked in this view. Open the tool in its own tab to save files.'); }
 }
