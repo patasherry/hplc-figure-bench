@@ -456,7 +456,7 @@ def jules_questions(s):
         if key in s['answered'] or any(c['id'] > q['id'] and c['body'].lstrip().lower().startswith('answer for jules') for c in cs):
             continue
         ctx = ctx or context()
-        text = re.split(r'The leader told Jules|The local manager on Patrick', q['body'][len('Jules asked:'):], 1)[0].strip()
+        text = re.split(r'The leader told Jules|The local manager on Patrick', q['body'][len('Jules asked:'):], maxsplit=1)[0].strip()
         try:
             who, ans, trail = ladder(s, i, text, ctx)
         except Exception as e:
@@ -693,18 +693,29 @@ def relay_file(path):
 
 
 HARNESS = ['tests/lib/harness.js', 'tests/suites/25_gels.js']
+RELAY_TOTAL_CHARS = cfg.get('relay_max_request_chars', 30000)  # the whole request, so what Patrick pastes stays something an agent will read
+RELAY_EXTRA_CHARS = cfg.get('relay_max_extra_chars', 12000)    # all attached files together
+RELAY_FILE_CHARS = cfg.get('relay_max_file_chars', 8000)       # any one of them
 
 
-def relay_extra(title, body):
+def relay_extra(title, body, room=None):
     """The whole files a request carries beside the excerpt. Every patch response has to bring a test with it, so the harness
     always rides along: without it an agent writes the test against @playwright/test, which this repository does not use.
-    A job that is about checks in its own right gets a worked suite too."""
+    A job that is about checks in its own right gets a worked suite too.
+
+    `room` is the characters left for these after the excerpt. The excerpt is the point of the request, so the attachments
+    give way, not the code the question is about. #1090's request went out at 43,166 characters with a whole gel
+    densitometry suite attached to a job about the Construct sequence field, and the agent answered that it could not work
+    with what it had been given."""
     want = HARNESS if rl.wants_tests(title, body) else HARNESS[:1]
-    out = []
+    out, left = [], RELAY_EXTRA_CHARS if room is None else max(0, room)
     for path in want:
         t = relay_file(path)
-        if t:
-            out.append((path, t if len(t) < 8000 else t[:8000] + '\n... (truncated)'))  # the excerpt is capped too (rl.MAX_CHARS): a request has to stay pasteable
+        if not t or left < 1200:  # a file cut below this teaches an agent nothing
+            continue
+        cut = min(len(t), left, RELAY_FILE_CHARS)
+        out.append((path, t if cut >= len(t) else t[:cut] + '\n... (truncated)'))
+        left -= cut
     return out
 
 
@@ -733,11 +744,34 @@ def relay_send(n, issue, app_text, base, ranges, board=False):
            'so it comes here for a bigger reasoning budget before it goes to the work queue.\n\n' + rl.BOARD_MARK + '\n') if board else ''
     body = re.sub(r'^.*relay-lines:.*$', '', issue.get('body') or '', flags=re.M).strip()[:6000]
     exp = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=RELAY_HOURS)
-    req = rl.build_request(rid, base, app_text, n, exp, issue['title'], body or issue['title'], ranges, relay_extra(issue['title'], body))
+    # The excerpt first, then whatever room is left for the attached files: a request has to stay something an agent will
+    # read in one go. #1090's went out at 43,166 characters and came back "insufficient".
+    used = rl.chars_of(app_text.split('\n'), ranges or [])
+    req = rl.build_request(rid, base, app_text, n, exp, issue['title'], body or issue['title'], ranges,
+                           relay_extra(issue['title'], body, room=min(RELAY_EXTRA_CHARS, RELAY_TOTAL_CHARS - used - 3000)))
+    if len(req) > RELAY_TOTAL_CHARS * 1.2:
+        log(f'relay request {rid} is {len(req)} characters, over the {RELAY_TOTAL_CHARS} budget')
     post(n, why + f'**Relay request `{rid}`.** Paste the block below into the offline agent as its whole prompt, then paste its reply back here as a comment. Valid until {rl.iso(exp)}.\n\n'
             + rl.MARK.format(rid, base) + '\n````\n' + req + '\n````' + SIGN.format(rv.MODEL))
     log(f'relay request {rid} posted on #{n}')
     return rid
+
+
+def relay_base_app(body, reqs):
+    """The app file as it stood at the base of the request this response answers, or None.
+
+    Check 4 accepts a hunk cut from that base when main has since moved, which a hand-carried round trip makes likely:
+    #1064's request went out at 08:13 and its answer came back at 18:03. Read from git, so it costs one cheap command and
+    cannot be influenced by the response itself."""
+    m = re.search(r'^id:\s*(\S+)', body, re.M)
+    base = (reqs.get(m.group(1)) or {}).get('base') if m else None
+    if not base or not re.fullmatch(r'[0-9a-f]{7,40}', base):
+        return None
+    try:
+        return git('show', f'{base}:{APP_}')
+    except Exception as e:
+        log(f'relay: could not read the app at {base} ({str(e)[:100]}), so only current main is checked')
+        return None
 
 
 def relay_ranges_of(cs, rid):
@@ -809,7 +843,8 @@ def relay_collect(n, issue):
         if app is None:
             app, base = relay_app()
         try:
-            r = rl.validate(c['body'], reqs, app)
+            # the app as it was at the request's base, so an answer that main has moved under is still usable
+            r = rl.validate(c['body'], reqs, app, relay_base_app(c['body'], reqs))
         except rl.Bad as b:
             if b.kind == 'reply':
                 post(n, f'Response not accepted: {b.msg}. Nothing was filed.' + sig + SIGN.format(rv.MODEL)); log(f'relay #{n}: rejected: {b.msg}'); continue
@@ -1005,6 +1040,21 @@ def gate(s):
         cop_done = 'copilot' in pr['user']['login'].lower() and not pr['title'].startswith('[WIP]') and bool(pr.get('requested_reviewers'))
         if (pr.get('draft') and not cop_done) or s['gated'].get(str(n)) == sha:
             continue
+        # Judge emptiness before waiting for tests. An empty PR touches neither the app nor tests/, so the Test suite
+        # never runs on it and `t` stays None for ever, and it does not conflict either, so the wait below skipped it on
+        # every pass and it never reached this check. #1016, #1058, #1076, #1080 and #1081 sat open that way, each with a
+        # commit message claiming a fix and nothing in the commit. Zero files is decidable with no test run at all.
+        files = [f['filename'] for f in gh(f'repos/{REPO}/pulls/{n}/files?per_page=100')]
+        if not files:
+            m0 = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
+            iss = int(m0.group(1)) if m0 else linked_issue(n)
+            gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
+            post(n, 'This pull request changes no files, so it cannot fix anything. Closed without merging, because merging it would close its issue while the bug stays.' + SIGN.format(rv.MODEL))
+            if iss:
+                label(iss, add=['jules-queue'], remove=['jules-running', 'jules-done', 'claude-cloud-running', 'claude-code-running'])
+                post(iss, f'PR #{n} for this issue changed no files, so it was closed without merging and the issue is queued again. The fix still has to be made in the app, with a check that fails on main and passes on the branch.' + SIGN.format(rv.MODEL))
+            log(f'PR #{n}: empty, closed and #{iss} requeued')
+            continue
         runs = gh(f'repos/{REPO}/actions/runs?head_sha={sha}').get('workflow_runs', [])
         t = next((r for r in runs if r['name'] == 'Test suite'), None)
         stuck_conflict, waits_approval = False, cop_done  # the API can't approve Copilot's runs: rebuild it on our own branch, where the tests run
@@ -1015,18 +1065,6 @@ def gate(s):
             if t or age < 1800 or gh(f'repos/{REPO}/pulls/{n}').get('mergeable_state') != 'dirty':
                 continue  # wait for the tests
             stuck_conflict = True  # GitHub runs no PR tests while a PR conflicts with main, so without this it would wait forever
-        files = [f['filename'] for f in gh(f'repos/{REPO}/pulls/{n}/files?per_page=100')]
-        if not files:  # an empty PR fixes nothing, and every file check below passes vacuously, so it would merge and close its issue while the bug stays
-            full = gh(f'repos/{REPO}/pulls/{n}')
-            m0 = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
-            iss = int(m0.group(1)) if m0 else linked_issue(n)
-            gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
-            post(n, 'This pull request changes no files, so it cannot fix anything. Closed without merging, because merging it would close its issue while the bug stays.' + SIGN.format(rv.MODEL))
-            if iss:
-                label(iss, add=['jules-queue'], remove=['jules-running', 'jules-done', 'claude-cloud-running', 'claude-code-running'])
-                post(iss, f'PR #{n} for this issue changed no files, so it was closed without merging and the issue is queued again. The fix still has to be made in the app, with a check that fails on main and passes on the branch.' + SIGN.format(rv.MODEL))
-            log(f'PR #{n}: empty, closed and #{iss} requeued')
-            continue
         if rv.APP not in files and all(ALLOWED.match(f) for f in files) and not (stuck_conflict or waits_approval):
             s['gated'][str(n)] = sha  # tests or docs only and nothing stray: the leader's own merge rule handles it
             continue
@@ -1417,16 +1455,26 @@ def antigravity(s):
                                                   'input': AG_JOB.format(n=n, repo=REPO, name=REPO.split('/')[1], title=i['title'], body=(i.get('body') or '')[:12000])})
         except Exception as e:
             s['count']['antigravity'] -= 1
-            # Every call from Nov 1 to Nov 5 came back 429 on the first attempt of the day, with no usage behind it: the
-            # agent has no quota on this key's tier, so retrying every 6 hours forever only hides it. Back off hard after
-            # AG_REFUSALS in a row and say so once, instead of a 6-hour cycle that never ends.
+            # "Project environment storage quota exceeded" is our own mess, not a tier problem: every call makes a
+            # sandbox and the API keeps each one 7 days. Clear the old ones and let the next pass try again, rather than
+            # counting a refusal and pausing for a day over something we can fix. At most one sweep an hour.
+            if 'environment storage quota' in str(e).lower() and s.get('ag_swept_at', 0) < time.time() - 3600:
+                s['ag_swept_at'] = time.time()
+                try:
+                    gone, total = ag_sweep_envs()
+                    return log(f'Antigravity: the project was full of old sandboxes, deleted {gone} of {total}, retrying next pass')
+                except Exception as ex:
+                    log(f'Antigravity: could not list or clear the sandboxes ({str(ex)[:120]})')
+            # Otherwise: back off hard after AG_REFUSALS in a row and say so once, instead of a 6-hour cycle that never ends.
             s['ag_refused'] = s.get('ag_refused', 0) + 1
             dead = s['ag_refused'] >= AG_REFUSALS
             s['ag_off_until'] = time.time() + (AG_DEAD_HOURS if dead else 6) * 3600
             if dead and not s.get('ag_said_dead'):
                 s['ag_said_dead'] = True
                 post(TRACK, f'**The Antigravity API is refusing every call.** {s["ag_refused"]} attempts in a row have come back `{str(e)[:120]}`, '
-                            'each on the first call of the day with no usage behind it, so this is not our traffic: the agent has no quota on this key\'s tier.\n\n'
+                            'each on the first call of the day with no usage behind it.\n\n'
+                            'If the message names the **environment storage quota**, that is our own doing and the manager clears it itself: every call '
+                            'creates a sandbox and the API keeps each one for 7 days, so they pile up. Any other message points at the key or the tier.\n\n'
                             f'The API route is paused for {AG_DEAD_HOURS} hours at a time now rather than 6, so it stops filling the log. '
                             'Antigravity still gets the app-changing jobs through the desktop app (`paste-to-antigravity`, see `docs/ANTIGRAVITY.md`), which is the only route that has ever '
                             'landed a PR here (#759, #765). Everything the app route cannot hold goes to Jules within '
@@ -1443,6 +1491,39 @@ def antigravity(s):
 
 
 AG_REFUSALS = cfg.get('antigravity_refusals_before_dead', 3)  # consecutive API refusals that mean the key has no quota, not a passing rate limit
+AG_ENV_KEEP_H = cfg.get('antigravity_env_keep_hours', 6)      # leave a sandbox alone this long: a job is capped at 3 hours, so 6 cannot hit a live one
+
+
+def ag_sweep_envs(keep_hours=None):
+    """Delete the sandboxes left behind by finished interactions. Returns (deleted, total).
+
+    Every call asks for `environment: 'remote'`, which creates a fresh sandbox, and the API keeps a sandbox for 7 days
+    after its last activity whether or not anything still needs it. At up to max_antigravity_jobs (40) a day they pile
+    up until the project's environment storage is full, and then every call comes back 429 "Project environment storage
+    quota exceeded" on the first attempt of the day with no usage behind it. From Nov 1 to Nov 5 that was read here as
+    the agent having no quota on this key's tier, which was wrong: the body only started saying so once gem_api began
+    reporting it. Nothing was wrong with the tier, the project was simply full of our own old sandboxes.
+
+    A sandbox touched inside keep_hours is left alone, since a running job could still be using it and an interaction
+    is capped at 3 hours."""
+    cutoff = time.time() - (AG_ENV_KEEP_H if keep_hours is None else keep_hours) * 3600
+    envs = (gem_api('environments?pageSize=100') or {}).get('environments') or []
+    gone = 0
+    for e in envs:
+        eid = (e.get('name') or '').rsplit('/', 1)[-1] or e.get('id') or ''
+        touched = e.get('updateTime') or e.get('createTime') or ''
+        try:
+            age_ok = dt.datetime.fromisoformat(touched.replace('Z', '+00:00')).timestamp() < cutoff if touched else False
+        except ValueError:
+            age_ok = False
+        if not eid or not age_ok:
+            continue
+        try:
+            gem_api(f'environments/{eid}', 'DELETE')
+            gone += 1
+        except Exception as ex:
+            log(f'could not delete sandbox {eid}: {str(ex)[:100]}')
+    return gone, len(envs)
 AG_DEAD_HOURS = cfg.get('antigravity_dead_hours', 24)        # how long to leave it alone then, instead of retrying every 6 hours forever
 AG_STALL_MIN = cfg.get('antigravity_stall_minutes', 45)  # a for-antigravity job nobody started by then goes to Jules, so a broken API never stalls the queue
 # Both default to 0: the scheduled prompt in docs/ANTIGRAVITY.md has the app session find its own work from the
@@ -1949,13 +2030,17 @@ Don't note taste, and don't judge whether a scientific number is right. If nothi
 Return ONE JSON object: {{"notes": [{{"problem": "one sentence", "where": "which part of the screen", "severity": "high|medium|low"}}]}}"""
 
 
+UX_LOOK_S = cfg.get('ux_vision_seconds', 180)  # one screenshot's budget. It was 600, and a timeout costs the whole pass that long
+UX_GIVE_UP = cfg.get('ux_vision_give_up', 2)   # empty or timed-out screenshots in a row before the walk stops asking
+
+
 def look(prompt, png):
     """The local model reads a screenshot (Ollama vision). Returns its notes, or None when the model can't take images."""
     body = {'model': rv.MODEL, 'stream': False, 'format': 'json', 'options': {'temperature': 0.2, 'num_ctx': int(cfg.get('num_ctx', 65536))},
             'messages': [{'role': 'user', 'content': prompt, 'images': [base64.b64encode(Path(png).read_bytes()).decode()]}]}
     req = urllib.request.Request(rv.OLLAMA + '/api/chat', data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
     try:
-        with urllib.request.urlopen(req, timeout=600) as r:
+        with urllib.request.urlopen(req, timeout=UX_LOOK_S) as r:
             out = re.sub(r'<think>.*?</think>', '', json.loads(r.read())['message']['content'], flags=re.S)
         return [n for n in (json.loads(out[out.find('{'):out.rfind('}') + 1]).get('notes') or []) if isinstance(n, dict) and n.get('problem')][:3]
     except urllib.error.HTTPError as e:
@@ -1963,7 +2048,7 @@ def look(prompt, png):
         return None
     except Exception as e:
         log(f'ux: no notes for one screenshot ({str(e)[:120]})')
-        return []
+        return False  # the call failed. [] means the model looked and saw nothing wrong, which is the common, healthy case
 
 
 def ux_scope(s):
@@ -1990,15 +2075,23 @@ def ux_scope(s):
         rep_ = json.loads((out / 'report.json').read_text(encoding='utf-8'))
     except Exception as e:
         return log(f'ux: the "{sc}" scope did not finish ({str(e)[:200]})')
-    vision = True
+    # A timeout costs a whole UX_LOOK_S of the pass, and everything behind this duty waits it out. The local model
+    # either reads screenshots today or it does not, so after UX_GIVE_UP in a row stop asking for the rest of the walk
+    # rather than paying that again per step: on 2026-11-05 three timeouts in one walk held the pass for 30 minutes.
+    vision, misses = True, 0
     for st in rep_['steps']:
         st['notes'] = []
         if vision and st.get('shot') and Path(st['shot']).exists():
             n = look(UX_NOTES.format(goal=rep_['goal'], step=st['name'], err=f"\nThat step did not work: {st['error']}" if st['error'] else ''), st['shot'])
             if n is None:
                 vision = False
+            elif n is False:  # the call failed, which is the expensive case; [] is a clean screenshot and must not count
+                misses += 1
+                if misses >= UX_GIVE_UP:
+                    vision = False
+                    log(f'ux: the local model failed on {misses} screenshots in a row, so the rest of this walk is plain checks only')
             else:
-                st['notes'] = n
+                st['notes'], misses = n, 0
     failed = [st for st in rep_['steps'] if not st['ok']]
     found = list(dict.fromkeys(f for st in rep_['steps'] for f in st['findings']))
     notes = list({n['problem'].strip().lower(): (st['name'], n) for st in reversed(rep_['steps']) for n in st['notes']}.values())[::-1]  # one line per problem, at the first step it showed up
