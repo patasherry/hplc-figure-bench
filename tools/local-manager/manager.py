@@ -1992,13 +1992,17 @@ Don't note taste, and don't judge whether a scientific number is right. If nothi
 Return ONE JSON object: {{"notes": [{{"problem": "one sentence", "where": "which part of the screen", "severity": "high|medium|low"}}]}}"""
 
 
+UX_LOOK_S = cfg.get('ux_vision_seconds', 180)  # one screenshot's budget. It was 600, and a timeout costs the whole pass that long
+UX_GIVE_UP = cfg.get('ux_vision_give_up', 2)   # empty or timed-out screenshots in a row before the walk stops asking
+
+
 def look(prompt, png):
     """The local model reads a screenshot (Ollama vision). Returns its notes, or None when the model can't take images."""
     body = {'model': rv.MODEL, 'stream': False, 'format': 'json', 'options': {'temperature': 0.2, 'num_ctx': int(cfg.get('num_ctx', 65536))},
             'messages': [{'role': 'user', 'content': prompt, 'images': [base64.b64encode(Path(png).read_bytes()).decode()]}]}
     req = urllib.request.Request(rv.OLLAMA + '/api/chat', data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
     try:
-        with urllib.request.urlopen(req, timeout=600) as r:
+        with urllib.request.urlopen(req, timeout=UX_LOOK_S) as r:
             out = re.sub(r'<think>.*?</think>', '', json.loads(r.read())['message']['content'], flags=re.S)
         return [n for n in (json.loads(out[out.find('{'):out.rfind('}') + 1]).get('notes') or []) if isinstance(n, dict) and n.get('problem')][:3]
     except urllib.error.HTTPError as e:
@@ -2006,7 +2010,7 @@ def look(prompt, png):
         return None
     except Exception as e:
         log(f'ux: no notes for one screenshot ({str(e)[:120]})')
-        return []
+        return False  # the call failed. [] means the model looked and saw nothing wrong, which is the common, healthy case
 
 
 def ux_scope(s):
@@ -2033,15 +2037,23 @@ def ux_scope(s):
         rep_ = json.loads((out / 'report.json').read_text(encoding='utf-8'))
     except Exception as e:
         return log(f'ux: the "{sc}" scope did not finish ({str(e)[:200]})')
-    vision = True
+    # A timeout costs a whole UX_LOOK_S of the pass, and everything behind this duty waits it out. The local model
+    # either reads screenshots today or it does not, so after UX_GIVE_UP in a row stop asking for the rest of the walk
+    # rather than paying that again per step: on 2026-11-05 three timeouts in one walk held the pass for 30 minutes.
+    vision, misses = True, 0
     for st in rep_['steps']:
         st['notes'] = []
         if vision and st.get('shot') and Path(st['shot']).exists():
             n = look(UX_NOTES.format(goal=rep_['goal'], step=st['name'], err=f"\nThat step did not work: {st['error']}" if st['error'] else ''), st['shot'])
             if n is None:
                 vision = False
+            elif n is False:  # the call failed, which is the expensive case; [] is a clean screenshot and must not count
+                misses += 1
+                if misses >= UX_GIVE_UP:
+                    vision = False
+                    log(f'ux: the local model failed on {misses} screenshots in a row, so the rest of this walk is plain checks only')
             else:
-                st['notes'] = n
+                st['notes'], misses = n, 0
     failed = [st for st in rep_['steps'] if not st['ok']]
     found = list(dict.fromkeys(f for st in rep_['steps'] for f in st['findings']))
     notes = list({n['problem'].strip().lower(): (st['name'], n) for st in reversed(rep_['steps']) for n in st['notes']}.values())[::-1]  # one line per problem, at the first step it showed up
