@@ -1023,6 +1023,21 @@ def gate(s):
         cop_done = 'copilot' in pr['user']['login'].lower() and not pr['title'].startswith('[WIP]') and bool(pr.get('requested_reviewers'))
         if (pr.get('draft') and not cop_done) or s['gated'].get(str(n)) == sha:
             continue
+        # Judge emptiness before waiting for tests. An empty PR touches neither the app nor tests/, so the Test suite
+        # never runs on it and `t` stays None for ever, and it does not conflict either, so the wait below skipped it on
+        # every pass and it never reached this check. #1016, #1058, #1076, #1080 and #1081 sat open that way, each with a
+        # commit message claiming a fix and nothing in the commit. Zero files is decidable with no test run at all.
+        files = [f['filename'] for f in gh(f'repos/{REPO}/pulls/{n}/files?per_page=100')]
+        if not files:
+            m0 = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
+            iss = int(m0.group(1)) if m0 else linked_issue(n)
+            gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
+            post(n, 'This pull request changes no files, so it cannot fix anything. Closed without merging, because merging it would close its issue while the bug stays.' + SIGN.format(rv.MODEL))
+            if iss:
+                label(iss, add=['jules-queue'], remove=['jules-running', 'jules-done', 'claude-cloud-running', 'claude-code-running'])
+                post(iss, f'PR #{n} for this issue changed no files, so it was closed without merging and the issue is queued again. The fix still has to be made in the app, with a check that fails on main and passes on the branch.' + SIGN.format(rv.MODEL))
+            log(f'PR #{n}: empty, closed and #{iss} requeued')
+            continue
         runs = gh(f'repos/{REPO}/actions/runs?head_sha={sha}').get('workflow_runs', [])
         t = next((r for r in runs if r['name'] == 'Test suite'), None)
         stuck_conflict, waits_approval = False, cop_done  # the API can't approve Copilot's runs: rebuild it on our own branch, where the tests run
@@ -1033,18 +1048,6 @@ def gate(s):
             if t or age < 1800 or gh(f'repos/{REPO}/pulls/{n}').get('mergeable_state') != 'dirty':
                 continue  # wait for the tests
             stuck_conflict = True  # GitHub runs no PR tests while a PR conflicts with main, so without this it would wait forever
-        files = [f['filename'] for f in gh(f'repos/{REPO}/pulls/{n}/files?per_page=100')]
-        if not files:  # an empty PR fixes nothing, and every file check below passes vacuously, so it would merge and close its issue while the bug stays
-            full = gh(f'repos/{REPO}/pulls/{n}')
-            m0 = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
-            iss = int(m0.group(1)) if m0 else linked_issue(n)
-            gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
-            post(n, 'This pull request changes no files, so it cannot fix anything. Closed without merging, because merging it would close its issue while the bug stays.' + SIGN.format(rv.MODEL))
-            if iss:
-                label(iss, add=['jules-queue'], remove=['jules-running', 'jules-done', 'claude-cloud-running', 'claude-code-running'])
-                post(iss, f'PR #{n} for this issue changed no files, so it was closed without merging and the issue is queued again. The fix still has to be made in the app, with a check that fails on main and passes on the branch.' + SIGN.format(rv.MODEL))
-            log(f'PR #{n}: empty, closed and #{iss} requeued')
-            continue
         if rv.APP not in files and all(ALLOWED.match(f) for f in files) and not (stuck_conflict or waits_approval):
             s['gated'][str(n)] = sha  # tests or docs only and nothing stray: the leader's own merge rule handles it
             continue
