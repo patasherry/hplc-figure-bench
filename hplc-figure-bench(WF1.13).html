@@ -61,7 +61,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .home-where{margin:0;color:var(--muted);font-size:12.5px}
 .home-alt{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .projbar{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 260px}
-.projbar .pb-sep{color:var(--line2);font-size:18px}
+.projbar .pb-sep{color:var(--line2);font-size:18px} .projbar .pb-lab{color:var(--muted);font-size:12.5px;white-space:nowrap}
 .projname{font:inherit;font-size:16px;font-weight:600;border:1px solid transparent;background:transparent;color:var(--ink);padding:3px 6px;border-radius:var(--r-s);min-width:0;flex:0 1 26ch}
 .projname:hover{border-color:var(--line)} .projname:focus{outline:none;border-color:var(--accent);background:var(--field)}
 .savestate{color:var(--muted);font-size:12.5px;white-space:nowrap}
@@ -511,8 +511,8 @@ button,input,select,textarea{font-family:inherit}
 <header class="top">
   <h1><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M1.5 15.5h3.2c1.6 0 2-1.4 2.6-4.4C8 7.6 8.6 3 10 3s2 4.6 2.7 8.1c.6 3 1 4.4 2.6 4.4h5.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><rect x="5.5" y="18.2" width="11" height="2.3" rx="1.15" fill="currentColor" opacity=".55"/></svg>Protein Purification Bench</h1>
   <div class="projbar" id="projBar" hidden>
-    <span class="pb-sep" aria-hidden="true">/</span>
-    <input type="text" id="projName" class="projname" aria-label="Project name" spellcheck="false">
+    <span class="pb-sep" aria-hidden="true">/</span><label for="projName" class="pb-lab">Project name</label>
+    <input type="text" id="projName" class="projname" aria-label="Project name" placeholder="Project name" spellcheck="false">
     <span class="savestate" id="saveState" role="status" aria-live="polite"></span>
   </div>
   <div class="btns top-act">
