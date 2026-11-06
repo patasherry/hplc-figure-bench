@@ -1458,7 +1458,7 @@ Change only hplc-figure-bench(WF1.13).html and files under tests/. Add a check, 
 Then commit, push, and open a pull request whose description says "Closes #{n}", with what you changed, the check that fails on main and passes here, and exactly what you ran. Do not merge.
 ```
 
-The PR goes through the Test suite and the review gate like any other. When it appears, this label clears itself.\n\nTo work the whole queue in one session instead of pasting job by job, use the standing prompt in `docs/ANTIGRAVITY.md`."""
+The PR goes through the Test suite and the review gate like any other. When it appears, this label clears itself.\n\nTo have it check the queue on its own instead of pasting job by job, use the scheduled prompt in `docs/ANTIGRAVITY.md`."""
 
 
 def has_pr(n):
