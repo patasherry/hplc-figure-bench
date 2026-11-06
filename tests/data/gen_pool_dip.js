@@ -14,8 +14,8 @@ function poolDipCsv(){
   return rows.join('\r\n') + '\r\n';
 }
 /* closed-form trapezoid over the samples from a to b, above the straight line between the trace at a and at b, nothing clamped */
-function trapArea(a = A, b = B){
-  const i0 = XS.findIndex(x => Math.abs(x - a) < 1e-9), i1 = XS.findIndex(x => Math.abs(x - b) < 1e-9), base = x => YS[i0] + (YS[i1] - YS[i0])*(x - a)/(b - a);
+function trapArea(a = A, b = B, zero = false){
+  const i0 = XS.findIndex(x => Math.abs(x - a) < 1e-9), i1 = XS.findIndex(x => Math.abs(x - b) < 1e-9), base = zero ? () => 0 : x => YS[i0] + (YS[i1] - YS[i0])*(x - a)/(b - a);
   let s = 0; for (let i = i0; i < i1; i++) s += ((YS[i] - base(XS[i])) + (YS[i+1] - base(XS[i+1])))/2*(XS[i+1] - XS[i]); return s;
 }
 module.exports = {poolDipCsv, trapArea, POOL, A, B};
