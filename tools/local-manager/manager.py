@@ -1288,7 +1288,8 @@ def copilot_cli_job(s, i, retry):
 
 # ---------- Antigravity agent (Gemini API): a third coding worker that needs no PC ----------
 AG_MARK = '<!-- antigravity-job -->'
-AG_APP = 'for-antigravity-app'  # waiting for Patrick to paste the prompt into the Antigravity desktop app
+AG_APP = 'paste-to-antigravity'   # waiting for Patrick to paste the prompt into the Antigravity desktop app: his action, so the name says so
+AG_APP_OLD = 'for-antigravity-app'  # what it was called until 2026-11-05, moved over once
 AG_AGENT = cfg.get('antigravity_agent', 'antigravity-preview-09-2026')
 AG_AT_ONCE = cfg.get('antigravity_at_once', 6)
 AG_PER_PASS = cfg.get('antigravity_per_pass', 3)  # jobs handed over in one pass
@@ -1426,7 +1427,7 @@ def antigravity(s):
                 post(TRACK, f'**The Antigravity API is refusing every call.** {s["ag_refused"]} attempts in a row have come back `{str(e)[:120]}`, '
                             'each on the first call of the day with no usage behind it, so this is not our traffic: the agent has no quota on this key\'s tier.\n\n'
                             f'The API route is paused for {AG_DEAD_HOURS} hours at a time now rather than 6, so it stops filling the log. '
-                            'Antigravity still gets the app-changing jobs through the desktop app (`for-antigravity-app`), which is the only route that has ever '
+                            'Antigravity still gets the app-changing jobs through the desktop app (`paste-to-antigravity`, see `docs/ANTIGRAVITY.md`), which is the only route that has ever '
                             'landed a PR here (#759, #765). Everything the app route cannot hold goes to Jules within '
                             f'{AG_STALL_MIN} minutes.\n\nTo bring the API route back, the Gemini key needs a tier with quota for `{AG_AGENT}`. '
                             'Once it has one, the next successful call clears this by itself.' + SIGN.format(rv.MODEL))
@@ -1443,8 +1444,11 @@ def antigravity(s):
 AG_REFUSALS = cfg.get('antigravity_refusals_before_dead', 3)  # consecutive API refusals that mean the key has no quota, not a passing rate limit
 AG_DEAD_HOURS = cfg.get('antigravity_dead_hours', 24)        # how long to leave it alone then, instead of retrying every 6 hours forever
 AG_STALL_MIN = cfg.get('antigravity_stall_minutes', 45)  # a for-antigravity job nobody started by then goes to Jules, so a broken API never stalls the queue
-AG_APP_AT_ONCE = cfg.get('antigravity_app_at_once', 2)      # jobs waiting for Patrick to paste into the Antigravity desktop app
-AG_APP_DEAD = cfg.get('antigravity_app_at_once_dead', 4)    # more of them while the API refuses, since the app is then the only Antigravity there is
+# Both default to 0: the scheduled prompt in docs/ANTIGRAVITY.md has the app session find its own work from the
+# for-antigravity label, so a per-issue prompt is a notification that asks Patrick for something already covered.
+# Set antigravity_app_at_once to 2 in the settings file to get per-issue prompts back.
+AG_APP_AT_ONCE = cfg.get('antigravity_app_at_once', 0)      # jobs waiting for Patrick to paste into the Antigravity desktop app
+AG_APP_DEAD = cfg.get('antigravity_app_at_once_dead', 0)    # the same while the API refuses: the scheduled prompt covers that case too
 AG_APP_PROMPT = """**For the Antigravity desktop app.** Paste this into a task in `C:\\Users\\Patrick\\hfb-antigravity`:
 
 ```
@@ -1457,7 +1461,7 @@ Change only hplc-figure-bench(WF1.13).html and files under tests/. Add a check, 
 Then commit, push, and open a pull request whose description says "Closes #{n}", with what you changed, the check that fails on main and passes here, and exactly what you ran. Do not merge.
 ```
 
-The PR goes through the Test suite and the review gate like any other. When it appears, this label clears itself."""
+The PR goes through the Test suite and the review gate like any other. When it appears, this label clears itself.\n\nTo have it check the queue on its own instead of pasting job by job, use the scheduled prompt in `docs/ANTIGRAVITY.md`."""
 
 
 def has_pr(n):
@@ -1467,23 +1471,38 @@ def has_pr(n):
                for pr in gh(f'repos/{REPO}/pulls?state=open&per_page=100'))
 
 
+def ag_app_done(i):
+    """True when a job no longer needs Patrick to paste it: another worker holds it, or a pull request already exists.
+    Both loops in antigravity_app must agree on this, or they fight over the label pass after pass."""
+    lab = {l['name'] for l in i['labels']}
+    return bool(lab & {'antigravity-done', 'jules-running', 'antigravity-running', 'claude-code-running', 'codex-running'}) or has_pr(i['number'])
+
+
 def antigravity_app(s):
     """The desktop app is the only Antigravity path that has actually landed pull requests (#759, #765), so a couple of
     app-changing jobs always carry a ready-to-paste prompt for Patrick. Nothing waits on him: the API route and the
     stall guard run regardless, and a job whose PR appears, or which another worker takes, clears itself."""
     seen = s.setdefault('ag_app', {})
+    if not s.get('ag_app_renamed'):  # one-time: the label was for-antigravity-app until 2026-11-05
+        for i in issues(AG_APP_OLD):
+            label(i['number'], add=[AG_APP], remove=[AG_APP_OLD])
+            log(f'#{i["number"]}: moved to the {AG_APP} label')
+        s['ag_app_renamed'] = 1
     for i in issues(AG_APP):  # done, taken elsewhere, or closed: let it go
-        n, lab = i['number'], {l['name'] for l in i['labels']}
-        if lab & {'antigravity-done', 'jules-running', 'antigravity-running', 'claude-code-running', 'codex-running'} or has_pr(n):
-            label(n, remove=[AG_APP]); seen.pop(str(n), None)
-            log(f'#{n}: cleared the Antigravity app label')
+        if ag_app_done(i):
+            label(i['number'], remove=[AG_APP]); seen.pop(str(i['number']), None)
+            log(f'#{i["number"]}: cleared the {AG_APP} label')
     have = [i for i in issues(AG_APP)]
     cap = AG_APP_DEAD if s.get('ag_refused', 0) >= AG_REFUSALS or s.get('ag_off_until', 0) > time.time() else AG_APP_AT_ONCE
     room = cap - len(have)
     if room <= 0:
         return
     tried = s.get('ag_tried', {})
-    pool = [i for i in issues('for-antigravity') if str(i['number']) not in s.get('antigravity', {}) and str(i['number']) not in seen]
+    # ag_app_done here too, or the loop thrashes: the cleanup above drops the label because a PR exists and pops the
+    # issue from seen, then this pool picks the same issue again and posts another prompt, every single pass. #1038
+    # collected four copies of its prompt that way while PR #1048 was already open.
+    pool = [i for i in issues('for-antigravity')
+            if str(i['number']) not in s.get('antigravity', {}) and str(i['number']) not in seen and not ag_app_done(i)]
     for i in rt.pick(pool, tried, room, AG_MAX_TRIES):
         n = i['number']
         if DRY:
@@ -2506,7 +2525,11 @@ def one_pass():
         log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
     else:
         heartbeat(s)
-    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('science inbox', science_inbox), ('relay', relay),('owner merge', owner_merge_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('agy jobs', lambda s: bg_worker(s, 'agy')), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    # Patrick is the transport for the relay and the one who answers on PRs, so the duties he waits on come first.
+    # Behind 'questions' they used to wait out the whole question ladder, which routinely holds a pass for 20 to 45
+    # minutes: #1060 sat on relay-from-board with no request posted because of that, and it reads as a stall.
+    for name, duty in (('relay', relay), ('owner', owner_replies), ('owner merge', owner_merge_replies), ('science inbox', science_inbox),
+                       ('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('agy jobs', lambda s: bg_worker(s, 'agy')), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':

@@ -2217,10 +2217,36 @@ function zoomCompose(S, m, win, buildIn){
   const rTop = isFinite(mx) ? Math.max(T, Math.min(B - 4, g.py(mx) - 3)) : T, xa = g.px(win.a), xb = g.px(win.b);
   const tg = beside ? {x0: ix + ins.geo.L, x1: ix + ins.geo.R, y0: ins.geo.T, y1: ins.geo.B} : {x0: ix, x1: ix + iw, y0: iy, y1: iy + ih};
   const ln = (x1, y1, x2, y2) => `<line x1="${r2(x1)}" y1="${r2(y1)}" x2="${r2(x2)}" y2="${r2(y2)}"/>`;
+  const sBox = {x0: Math.min(xa, xb), x1: Math.max(xa, xb), y0: Math.min(rTop, B), y1: Math.max(rTop, B)};
+  const iBox = {x0: Math.min(tg.x0, tg.x1), x1: Math.max(tg.x0, tg.x1), y0: Math.min(tg.y0, tg.y1), y1: Math.max(tg.y0, tg.y1)};
   let con = '';
-  if (tg.y1 < rTop - 2) con = ln(xa, rTop, tg.x0, tg.y1) + ln(xb, rTop, tg.x1, tg.y1);
-  else if (xb <= tg.x0) con = ln(xb, rTop, tg.x0, tg.y0) + ln(xb, B, tg.x0, tg.y1);
-  else if (xa >= tg.x1) con = ln(xa, rTop, tg.x1, tg.y0) + ln(xa, B, tg.x1, tg.y1);
+  const abut = sBox.x0 <= iBox.x1 + 1 && sBox.x1 >= iBox.x0 - 1 && sBox.y0 <= iBox.y1 + 1 && sBox.y1 >= iBox.y0 - 1;
+  if (!abut) {
+    let dx = 0, dirX = 0;
+    if (sBox.x1 < iBox.x0) { dx = iBox.x0 - sBox.x1; dirX = 1; }
+    else if (sBox.x0 > iBox.x1) { dx = sBox.x0 - iBox.x1; dirX = -1; }
+    let dy = 0, dirY = 0;
+    if (sBox.y1 < iBox.y0) { dy = iBox.y0 - sBox.y1; dirY = 1; }
+    else if (sBox.y0 > iBox.y1) { dy = sBox.y0 - iBox.y1; dirY = -1; }
+    const axis = (dy === 0 || (dx > 0 && dx <= dy)) ? 'x' : 'y';
+    if (axis === 'x') {
+      const sx = dirX > 0 ? sBox.x1 : sBox.x0;
+      const tx = dirX > 0 ? iBox.x0 : iBox.x1;
+      [sBox.y0, sBox.y1].forEach(ys => {
+        const yt = Math.max(iBox.y0, Math.min(iBox.y1, ys));
+        con += ln(sx, ys, tx, ys);
+        if (Math.abs(yt - ys) > 0.05) con += ln(tx, ys, tx, yt);
+      });
+    } else {
+      const sy = dirY > 0 ? sBox.y1 : sBox.y0;
+      const ty = dirY > 0 ? iBox.y0 : iBox.y1;
+      [sBox.x0, sBox.x1].forEach(xs => {
+        const xt = Math.max(iBox.x0, Math.min(iBox.x1, xs));
+        con += ln(xs, sy, xs, ty);
+        if (Math.abs(xt - xs) > 0.05) con += ln(xs, ty, xt, ty);
+      });
+    }
+  }
   const inner = beside ? m.svg : m.svg.slice(S.head.length, m.svg.length - 6);
   const out = [S.head];
   if (beside && o.bg) out.push(`<rect width="${r2(S.W)}" height="${r2(S.H)}" fill="#ffffff"/>`);
@@ -3890,7 +3916,11 @@ function buildWorkflow(){
   /* Fit to page: a grid or stacked figure taller than the page gets shorter traces and gels (never below 60%) until it fits */
   const fit = (L, c, maxH) => { let res = composeRuns(L, c);
     if (opt.wfFit !== false && opt.wfLayout !== 'row' && res.geo && (res.geo.H0 || res.geo.H) > maxH) { let k = 1;
-      for (let t = 0; t < 4 && (res.geo.H0 || res.geo.H) > maxH && k > 0.6; t++) { k = Math.max(0.6, k*(maxH - 0.1*72)/(res.geo.H0 || res.geo.H)); res = composeRuns(L, Object.assign({}, c, {chromH: c.chromH*k, gelK: k})); }
+      let targetH = res.geo.H0 || res.geo.H;
+      if (targetH > maxH) {
+        k = Math.max(0.6, (maxH - 0.1*72) / targetH);
+        res = composeRuns(L, Object.assign({}, c, {chromH: c.chromH*k, gelK: k}));
+      }
       if (res.geo) res.geo.fitted = k; }
     return res; };
   if (!pre.length) return yieldLine(fit(list, cfg, PAGE));

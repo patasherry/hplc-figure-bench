@@ -116,6 +116,54 @@ function makePNG(w, h) {
     T.check('layout-switching', ms < 12000, `${ms} ms for 8 layout switches (budget: 12000 ms)`);
   });
 
+
+  // 4b. 8-step workflow structure correctness
+  await T.t('workflow-8-step-structure', async () => {
+    const F = {
+      his: path.join(DATA, 'standins', 'imac_histrap_1ml_step.csv'),
+      ortho: path.join(DATA, 'standins', 'imac_histrap_1ml_ortho.csv'),
+      q: path.join(DATA, 'standins', 'iex_q_6ml.csv'),
+      s200: path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv'),
+      zip: path.join(DATA, 'chrom', 'sec_Sup6_basic_unicorn7.zip'),
+      nd: path.join(DATA, 'nd', 'nd_one_protein_a280.csv')
+    };
+    const {p, errs, close} = await open();
+    const h = H(p);
+    await h.newProject('Perf Test Structure');
+    await h.dropFiles(F.his);
+    await h.dropFiles(F.ortho);
+    await h.dropFiles(F.q);
+    await h.dropFiles(F.s200);
+    await h.dropFiles(F.zip);
+    await h.addConc(F.nd, 0.3);
+    await h.addConc(null, 0.2);
+    await h.addConc(null, 0.1);
+    await h.step('figure');
+    await p.waitForTimeout(500);
+
+    // Switch to stacked layout
+    await p.evaluate(() => {
+        const e = document.querySelector('label[for="wf-stack"]');
+        if (e) e.click();
+    });
+    await p.waitForTimeout(500);
+
+    const count = await p.evaluate(() => {
+        const els = document.querySelectorAll('#paper svg text');
+        let c = 0;
+        for (let i = 0; i < els.length; i++) {
+           const text = els[i].textContent.trim();
+           if (text.match(/^[A-H] {2}/)) {
+               c++;
+           }
+        }
+        return c;
+    });
+
+    T.check('perf.workflow-8-steps-structure-correct', count === 8, `panels count: ${count}`);
+    await close();
+  });
+
   // 5. Loading a 3000x2000 synthetic gel PNG
   await T.t('load-synthetic-gel-png', async () => {
     const tg0 = Date.now();
