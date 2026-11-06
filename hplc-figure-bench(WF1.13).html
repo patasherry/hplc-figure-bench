@@ -6070,12 +6070,25 @@ function parseNanoDrop(text){
       if (s.r230 == null && s.a230 > 0 && at(260) != null) s.r230 = at(260)/s.a230; }
     return s; }).filter(s => s.a280 != null || s.conc != null);
 }
-/* readings named after a pool or a step go with that run */
+/* readings named after a pool or a step go with that run.
+   deterministic assignment scoring:
+   1. pool match: reading name includes a run's pooled fractions (r.shade). Unique match assigns to that run; multiple matches tie.
+   2. word match: count of significant words in shortRunName(r) (>= 2 chars, not stop words) present in the reading name.
+      Unique highest score (>0) assigns to that run; tied highest score (>0) leaves the reading unassigned for review. */
 function ndGuessRun(name){
   const n = String(name || '').toUpperCase().replace(/\s+/g, ' '), steps = runs.filter(r => r.inWf);
-  const byPool = steps.find(r => r.shade && n.includes(String(r.shade).toUpperCase().replace(/\s*[-–]\s*/g, '-'))); if (byPool) return byPool.id;
+  const byPool = steps.filter(r => r.shade && n.includes(String(r.shade).toUpperCase().replace(/\s*[-–]\s*/g, '-')));
+  if (byPool.length > 1) return {id: '', tied: true};
+  if (byPool.length === 1) return {id: byPool[0].id, tied: false};
   const words = r => String(shortRunName(r)).toUpperCase().split(/[^A-Z0-9]+/).filter(w => w.length >= 2 && !/^(ML|FF|STEP|THE|AND|LOAD|LOOP|RUN|HUMAN|\d+)$/.test(w));
-  let best = '', bs = 0; steps.forEach(r => { const sc = words(r).filter(w => n.includes(w)).length; if (sc > bs) { bs = sc; best = r.id; } }); return best;
+  let top = [], bs = 0;
+  steps.forEach(r => {
+    const sc = words(r).filter(w => n.includes(w)).length;
+    if (sc > bs) { bs = sc; top = [r.id]; }
+    else if (sc > 0 && sc === bs) { top.push(r.id); }
+  });
+  if (top.length > 1) return {id: '', tied: true};
+  return {id: top[0] || '', tied: false};
 }
 function addNanoDrop(list, name, to){
   if (!list.length) { toast(`No readings found in ${name}`); return; }
@@ -6083,11 +6096,12 @@ function addNanoDrop(list, name, to){
   /* readings saved before row numbers were kept have no row: match them by name and A280 alone */
   const find = s => have.get(key(s)) || (s.when ? null : ndSamples.find(o => !o.when && o.row == null && base(o) === base(s)));
   const fresh = list.filter(s => { const o = find(s); if (!o) return true; let add = false; Object.keys(s).forEach(k => { if (['id', 'runId', 'stage', 'dil', 'hide'].includes(k)) return; if ((o[k] == null || o[k] === '') && s[k] != null && s[k] !== '') { o[k] = s[k]; add = true; } }); if (add) merged++; return false; });
-  fresh.forEach(s => { if (to && s.kind !== 'nucleic') { s.runId = to; s.stage = 'conc'; ndSamples.push(s); return; } s.runId = s.kind === 'nucleic' || CRUDE_RE.test(s.name) ? '' : ndGuessRun(s.name); if (/conc|final|dialy|after/i.test(s.name)) s.stage = 'final'; ndSamples.push(s); });
+  fresh.forEach(s => { if (to && s.kind !== 'nucleic') { s.runId = to; s.stage = 'conc'; ndSamples.push(s); return; } if (s.kind === 'nucleic' || CRUDE_RE.test(s.name)) { s.runId = ''; } else { const g = ndGuessRun(s.name); s.runId = g.id; if (g.tied) s.tied = true; } if (/conc|final|dialy|after/i.test(s.name)) s.stage = 'final'; ndSamples.push(s); });
   /* a file loaded on a Concentrated step: readings already loaded elsewhere move to it too */
   if (to) list.forEach(s => { const o = find(s); if (o && o.kind !== 'nucleic') { o.runId = to; o.stage = 'conc'; } });
-  const dup = list.length - fresh.length - merged, sp = fresh.some(s => s.spec), uw = [...new Set(fresh.filter(s => s.unitWarn).map(s => s.unitWarn))];
-  toast(`Added ${fresh.length} NanoDrop reading${fresh.length === 1 ? '' : 's'}${merged ? `, filled in ${merged} already loaded` : ''}${dup ? `, skipped ${dup} already loaded` : ''}${to ? '' : sp ? '. Spectra are on the NanoDrop spectra tab' : ''}${uw.length ? `. Review required: unrecognised concentration unit ${uw.join(', ')}, kept as read` : ''}`);
+  const dup = list.length - fresh.length - merged, sp = fresh.some(s => s.spec), uw = [...new Set(fresh.filter(s => s.unitWarn).map(s => s.unitWarn))],
+    tiedN = fresh.filter(s => s.tied && !s.runId).length;
+  toast(`Added ${fresh.length} NanoDrop reading${fresh.length === 1 ? '' : 's'}${merged ? `, filled in ${merged} already loaded` : ''}${dup ? `, skipped ${dup} already loaded` : ''}${to ? '' : sp ? '. Spectra are on the NanoDrop spectra tab' : ''}${uw.length ? `. Review required: unrecognised concentration unit ${uw.join(', ')}, kept as read` : ''}${tiedN ? `. Review required: ${tiedN} tied reading${tiedN === 1 ? '' : 's'} left unassigned, select step` : ''}`);
   $('#ndList')._n = -1; renderND(); render();
 }
 /* the A280 of a 1 mg/mL solution for a step: tagged or untagged form from the Protein section, else the single value set, else none */
@@ -6146,7 +6160,8 @@ function renderND(){
     const r = s.r280 == null ? '' : `<span class="nd-r ${f}" title="A260/A280. About 0.57 for pure protein. NAD(P)-binding proteins can read 0.6 to 0.9 from bound nucleotide alone. Above 0.8 points to nucleic acid">${f ? '▲ ' : ''}260/280 ${fmt(s.r280, 2)}</span>`;
     const cb = c.raw != null ? `<span class="nd-r" title="Corrected for nucleic acid by the NanoDrop. Uncorrected: ${fmt(c.raw, 2)} mg/mL${s.imp && s.imp.a280 != null ? `. ${esc(s.imp.name)} adds A280 ${fmt(s.imp.a280, 3)}` : ''}">corrected</span>` : '';
     const uw = s.unitWarn && c.v != null && /instrument/.test(c.src) ? `<span class="nd-r hi nd-unit" title="The file gives this concentration in ${esc(s.unitWarn)}, a unit this app does not convert. The number is kept as read and shown as ${c.unit}: check it before use">▲ Review required: ${esc(s.unitWarn)}</span>` : '';
-    return {val, src: crude ? 'crude sample, not converted' : c.src, r: uw + r + cb, r230: s.kind !== 'nucleic' ? ((sc => sc != null && sc > 0.05 ? `<span class="nd-r mid" title="A340 is ${fmt(100*sc, 0)}% of A280, so light scattering from aggregates or particles adds to A280">scatter ${fmt(sc, 2)}</span>` : '')(s.a280 > 0 && (s.baseA ?? s.a340) != null ? (s.baseA ?? s.a340)/s.a280 : null)) : s.r230 != null && s.r230 < 1.8 ? `<span class="nd-r mid" title="A260/A230. Low values point to imidazole, DTT, Tris or a mismatched blank">260/230 ${fmt(s.r230, 2)}</span>` : ''}; };
+    const tw = s.tied && !s.runId ? `<span class="nd-r hi nd-tied" title="Multiple workflow steps have equal matching scores. Review required: select a step to assign this reading and include it in totals">▲ Review required: select step</span>` : '';
+    return {val, src: crude ? 'crude sample, not converted' : c.src, r: tw + uw + r + cb, r230: s.kind !== 'nucleic' ? ((sc => sc != null && sc > 0.05 ? `<span class="nd-r mid" title="A340 is ${fmt(100*sc, 0)}% of A280, so light scattering from aggregates or particles adds to A280">scatter ${fmt(sc, 2)}</span>` : '')(s.a280 > 0 && (s.baseA ?? s.a340) != null ? (s.baseA ?? s.a340)/s.a280 : null)) : s.r230 != null && s.r230 < 1.8 ? `<span class="nd-r mid" title="A260/A230. Low values point to imidazole, DTT, Tris or a mismatched blank">260/230 ${fmt(s.r230, 2)}</span>` : ''}; };
   const live = el.contains(document.activeElement) && el._n === NDS.length;
   const groups = steps.map(r => ({r, ss: NDS.filter(s => s.runId === r.id)})).filter(g => g.ss.length).concat([{r: null, ss: NDS.filter(s => !steps.some(r => r.id === s.runId))}]).filter(g => g.ss.length);
   const stat = x => x ? `${fmt(x.m, 2)}${x.sd != null ? ` ± ${fmt(x.sd, 2)}` : ''} mg/mL${x.n > 1 ? `, n ${x.n}` : ''}` : '';
@@ -6162,7 +6177,7 @@ function renderND(){
   el.innerHTML = groups.map(g => `<div class="ndg">${head(g)}${g.ss.map(s => { const m = meta(s); return `<div class="ndr" data-nd="${s.id}">
       <input type="text" data-ndk="name" value="${esc(s.name)}" aria-label="Sample name"><span class="nd-v" title="${esc(m.src)}">${m.val}</span><button type="button" class="xbtn" data-nddel="${s.id}" aria-label="Remove ${esc(s.name)}">×</button>
       <div class="ndr-2"><span class="nd-flags">${m.r}${m.r230}${numOr(s.dil, 1) !== 1 ? `<span class="nd-r">diluted ×${fmt(s.dil, 0)}</span>` : ''}${s.stage === 'final' ? '<span class="nd-r">final</span>' : ''}</span>
-        <details class="nd-edit"><summary>Edit</summary><div class="nd-edit-b"><select data-ndk="runId" aria-label="Step"><option value="">No step</option>${steps.map((r, k) => { const p = poolRows(r); return `<option value="${r.id}"${r.id === s.runId ? ' selected' : ''}>${k + 1} · ${esc(p ? p.label : shortRunName(r))}</option>`; }).join('')}</select>
+        <details class="nd-edit"><summary>Edit</summary><div class="nd-edit-b"><select data-ndk="runId" aria-label="Step"><option value="">${s.tied && !s.runId ? 'Select step…' : 'No step'}</option>${steps.map((r, k) => { const p = poolRows(r); return `<option value="${r.id}"${r.id === s.runId ? ' selected' : ''}>${k + 1} · ${esc(p ? p.label : shortRunName(r))}</option>`; }).join('')}</select>
         <select data-ndk="stage" aria-label="Stage"><option value="pool"${s.stage !== 'final' ? ' selected' : ''}>Pool</option><option value="final"${s.stage === 'final' ? ' selected' : ''}>Final</option></select>
         <label class="nd-dil" title="Dilution factor before measuring">×<input type="number" step="any" min="1" data-ndk="dil" value="${s.dil ?? 1}" aria-label="Dilution factor"></label>
         ${s.spec ? `<label class="eye" title="Show in the spectra figure"><input type="checkbox" data-ndk="show" ${s.hide ? '' : 'checked'}>plot</label>` : ''}</div></details></div></div>`; }).join('')}</div>`).join('');
@@ -6170,7 +6185,7 @@ function renderND(){
 $('#ndList').addEventListener('input', e => { const t = e.target;
   if (t.dataset.ndr) { const h = t.closest('[data-ndrun]'), r = h && runs.find(x => x.id === h.dataset.ndrun); if (!r) return; r[t.dataset.ndr] = t.type === 'number' ? (t.value === '' ? '' : +t.value) : t.value; if (t.tagName === 'SELECT') $('#ndList')._n = -1; renderND(); render(); return; }
   const row = t.closest('[data-nd]'), k = t.dataset.ndk; if (!row || !k) return; const s = ndSamples.find(x => x.id === row.dataset.nd); if (!s) return;
-  if (k === 'show') s.hide = !t.checked; else if (k === 'dil') s.dil = numOr(t.value, 1) || 1; else s[k] = t.value;
+  if (k === 'show') s.hide = !t.checked; else if (k === 'dil') s.dil = numOr(t.value, 1) || 1; else { s[k] = t.value; if (k === 'runId') delete s.tied; }
   if (t.tagName === 'SELECT') $('#ndList')._n = -1; renderND(); render(); });
 $('#ndList').addEventListener('click', e => { const b = e.target.closest('[data-nddel]'); if (!b) return; ndSamples = ndSamples.filter(x => x.id !== b.dataset.nddel); $('#ndList')._n = -1; renderND(); render(); });
 $('#ndAdd').addEventListener('click', () => $('#ndFile').click());
