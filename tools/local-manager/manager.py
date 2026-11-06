@@ -673,6 +673,7 @@ BOARD_RELAY_MAX = cfg.get('board_relay_max', 2)  # board-raised requests per rou
 RELAY_PENDING = 'relay-pending'  # on issues with an open request, so the PC and cloud copies find them without sharing state
 RELAY_HOURS, RELAY_ROUNDS, RELAY_CTX = cfg.get('relay_expire_hours', 12), cfg.get('relay_max_rounds', 1), cfg.get('relay_context_lines', 40)
 RELAY_LINES = cfg.get('relay_max_lines', rl.MAX_LINES)  # excerpt lines per request: the relay is for the hard jobs, so it sends whole sections
+RELAY_CHARS = cfg.get('relay_max_chars', rl.MAX_CHARS)  # and the cap that actually binds, since this app's lines are long: see #1060, a 104,314-character request
 
 
 def relay_app():
@@ -703,7 +704,7 @@ def relay_extra(title, body):
     for path in want:
         t = relay_file(path)
         if t:
-            out.append((path, t if len(t) < 20000 else t[:20000] + '\n... (truncated)'))
+            out.append((path, t if len(t) < 8000 else t[:8000] + '\n... (truncated)'))  # the excerpt is capped too (rl.MAX_CHARS): a request has to stay pasteable
     return out
 
 
@@ -768,7 +769,7 @@ def relay(s):
             if board and rt.is_light(i['title']):  # a light job gains little from a bigger reasoning budget: the normal queue
                 post(n, 'This is a light job, so it did not need the offline relay. It went to the normal work queue (`jules-queue`) instead.' + SIGN.format(rv.MODEL))
                 label(n, add=['jules-queue'], remove=[lab]); continue
-            ranges = rl.pick_ranges(app, f"{i['title']}\n{i.get('body') or ''}", RELAY_CTX, RELAY_LINES)  # by subject when no line is named, so the first request already carries the right code
+            ranges = rl.pick_ranges(app, f"{i['title']}\n{i.get('body') or ''}", RELAY_CTX, RELAY_LINES, RELAY_CHARS)  # by subject when no line is named, so the first request already carries the right code
             if not ranges and not board:
                 post(n, f'I need a range to cut the excerpt from. Add a line `relay-lines: <from>-<to>` or a line number ("line 1234") to the issue body, then label it `{RELAY_LABEL}` again.' + SIGN.format(rv.MODEL))
                 label(n, remove=[RELAY_LABEL]); continue
@@ -815,7 +816,7 @@ def relay_collect(n, issue):
             mid = re.search(r'^id:\s*(\S+)', c['body'], re.M)
             rid = mid.group(1) if mid else ''
             reqs.pop(rid, None)
-            ranges = relay_ranges_of(cs, rid) or rl.pick_ranges(app, f"{issue['title']}\n{issue.get('body') or ''}", RELAY_CTX, RELAY_LINES)
+            ranges = relay_ranges_of(cs, rid) or rl.pick_ranges(app, f"{issue['title']}\n{issue.get('body') or ''}", RELAY_CTX, RELAY_LINES, RELAY_CHARS)
             if rl.request_count(bodies) < 1 + RELAY_ROUNDS and (ranges or board) and not DRY:
                 post(n, f'Stale: {b.msg}. Request `{rid}` is withdrawn and a fresh one follows, cut from main as it is now. Nothing was filed.' + rl.DONE.format(rid) + sig + SIGN.format(rv.MODEL))
                 new = relay_send(n, issue, app, base, ranges, board); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
@@ -834,7 +835,7 @@ def relay_collect(n, issue):
             late = '' if rl.same_sha(r['base'], base) else f'\n\n_(Written against main {r["base"]}; main is now {base}, so check it against the current code.)_'
             post(n, f'**Relay answer to `{rid}`:** {nomention(r["summary"])}\n\n{nomention(r["answer"])}{late}' + done)
         elif rl.request_count(bodies) < 1 + RELAY_ROUNDS and not DRY:
-            ranges = rl.ranges_from_need(app, r['need'], RELAY_CTX, RELAY_LINES, had=relay_ranges_of(cs, rid))
+            ranges = rl.ranges_from_need(app, r['need'], RELAY_CTX, RELAY_LINES, had=relay_ranges_of(cs, rid), chars=RELAY_CHARS)
             post(n, f'`{rid}` came back as insufficient: {nomention(r["need"])[:600]}\n\nA second request follows.' + done)
             new = relay_send(n, issue, app, base, ranges, board); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
         else:

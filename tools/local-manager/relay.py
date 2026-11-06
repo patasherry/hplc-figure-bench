@@ -4,6 +4,9 @@ import datetime as dt, hashlib, re, secrets
 
 APP = 'hplc-figure-bench(WF1.13).html'
 MAX_LINES = 1400  # total excerpt lines per request: these are the hard jobs, and the agent reading them has room for whole sections
+MAX_CHARS = 20000  # and a character budget beside it, which is the one that actually binds. This app's lines run long
+                   # (median 89, longest 3126), so 631 lines of it came to 64,000 characters and #1060's request went
+                   # out at 104,314: too long to paste into most agents, and spam in the owner's notifications.
 ALLOWED = re.compile(r'^(hplc-figure-bench\(WF1\.13\)\.html|README\.md|tests/(suites|data|lib|ux)/|tests/README\.md|docs/)')  # same as the gate's in manager.py
 REQ_HEAD, REQ_END = '=== HFB-RELAY REQUEST v1 ===', '=== END REQUEST ==='
 RESP_HEAD, RESP_END = '=== HFB-RELAY RESPONSE v1 ===', '=== END RESPONSE ==='
@@ -247,7 +250,35 @@ def first_line_in(body):
     return int(next(g for g in m.groups() if g)) if m else None
 
 
-def pick_ranges(app_text, body, ctx, budget=MAX_LINES):
+def chars_of(lines, ranges):
+    return sum(len(lines[i]) + 1 for a, b in ranges for i in range(a - 1, min(b, len(lines))))
+
+
+def fit_chars(lines, ranges, max_chars=MAX_CHARS):
+    """Keep ranges, in the priority order given, while their text fits `max_chars`. The range that crosses the limit is
+    cut short rather than dropped, so the best-matching code is never lost whole to the budget. Called before
+    merge_ranges, which sorts positionally and would otherwise lose that priority order."""
+    out, used = [], 0
+    for a, b in ranges:
+        b = min(b, len(lines))
+        if a > b:
+            continue
+        n = sum(len(lines[i]) + 1 for i in range(a - 1, b))
+        if used + n <= max_chars:
+            out.append((a, b)); used += n; continue
+        room = max_chars - used
+        if room < 400:  # too little left to be worth a fragment
+            break
+        end = a - 1
+        while end < b and room - (len(lines[end]) + 1) > 0:
+            room -= len(lines[end]) + 1; end += 1
+        if end >= a:
+            out.append((a, end))
+        break
+    return out
+
+
+def pick_ranges(app_text, body, ctx, budget=MAX_LINES, chars=MAX_CHARS):
     """[(from, to)] for the excerpt(s), best signal first: an explicit relay-lines range, a line number, the functions the
     text names, then the sections whose subject matches its words. Only None when the text gives no signal at all.
 
@@ -257,7 +288,7 @@ def pick_ranges(app_text, body, ctx, budget=MAX_LINES):
     r = range_in(body)
     if r:
         a, b = min(r), max(r)
-        return [(max(1, a - ctx), min(len(lines), b + ctx))]
+        return fit_chars(lines, [(max(1, a - ctx), min(len(lines), b + ctx))], chars) or None
     body = subject(body)
     out = []
     n = first_line_in(body)
@@ -265,15 +296,15 @@ def pick_ranges(app_text, body, ctx, budget=MAX_LINES):
         out.append(span_of_function(lines, n) or (max(1, n - ctx), min(len(lines), n + ctx)))
     out += named_defs(app_text, body)
     out += literal_ranges(app_text, body, ctx)
-    out = merge_ranges(out, budget)
+    out = merge_ranges(fit_chars(lines, out, chars), budget)
     used = sum(b - a + 1 for a, b in out)
     room = (budget - used) if not out else min(budget - used, budget//4)  # a named function or a quoted string is the real location: sections only top it up
-    if room > 40:
-        out = merge_ranges(out + section_ranges(app_text, body, room, skip=out), budget)
+    if room > 40 and chars_of(lines, out) < chars - 800:
+        out = merge_ranges(fit_chars(lines, out + section_ranges(app_text, body, room, skip=out), chars), budget)
     return out or None
 
 
-def ranges_from_need(app_text, need, ctx, budget=MAX_LINES, had=()):
+def ranges_from_need(app_text, need, ctx, budget=MAX_LINES, had=(), chars=MAX_CHARS):
     """The second round: what the agent asked for. Explicit ranges and named functions first, then a subject match on its prose,
     because a need is usually written in words ('grey-value to absorbance conversion') and names no identifier.
     `had` is what the earlier request already carried, so round two always adds code instead of repeating it."""
@@ -281,11 +312,12 @@ def ranges_from_need(app_text, need, ctx, budget=MAX_LINES, had=()):
     out = [(max(1, min(a, b)), min(len(lines), max(a, b))) for a, b in ((int(x), int(y)) for x, y in re.findall(r'\b(\d+)\s*-\s*(\d+)\b', need or ''))]
     out += named_defs(app_text, need)
     out += literal_ranges(app_text, need, ctx)
-    out = merge_ranges(out, budget)
+    out = merge_ranges(fit_chars(lines, out, chars), budget)
     used = sum(b - a + 1 for a, b in out)
-    if used < budget:
-        out = merge_ranges(out + section_ranges(app_text, need, budget - used, skip=out), budget)
-    return merge_ranges(list(out) + [r for r in had], budget) if out else merge_ranges(list(had), budget)
+    if used < budget and chars_of(lines, out) < chars - 800:
+        out = merge_ranges(fit_chars(lines, out + section_ranges(app_text, need, budget - used, skip=out), chars), budget)
+    # what round one already sent comes last, so the budget goes to the code the agent actually asked for
+    return merge_ranges(fit_chars(lines, list(out) + [r for r in had], chars), budget) if out else merge_ranges(fit_chars(lines, list(had), chars), budget)
 
 
 def numbered(app_text, a, b):

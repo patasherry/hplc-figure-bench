@@ -73,7 +73,11 @@ A request is worth sending only if the agent can answer it in one go. The excerp
 4. **The quoted phrases that appear verbatim in the app.** A UI issue quotes what it is about, and that string sits next to the code that draws it: #1015 asked to centre "Choose data files", which is on line 571, and no amount of subject matching finds it, because the words of a button are not the words of a section title. Identifiers and paths in quotes are skipped, since step 3 and step 1 cover those.
 5. **The sections whose subject matches the text**, from the app's own `/* ---------- name ---------- */` markers. A word that appears in few section titles counts for much more than one in many, so "NanoDrop" picks the NanoDrop section while "run" picks nothing on its own. A section's body counts for little, or a long section would win just by being long. Sections fill at most a quarter of the budget when step 3 or 4 already found the location.
 
-Overlapping picks are merged and the total is capped at `relay_max_lines`.
+Overlapping picks are merged, and the total is capped two ways: `relay_max_lines` lines and `relay_max_chars`
+characters. The character cap is the one that binds. This app's lines run long (median 89, longest 3126), so
+631 lines of it came to 64,000 characters and #1060's request went out at 104,314, which is too long to paste
+into most agents. Ranges are fitted in priority order, and the one that crosses the limit is cut short rather
+than dropped, so the best-matching code is never lost whole to the budget.
 
 Until Nov 5 only steps 1 and 2 existed, so every board-raised issue (which names no line) went out with no code at all, and the answer was always `insufficient: send me these functions`. Worse, the `need` that came back was prose ("grey-value-to-absorbance conversion"), which resolved to no ranges either, so the next request was empty too: #993 burned three rounds and learned nothing. Steps 3 and 4 are what make one round enough.
 
@@ -174,6 +178,7 @@ In the manager's settings file; all optional.
 | `board_relay_max` | 2 | board-raised requests per board round |
 | `relay_context_lines` | 40 | lines added each side of a named `relay-lines` range (and of a bare line number when no function encloses it) |
 | `relay_max_lines` | 1400 | excerpt lines per request, in total. The relay is for the hard jobs and the agent reading it has room for whole sections |
+| `relay_max_chars` | 20000 | excerpt characters per request, in total. The cap that actually binds, because the app's lines are long. A whole file carried beside the excerpt is cut at 8000 |
 
 ## Worked example
 
