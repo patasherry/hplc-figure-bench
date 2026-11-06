@@ -38,6 +38,76 @@ for(const kind of ['contam','none']){await load(p,project(gel(im,{marks,tags:[{k
 await load(p,project(gel(im,{marks,tags:[{kind:'target',lane:2,y}]}),opt));L=lane(await csv(p));T.check('tags.other-lane-does-not-disable-estimate',L.some(r=>+r[10]>0),JSON.stringify(L));
 await load(p,project(gel(im,{tags:[{kind:'target',lane:1,y},{kind:'tagged',lane:2,y}]})));L=lane(await csv(p));T.check('tags.other-lane-does-not-invent-cleavage',L.every(r=>r[12]===''),JSON.stringify(L));T.check('tags.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
 
+await T.t('contaminant-lane-post-cleavage', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+
+    // Case A: A three steps, IMAC / SEC / SEC polish. Cleavage configured after the SEC step
+    // (prep.cleave = true, prep.cleaveAfter = 'r2'). Gel lane labelled "SEC pool", assigned to the
+    // SEC step (index 1).
+    let projA = project(gel(im, {
+      labels: 'M, SEC pool',
+      assign: ['', 'r2'],
+      marks: [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}],
+      tags: [],
+      edits: {added: [{lane: 1, y: 195/360}], removed: []} // Band at ~27 kDa.
+    }), { knownOn: true });
+
+    projA.runs = [
+      {id: 'r1', inWf: true, stepName: 'IMAC', name: 'run 1'},
+      {id: 'r2', inWf: true, stepName: 'SEC', name: 'run 2'},
+      {id: 'r3', inWf: true, stepName: 'SEC polish', name: 'run 3'}
+    ];
+    projA.prep = { cleave: true, cleaveAfter: 'r2' };
+
+    await load(p, projA);
+
+    // Ensure known list is rendered
+    await p.waitForTimeout(300);
+    const tableA = await p.evaluate(() => document.querySelector('#bandTable').textContent);
+    T.check('contaminant-lane-post-cleavage.A-no-ulp1', tableA.indexOf('His-Ulp1') === -1, 'Case A: SEC pool should not be labelled His-Ulp1 in DOM, got it.');
+
+    // Case C: two steps, SEC / SEC polish, no IMAC anywhere. Cleavage configured after the first step.
+    // Gel lane labelled "Polish pool", assigned to the second step.
+    let projC = project(gel(im, {
+      labels: 'M, Polish pool',
+      assign: ['', 'r2'],
+      marks: [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}],
+      tags: [],
+      edits: {added: [{lane: 1, y: 195/360}], removed: []} // Band at ~27 kDa.
+    }), { knownOn: true });
+
+    projC.runs = [
+      {id: 'r1', inWf: true, stepName: 'SEC', name: 'run 1'},
+      {id: 'r2', inWf: true, stepName: 'SEC polish', name: 'run 2'}
+    ];
+    projC.prep = { cleave: true, cleaveAfter: 'r1' };
+
+    await load(p, projC);
+
+
+    // As per user instruction, if the test fails because the app looks wrong, keep the check failing and explain it in PR.
+    // The issue description stated that Case C refused to call a lane post-cleavage, which implies that it failed to identify it as post-cleavage and thus didn't apply the label. With the fix, we expect it to correctly apply the label. We will just check if the label is there.
+    // If it fails we keep it.
+    await p.waitForTimeout(300);
+
+    const tableC = await p.evaluate(() => {
+        const el = document.querySelector('#bandTable');
+        return el ? el.textContent : '';
+    });
+
+    // T.check('contaminant-lane-post-cleavage.C-has-ulp1', tableC.indexOf('His-Ulp1') !== -1, 'Case C: Polish pool should be labelled His-Ulp1 in DOM');
+    // As per user instruction, if the test fails because the app looks wrong, keep the check failing and explain it in PR.
+    // The issue description stated that Case C refused to call a lane post-cleavage, which implies that it failed to identify it as post-cleavage and thus didn't apply the label. With the fix, we expect it to correctly apply the label. We will just check if the label is there.
+    // If it fails we keep it.
+    T.check('contaminant-lane-post-cleavage.C-has-ulp1', tableC.indexOf('His-Ulp1') !== -1, 'Case C: Polish pool should be labelled His-Ulp1 in DOM');
+
+  } finally {
+    await a.close();
+  }
+});
+
 await T.t('cleavage-small-tag', async () => {
   const a = await start(), p = a.p;
   try {
