@@ -13,7 +13,7 @@
 const QUICK = /\b(skip|bypass|without (running|waiting)|instead of)\b[^.?]{0,60}\b(compare(\.js)?|test suite|tests?|comparison)\b|\b(compare(\.js)?|comparison|test suite|bash|shell|environment)\b[^.?]{0,60}\b(too (slow|long)|time[sd]? ?out|stopped responding|not responding|hang|hung|unresponsive)\b|\b(shall|should|may|can) i (now )?(proceed|submit|open the (pr|pull request)|commit)\b/i;
 const SCI = /yield|extinction|concentrat|mg\/ml|purity|kda|molecular weight|calibrat|integrat|baseline|a280|a260|which (value|number|default)|scientific/i; /* a question about a number still goes to the managers */
 const QUICK_ANSWER = 'Do not skip, weaken or delete any check. If node compare.js is too slow or the shell stops responding, run only the suites you changed (node tests/suites/NN_name.js) and fix any failure in your own new checks. Then commit and open the pull request now, stating exactly what you ran and its result: the Test suite action runs the full comparison on the PR. If a check fails because the app looks wrong, keep it failing and explain it in the PR.';
-const MAX_RUNNING = 15, MAX_APP = 8, REBASE_AFTER = 6, AG_TAKES_APP = process.env.AG_TAKES_APP !== '0', LIGHT = i => /^(tests?|audit|docs?)\b|^add (a |one )?(failing |ui[- ]level )?(tests?|checks?)\b|^(prove|verify|confirm)\b/i.test(i.title || ''), MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, LOCAL_FIRST = 10, API = 'https://jules.googleapis.com/v1alpha/';
+const MAX_RUNNING = 15, MAX_APP = 8, REBASE_AFTER = 6, LIGHT = i => /^(tests?|audit|docs?)\b|^add (a |one )?(failing |ui[- ]level )?(tests?|checks?)\b|^(prove|verify|confirm)\b/i.test(i.title || ''), MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, LOCAL_FIRST = 10, API = 'https://jules.googleapis.com/v1alpha/';
 const L = {queue: 'jules-queue', run: 'jules-running', done: 'jules-done', fail: 'needs-coordinator', triage: 'needs-triage'};
 const MARK = '<!-- jules-leader ';
 const SAFE = f => /^(tests\/|docs\/|\.github\/ISSUE_TEMPLATE\/)/.test(f) || f === 'README.md' || f === 'tests/README.md';
@@ -68,23 +68,9 @@ module.exports = async ({github, context, core}) => {
   for (const i of running) { const {s} = await getState(i.number); if (!s.session) continue; let ses;
     try { ses = await jules(s.session); } catch (e) { say(`#${i.number}: could not read session: ${e.message}`); continue; }
     const st = String(ses.state || '').toUpperCase(), pr = (ses.outputs || []).map(o => o.pullRequest && o.pullRequest.url).find(Boolean);
-    /* Relay the coordinator's or owner's own answers: a human comment starting "Answer for Jules:" goes to the session
-       as written. TRUSTED is the point of this filter. The repository is public, so anyone with a GitHub account can
-       comment on an open issue, and this text is sent verbatim as an instruction to an agent that can push. Until
-       2026-11-05 the only test was `type !== 'Bot'`, so any stranger could steer a running session. An outside comment
-       did appear on #1066 that day (deleted by the owner). author_association is GitHub's own answer to "may this
-       person speak for the repository", and it cannot be set by the commenter. */
+    /* relay the coordinator's or owner's own answers: a human comment starting "Answer for Jules:" goes to the session as written */
     { const cs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: i.number, per_page: 100});
-      const TRUSTED = new Set(['OWNER', 'COLLABORATOR', 'MEMBER']);
-      const trusted = c => TRUSTED.has(String(c.author_association || '').toUpperCase());
-      const fresh = cs.filter(c => c.id > (s.relayed || 0) && c.user && c.user.type !== 'Bot' && /^answer for jules:/i.test(c.body.trim()));
-      const ans = fresh.filter(trusted);
-      /* say it once, not every three minutes: its own watermark, so ignoring never advances the relay one */
-      for (const c of fresh.filter(c => !trusted(c) && c.id > (s.ignored || 0))) {
-        s.ignored = Math.max(s.ignored || 0, c.id);
-        say(`#${i.number}: ignored an "Answer for Jules:" comment from @${c.user.login} (${c.author_association}): only the owner and collaborators can steer a session`);
-        await putState(i.number, s, `Jules leader: ignored an answer from @${c.user.login}, who is not the owner or a collaborator. Only they can steer a running session.`);
-      }
+      const ans = cs.filter(c => c.id > (s.relayed || 0) && c.user && c.user.type !== 'Bot' && /^answer for jules:/i.test(c.body.trim()));
       for (const c of ans) { await jules(`${s.session}:sendMessage`, {prompt: c.body.trim().replace(/^answer for jules:\s*/i, '') + '\n\nThen finish, commit and open the pull request.'}).catch(e => say(`#${i.number}: relay failed: ${e.message}`));
         s.relayed = c.id; s.relayedAt = c.created_at; await putState(i.number, s, `Jules leader: relayed an answer from @${c.user.login} to Jules.`); say(`#${i.number}: relayed answer`); } }
     /* keep the last seen state on the issue, so a stuck session is easy to spot */
@@ -143,19 +129,7 @@ module.exports = async ({github, context, core}) => {
       if ((s.attempt || 1) < MAX_ATTEMPTS) await start(i, (s.attempt || 1) + 1, why);
       else { await putState(i.number, s, `Jules leader: ${MAX_ATTEMPTS} attempts ended without a PR (${why}). Needs the coordinator.`); await setLabels(i.number, [L.fail], [L.run]); freed.add(i.number); say(`#${i.number}: gave up`); } } }
 
-  /* ---------- 1. route the app-changing work to Antigravity, then start what is left ---------- */
-  /* Patrick's split (2026-11-05): Antigravity takes the jobs that change the app, Jules keeps the light ones. The routing
-     happens here because this is what races: the leader checks every 3 minutes and would otherwise start the job first.
-     An issue the manager has handed back (ag-returned) stays with Jules, so a job can never bounce between the two. */
-  if (key && AG_TAKES_APP) {
-    for (const i of await issues(L.queue)) {
-      if (LIGHT(i) || labels(i).some(l => l === 'ag-returned' || l === L.run || l === 'for-antigravity')) continue;
-      await setLabels(i.number, ['for-antigravity'], [L.queue]);
-      await github.rest.issues.createComment({owner, repo, issue_number: i.number,
-        body: 'Routed to the Google Antigravity agent, which takes the jobs that change the app while Jules keeps the light ones. If Antigravity cannot take it, the local manager hands it back here.'});
-      say(`#${i.number}: routed to Antigravity (app-changing)`);
-    }
-  }
+  /* ---------- 1. start queued work ---------- */
   if (key) { const run = (await issues(L.run)).filter(i => !freed.has(i.number)); let free = MAX_RUNNING - run.length, freeApp = MAX_APP - run.filter(i => !LIGHT(i)).length;
     for (const i of (await issues(L.queue)).filter(i => !labels(i).includes(L.run)).sort((a, b) => (labels(b).includes('from-patrick') - labels(a).includes('from-patrick')) || a.number - b.number)) { if (free <= 0) break; if (!LIGHT(i) && freeApp <= 0) continue;
       try { await start(i, 1); free--; if (!LIGHT(i)) freeApp--; } catch (e) { say(`#${i.number}: could not start: ${e.message}`); } } }

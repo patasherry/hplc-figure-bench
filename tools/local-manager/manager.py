@@ -20,7 +20,7 @@ Run:  python tools\\local-manager\\manager.py          (keeps running)
       python tools\\local-manager\\manager.py --once   (one pass)
       python tools\\local-manager\\manager.py --dry    (one pass, prints what it would do, changes nothing)
 """
-import base64, datetime as dt, json, os, re, shutil, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request
+import base64, datetime as dt, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -39,7 +39,7 @@ AUTO_MAX, AUTO_QUEUE, AUTO_AVG = cfg.get('board_adopt_max', 5), cfg.get('board_q
 BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
 COPILOT_MODE = cfg.get('copilot_mode', 'off')  # off (Patrick has no Copilot credits): no Copilot jobs at all, and its turn goes to Claude Code. auto: the cloud agent, and the Copilot CLI while it is paused. cloud or cli: only that one
-CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 40), 'agy': cfg.get('max_agy_jobs', 8), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
+CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 15), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
 TRACK = cfg.get('tracking_issue', 17)
 CLOUD_STANDBY = cfg.get('cloud_standby_minutes', 20)  # the cloud copy works only when the PC manager has been quiet this long
 DIGEST_HOUR = cfg.get('digest_hour', 7)
@@ -673,7 +673,6 @@ BOARD_RELAY_MAX = cfg.get('board_relay_max', 2)  # board-raised requests per rou
 RELAY_PENDING = 'relay-pending'  # on issues with an open request, so the PC and cloud copies find them without sharing state
 RELAY_HOURS, RELAY_ROUNDS, RELAY_CTX = cfg.get('relay_expire_hours', 12), cfg.get('relay_max_rounds', 1), cfg.get('relay_context_lines', 40)
 RELAY_LINES = cfg.get('relay_max_lines', rl.MAX_LINES)  # excerpt lines per request: the relay is for the hard jobs, so it sends whole sections
-RELAY_CHARS = cfg.get('relay_max_chars', rl.MAX_CHARS)  # and the cap that actually binds, since this app's lines are long: see #1060, a 104,314-character request
 
 
 def relay_app():
@@ -704,7 +703,7 @@ def relay_extra(title, body):
     for path in want:
         t = relay_file(path)
         if t:
-            out.append((path, t if len(t) < 8000 else t[:8000] + '\n... (truncated)'))  # the excerpt is capped too (rl.MAX_CHARS): a request has to stay pasteable
+            out.append((path, t if len(t) < 20000 else t[:20000] + '\n... (truncated)'))
     return out
 
 
@@ -769,7 +768,7 @@ def relay(s):
             if board and rt.is_light(i['title']):  # a light job gains little from a bigger reasoning budget: the normal queue
                 post(n, 'This is a light job, so it did not need the offline relay. It went to the normal work queue (`jules-queue`) instead.' + SIGN.format(rv.MODEL))
                 label(n, add=['jules-queue'], remove=[lab]); continue
-            ranges = rl.pick_ranges(app, f"{i['title']}\n{i.get('body') or ''}", RELAY_CTX, RELAY_LINES, RELAY_CHARS)  # by subject when no line is named, so the first request already carries the right code
+            ranges = rl.pick_ranges(app, f"{i['title']}\n{i.get('body') or ''}", RELAY_CTX, RELAY_LINES)  # by subject when no line is named, so the first request already carries the right code
             if not ranges and not board:
                 post(n, f'I need a range to cut the excerpt from. Add a line `relay-lines: <from>-<to>` or a line number ("line 1234") to the issue body, then label it `{RELAY_LABEL}` again.' + SIGN.format(rv.MODEL))
                 label(n, remove=[RELAY_LABEL]); continue
@@ -816,7 +815,7 @@ def relay_collect(n, issue):
             mid = re.search(r'^id:\s*(\S+)', c['body'], re.M)
             rid = mid.group(1) if mid else ''
             reqs.pop(rid, None)
-            ranges = relay_ranges_of(cs, rid) or rl.pick_ranges(app, f"{issue['title']}\n{issue.get('body') or ''}", RELAY_CTX, RELAY_LINES, RELAY_CHARS)
+            ranges = relay_ranges_of(cs, rid) or rl.pick_ranges(app, f"{issue['title']}\n{issue.get('body') or ''}", RELAY_CTX, RELAY_LINES)
             if rl.request_count(bodies) < 1 + RELAY_ROUNDS and (ranges or board) and not DRY:
                 post(n, f'Stale: {b.msg}. Request `{rid}` is withdrawn and a fresh one follows, cut from main as it is now. Nothing was filed.' + rl.DONE.format(rid) + sig + SIGN.format(rv.MODEL))
                 new = relay_send(n, issue, app, base, ranges, board); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
@@ -835,7 +834,7 @@ def relay_collect(n, issue):
             late = '' if rl.same_sha(r['base'], base) else f'\n\n_(Written against main {r["base"]}; main is now {base}, so check it against the current code.)_'
             post(n, f'**Relay answer to `{rid}`:** {nomention(r["summary"])}\n\n{nomention(r["answer"])}{late}' + done)
         elif rl.request_count(bodies) < 1 + RELAY_ROUNDS and not DRY:
-            ranges = rl.ranges_from_need(app, r['need'], RELAY_CTX, RELAY_LINES, had=relay_ranges_of(cs, rid), chars=RELAY_CHARS)
+            ranges = rl.ranges_from_need(app, r['need'], RELAY_CTX, RELAY_LINES, had=relay_ranges_of(cs, rid))
             post(n, f'`{rid}` came back as insufficient: {nomention(r["need"])[:600]}\n\nA second request follows.' + done)
             new = relay_send(n, issue, app, base, ranges, board); reqs[new] = {'base': base}; bodies.append(rl.MARK.format(new, base))
         else:
@@ -956,7 +955,10 @@ def clean_rebuild(pr, files, issue):
         git('fetch', '-q', 'origin', f'+refs/pull/{n}/head:refs/remotes/pr/{n}', 'main')
         base = git('merge-base', 'origin/main', f'pr/{n}')
         patch.write_text(git('diff', '--binary', base, f'pr/{n}', '--', *keep) + '\n', encoding='utf-8')
-        fresh_worktree(wt, branch)
+        if wt.exists():
+            unlink_deps(wt)
+            git('worktree', 'remove', '--force', str(wt))
+        git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
         git('apply', '--3way', str(patch), cwd=wt)  # raises on a conflict it can't settle
         if git('diff', '--name-only', '--diff-filter=U', cwd=wt):
             raise RuntimeError('conflicts remain')
@@ -1139,32 +1141,6 @@ def link_deps(wt):
         log(f'could not link the test libraries into {wt}: {e}')
 
 
-def fresh_worktree(wt, branch):
-    """Put a clean worktree at wt on origin/main.
-
-    A leftover directory that git has no record of (a killed manager, a crashed job, a tool that made the folder
-    itself) makes `worktree remove` fail with "<path> is not a working tree". That used to abort the job, and then
-    every retry of it, because the directory stayed behind: #1038 failed this way on its first agy run. So remove it
-    if git knows it, prune the records either way, and delete whatever is left on disk before adding.
-
-    unlink_deps runs first in every path, so the junction to the real tests/node_modules is gone before anything
-    deletes a directory tree here."""
-    wt = Path(wt)
-    if wt.exists():
-        unlink_deps(wt)
-        try:
-            git('worktree', 'remove', '--force', str(wt))
-        except Exception as e:
-            log(f'worktree {wt.name}: {str(e).strip()[:120]}, deleting the folder instead')
-        git('worktree', 'prune')
-        if wt.exists():
-            shutil.rmtree(wt, ignore_errors=True)
-        if wt.exists():
-            raise RuntimeError(f'could not clear the old worktree at {wt}')
-    wt.parent.mkdir(parents=True, exist_ok=True)
-    git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
-
-
 def unlink_deps(wt):
     """Remove only the link, before the worktree is deleted, so the real tests/node_modules is never touched."""
     dst = wt / 'tests' / 'node_modules'
@@ -1193,7 +1169,11 @@ def claude_jobs(s):
         label(n, add=['claude-code-running'], remove=['for-claude-code', FIRST])
         try:
             git('fetch', '-q', 'origin')
-            fresh_worktree(wt, branch)
+            if wt.exists():
+                unlink_deps(wt)
+                git('worktree', 'remove', '--force', str(wt))
+            WORK.mkdir(parents=True, exist_ok=True)
+            git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
             link_deps(wt)
             run(['claude', '-p', '--permission-mode', 'acceptEdits', '--allowedTools', CC_TOOLS], CC_JOB.format(who='Claude Code', why='It is a numeric fix from an independent audit, sent to you first.' if first else 'Jules (another agent) could not finish it.', n=n, title=i['title'], body=(i.get('body') or '')[:12000]), timeout=3600, cwd=wt, stdin=True)
             body_f = wt / 'PR_BODY.md'
@@ -1247,7 +1227,11 @@ def copilot_cli_job(s, i, retry):
     label(n, add=['copilot-running'], remove=['jules-queue', 'for-copilot'])
     try:
         git('fetch', '-q', 'origin')
-        fresh_worktree(wt, branch)
+        if wt.exists():
+            unlink_deps(wt)
+            git('worktree', 'remove', '--force', str(wt))
+        WORK.mkdir(parents=True, exist_ok=True)
+        git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
         link_deps(wt)
         why = 'Jules (another agent) could not finish it.' if retry else 'You are taking it so Jules (another agent) can work on other jobs.'
         (wt / TASK_FILE).write_text(CC_JOB.format(who='the GitHub Copilot CLI', why=why, n=n, title=i['title'], body=(i.get('body') or '')[:12000]), encoding='utf-8')
@@ -1289,13 +1273,11 @@ def copilot_cli_job(s, i, retry):
 
 # ---------- Antigravity agent (Gemini API): a third coding worker that needs no PC ----------
 AG_MARK = '<!-- antigravity-job -->'
-AG_APP = 'paste-to-antigravity'   # waiting for Patrick to paste the prompt into the Antigravity desktop app: his action, so the name says so
-AG_APP_OLD = 'for-antigravity-app'  # what it was called until 2026-11-05, moved over once
 AG_AGENT = cfg.get('antigravity_agent', 'antigravity-preview-09-2026')
-AG_AT_ONCE = cfg.get('antigravity_at_once', 6)
-AG_PER_PASS = cfg.get('antigravity_per_pass', 3)  # jobs handed over in one pass
+AG_AT_ONCE = cfg.get('antigravity_at_once', 4)
+AG_PER_PASS = cfg.get('antigravity_per_pass', 2)  # jobs handed over in one pass
 AG_MAX_TRIES = cfg.get('antigravity_max_tries', 2)  # attempts per issue before it stays with Jules
-AG_WHEN_QUEUE = cfg.get('antigravity_when_queue', 1)  # hand a job over while at least this many wait for Jules
+AG_WHEN_QUEUE = cfg.get('antigravity_when_queue', 2)  # hand a job over while at least this many wait for Jules
 AG_TOKENS = cfg.get('antigravity_max_tokens', 1500000)  # the app file alone is large; 400k ran out before the first job finished
 AG_JOB = """You are the Google Antigravity agent working on issue #{n} of Protein Purification Bench, a public GitHub repository.
 1. Clone it: git clone --depth 50 https://github.com/{repo}.git && cd {name}
@@ -1319,18 +1301,8 @@ Issue #{n}: {title}
 def gem_api(path, method='GET', body=None):
     req = urllib.request.Request(f'https://generativelanguage.googleapis.com/v1beta/{path}', method=method, data=json.dumps(body).encode() if body is not None else None,
                                  headers={'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            return json.loads(r.read() or b'{}')
-    except urllib.error.HTTPError as e:
-        # The body is the whole diagnosis and urllib's str(e) drops it. A 429 names the quota it counted against:
-        # "free_tier" with "limit: 0" means no free allowance for this agent, anything else is a rate or daily limit
-        # we are tripping ourselves. Without this the log only ever said "HTTP Error 429: Too Many Requests".
-        try:
-            detail = (e.read() or b'')[:600].decode('utf-8', 'replace').replace('\n', ' ')
-        except Exception:
-            detail = ''
-        raise RuntimeError(f'HTTP {e.code} {e.reason}' + (f': {detail}' if detail else '')) from None
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.loads(r.read() or b'{}')
 
 
 def all_text(o):
@@ -1355,10 +1327,7 @@ def antigravity(s):
         except Exception as e:
             log(f'#{n}: Antigravity status check failed: {str(e)[:200]}')
             if time.time() - job['at'] > 3 * 3600:
-                s.setdefault('ag_tried', {})[n] = rt.tries(s['ag_tried'].get(n)) + 1
-                lost_more = s['ag_tried'][n] < AG_MAX_TRIES
-                label(int(n), add=['for-antigravity' if lost_more else 'jules-queue'] + ([] if lost_more else ['ag-returned']), remove=['antigravity-running', 'for-antigravity'])
-                a.pop(n)
+                label(int(n), add=[job.get('src', 'jules-queue')], remove=['antigravity-running']); a.pop(n); s.setdefault('ag_tried', {})[n] = rt.tries(s['ag_tried'].get(n)) + 1
                 log(f'#{n}: Antigravity job lost ({e}), back to Jules')
             continue
         st = it.get('status', '')
@@ -1382,15 +1351,14 @@ def antigravity(s):
             log(f'#{n}: Antigravity opened PR #{pr}')
         except Exception as e:
             s.setdefault('ag_tried', {})[n] = rt.tries(s['ag_tried'].get(n)) + 1
-            more = s['ag_tried'][n] < AG_MAX_TRIES
-            back = 'for-antigravity' if more else 'jules-queue'
-            # Jules takes it after the last try, and ag-returned stops the leader routing it straight back to Antigravity
-            label(int(n), add=[back] + ([] if more else ['ag-returned']), remove=['antigravity-running', 'for-antigravity'])
-            post(int(n), f'The Antigravity job did not produce a usable change ({str(e)[:300]}), so the job goes ' + ('back to Antigravity for one more try.' if more else 'to Jules instead.') + SIGN.format(rv.MODEL))
+            more = s['ag_tried'][n] < AG_MAX_TRIES and job.get('src', 'jules-queue') == 'jules-queue'
+            back = job.get('src', 'jules-queue')  # a second try stays in the queue, where Antigravity can take it again; after the last one the job is Jules'
+            label(int(n), add=[back], remove=['antigravity-running'])
+            post(int(n), f'The Antigravity job did not produce a usable change ({str(e)[:300]}), so the job goes back to `{back}`' + (' (Antigravity may try once more).' if more else '.') + SIGN.format(rv.MODEL))
             log(f'#{n}: Antigravity job failed: {e}')
     for i in issues('antigravity-running'):  # labelled, but the manager has no job for it (its memory was lost): put it back
         if str(i['number']) not in a:
-            label(i['number'], add=['jules-queue', 'ag-returned'], remove=['antigravity-running', 'for-antigravity'])
+            label(i['number'], add=['jules-queue'], remove=['antigravity-running'])
             log(f'#{i["number"]}: Antigravity job not tracked any more, back to Jules')
     # hand out: first jobs that wait for a worker that isn't there (Copilot while it is paused, Claude Code while the PC is off), then Jules' backlog
     tried = s.get('ag_tried', {})
@@ -1417,157 +1385,14 @@ def antigravity(s):
                                                   'input': AG_JOB.format(n=n, repo=REPO, name=REPO.split('/')[1], title=i['title'], body=(i.get('body') or '')[:12000])})
         except Exception as e:
             s['count']['antigravity'] -= 1
-            # Every call from Nov 1 to Nov 5 came back 429 on the first attempt of the day, with no usage behind it: the
-            # agent has no quota on this key's tier, so retrying every 6 hours forever only hides it. Back off hard after
-            # AG_REFUSALS in a row and say so once, instead of a 6-hour cycle that never ends.
-            s['ag_refused'] = s.get('ag_refused', 0) + 1
-            dead = s['ag_refused'] >= AG_REFUSALS
-            s['ag_off_until'] = time.time() + (AG_DEAD_HOURS if dead else 6) * 3600
-            if dead and not s.get('ag_said_dead'):
-                s['ag_said_dead'] = True
-                post(TRACK, f'**The Antigravity API is refusing every call.** {s["ag_refused"]} attempts in a row have come back `{str(e)[:120]}`, '
-                            'each on the first call of the day with no usage behind it, so this is not our traffic: the agent has no quota on this key\'s tier.\n\n'
-                            f'The API route is paused for {AG_DEAD_HOURS} hours at a time now rather than 6, so it stops filling the log. '
-                            'Antigravity still gets the app-changing jobs through the desktop app (`paste-to-antigravity`, see `docs/ANTIGRAVITY.md`), which is the only route that has ever '
-                            'landed a PR here (#759, #765). Everything the app route cannot hold goes to Jules within '
-                            f'{AG_STALL_MIN} minutes.\n\nTo bring the API route back, the Gemini key needs a tier with quota for `{AG_AGENT}`. '
-                            'Once it has one, the next successful call clears this by itself.' + SIGN.format(rv.MODEL))
-            return log(f'Antigravity not available ({str(e)[:200]}), refusal {s["ag_refused"]}, paused for {AG_DEAD_HOURS if dead else 6} hours')
-        s['ag_refused'], s['ag_said_dead'] = 0, False  # it answered, so whatever was wrong with the quota is fixed
+            s['ag_off_until'] = time.time() + 6 * 3600
+            return log(f'Antigravity not available ({str(e)[:200]}), paused for 6 hours')
         kind = rt.kind(i['title'])
         a[str(n)] = {'id': it['id'], 'at': time.time(), 'title': i['title'], 'src': src, 'kind': kind}
         label(n, add=['antigravity-running'], remove=[src])
         why = {'for-copilot': 'Copilot is paused', 'for-claude-code': "Claude Code needs Patrick's PC, which is off"}.get(src, f'Jules has {len(queue)} jobs waiting')
         post(n, f'Handed to the **Google Antigravity agent** through the Gemini API ({why}; {kind} job). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
         log(f'#{n}: handed to Antigravity ({kind}, attempt {rt.tries(tried.get(str(n))) + 1})')
-
-
-AG_REFUSALS = cfg.get('antigravity_refusals_before_dead', 3)  # consecutive API refusals that mean the key has no quota, not a passing rate limit
-AG_DEAD_HOURS = cfg.get('antigravity_dead_hours', 24)        # how long to leave it alone then, instead of retrying every 6 hours forever
-AG_STALL_MIN = cfg.get('antigravity_stall_minutes', 45)  # a for-antigravity job nobody started by then goes to Jules, so a broken API never stalls the queue
-# Both default to 0: the scheduled prompt in docs/ANTIGRAVITY.md has the app session find its own work from the
-# for-antigravity label, so a per-issue prompt is a notification that asks Patrick for something already covered.
-# Set antigravity_app_at_once to 2 in the settings file to get per-issue prompts back.
-AG_APP_AT_ONCE = cfg.get('antigravity_app_at_once', 0)      # jobs waiting for Patrick to paste into the Antigravity desktop app
-AG_APP_DEAD = cfg.get('antigravity_app_at_once_dead', 0)    # the same while the API refuses: the scheduled prompt covers that case too
-AG_APP_PROMPT = """**For the Antigravity desktop app.** Paste this into a task in `C:\\Users\\Patrick\\hfb-antigravity`:
-
-```
-First: git checkout main && git pull, then read AGENTS.md, docs/CODEMAP.md and docs/AGENT_TIPS.md. Give every step a time limit, and if something fails twice the same way, record it, move on, and report it in the PR instead of retrying.
-
-Work on GitHub issue #{n} in this repository ({repo}): "{title}". Read the issue and do what it asks. Create the branch antigravity/issue-{n}.
-
-Change only hplc-figure-bench(WF1.13).html and files under tests/. Add a check, driven only through the UI and DOM, that fails on current main and passes with your change, and keep every existing check. Run the suites you touched (cd tests && node suites/NN_name.js). Never add real lab data.
-
-Then commit, push, and open a pull request whose description says "Closes #{n}", with what you changed, the check that fails on main and passes here, and exactly what you ran. Do not merge.
-```
-
-The PR goes through the Test suite and the review gate like any other. When it appears, this label clears itself.\n\nTo have it check the queue on its own instead of pasting job by job, use the scheduled prompt in `docs/ANTIGRAVITY.md`."""
-
-
-def has_pr(n):
-    """An open pull request for issue n: its branch, or a "Closes #n" in its body."""
-    pat = re.compile(rf'(?:closes|fixes|resolves)\s+#{n}\b', re.I)
-    return any(pr['head']['ref'].endswith(f'/issue-{n}') or pat.search(pr.get('body') or '')
-               for pr in gh(f'repos/{REPO}/pulls?state=open&per_page=100'))
-
-
-def ag_app_done(i):
-    """True when a job no longer needs Patrick to paste it: another worker holds it, or a pull request already exists.
-    Both loops in antigravity_app must agree on this, or they fight over the label pass after pass."""
-    lab = {l['name'] for l in i['labels']}
-    return bool(lab & {'antigravity-done', 'jules-running', 'antigravity-running', 'claude-code-running', 'codex-running'}) or has_pr(i['number'])
-
-
-def antigravity_app(s):
-    """The desktop app is the only Antigravity path that has actually landed pull requests (#759, #765), so a couple of
-    app-changing jobs always carry a ready-to-paste prompt for Patrick. Nothing waits on him: the API route and the
-    stall guard run regardless, and a job whose PR appears, or which another worker takes, clears itself."""
-    seen = s.setdefault('ag_app', {})
-    if not s.get('ag_app_renamed'):  # one-time: the label was for-antigravity-app until 2026-11-05
-        for i in issues(AG_APP_OLD):
-            label(i['number'], add=[AG_APP], remove=[AG_APP_OLD])
-            log(f'#{i["number"]}: moved to the {AG_APP} label')
-        s['ag_app_renamed'] = 1
-    for i in issues(AG_APP):  # done, taken elsewhere, or closed: let it go
-        if ag_app_done(i):
-            label(i['number'], remove=[AG_APP]); seen.pop(str(i['number']), None)
-            log(f'#{i["number"]}: cleared the {AG_APP} label')
-    have = [i for i in issues(AG_APP)]
-    cap = AG_APP_DEAD if s.get('ag_refused', 0) >= AG_REFUSALS or s.get('ag_off_until', 0) > time.time() else AG_APP_AT_ONCE
-    room = cap - len(have)
-    if room <= 0:
-        return
-    tried = s.get('ag_tried', {})
-    # ag_app_done here too, or the loop thrashes: the cleanup above drops the label because a PR exists and pops the
-    # issue from seen, then this pool picks the same issue again and posts another prompt, every single pass. #1038
-    # collected four copies of its prompt that way while PR #1048 was already open.
-    pool = [i for i in issues('for-antigravity')
-            if str(i['number']) not in s.get('antigravity', {}) and str(i['number']) not in seen and not ag_app_done(i)]
-    for i in rt.pick(pool, tried, room, AG_MAX_TRIES):
-        n = i['number']
-        if DRY:
-            log(f'[dry] would ask Patrick to paste #{n}'); continue
-        seen[str(n)] = time.time()
-        label(n, add=[AG_APP])
-        post(n, AG_APP_PROMPT.format(n=n, repo=REPO, title=i['title'].replace('"', "'")) + SIGN.format(rv.MODEL))
-        log(f'#{n}: prompt posted for the Antigravity desktop app')
-
-
-AGY_SEEN_DAYS = 7  # how long a successful agy start vouches for the CLI being there
-
-
-def agy_exe():
-    """The Antigravity CLI on PATH. On Windows it is usually a shim (agy.cmd from npm), and a PATH that lost it, or a
-    manager started from a shell whose PATH predates the install, makes a bare which('agy') miss something that works.
-    agy_exe in the settings file names it outright."""
-    named = cfg.get('agy_exe')
-    if named:
-        return named if (os.path.isfile(named) or shutil.which(named)) else None
-    for name in ('agy', 'agy.cmd', 'agy.exe', 'agy.ps1', 'agy.bat'):
-        found = shutil.which(name)
-        if found:
-            return found
-    return None
-
-
-def have_agy(s):
-    """(usable, why not). A missed PATH lookup must not look like "not installed": on 2026-11-05 the CLI opened #1070 at
-    21:26 and two hours later the stall guard swept six jobs to Jules saying it was not installed. So a start that
-    actually worked vouches for it for AGY_SEEN_DAYS, and the reason is reported exactly rather than guessed."""
-    if CLOUD:
-        return False, 'this is the cloud copy, which has no PC to run it on'
-    if not cfg.get('agy_jobs_on', True):
-        return False, 'the Antigravity CLI is turned off (agy_jobs_on)'
-    if agy_exe():
-        return True, ''
-    seen = s.get('agy_seen', 0)
-    if seen and time.time() - seen < AGY_SEEN_DAYS * 86400:
-        return True, ''  # it ran for us recently, so believe that over a PATH lookup
-    return False, 'the Antigravity CLI is not on PATH (set agy_exe to its full path if it is installed)'
-
-
-def antigravity_stall(s):
-    """Hand a for-antigravity job to Jules when Antigravity has not started it. Patrick's split gives Antigravity every
-    app-changing job, so without this a paused API (6 hours after one refusal) would stop all app work."""
-    a = s.get('antigravity', {})
-    paused = s.get('ag_off_until', 0) > time.time() or not GEMINI_KEY
-    # the Antigravity CLI on the PC serves the same queue and takes one job at a time, so a backlog for it is not a stall
-    cli, why_no_cli = have_agy(s)
-    waiting = [i for i in issues('for-antigravity') if str(i['number']) not in a and AG_APP not in {l['name'] for l in i['labels']}]
-    keep = cfg.get('agy_backlog', 6) if cli else 0
-    if keep:
-        waiting = sorted(waiting, key=lambda i: -i['number'])[keep:]  # newest stay for the CLI, the rest go to Jules
-    for i in waiting:
-        n = i['number']
-        waited = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(i['updated_at'].replace('Z', '+00:00'))).total_seconds() / 60
-        if waited < AG_STALL_MIN and not (paused and not cli):
-            continue
-        why = (f'the Gemini API is paused and {why_no_cli}' if paused and not cli
-               else f'Antigravity has not started it in {int(waited)} minutes')
-        label(n, add=['jules-queue', 'ag-returned'], remove=['for-antigravity'])
-        post(n, f'Back to Jules: {why}. Antigravity keeps the app-changing jobs it can take, and this one was waiting.' + SIGN.format(rv.MODEL))
-        log(f'#{n}: for-antigravity -> jules-queue ({why})')
 
 
 def apply_agent_diff(n, title, diff, body, branch, who):
@@ -1577,7 +1402,9 @@ def apply_agent_diff(n, title, diff, body, branch, who):
     patch.write_text(diff, encoding='utf-8')
     try:
         git('fetch', '-q', 'origin')
-        fresh_worktree(wt, branch)
+        if wt.exists():
+            git('worktree', 'remove', '--force', str(wt))
+        git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
         git('apply', '--3way', '--whitespace=nowarn', str(patch), cwd=wt)
         changed = sorted(set(git('diff', '--name-only', 'HEAD', cwd=wt).splitlines() + git('ls-files', '--others', '--exclude-standard', cwd=wt).splitlines()) - {''})
         bad = [f for f in changed if not ALLOWED.match(f.strip('"'))]
@@ -1612,9 +1439,8 @@ def ship_worktree(wt, n, title, desc, branch, who, mark):
     return gh(f'repos/{REPO}/pulls', 'POST', {'title': f'{title} (#{n})', 'head': branch, 'base': 'main', 'body': f'{mark}\nCloses #{n}. Made by **{who}**, started by the local manager.\n\n{desc}'})['number']
 
 
-BG_HOURS = {'openclaw': cfg.get('openclaw_hours', 1.5), 'codex': cfg.get('codex_hours', 1.5), 'agy': cfg.get('agy_hours', 2)}
-AGY_MODEL = cfg.get('agy_model', 'gemini-3.8-flash')  # the model the Antigravity CLI runs a job on; '' takes the sign-in's own default
-_bg = {'openclaw': {}, 'codex': {}, 'agy': {}}  # issue -> running job, per worker; kept in memory, since the processes belong to this manager
+BG_HOURS = {'openclaw': cfg.get('openclaw_hours', 1.5), 'codex': cfg.get('codex_hours', 1.5)}
+_bg = {'openclaw': {}, 'codex': {}}  # issue -> running job, per worker; kept in memory, since the processes belong to this manager
 BG = {  # how each local coding worker is started and labelled
     'openclaw': {'name': 'OpenClaw', 'who': lambda: f'OpenClaw with the local model ({rv.MODEL_LOCAL})', 'mark': '<!-- openclaw-job -->', 'exe': 'openclaw',
                  'args': lambda wt, src='': ['agent', 'exec', '--message-file', str(wt / TASK_FILE), '--cwd', str(wt)],
@@ -1622,32 +1448,6 @@ BG = {  # how each local coding worker is started and labelled
     'codex': {'name': 'Codex', 'who': lambda: 'ChatGPT Codex on the owner\'s PC', 'mark': '<!-- codex-job -->', 'exe': 'codex',
               'args': lambda wt, src='': ['exec', '--sandbox', 'workspace-write'] + codex_opts(src in ('for-claude-code', 'for-codex')) + ['-C', str(wt), f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE}.'],
               'own': 'for-codex', 'takes_claude': True, 'cap': 'codex_jobs', 'desc': 'ChatGPT Codex writing code'},
-    # The Antigravity CLI, covered by Patrick's Google AI Pro subscription: the CLI is included at every tier and draws on the
-    # subscription quota through the sign-in cached by an interactive `agy` session, not on the Gemini API key whose project
-    # has refused every Interactions API call since Nov 1 (HTTP 429). Headless: `agy -p` prints to stdout and exits.
-    'agy': {'name': 'the Antigravity CLI', 'who': lambda: 'the Antigravity CLI (agy) on the owner\'s PC, on his Google AI Pro subscription', 'mark': '<!-- agy-job -->', 'exe': 'agy',
-            'args': lambda wt, src='': ['-p', f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE} and do not commit, push or open a pull request: the manager does that.',
-                                        '--output-format', 'text', '--print-timeout', f'{int(BG_HOURS["agy"] * 3600)}s']
-                                       # --model picks the model for this run (added in CLI 1.0.5; /model is interactive
-                                       # only, so it is no use headless). Patrick's choice: 3.8 Flash rather than the
-                                       # Gemini 4 Argon the sign-in defaults to, to spend less of the AI Pro quota per
-                                       # job. `agy models` lists the names this build accepts; agy_model: "" drops the
-                                       # flag and takes whatever the sign-in defaults to.
-                                       + (['--model', AGY_MODEL] if AGY_MODEL else [])
-                                       # Off by default: unverified on Windows, and an unsupported flag here fails the way
-                                       # permissions did, silently. Turn it on once a smoke test shows the CLI still edits
-                                       # a file with both flags, and we get containment as well as no prompts.
-                                       + (['--sandbox'] if cfg.get('agy_sandbox', False) else [])
-                                       # On Windows the CLI still uses the older permission system, where an unconfigured
-                                       # command defaults to Ask, and in headless mode an Ask nobody can answer is
-                                       # soft-denied: the run exits 0 having changed nothing. Scoped permissions.allow
-                                       # rules do not take effect there: write_file(*) and a concrete write_file(/Users/...)
-                                       # were both ignored on 2026-11-05 and the run auto-denied the write either way, so
-                                       # this flag is the only route and defaults on. Safe enough only because the job runs
-                                       # in a throwaway worktree and the manager still checks which files changed before it
-                                       # pushes anything. It is the least contained worker here: Codex gets workspace-write.
-                                       + (['--dangerously-skip-permissions'] if cfg.get('agy_yolo', True) else []),
-            'own': 'for-antigravity', 'takes_claude': False, 'cap': 'agy', 'desc': 'the Antigravity CLI writing code'},
 }
 OC_MARK = BG['openclaw']['mark']
 
@@ -1678,7 +1478,7 @@ def small_job(s, i):
 def bg_worker(s, key):
     """Run one local coding worker (OpenClaw or Codex) on one job at a time, in the background, so the manager's passes keep going while it codes."""
     W, jobs = BG[key], _bg[key]
-    exe = agy_exe() if key == 'agy' else shutil.which(W['exe'])  # agy may be a shim, or named outright in the settings file
+    exe = shutil.which(W['exe'])
     if CLOUD or not exe or not cfg.get(key + '_jobs_on', key != 'openclaw'):  # OpenClaw is off unless openclaw_jobs_on is true: it failed every job (#500, #514, #515)
         return
     tried = s.setdefault(f'{key}_tried', {})
@@ -1741,7 +1541,11 @@ def bg_worker(s, key):
     n, wt = i['number'], WORK / f'{key}-{i["number"]}'
     try:
         git('fetch', '-q', 'origin')
-        fresh_worktree(wt, f'{key}/issue-{n}')
+        if wt.exists():
+            unlink_deps(wt)
+            git('worktree', 'remove', '--force', str(wt))
+        WORK.mkdir(parents=True, exist_ok=True)
+        git('worktree', 'add', '-B', f'{key}/issue-{n}', str(wt), 'origin/main')
         link_deps(wt)
         why = 'Jules (another agent) could not finish it.' if src not in ('jules-queue', W['own']) else 'You are taking it so Jules (another agent) can work on other jobs.'
         (wt / TASK_FILE).write_text(CC_JOB.format(who=W['who'](), why=why, n=n, title=i['title'], body=(i.get('body') or '')[:12000]), encoding='utf-8')
@@ -1753,9 +1557,6 @@ def bg_worker(s, key):
     jobs[n] = {'proc': proc, 'wt': wt, 't': time.time(), 'src': src, 'title': i['title'], 'log': logf}
     if key == 'codex':
         log(f'#{n}: Codex uses {CODEX_HEAVY if src in ("for-claude-code", "for-codex") else CODEX_LIGHT}')
-    if key == 'agy':
-        log(f'#{n}: the Antigravity CLI uses {AGY_MODEL or "the model its sign-in defaults to"}')  # a name this build rejects shows up here, not as a mystery failure
-        s['agy_seen'] = time.time()  # it started, so a later PATH lookup that misses must not report it as uninstalled
     label(n, add=[f'{key}-running'], remove=[src])
     post(n, f'Handed to **{W["name"]}** on Patrick\'s PC ({W["desc"]}). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
     log(f'#{n}: handed to {W["name"]}')
@@ -2490,48 +2291,8 @@ def heartbeat_check_cloud_yield():
         return False
 
 
-HB_EVERY = 240       # seconds between heartbeat refreshes: comfortably inside CLOUD_STANDBY (20 min)
-HB_ID = None         # the heartbeat comment, found once per process
-HB_THREAD = False    # set once the timer below is running, so the per-pass call stands down
-
-
-def hb_body():
-    return f'{HEARTBEAT}{int(time.time())} -->\n_The local manager on Patrick\'s PC is running (last pass {time.strftime("%Y-%m-%d %H:%M")}). While this is recent, the cloud copy stands aside._'
-
-
-def hb_tick():
-    """Write the heartbeat once. Keeps its comment id in a global, so it touches no state file and is safe off the main thread."""
-    global HB_ID
-    if HB_ID is None:
-        c = next((c for c in comments(TRACK) if c['body'].startswith(HEARTBEAT)), None)
-        HB_ID = c and c['id']
-    if HB_ID:
-        gh(f'repos/{REPO}/issues/comments/{HB_ID}', 'PATCH', {'body': hb_body()})
-    else:
-        HB_ID = gh(f'repos/{REPO}/issues/{TRACK}/comments', 'POST', {'body': hb_body()})['id']
-
-
-def hb_start():
-    """Refresh the heartbeat on its own timer. A duty loop cannot do this: one duty (a board meeting, a hard
-    question through the ladder) runs for 20 to 45 minutes, and while it does, a per-duty heartbeat never fires.
-    The cloud copy then reads a stale heartbeat, decides the PC is off and works the same queue in parallel."""
-    global HB_THREAD
-
-    def loop():
-        global HB_ID
-        while True:
-            try:
-                hb_tick()
-            except Exception as e:
-                HB_ID = None  # find the comment again next time, in case it was deleted
-                log(f'heartbeat failed: {e}')
-            time.sleep(HB_EVERY)
-    HB_THREAD = True
-    threading.Thread(target=loop, daemon=True, name='heartbeat').start()
-
-
 def heartbeat(s):
-    """PC: refresh the heartbeat comment on the tracking issue. Cloud: return its age in minutes (None if there is none)."""
+    """PC: refresh the heartbeat comment on the tracking issue every 5 minutes. Cloud: return its age in minutes (None if there is none)."""
     cid = s.get('hb_id')
     if not cid:
         c = next((c for c in comments(TRACK) if c['body'].startswith(HEARTBEAT)), None)
@@ -2541,9 +2302,9 @@ def heartbeat(s):
             return None
         m = re.search(r'pc-heartbeat (\d+)', gh(f'repos/{REPO}/issues/comments/{cid}')['body'])
         return (time.time() - int(m.group(1))) / 60 if m else None
-    if HB_THREAD or DRY or time.time() - s.get('hb_at', 0) < 300:
-        return 0  # the timer owns the heartbeat whenever it is running; this path is for --once
-    body = hb_body()
+    if DRY or time.time() - s.get('hb_at', 0) < 300:
+        return 0
+    body = f'{HEARTBEAT}{int(time.time())} -->\n_The local manager on Patrick\'s PC is running (last pass {time.strftime("%Y-%m-%d %H:%M")}). While this is recent, the cloud copy stands aside._'
     try:
         if cid:
             gh(f'repos/{REPO}/issues/comments/{cid}', 'PATCH', {'body': body})
@@ -2569,18 +2330,14 @@ def one_pass():
         log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
     else:
         heartbeat(s)
-    # Patrick is the transport for the relay and the one who answers on PRs, so the duties he waits on come first.
-    # Behind 'questions' they used to wait out the whole question ladder, which routinely holds a pass for 20 to 45
-    # minutes: #1060 sat on relay-from-board with no request posted because of that, and it reads as a stall.
-    for name, duty in (('relay', relay), ('owner', owner_replies), ('owner merge', owner_merge_replies), ('science inbox', science_inbox),
-                       ('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('agy jobs', lambda s: bg_worker(s, 'agy')), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+    for name, duty in (('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('owner', owner_replies), ('science inbox', science_inbox), ('relay', relay),('owner merge', owner_merge_replies), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
             continue  # first-pass notes from the local model: off, its time goes to writing code
         s['busy'] = {'duty': name, 'since': time.time()}
-        if not CLOUD and not HB_THREAD:
-            heartbeat(s)  # --once only: in the keep-running loop the hb_start timer does this, and from inside long duties too
+        if not CLOUD:
+            heartbeat(s)  # a long pass (a hard question, a board meeting) must not look like the PC is off
         save(s)
         try:
             duty(s)
@@ -2645,8 +2402,6 @@ if __name__ == '__main__':
         rv.ask_model = lambda system, user: ask_gemini(system + '\n\n' + user)
         rv.MODEL = 'Gemini'
     log(f'manager started ({rv.MODEL}; caps {CAP}){" DRY RUN" if DRY else ""}{" IN THE CLOUD" if CLOUD else ""}')
-    if not DRY and not CLOUD and '--once' not in sys.argv:
-        hb_start()  # on its own timer, so a 40-minute duty cannot make the PC look off to the cloud copy
     if not DRY and not CLOUD and '--once' not in sys.argv and '--no-console' not in sys.argv:
         import console
         console.start(sys.modules[__name__], cfg.get('console_port', 8765))

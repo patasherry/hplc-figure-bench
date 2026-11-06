@@ -61,7 +61,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .home-where{margin:0;color:var(--muted);font-size:12.5px}
 .home-alt{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .projbar{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 260px}
-.projbar .pb-sep{color:var(--line2);font-size:18px} .projbar .pb-lab{color:var(--muted);font-size:12.5px;white-space:nowrap}
+.projbar .pb-sep{color:var(--line2);font-size:18px}
 .projname{font:inherit;font-size:16px;font-weight:600;border:1px solid transparent;background:transparent;color:var(--ink);padding:3px 6px;border-radius:var(--r-s);min-width:0;flex:0 1 26ch}
 .projname:hover{border-color:var(--line)} .projname:focus{outline:none;border-color:var(--accent);background:var(--field)}
 .savestate{color:var(--muted);font-size:12.5px;white-space:nowrap}
@@ -511,8 +511,8 @@ button,input,select,textarea{font-family:inherit}
 <header class="top">
   <h1><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M1.5 15.5h3.2c1.6 0 2-1.4 2.6-4.4C8 7.6 8.6 3 10 3s2 4.6 2.7 8.1c.6 3 1 4.4 2.6 4.4h5.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><rect x="5.5" y="18.2" width="11" height="2.3" rx="1.15" fill="currentColor" opacity=".55"/></svg>Protein Purification Bench</h1>
   <div class="projbar" id="projBar" hidden>
-    <span class="pb-sep" aria-hidden="true">/</span><label for="projName" class="pb-lab">Project name</label>
-    <input type="text" id="projName" class="projname" aria-label="Project name" placeholder="Project name" spellcheck="false">
+    <span class="pb-sep" aria-hidden="true">/</span>
+    <input type="text" id="projName" class="projname" aria-label="Project name" spellcheck="false">
     <span class="savestate" id="saveState" role="status" aria-live="polite"></span>
   </div>
   <div class="btns top-act">
@@ -1164,7 +1164,7 @@ button,input,select,textarea{font-family:inherit}
         </label>
         <label class="f">Inset size (fraction of width)<input type="number" step="0.05" min="0.15" max="0.6" id="o-zoomInsetSize" data-opt="zoomInsetSize"></label>
       </div>
-      <div class="btns"><button class="btn quiet" id="resetRange" type="button">Reset to auto</button><button class="btn quiet" id="zoomPeak" type="button" title="Zoom to selected peak">Zoom to peak</button></div>
+      <div class="btns"><button class="btn quiet" id="resetRange" type="button">Reset to auto</button></div>
       <p class="hint" data-for="run">The window is saved per run and also applies in the workflow figure.</p>
     </section>
 
@@ -1339,7 +1339,7 @@ button,input,select,textarea{font-family:inherit}
     </div>
     <div class="intp" id="intPanel" hidden>
       <div class="intp-head"><strong>Peak integration</strong>
-        <div class="btns"><button type="button" class="mini" id="intAuto">Detect peaks</button><button type="button" class="mini" id="intClear">Clear regions</button><button type="button" class="mini" id="intMore" hidden></button><button type="button" class="mini" id="intCsv" aria-label="Save table CSV">Save table CSV</button></div></div>
+        <div class="btns"><button type="button" class="mini" id="intAuto">Detect peaks</button><button type="button" class="mini" id="intClear">Clear regions</button><button type="button" class="mini" id="intMore" hidden></button><button type="button" class="mini" id="intCsv">Save table (CSV, all runs)</button></div></div>
       <div class="tablewrap"><table class="itab mono" id="intTable"></table></div>
     </div>
   </main>
@@ -1361,7 +1361,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
   intMethod:'gauss', poolStyle:'band', poolColor:'#E69F00', poolAlpha:0.3, intBase:'line', intLabel:'num', intProm:5, intFill:true, eps:'', path:2,
   wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfFull:false, wfArrows:true, gelFrame:true, ladder:'biorad',
-  zoomMode:false, zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4, zoomInsetW:0, zoomInsetH:0, zoomInsetX:null, zoomInsetY:null,
+  zoomMode:false, zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4,
   preset:'single', w:3.5, h:2.6, fs:8, lw:0.75, font:'Arial', palette:'okabe', bg:true, dpi:600};
 const RANGE = ['xmin','xmax','ymin','ymax'];
 /* Native E. coli proteins commonly co-purified by IMAC (Bolanos-Garcia & Davies 2006, Table 1), DnaK, and common purification additives.
@@ -2207,75 +2207,27 @@ function zoomWindow(lo, hi, a, b){
   const za = Math.max(lo, hasA ? +a : hasB ? lo : lo + (hi - lo)/3), zb = Math.min(hi, hasB ? +b : hasA ? hi : lo + (hi - lo)*2/3);
   return zb > za ? {a: za, b: zb} : null;
 }
-function zoomCompose(S, m, win, buildIn, zObj){
+function zoomCompose(S, m, win, buildIn){
   const o = opt, pos = zoomPos(), beside = pos === 'beside', g = m.geo, {L, R, T, B} = g;
-  zObj = zObj || opt;
-  let iw = (zObj && numOr(zObj.zoomInsetW, 0) > 0) ? +zObj.zoomInsetW : (beside ? S.W*zoomSize() : (R - L)*zoomSize());
-  let ih = (zObj && numOr(zObj.zoomInsetH, 0) > 0) ? +zObj.zoomInsetH : (beside ? S.H : Math.min((B - T)*0.8, iw*S.H/S.W*1.15));
-  iw = Math.max(30, Math.min(S.W, iw)); ih = Math.max(20, Math.min(S.H, ih));
-  const pad = 3;
-  let ix = (zObj && zObj.zoomInsetX !== null && zObj.zoomInsetX !== undefined && isFinite(+zObj.zoomInsetX)) ? +zObj.zoomInsetX : (beside ? S.W - iw : pos === 'tl' ? L + pad : R - iw - pad);
-  let iy = (zObj && zObj.zoomInsetY !== null && zObj.zoomInsetY !== undefined && isFinite(+zObj.zoomInsetY)) ? +zObj.zoomInsetY : (beside ? 0 : pos === 'br' ? B - ih - pad : T + pad);
-  ix = Math.max(0, Math.min(S.W - iw, ix)); iy = Math.max(0, Math.min(S.H - ih, iy));
-  if (ix + iw > S.W) iw = Math.max(30, S.W - ix);
-  if (iy + ih > S.H) ih = Math.max(20, S.H - iy);
+  const iw = beside ? S.W*zoomSize() : (R - L)*zoomSize(), ih = beside ? S.H : Math.min((B - T)*0.8, iw*S.H/S.W*1.15);
   const ins = buildIn(iw, ih); if (!ins || !ins.svg) return null;
+  const pad = 3, ix = beside ? S.W - iw : pos === 'tl' ? L + pad : R - iw - pad, iy = beside ? 0 : pos === 'br' ? B - ih - pad : T + pad;
   const src = g.uv ? [{xs: g.uv.xs, yp: g.uv.ys}] : g.P; let mx = -Infinity;
   src.forEach(p => { for (let i = Math.max(0, lowerBound(p.xs, win.a)); i < p.xs.length && p.xs[i] <= win.b; i++) if (p.yp[i] > mx) mx = p.yp[i]; });
   const rTop = isFinite(mx) ? Math.max(T, Math.min(B - 4, g.py(mx) - 3)) : T, xa = g.px(win.a), xb = g.px(win.b);
   const tg = beside ? {x0: ix + ins.geo.L, x1: ix + ins.geo.R, y0: ins.geo.T, y1: ins.geo.B} : {x0: ix, x1: ix + iw, y0: iy, y1: iy + ih};
   const ln = (x1, y1, x2, y2) => `<line x1="${r2(x1)}" y1="${r2(y1)}" x2="${r2(x2)}" y2="${r2(y2)}"/>`;
-  const sBox = {x0: Math.min(xa, xb), x1: Math.max(xa, xb), y0: Math.min(rTop, B), y1: Math.max(rTop, B)};
-  const iBox = {x0: Math.min(tg.x0, tg.x1), x1: Math.max(tg.x0, tg.x1), y0: Math.min(tg.y0, tg.y1), y1: Math.max(tg.y0, tg.y1)};
   let con = '';
-  const abut = sBox.x0 <= iBox.x1 + 1 && sBox.x1 >= iBox.x0 - 1 && sBox.y0 <= iBox.y1 + 1 && sBox.y1 >= iBox.y0 - 1;
-  if (!abut) {
-    let dx = 0, dirX = 0;
-    if (sBox.x1 < iBox.x0) { dx = iBox.x0 - sBox.x1; dirX = 1; }
-    else if (sBox.x0 > iBox.x1) { dx = sBox.x0 - iBox.x1; dirX = -1; }
-    let dy = 0, dirY = 0;
-    if (sBox.y1 < iBox.y0) { dy = iBox.y0 - sBox.y1; dirY = 1; }
-    else if (sBox.y0 > iBox.y1) { dy = sBox.y0 - iBox.y1; dirY = -1; }
-    const axis = (dy === 0 || (dx > 0 && dx <= dy)) ? 'x' : 'y';
-    if (axis === 'x') {
-      const sx = dirX > 0 ? sBox.x1 : sBox.x0;
-      const tx = dirX > 0 ? iBox.x0 : iBox.x1;
-      [sBox.y0, sBox.y1].forEach(ys => {
-        const yt = Math.max(iBox.y0, Math.min(iBox.y1, ys));
-        con += ln(sx, ys, tx, ys);
-        if (Math.abs(yt - ys) > 0.05) con += ln(tx, ys, tx, yt);
-      });
-    } else {
-      const sy = dirY > 0 ? sBox.y1 : sBox.y0;
-      const ty = dirY > 0 ? iBox.y0 : iBox.y1;
-      [sBox.x0, sBox.x1].forEach(xs => {
-        const xt = Math.max(iBox.x0, Math.min(iBox.x1, xs));
-        con += ln(xs, sy, xs, ty);
-        if (Math.abs(xt - xs) > 0.05) con += ln(xs, ty, xt, ty);
-      });
-    }
-  }
+  if (tg.y1 < rTop - 2) con = ln(xa, rTop, tg.x0, tg.y1) + ln(xb, rTop, tg.x1, tg.y1);
+  else if (xb <= tg.x0) con = ln(xb, rTop, tg.x0, tg.y0) + ln(xb, B, tg.x0, tg.y1);
+  else if (xa >= tg.x1) con = ln(xa, rTop, tg.x1, tg.y0) + ln(xa, B, tg.x1, tg.y1);
   const inner = beside ? m.svg : m.svg.slice(S.head.length, m.svg.length - 6);
   const out = [S.head];
   if (beside && o.bg) out.push(`<rect width="${r2(S.W)}" height="${r2(S.H)}" fill="#ffffff"/>`);
   out.push(`<g data-plot="main">${inner}</g>`);
   out.push(`<g id="zoom-region" stroke="#777777" stroke-width="${r2(Math.max(0.3, S.aw*0.6))}" fill="none"><rect x="${r2(xa)}" y="${r2(rTop)}" width="${r2(xb - xa)}" height="${r2(B - rTop)}" fill="#000000" fill-opacity="0.05"/>${con}</g>`);
-  let handles = '';
-  if (FIG_SCREEN && !beside) {
-    const hw = 7, hit = 14;
-    handles = `<g class="zoom-inset-handles">`
-      + `<rect class="zoom-inset-handle" data-handle="se" x="${r2(iw - hw)}" y="${r2(ih - hw)}" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:se-resize;pointer-events:all;"/>`
-      + `<rect data-handle="se" x="${r2(iw - hit)}" y="${r2(ih - hit)}" width="${hit}" height="${hit}" fill="transparent" style="cursor:se-resize;pointer-events:all;"/>`
-      + `<rect class="zoom-inset-handle" data-handle="sw" x="0" y="${r2(ih - hw)}" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:sw-resize;pointer-events:all;"/>`
-      + `<rect data-handle="sw" x="0" y="${r2(ih - hit)}" width="${hit}" height="${hit}" fill="transparent" style="cursor:sw-resize;pointer-events:all;"/>`
-      + `<rect class="zoom-inset-handle" data-handle="ne" x="${r2(iw - hw)}" y="0" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:ne-resize;pointer-events:all;"/>`
-      + `<rect data-handle="ne" x="${r2(iw - hit)}" y="0" width="${hit}" height="${hit}" fill="transparent" style="cursor:ne-resize;pointer-events:all;"/>`
-      + `<rect class="zoom-inset-handle" data-handle="nw" x="0" y="0" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:nw-resize;pointer-events:all;"/>`
-      + `<rect data-handle="nw" x="0" y="0" width="${hit}" height="${hit}" fill="transparent" style="cursor:nw-resize;pointer-events:all;"/>`
-      + `</g>`;
-  }
-  out.push(`<g id="zoomInsetContainer" class="zoom-inset" data-plot="inset" transform="translate(${r2(ix)} ${r2(iy)})"><g id="zoom-inset">${beside ? '' : `<rect class="zoom-inset-bg" width="${r2(iw)}" height="${r2(ih)}" fill="#ffffff" stroke="#999999" stroke-width="0.4"/>`}${ins.svg}</g>${handles}</g></svg>`);
-  return {svg: out.join(''), geo: Object.assign({}, g, {zoomInset: {x: ix, y: iy, w: iw, h: ih, figW: S.W, figH: S.H, zObj}})};
+  out.push(`<g id="zoom-inset" data-plot="inset" transform="translate(${r2(ix)} ${r2(iy)})">${beside ? '' : `<rect width="${r2(iw)}" height="${r2(ih)}" fill="#ffffff" stroke="#999999" stroke-width="0.4"/>`}${ins.svg}</g></svg>`);
+  return {svg: out.join(''), geo: g};
 }
 
 /* ---------- figure: HPLC overlay ---------- */
@@ -2422,7 +2374,7 @@ function buildSVG(ov){
   const m = withOpt({xmin: '', xmax: ''}, () => buildOverlaySVG(beside ? {noZoom: true, nest: true, wPt: S.W*(1 - zoomSize()), hPt: S.H} : {noZoom: true}));
   if (!m.svg) return m;
   const win = zoomWindow(m.geo.xlo, m.geo.xhi, wa, wb);
-  const z = win && zoomCompose(S, m, win, (w, h) => withOpt({xmin: win.a, xmax: win.b, legend: 'none', scalebar: false, xlabel: '', showY: true, ylabel: opt.ylabel === DEF.ylabel ? 'Absorbance (mAU)' : opt.ylabel, ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildOverlaySVG({noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})), opt);
+  const z = win && zoomCompose(S, m, win, (w, h) => withOpt({xmin: win.a, xmax: win.b, legend: 'none', scalebar: false, xlabel: '', showY: true, ylabel: opt.ylabel === DEF.ylabel ? 'Absorbance (mAU)' : opt.ylabel, ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildOverlaySVG({noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})));
   return z || buildOverlaySVG({noZoom: true});
 }
 
@@ -2439,7 +2391,7 @@ function buildRunSVG(run, ov){
   if (!m.svg) return m;
   const win = zoomWindow(m.geo.xlo, m.geo.xhi, wa, wb);
   const z = win && zoomCompose(S, m, win, (w, h) => { try { put(win.a, win.b);
-    return withOpt({rxlabel: '', rylabel: opt.rylabel === DEF.rylabel ? uvTitle(DEF.rylabel, uvOf(run)) : opt.rylabel, showY: true, runCond: 'none', ndFig: 'none', runTitle: false, ymin: m.geo.y0, ymax: m.geo.y1, fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true, wPt: w, hPt: h, idp: 'zi-'}))); } finally { put(wa, wb); } }, ov.nest ? run : (curRun() || opt));
+    return withOpt({rxlabel: '', rylabel: opt.rylabel === DEF.rylabel ? uvTitle(DEF.rylabel, uvOf(run)) : opt.rylabel, showY: true, runCond: 'none', ndFig: 'none', runTitle: false, ymin: m.geo.y0, ymax: m.geo.y1, fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true, wPt: w, hPt: h, idp: 'zi-'}))); } finally { put(wa, wb); } });
   return z || buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true}));
 }
 function buildRunPlainSVG(run, ov){
@@ -2820,15 +2772,15 @@ function processGel(g){
   const sc = Math.min(1, 1400/cw), ow = Math.max(2, Math.round(cw*sc)), oh = Math.max(2, Math.round(ch*sc));
   const c2 = document.createElement('canvas'); c2.width = ow; c2.height = oh; const x2 = c2.getContext('2d');
   x2.imageSmoothingQuality = 'high'; x2.drawImage(c1, cx, cy, cw, ch, 0, 0, ow, oh);
-  const img = x2.getImageData(0, 0, ow, oh), d = img.data, hist = new Uint32Array(256), dk = new Float32Array(ow*oh), dq = new Float32Array(ow*oh);
+  const img = x2.getImageData(0, 0, ow, oh), d = img.data, hist = new Uint32Array(256), dk = new Float32Array(ow*oh);
   const bl = +g.black, wh = Math.max(bl + 1, +g.white), k = 255/(wh - bl);
   for (let i=0;i<d.length;i+=4){
-    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++; dk[i/4] = g.invert ? gray : 255 - gray; dq[i/4] = g.invert ? gray : -Math.log10(Math.max(gray, 1)/255)*255;
+    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++; dk[i/4] = g.invert ? gray : 255 - gray;
     if (g.color) for (let j=0;j<3;j++){ let v = (d[i+j] - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; d[i+j] = g.invert ? 255 - v : v; }
     else { let v = (gray - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; if (g.invert) v = 255 - v; d[i] = d[i+1] = d[i+2] = v; }
   }
   x2.putImageData(img, 0, 0);
-  g.pix = {w: ow, h: oh, d: dk, q: dq}; g._bands = null;
+  g.pix = {w: ow, h: oh, d: dk}; g._bands = null;
   g.out = {url: c2.toDataURL('image/jpeg', 0.92), w: ow, h: oh}; g.hist = hist; g.crop = {l, r: rr, t, b};
 }
 /* ---------- auto crop: find the stained lanes, their spacing, and the top and bottom of the bands ---------- */
@@ -3010,7 +2962,7 @@ function laneTrack(g, i){
 function laneProfile(g, i){
   const P = g.pix, n = gelLabels(g).length, lw = P.w/n, tr = laneTrack(g, i);
   const pr = new Float64Array(P.h);
-  for (let y=0;y<P.h;y++){ const x0 = Math.max(0, Math.floor((i + DET.laneLo)*lw + tr[y])), x1 = Math.min(P.w, Math.ceil((i + DET.laneHi)*lw + tr[y])); let t = 0; const o = y*P.w; const src = P.q || P.d; for (let x=x0;x<x1;x++) t += src[o + x]; pr[y] = x1 > x0 ? t/(x1 - x0) : 0; }
+  for (let y=0;y<P.h;y++){ const x0 = Math.max(0, Math.floor((i + DET.laneLo)*lw + tr[y])), x1 = Math.min(P.w, Math.ceil((i + DET.laneHi)*lw + tr[y])); let t = 0; const o = y*P.w; for (let x=x0;x<x1;x++) t += P.d[o + x]; pr[y] = x1 > x0 ? t/(x1 - x0) : 0; }
   const k = Math.max(1, Math.round(P.h*DET.smooth)), sm = new Float64Array(P.h);
   for (let y=0;y<P.h;y++){ let t = 0, c = 0; for (let j=Math.max(0,y-k); j<=Math.min(P.h-1,y+k); j++){ t += pr[j]; c++; } sm[y] = t/c; }
   /* rolling-minimum background, then smoothed, so broad smears and uneven staining are removed */
@@ -4629,7 +4581,7 @@ function stepStatus(g){
   const trimmed = g.cl || g.cr || g.ct || g.cb;
   set('st-crop', (g.autoCropped && !g.trimTouched ? 'auto cropped' : trimmed ? 'trimmed' : 'full image') + (g.rot ? `, rotated ${g.rot}°` : ''));
   const labs = gelLabels(g), used = new Set(labs.map((_, i) => laneAssign(g, i)).filter(a => a && a !== 'marker'));
-  set('st-lanes', `${labs.length} lanes` + (used.size ? `, ${used.size} run${used.size > 1 ? 's' : ''}` : ', no runs'));
+  set('st-lanes', `${labs.length} lanes` + (used.size ? `, ${used.size} step${used.size > 1 ? 's' : ''}` : ', no steps'));
   const nm = g.marks.length, nv = ladderVals(g).length;
   set('st-ladder', !lanesFor(g, 'marker').length ? 'no ladder lane' : nm >= 2 ? `${nm} of ${nv} marked${g.marksManual ? ' by hand' : ''}` : 'not found');
   const tg = g.tags || [], nt = tg.filter(t => isProt(t.kind)).length, nc = tg.filter(t => t.kind === 'contam').length, ed = g.edits || {added: [], removed: []};
@@ -4719,7 +4671,7 @@ $('#figtabs').addEventListener('keydown', e => { const k = {ArrowRight: 1, Arrow
 
 function gelMeta(g){
   const asg = gelLabels(g).map((_, i) => laneAssign(g, i)), short = t => t.length > 18 ? t.slice(0, 17) + '…' : t;
-  const parts = PREP_LANE.map(k => { const c = asg.filter(a => a === k).length; return c ? `${PREP_NAME[k]} ×${c}` : ''; }).concat(runs.map(r => { const c = asg.filter(a => a === r.id).length; return c ? `${esc(short(shortRunName(r)))} ×${c}` : ''; })).filter(Boolean), nm = asg.filter(a => a === 'marker').length;
+  const parts = PREP_LANE.map(k => { const c = asg.filter(a => a === k).length; return c ? `${PREP_NAME[k]} ×${c}` : ''; }).concat(runs.map(r => { const c = asg.filter(a => a === r.id).length; return c ? `<span title="${esc(r.name)}">${esc(short(shortRunName(r)))}</span> ×${c}` : ''; })).filter(Boolean), nm = asg.filter(a => a === 'marker').length;
   return (parts.length ? parts.join(', ') : 'No lanes assigned to a run') + (nm ? `, ladder ×${nm}` : ''); }
 function gelCardBody(g){
   const labs = gelLabels(g), asg = labs.map((_, i) => laneAssign(g, i)), samp = new Set(asg.filter(a => a !== 'marker'));
@@ -4738,7 +4690,7 @@ function renderKnown(){
 }
 function renderLaneTable(){
   const g = curGel(), el = $('#laneTable'); if (!g) { el.innerHTML = ''; return; }
-  const labs = gelLabels(g), short = t => t.length > 24 ? t.slice(0, 23) + '…' : t;
+  const labs = gelLabels(g), short = t => t;
   el.innerHTML = labs.map((l, i) => { const a = laneAssign(g, i);
     const am = !(g.assign || [])[i] && a === '' && g._auto && g._auto.amb && g._auto.amb[i];
     return `<div class="lrow${am ? ' amb' : ''}"${am ? ` title="${esc(l)} is a fraction in ${am.length} runs. Pick the run it came from, or set the runs' pooled fractions."` : ''}><span>${i + 1}</span><input type="text" id="ln${i}" data-lane="${i}" data-lk="label" value="${esc(l)}" aria-label="Lane ${i + 1} label"><select id="la${i}" data-lane="${i}" data-lk="assign" aria-label="Lane ${i + 1} belongs to"${(() => { const rk = runs.findIndex(r => r.id === a); if (rk >= 0) return ` title="${esc(runs[rk].name)}"`; if (a === 'marker') return ' title="Ladder"'; if (a === '') return ' title="Not shown with a run"'; const m = (typeof a === 'string' && /^m\d+$/.test(a) && manSteps().some(mx => mx.id === a)) ? manSteps().find(x => x.id === a) : null; return ` title="${esc(PREP_NAME[a] || (m ? m.name || MAN_NAME[m.kind] || 'Other step' : a))}"`; })()}><option value="marker" ${a === 'marker' ? 'selected' : ''}>Ladder</option><option value="" ${a === '' ? 'selected' : ''}>Not shown with a run</option>${PREP_OPT().replace(`value="${a}"`, `value="${a}" selected`)}${runs.map((r, k) => `<option value="${r.id}" title="${esc(r.name)}" ${a === r.id ? 'selected' : ''}>${k + 1}. ${esc(short(shortRunName(r)))}</option>`).join('')}</select></div>`; }).join('');
@@ -4941,7 +4893,6 @@ function onOpt(e){
     else { opt.showY = true; opt.scalebar = false; if (opt.legend === 'direct') opt.legend = 'inside'; }
     syncControls();
   }
-  if (['zoomInsetPos', 'zoomInsetSize'].includes(k)) { opt.zoomInsetW = opt.zoomInsetH = opt.zoomInsetX = opt.zoomInsetY = null; const cr = curRun(); if (cr) cr.zoomInsetW = cr.zoomInsetH = cr.zoomInsetX = cr.zoomInsetY = null; }
   if (k === 'peakDec') renderList();
   if (k === 'runCond') syncControls();
   render();
@@ -4963,7 +4914,6 @@ document.querySelectorAll('details.sub[data-sub]').forEach(d => { try { const v 
 $('#panel').addEventListener('change', e => { if (e.target.type === 'radio') onOpt(e); });
 $('#o-dpi').addEventListener('change', onOpt);
 $('#resetRange').addEventListener('click', () => { const ro = rangeObj(); RANGE.forEach(k => ro[k] = ''); syncControls(); render(); });
-$('#zoomPeak').addEventListener('click', () => { const ro = rangeObj(); const rs = curRun() ? [curRun()] : traces; for (const r of rs) { let pk = null; if (r.integ && r.integ.length) { const q = r.integ[r.integ.length-1]; pk = {a: q.a, b: q.b}; } else if (r.peaks && r.peaks.length) { const p = r.peaks.find(x => x.label) || r.peaks.slice().sort((p1,p2)=>p2.prom-p1.prom)[0]; if (p) { const pr = processTrace(r); const idx = peakApex(pr.xs, pr.ys, p.x); let l = idx, r_idx = idx; while(l > 0 && pr.ys[l] > pr.ys[idx]*0.1) l--; while(r_idx < pr.ys.length-1 && pr.ys[r_idx] > pr.ys[idx]*0.1) r_idx++; pk = {a: pr.xs[l], b: pr.xs[r_idx]}; } } if (pk && pk.a != null && pk.b != null) { const w = pk.b - pk.a; ro.xmin = pk.a - w*0.1; ro.xmax = pk.b + w*0.1; syncControls(); render(); return; } } });
 $('#detectAll').addEventListener('click', () => { traces.forEach(detectPeaks); renderList(); render(); });
 $('#clearAll').addEventListener('click', () => { traces.forEach(t => t.peaks = []); renderList(); render(); });
 
@@ -5090,13 +5040,7 @@ function svgPoint(e){ const svg = paper.querySelector('svg'); if (!svg || !G) re
 function chartAt(){ if (!G || G.cal) return null; if (G.run && G.L !== undefined) return {g: G, ox: 0, oy: 0, run: curRun()}; if (G.chart) return G.chart; if (G.L !== undefined) return {g: G, ox: 0, oy: 0, run: null}; return null; }
 const invx = X => G.xlo + (X - G.L)/(G.R - G.L)*(G.xhi - G.xlo);
 paper.addEventListener('mousemove', e => {
-  const ro = $('#readout');
-  if (G && G.zoomInset) {
-    const p = svgPoint(e), act = insetHit(p, G.zoomInset);
-    if (act && act !== 'move') { ro.textContent = 'drag to resize inset (Shift to unlock aspect ratio)'; return; }
-    if (act === 'move') { ro.textContent = 'drag inset to position'; return; }
-  }
-  const c = chartAt(); if (!c) { ro.textContent = ''; return; }
+  const ro = $('#readout'), c = chartAt(); if (!c) { ro.textContent = ''; return; }
   const p = svgPoint(e); if (!p) return; const g = c.g, lx = p.x - c.ox, ly = p.y - c.oy;
   if (lx < g.L || lx > g.R || ly < g.T || ly > g.B) { ro.textContent = ''; return; }
   const xv = g.xlo + (lx - g.L)/(g.R - g.L)*(g.xhi - g.xlo), yv = g.y0 + (g.B - ly)/(g.B - g.T)*(g.y1 - g.y0);
@@ -5148,127 +5092,6 @@ addEventListener('resize', () => { if (wfSel) renderWfTool(); });
 /* drag across a run chromatogram to add an integration region */
 const dragBox = $('#dragBox'), wrap = $('#paperwrap'); let drag = null;
 let gelDrag = null, gelRaf2 = 0;
-let insetDrag = null, insetRaf = 0;
-function insetHit(p, zi){
-  if (!p || !zi) return null;
-  const hitTol = 14;
-  if (Math.hypot(p.x - (zi.x + zi.w), p.y - (zi.y + zi.h)) <= hitTol) return 'se';
-  if (Math.hypot(p.x - zi.x, p.y - (zi.y + zi.h)) <= hitTol) return 'sw';
-  if (Math.hypot(p.x - (zi.x + zi.w), p.y - zi.y) <= hitTol) return 'ne';
-  if (Math.hypot(p.x - zi.x, p.y - zi.y) <= hitTol) return 'nw';
-  if (p.x >= zi.x && p.x <= zi.x + zi.w && p.y >= zi.y && p.y <= zi.y + zi.h) return 'move';
-  return null;
-}
-paper.addEventListener('pointerdown', e => {
-  if (e.button !== 0 || !G || !G.zoomInset) return;
-  const p0 = svgPoint(e); if (!p0) return;
-  const zi = G.zoomInset;
-  const targetHandle = e.target && e.target.dataset && e.target.dataset.handle;
-  const action = targetHandle || insetHit(p0, zi);
-  if (!action) return;
-  e.preventDefault(); e.stopImmediatePropagation();
-  insetDrag = {
-    action, p0, x0: zi.x, y0: zi.y, w0: zi.w, h0: zi.h,
-    aspect: zi.w / zi.h, figW: zi.figW, figH: zi.figH, zObj: zi.zObj
-  };
-}, true);
-window.addEventListener('pointermove', e => {
-  if (!insetDrag) {
-    if (G && G.zoomInset) {
-      const p = svgPoint(e), act = insetHit(p, G.zoomInset);
-      if (act === 'se' || act === 'nw') paper.style.cursor = 'nwse-resize';
-      else if (act === 'sw' || act === 'ne') paper.style.cursor = 'nesw-resize';
-      else if (act === 'move') paper.style.cursor = 'move';
-    }
-    return;
-  }
-  const d = insetDrag, p = svgPoint(e); if (!p) return;
-  const dx = p.x - d.p0.x, dy = p.y - d.p0.y, shift = e.shiftKey;
-  if (d.action === 'move') {
-    let newX = Math.max(0, Math.min(d.figW - d.w0, d.x0 + dx));
-    let newY = Math.max(0, Math.min(d.figH - d.h0, d.y0 + dy));
-    d.zObj.zoomInsetX = r2(newX);
-    d.zObj.zoomInsetY = r2(newY);
-  } else {
-    let newW = d.w0, newH = d.h0, newX = d.x0, newY = d.y0;
-    const minW = 30, minH = 20;
-    if (d.action === 'se') {
-      const rawW = Math.max(minW, d.w0 + dx), rawH = Math.max(minH, d.h0 + dy);
-      if (!shift) {
-        if (Math.abs(dx) >= Math.abs(dy * d.aspect)) { newW = rawW; newH = newW / d.aspect; }
-        else { newH = rawH; newW = newH * d.aspect; }
-        const maxW = d.figW - d.x0, maxH = d.figH - d.y0;
-        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
-        if (newH > maxH) { newH = maxH; newW = newH * d.aspect; }
-        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
-      } else {
-        newW = Math.max(minW, Math.min(d.figW - d.x0, rawW));
-        newH = Math.max(minH, Math.min(d.figH - d.y0, rawH));
-      }
-    } else if (d.action === 'sw') {
-      const rawW = Math.max(minW, d.w0 - dx), rawH = Math.max(minH, d.h0 + dy);
-      const rightX = d.x0 + d.w0;
-      if (!shift) {
-        if (Math.abs(dx) >= Math.abs(dy * d.aspect)) { newW = rawW; newH = newW / d.aspect; }
-        else { newH = rawH; newW = newH * d.aspect; }
-        const maxW = rightX, maxH = d.figH - d.y0;
-        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
-        if (newH > maxH) { newH = maxH; newW = newH * d.aspect; }
-        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
-      } else {
-        newW = Math.max(minW, Math.min(rightX, rawW));
-        newH = Math.max(minH, Math.min(d.figH - d.y0, rawH));
-      }
-      newX = rightX - newW;
-    } else if (d.action === 'ne') {
-      const rawW = Math.max(minW, d.w0 + dx), rawH = Math.max(minH, d.h0 - dy);
-      const bottomY = d.y0 + d.h0;
-      if (!shift) {
-        if (Math.abs(dx) >= Math.abs(dy * d.aspect)) { newW = rawW; newH = newW / d.aspect; }
-        else { newH = rawH; newW = newH * d.aspect; }
-        const maxW = d.figW - d.x0, maxH = bottomY;
-        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
-        if (newH > maxH) { newH = maxH; newW = newH * d.aspect; }
-        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
-      } else {
-        newW = Math.max(minW, Math.min(d.figW - d.x0, rawW));
-        newH = Math.max(minH, Math.min(bottomY, rawH));
-      }
-      newY = bottomY - newH;
-    } else if (d.action === 'nw') {
-      const rawW = Math.max(minW, d.w0 - dx), rawH = Math.max(minH, d.h0 - dy);
-      const rightX = d.x0 + d.w0, bottomY = d.y0 + d.h0;
-      if (!shift) {
-        if (Math.abs(dx) >= Math.abs(dy * d.aspect)) { newW = rawW; newH = newW / d.aspect; }
-        else { newH = rawH; newW = newH * d.aspect; }
-        const maxW = rightX, maxH = bottomY;
-        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
-        if (newH > maxH) { newH = maxH; newW = newH * d.aspect; }
-        if (newW > maxW) { newW = maxW; newH = newW / d.aspect; }
-      } else {
-        newW = Math.max(minW, Math.min(rightX, rawW));
-        newH = Math.max(minH, Math.min(bottomY, rawH));
-      }
-      newX = rightX - newW; newY = bottomY - newH;
-    }
-    newX = Math.max(0, Math.min(d.figW - newW, newX));
-    newY = Math.max(0, Math.min(d.figH - newH, newY));
-    d.zObj.zoomInsetX = r2(newX);
-    d.zObj.zoomInsetY = r2(newY);
-    d.zObj.zoomInsetW = r2(newW);
-    d.zObj.zoomInsetH = r2(newH);
-  }
-  cancelAnimationFrame(insetRaf);
-  insetRaf = requestAnimationFrame(render);
-});
-['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => {
-  if (insetDrag) {
-    insetDrag = null;
-    paper.style.cursor = '';
-    render();
-    saveOpt();
-  }
-}));
 function gelBoxAt(p){ return G && G.gelBoxes ? G.gelBoxes.slice().reverse().find(b => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) : null; }
 paper.addEventListener('pointerdown', e => {
   if (e.button !== 0) return; const p0 = svgPoint(e); const gb = p0 && gelBoxAt(p0); if (!gb) return;
@@ -5566,7 +5389,7 @@ async function addGelFiles(files){
     catch (e) { bad.push(f.name); }
   }
   gelTarget = null;
-  if (last) { cur = last.id; renderList(); syncControls(); render(); toast(last.autoCropped ? `Gel added and cropped to ${last.nLanes} lanes. Type your lane labels to set the count, then detect the ladder.` : 'Gel added. Trim it to the lanes, then mark the ladder.'); }
+  if (last) { cur = last.id; renderList(); syncControls(); render(); toast(last.autoCropped ? `Gel added and cropped to ${last.nLanes} lanes. Select lane labels in the sidebar to set the count, then detect the ladder.` : 'Gel added. Trim it to the lanes, then mark the ladder.'); }
   if (bad.length) toast(`Could not open ${bad.join(', ')}. Try exporting the gel as PNG or JPEG.`);
 }
 async function loadFiles(files){
@@ -6274,7 +6097,7 @@ function nextHere(k){ if (!PROJ) return true; const [a, b] = String(k).split(':'
 function nextStep(){
   const real = traces.filter(t => !t.ex);
   if (projUndo) { const _n = {k: 'undoOpen', t: 'Project opened over your previous work.', go: 'Undo', act: () => { const u = projUndo; projUndo = null; openProject(u, 'previous work', true); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
-  if (!runs.length && !real.length && !gels.length) { const _n = {k: 'start', t: 'Drop ÄKTA or HPLC exports, or a gel image, to begin.', go: 'Choose data files', act: () => $('#file').click()}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
+  if (!runs.length && !real.length && !gels.length) { const _n = {k: 'start', t: 'Drop ÄKTA or HPLC exports, or a gel image, to begin.'}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
   const steps = runs.filter(r => r.inWf && !isSec(r) && !r.isStd);
   /* a step for the figure on screen comes first, so the button never edits something out of view */
   const noPools = steps.filter(r => !String(r.shade || '').trim()), noPool = noPools.find(r => r.id === cur) || (curGel() ? null : noPools[0]);
@@ -6668,7 +6491,7 @@ function renderSteps(){
 function renderStepSheet(L){
   const k = curStep, s = (L || stepList()).find(x => x.k === k) || {t: ''}, kind = k.includes(':') ? k.split(':')[0] : k, f = curFig(), onGel = f && f.kind === 'gel';
   $('#ssTitle').textContent = onGel ? `Gel: ${f.gel.name}` : s.t;
-  $('#ssWhat').textContent = onGel ? 'Type the lane labels and check the ladder. The lanes appear under their step in the figure.' : (STEP_WHAT[kind] || '') + '';
+  $('#ssWhat').textContent = onGel ? 'Select lane labels in the sidebar and check the ladder. The lanes appear under their step in the figure.' : (STEP_WHAT[kind] || '') + '';
   const di = $('#ssDate'), ni = $('#ssNotes'), mm = stepMeta(k); di.parentNode.hidden = k === 'figure' || onGel; ni.parentNode.hidden = k === 'figure' || onGel;
   if (di !== document.activeElement) di.value = mm.date || ''; if (ni !== document.activeElement) ni.value = mm.notes || '';
   const lane = STEP_LANE(k), gl = lane ? gels.filter(g => lanesFor(g, lane).length) : [], rid = kind === 'run' ? k.slice(4) : '', rr = rid && runs.find(r => r.id === rid);
@@ -6939,8 +6762,7 @@ async function saveFile(name, data){
   anchorSave(name, data);
 }
 function anchorSave(name, data){
-  const mime = /\.csv$/i.test(name) ? 'text/csv' : (/\.json$/i.test(name) ? 'application/json' : 'image/svg+xml');
-  const blob = data instanceof Blob ? data : new Blob([data], {type: mime});
+  const blob = data instanceof Blob ? data : new Blob([data], {type: 'image/svg+xml'});
   try { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
   catch (e) { toast(/\.svg$/.test(name) ? 'Saving is blocked in this view. Copy SVG still works.' : 'Saving is blocked in this view. Open the tool in its own tab to save files.'); }
 }

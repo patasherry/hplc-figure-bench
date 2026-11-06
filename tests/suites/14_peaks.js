@@ -199,39 +199,11 @@ async function zoomPeak() {
   } finally { T.check('zoom_peak/no-page-errors', !errs.length, errs.join(' | ')); await close(); }
 }
 
-
-
-
-
-async function zoomToPeakButton() {
-  const {p, errs, close} = await open(), h = H(p);
-  try {
-    let csv = 'Time (min),UV (mAU)\n'; for (let i = 0; i <= 1000; i++) { const x = i/10; csv += x.toFixed(1) + ',' + (100*Math.exp(-((x-50)**2)/(2*4))).toFixed(3) + '\n'; }
-    await p.click('#homeQuick'); await p.waitForTimeout(800);
-    await p.setInputFiles('#file', {name: 'trace2.csv', mimeType: 'text/csv', buffer: Buffer.from(csv)});
-    await p.waitForTimeout(600);
-
-    await p.evaluate(() => { const el = document.querySelector('#detectAll'); if(el) el.click(); });
-    await p.waitForTimeout(500);
-
-    await p.evaluate(() => { const el = document.querySelector('#zoomPeak'); if(el) el.click(); });
-    await p.waitForTimeout(500);
-
-    const xmin = await p.evaluate(() => document.querySelector('#o-xmin').value);
-    const xmax = await p.evaluate(() => document.querySelector('#o-xmax').value);
-
-    // The peak is at 50, window should center around it
-    T.check('zoom_to_peak_button_updates_window_xmin', Number(xmin) > 30 && Number(xmin) < 50, `Zoom to peak adjusts xmin (actual: ${xmin})`);
-    T.check('zoom_to_peak_button_updates_window_xmax', Number(xmax) > 50 && Number(xmax) < 70, `Zoom to peak adjusts xmax (actual: ${xmax})`);
-  } finally { T.check('zoom_to_peak_button_no_errors', !errs.length, errs.join(' | ')); await close(); }
-}
-
 (async () => {
   await T.t('overlap', overlap);
   await T.t('zoom_peak', zoomPeak);
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
   }
-  await T.t('zoom_to_peak_button', zoomToPeakButton);
   T.done();
 })();
