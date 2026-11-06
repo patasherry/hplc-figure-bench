@@ -955,10 +955,7 @@ def clean_rebuild(pr, files, issue):
         git('fetch', '-q', 'origin', f'+refs/pull/{n}/head:refs/remotes/pr/{n}', 'main')
         base = git('merge-base', 'origin/main', f'pr/{n}')
         patch.write_text(git('diff', '--binary', base, f'pr/{n}', '--', *keep) + '\n', encoding='utf-8')
-        if wt.exists():
-            unlink_deps(wt)
-            git('worktree', 'remove', '--force', str(wt))
-        git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+        fresh_worktree(wt, branch)
         git('apply', '--3way', str(patch), cwd=wt)  # raises on a conflict it can't settle
         if git('diff', '--name-only', '--diff-filter=U', cwd=wt):
             raise RuntimeError('conflicts remain')
@@ -1141,6 +1138,32 @@ def link_deps(wt):
         log(f'could not link the test libraries into {wt}: {e}')
 
 
+def fresh_worktree(wt, branch):
+    """Put a clean worktree at wt on origin/main.
+
+    A leftover directory that git has no record of (a killed manager, a crashed job, a tool that made the folder
+    itself) makes `worktree remove` fail with "<path> is not a working tree". That used to abort the job, and then
+    every retry of it, because the directory stayed behind: #1038 failed this way on its first agy run. So remove it
+    if git knows it, prune the records either way, and delete whatever is left on disk before adding.
+
+    unlink_deps runs first in every path, so the junction to the real tests/node_modules is gone before anything
+    deletes a directory tree here."""
+    wt = Path(wt)
+    if wt.exists():
+        unlink_deps(wt)
+        try:
+            git('worktree', 'remove', '--force', str(wt))
+        except Exception as e:
+            log(f'worktree {wt.name}: {str(e).strip()[:120]}, deleting the folder instead')
+        git('worktree', 'prune')
+        if wt.exists():
+            shutil.rmtree(wt, ignore_errors=True)
+        if wt.exists():
+            raise RuntimeError(f'could not clear the old worktree at {wt}')
+    wt.parent.mkdir(parents=True, exist_ok=True)
+    git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+
+
 def unlink_deps(wt):
     """Remove only the link, before the worktree is deleted, so the real tests/node_modules is never touched."""
     dst = wt / 'tests' / 'node_modules'
@@ -1169,11 +1192,7 @@ def claude_jobs(s):
         label(n, add=['claude-code-running'], remove=['for-claude-code', FIRST])
         try:
             git('fetch', '-q', 'origin')
-            if wt.exists():
-                unlink_deps(wt)
-                git('worktree', 'remove', '--force', str(wt))
-            WORK.mkdir(parents=True, exist_ok=True)
-            git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+            fresh_worktree(wt, branch)
             link_deps(wt)
             run(['claude', '-p', '--permission-mode', 'acceptEdits', '--allowedTools', CC_TOOLS], CC_JOB.format(who='Claude Code', why='It is a numeric fix from an independent audit, sent to you first.' if first else 'Jules (another agent) could not finish it.', n=n, title=i['title'], body=(i.get('body') or '')[:12000]), timeout=3600, cwd=wt, stdin=True)
             body_f = wt / 'PR_BODY.md'
@@ -1227,11 +1246,7 @@ def copilot_cli_job(s, i, retry):
     label(n, add=['copilot-running'], remove=['jules-queue', 'for-copilot'])
     try:
         git('fetch', '-q', 'origin')
-        if wt.exists():
-            unlink_deps(wt)
-            git('worktree', 'remove', '--force', str(wt))
-        WORK.mkdir(parents=True, exist_ok=True)
-        git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+        fresh_worktree(wt, branch)
         link_deps(wt)
         why = 'Jules (another agent) could not finish it.' if retry else 'You are taking it so Jules (another agent) can work on other jobs.'
         (wt / TASK_FILE).write_text(CC_JOB.format(who='the GitHub Copilot CLI', why=why, n=n, title=i['title'], body=(i.get('body') or '')[:12000]), encoding='utf-8')
@@ -1509,9 +1524,7 @@ def apply_agent_diff(n, title, diff, body, branch, who):
     patch.write_text(diff, encoding='utf-8')
     try:
         git('fetch', '-q', 'origin')
-        if wt.exists():
-            git('worktree', 'remove', '--force', str(wt))
-        git('worktree', 'add', '-B', branch, str(wt), 'origin/main')
+        fresh_worktree(wt, branch)
         git('apply', '--3way', '--whitespace=nowarn', str(patch), cwd=wt)
         changed = sorted(set(git('diff', '--name-only', 'HEAD', cwd=wt).splitlines() + git('ls-files', '--others', '--exclude-standard', cwd=wt).splitlines()) - {''})
         bad = [f for f in changed if not ALLOWED.match(f.strip('"'))]
@@ -1668,11 +1681,7 @@ def bg_worker(s, key):
     n, wt = i['number'], WORK / f'{key}-{i["number"]}'
     try:
         git('fetch', '-q', 'origin')
-        if wt.exists():
-            unlink_deps(wt)
-            git('worktree', 'remove', '--force', str(wt))
-        WORK.mkdir(parents=True, exist_ok=True)
-        git('worktree', 'add', '-B', f'{key}/issue-{n}', str(wt), 'origin/main')
+        fresh_worktree(wt, f'{key}/issue-{n}')
         link_deps(wt)
         why = 'Jules (another agent) could not finish it.' if src not in ('jules-queue', W['own']) else 'You are taking it so Jules (another agent) can work on other jobs.'
         (wt / TASK_FILE).write_text(CC_JOB.format(who=W['who'](), why=why, n=n, title=i['title'], body=(i.get('body') or '')[:12000]), encoding='utf-8')
