@@ -1417,16 +1417,26 @@ def antigravity(s):
                                                   'input': AG_JOB.format(n=n, repo=REPO, name=REPO.split('/')[1], title=i['title'], body=(i.get('body') or '')[:12000])})
         except Exception as e:
             s['count']['antigravity'] -= 1
-            # Every call from Nov 1 to Nov 5 came back 429 on the first attempt of the day, with no usage behind it: the
-            # agent has no quota on this key's tier, so retrying every 6 hours forever only hides it. Back off hard after
-            # AG_REFUSALS in a row and say so once, instead of a 6-hour cycle that never ends.
+            # "Project environment storage quota exceeded" is our own mess, not a tier problem: every call makes a
+            # sandbox and the API keeps each one 7 days. Clear the old ones and let the next pass try again, rather than
+            # counting a refusal and pausing for a day over something we can fix. At most one sweep an hour.
+            if 'environment storage quota' in str(e).lower() and s.get('ag_swept_at', 0) < time.time() - 3600:
+                s['ag_swept_at'] = time.time()
+                try:
+                    gone, total = ag_sweep_envs()
+                    return log(f'Antigravity: the project was full of old sandboxes, deleted {gone} of {total}, retrying next pass')
+                except Exception as ex:
+                    log(f'Antigravity: could not list or clear the sandboxes ({str(ex)[:120]})')
+            # Otherwise: back off hard after AG_REFUSALS in a row and say so once, instead of a 6-hour cycle that never ends.
             s['ag_refused'] = s.get('ag_refused', 0) + 1
             dead = s['ag_refused'] >= AG_REFUSALS
             s['ag_off_until'] = time.time() + (AG_DEAD_HOURS if dead else 6) * 3600
             if dead and not s.get('ag_said_dead'):
                 s['ag_said_dead'] = True
                 post(TRACK, f'**The Antigravity API is refusing every call.** {s["ag_refused"]} attempts in a row have come back `{str(e)[:120]}`, '
-                            'each on the first call of the day with no usage behind it, so this is not our traffic: the agent has no quota on this key\'s tier.\n\n'
+                            'each on the first call of the day with no usage behind it.\n\n'
+                            'If the message names the **environment storage quota**, that is our own doing and the manager clears it itself: every call '
+                            'creates a sandbox and the API keeps each one for 7 days, so they pile up. Any other message points at the key or the tier.\n\n'
                             f'The API route is paused for {AG_DEAD_HOURS} hours at a time now rather than 6, so it stops filling the log. '
                             'Antigravity still gets the app-changing jobs through the desktop app (`paste-to-antigravity`, see `docs/ANTIGRAVITY.md`), which is the only route that has ever '
                             'landed a PR here (#759, #765). Everything the app route cannot hold goes to Jules within '
@@ -1443,6 +1453,39 @@ def antigravity(s):
 
 
 AG_REFUSALS = cfg.get('antigravity_refusals_before_dead', 3)  # consecutive API refusals that mean the key has no quota, not a passing rate limit
+AG_ENV_KEEP_H = cfg.get('antigravity_env_keep_hours', 6)      # leave a sandbox alone this long: a job is capped at 3 hours, so 6 cannot hit a live one
+
+
+def ag_sweep_envs(keep_hours=None):
+    """Delete the sandboxes left behind by finished interactions. Returns (deleted, total).
+
+    Every call asks for `environment: 'remote'`, which creates a fresh sandbox, and the API keeps a sandbox for 7 days
+    after its last activity whether or not anything still needs it. At up to max_antigravity_jobs (40) a day they pile
+    up until the project's environment storage is full, and then every call comes back 429 "Project environment storage
+    quota exceeded" on the first attempt of the day with no usage behind it. From Nov 1 to Nov 5 that was read here as
+    the agent having no quota on this key's tier, which was wrong: the body only started saying so once gem_api began
+    reporting it. Nothing was wrong with the tier, the project was simply full of our own old sandboxes.
+
+    A sandbox touched inside keep_hours is left alone, since a running job could still be using it and an interaction
+    is capped at 3 hours."""
+    cutoff = time.time() - (AG_ENV_KEEP_H if keep_hours is None else keep_hours) * 3600
+    envs = (gem_api('environments?pageSize=100') or {}).get('environments') or []
+    gone = 0
+    for e in envs:
+        eid = (e.get('name') or '').rsplit('/', 1)[-1] or e.get('id') or ''
+        touched = e.get('updateTime') or e.get('createTime') or ''
+        try:
+            age_ok = dt.datetime.fromisoformat(touched.replace('Z', '+00:00')).timestamp() < cutoff if touched else False
+        except ValueError:
+            age_ok = False
+        if not eid or not age_ok:
+            continue
+        try:
+            gem_api(f'environments/{eid}', 'DELETE')
+            gone += 1
+        except Exception as ex:
+            log(f'could not delete sandbox {eid}: {str(ex)[:100]}')
+    return gone, len(envs)
 AG_DEAD_HOURS = cfg.get('antigravity_dead_hours', 24)        # how long to leave it alone then, instead of retrying every 6 hours forever
 AG_STALL_MIN = cfg.get('antigravity_stall_minutes', 45)  # a for-antigravity job nobody started by then goes to Jules, so a broken API never stalls the queue
 # Both default to 0: the scheduled prompt in docs/ANTIGRAVITY.md has the app session find its own work from the
