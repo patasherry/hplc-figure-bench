@@ -248,4 +248,22 @@ assert rl.same_sha(' 7F18D1FFB0 ', '7f18d1ffb0993f') and not rl.same_sha('7f18d1
 assert not rl.same_sha('abc123', 'abc123456') and rl.same_sha('abc123', 'abc123') and not rl.same_sha('', 'x')
 assert rl.validate(resp(base='abc1234567abcdef'), {'7-ab12': {'base': 'abc1234567'}}, APP)['id'] == '7-ab12'  # full sha accepted
 
+# a request has to stay pasteable: this app's lines run to 3126 characters, so a line budget alone let #1060 go out at
+# 104,314. fit_chars binds in characters, keeps whole ranges in the priority order given and cuts the one that crosses.
+LONG = '\n'.join(('x' * 500) if i % 2 else ('y' * 50) for i in range(400))
+_lines = LONG.split('\n')
+fit = rl.fit_chars(_lines, [(1, 400)], 5000)
+assert fit and rl.chars_of(_lines, fit) <= 5000, (fit, rl.chars_of(_lines, fit))
+assert fit[0][0] == 1 and fit[0][1] < 400, fit  # cut short, not dropped
+# priority order is kept: the first range survives whole, the later one is what gets trimmed away
+two = rl.fit_chars(_lines, [(1, 4), (100, 400)], 3000)
+assert two[0] == (1, 4), two
+assert rl.chars_of(_lines, two) <= 3000, rl.chars_of(_lines, two)
+# a range that fits entirely is untouched, and nothing is invented past the end of the file
+assert rl.fit_chars(_lines, [(1, 2)], 100000) == [(1, 2)]
+assert rl.fit_chars(_lines, [(399, 10000)], 100000) == [(399, 400)]
+# an explicit relay-lines range obeys the budget too
+big = rl.pick_ranges(LONG, 'relay-lines: 1-400', 0, chars=4000)
+assert big and rl.chars_of(_lines, big) <= 4000, rl.chars_of(_lines, big)
+
 print('ok')
