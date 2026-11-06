@@ -1785,9 +1785,14 @@ def bg_worker(s, key):
             log(f'#{n}: {W["name"]} opened PR #{pr} after {int((time.time() - j["t"]) / 60)} min')
             handled.add(n)
         except Exception as e:
-            tried[str(n)] = time.time()
+            tried[str(n)] = rt.tries(tried.get(str(n))) + 1  # a count. A timestamp read back as 1 for ever, so AG_MAX_TRIES was never reached
             back = 'jules-queue' if j['src'] == W['own'] else j['src']  # a job labelled for this worker gets one try per label, then Jules takes it
-            label(n, add=[back], remove=[f'{key}-running'])
+            # ag-returned, or the job comes straight back. The Jules leader re-labels any jules-queue issue that is not
+            # light as for-antigravity unless it carries ag-returned, and the own-label branch below does not consult
+            # `tried`, so agy picked the same failing job up again every few minutes and spent its whole daily cap on it.
+            # The API route has always set this label on hand-back; the CLI route never did.
+            gone = [f'{key}-running'] + (['for-antigravity'] if W['own'] == 'for-antigravity' else [])
+            label(n, add=[back] + (['ag-returned'] if W['own'] == 'for-antigravity' else []), remove=gone)
             post(n, f'The {W["name"]} job did not produce a usable change ({str(e)[:300]}), so the job goes to `{back}`.' + SIGN.format(rv.MODEL))
             log(f'#{n}: {W["name"]} job failed: {e}')
             handled.add(n)
@@ -1811,7 +1816,9 @@ def bg_worker(s, key):
             label(n2, remove=[f'{key}-running'])
             log(f'#{n2}: {W["name"]} job is finished, clearing the stale running label')
             continue
-        label(n2, add=['jules-queue'], remove=[f'{key}-running'])
+        # ag-returned here too: without it the leader routes the job straight back to this worker (see the failure path)
+        label(n2, add=['jules-queue'] + (['ag-returned'] if W['own'] == 'for-antigravity' else []),
+              remove=[f'{key}-running'] + (['for-antigravity'] if W['own'] == 'for-antigravity' else []))
         log(f'#{n2}: {W["name"]} job lost in a restart, back to Jules')
     if jobs or DRY:
         return
