@@ -60,7 +60,7 @@ const {open, H, suite, src} = require('../lib/harness');
       const h2 = el && el.closest('section') && el.closest('section').querySelector('h2');
       return h2 && h2.firstChild ? h2.firstChild.textContent.trim() : null;
     });
-    T.check('zoom_inset_in_window_section', zoomSec === 'Window', `Zoom inset is in section: ${zoomSec}`);
+    T.check('zoom_inset_in_window_section', zoomSec === 'Window', `Show Inset View is in section: ${zoomSec}`);
 
     // 4. UV path input width fits "assumed: 2" and More options links in project
     await p.click('#homeBtn'); await h.wait(400);
@@ -79,6 +79,10 @@ const {open, H, suite, src} = require('../lib/harness');
     // 5. Workflow full chromatogram visible by default
     await h.step('figure'); await h.wait(400);
     T.check('wf_full_visible_by_default', await vis('#o-wfFull'), 'Full chromatogram checkbox visible');
+
+    // 6. Check search placeholder text (#895)
+    const searchPlaceholder = await p.getAttribute('#panelSearch', 'placeholder');
+    T.check('search_placeholder_text', searchPlaceholder === 'Search settings/data/files', 'Search placeholder should be "Search settings/data/files" to reduce ambiguity');
   });
 
   T.check('no_errors', !errs.length, errs.join('|'));

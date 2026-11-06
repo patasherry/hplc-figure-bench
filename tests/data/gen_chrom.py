@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthetic chromatograms with known answers for the HPLC Figure Bench stress suite.
+"""Synthetic chromatograms with known answers for the Protein Purification Bench stress suite.
 
 Writes stress/data/chrom/* and the "chrom" section of stress/data/expected.json.
 Every trace is a sum of Gaussians (plus optional drift, dip and noise) so the true apex, the true

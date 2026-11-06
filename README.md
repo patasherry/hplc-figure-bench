@@ -1,6 +1,6 @@
-# HPLC Figure Bench
+# Protein Purification Bench
 
-HPLC Figure Bench is a single-file browser application for making publication-quality protein purification figures: HPLC and ÄKTA chromatograms, SDS-PAGE gels with densitometry, size-exclusion (SEC) calibration, NanoDrop readings and spectra, construct schematics, and composite multi-step purification workflow figures with a quantitative summary table and draft Methods text.
+Protein Purification Bench is a single-file browser application for making publication-quality protein purification figures: HPLC and ÄKTA chromatograms, SDS-PAGE gels with densitometry, size-exclusion (SEC) calibration, NanoDrop readings and spectra, construct schematics, and composite multi-step purification workflow figures with a quantitative summary table and draft Methods text.
 
 ## How to use
 
@@ -15,7 +15,7 @@ Click **"Make a quick figure without a project"** on the home screen. Drop a CSV
     *   *Tip:* Use Zoom mode to quickly zoom into a peak of interest without typing numbers into X from / X to, then uncheck Zoom mode when you are ready to drag and integrate peaks. (Presentation only: peak areas, integration, SEC masses, and yields do not change).
 *   **Settings panel (More options and settings search):**
     *   *What it does:* Each section shows common settings first. Rarely changed options (such as line width, font family, smoothing points, label decimals, integration prominence threshold) sit inside a collapsed **More options** fold at the bottom of that section. A live search box at the top filters controls by label and automatically expands parent sections and disclosure folds to display matches.
-    *   *Where to find it:* At the top of the side panel: **Search settings** (`#panelSearch`). At the bottom of each settings group: **More options** (`details.more`).
+    *   *Where to find it:* At the top of the side panel: **Search settings/data/files** (`#panelSearch`). At the bottom of each settings group: **More options** (`details.more`).
     *   *Tip:* Any setting modified from its default value is automatically kept visible—its section's More options expands automatically and stays open across project saves and reloads.
 *   **iOS-style look and dark mode:**
     *   *What it does:* The web application features an iOS-inspired interface with inset grouped card sections, smooth toggle switches, segmented controls, tactile button feedback, and system typography (`-apple-system`, `SF Pro Text`, `Instrument Sans`). It automatically adapts to dark mode based on operating system appearance (`prefers-color-scheme: dark`) or explicit theme attributes.
@@ -82,7 +82,7 @@ Status messages and hints explain missing inputs or unverified numbers. For exam
 ## Protein mg from the UV area and NanoDrop
 
 *   **Formula:** $\text{mg} = \frac{A_{280}\text{ area (mAU}\cdot\text{mL)}}{1000 \times \varepsilon_{1\text{ mg/mL}} \times \text{path (cm)}}$.
-*   **Step-Aware Extinction Coefficient:** When a protein sequence and tag are provided, steps up to protease cleavage use the tagged form's $A_{280}$ (1 mg/mL) and steps after cleavage use the cleaved form's $A_{280}$ (1 mg/mL). If a tag preset without a known sequence (such as GST or MBP) is selected without an entered tag sequence, the coefficient is withheld until the sequence is entered or a manual coefficient is typed. Otherwise, the single $A_{280}$ value set under Peak integration is used.
+*   **Step-Aware Extinction Coefficient:** When a protein sequence and tag are provided, steps up to protease cleavage use the tagged form's $A_{280}$ (1 mg/mL) and steps after cleavage use the cleaved form's $A_{280}$ (1 mg/mL). A sequence counts as tagged only when a tag preset is chosen or a tag sequence is entered: the Tag menu starts at **No tag**, so a sequence pasted on its own uses the untagged $A_{280}$ for every step. Settings and projects saved under the old His-SUMO default keep that tag. If a tag preset without a known sequence (such as GST or MBP) is selected without an entered tag sequence, the coefficient is withheld until the sequence is entered or a manual coefficient is typed. Otherwise, the single $A_{280}$ value set under Peak integration is used.
 *   **Branch-Aware Yields:** In branched purification workflows, recovery yields and pool amounts are calculated along each specific branch path rather than assuming a single linear sequence. The summary table and Methods text report yields and splits per branch.
 *   **NanoDrop Override:** When a step's pool or Concentrated step has a measured NanoDrop concentration and volume, that measured mass ($\text{conc} \times \text{vol}$) is used for the step and scales the step's integrated peak mg estimates.
 *   **mAU Traces:** `AU` traces are automatically converted to `mAU`.
@@ -126,3 +126,5 @@ Status messages and hints explain missing inputs or unverified numbers. For exam
 *   `AGENTS.md` / `CLAUDE.md`: Shared instructions and rules for coding agents.
 *   `.github/workflows/`: GitHub Actions for automated browser tests and PR reviews.
 *   `tests/`: Automated Playwright browser test suite and synthetic test datasets.
+
+**A note on the name.** The app was called HPLC Figure Bench until November 2026. Project files still carry `"app": "HPLC Figure Bench"` inside them and the browser still stores settings under `hplc-fig-opt`, so everything you saved under the old name keeps working, and a file you save today still opens in an older copy of the app.

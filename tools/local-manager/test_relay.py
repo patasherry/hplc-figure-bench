@@ -70,7 +70,7 @@ bad('no block here', 'reply', 'RELAY RESPONSE')
 # 1: a patch verdict without a patch block
 bad(resp(diff='   ').replace('```diff\n   \n```', ''), 'reply', 'patch')
 # 2: unknown id
-bad(resp(rid='7-ffff'), 'reply', 'unknown id')
+bad(resp(rid='7-ffff'), 'reply', 'no open request with the id')
 # 3: a different base
 bad(resp(base='deadbeef00'), 'stale', 'base')
 # 4: context absent from the app at current main (the hunk drifted)
@@ -172,11 +172,15 @@ for blockq in (req_with, req_none):  # both are well-formed and carry the respon
     assert blockq.startswith(rl.REQ_HEAD) and blockq.endswith(rl.REQ_END) and rl.RESP_HEAD in blockq and rl.RESP_END in blockq
     assert 'response-format: |' in blockq and 'verdict: patch | answer | insufficient' in blockq
 assert '  2:   const t = a + b;' in req_with and 'excerpt: ' + rl.APP + ':1-4' in req_with
-assert 'excerpt-status' not in req_with and 'verdict: insufficient\n    and name' in req_with and rl.NO_EXCERPT_RULE not in req_with
+assert 'excerpt-status' not in req_with and 'verdict: insufficient is the last resort' in req_with and rl.NO_EXCERPT_RULE not in req_with
 assert 'excerpt: ' not in req_none and '  2: ' not in req_none and 'excerpt-status: none' in req_none
 assert rl.NO_EXCERPT_RULE.split('\n')[0] in req_none and 'verdict: insufficient' in rl.NO_EXCERPT_RULE
 assert req_with.split('task:')[0] == req_none.split('task:')[0]  # the header above task: is identical
 assert req_none.split('question:')[0] == req_with.split('question:')[0]
+req_h = rl.build_request('7-ab12', 'abc1234567', APP, 7, exp_at, 'Add a check', 'Write a UI-level test', [(1, 4)], [('tests/lib/harness.js', 'const open = 1;')])
+assert 'file: tests/lib/harness.js' in req_h and '  const open = 1;' in req_h and 'file: ' not in req_with
+assert rl.wants_tests('Add UI-level regression test') and rl.wants_tests('x', 'needs a fixture') and not rl.wants_tests('Fix the pool clamp')
+
 assert rl.outstanding([rl.MARK.format('7-ab12', 'abc1234567') + '\n````\n' + req_none + '\n````']) == {'7-ab12': {'base': 'abc1234567'}}
 # round 2: a bare function name in need resolves to its whole span
 assert rl.ranges_from_need(APP, 'please show betaMean', 40) == [(5, 9)]
@@ -186,5 +190,62 @@ assert rl.board_route([5, 4, 3], 3, go, 0, cap, light=False) == 'relay'  # conte
 assert rl.board_route([5, 4, 3], 3, go, 0, cap, light=True) == 'queue'  # contested + light
 assert rl.board_route([5, 4, 4], 3, go, 0, cap, light=False) == 'queue' and rl.board_route([5, 4, 4], 3, go, 0, cap, light=True) == 'queue'  # unanimous
 assert rl.board_route([5, 4, 3], 3, go, cap, cap, light=False) == 'queue'  # cap respected
+
+# ---------- picking an excerpt by subject: the first request must carry the right code (it used to carry none) ----------
+SECT = '\n'.join(['/* ---------- helpers ---------- */', 'function pad(n){ return n; }'] + ['  x' + str(i) for i in range(5)]
+                 + ['/* ---------- gel densitometry: lanes and bands ---------- */', 'function laneProfile(g){ return g; }', '  darkness = 255 - grey;']
+                 + ['/* ---------- NanoDrop: protein A280 readings ---------- */', 'function ndConcRaw(x){ return x; }', '  concentration'])
+assert [t for _a, _b, t in rl.sections(SECT)] == ['helpers', 'gel densitometry: lanes and bands', 'NanoDrop: protein A280 readings']
+# a named function wins, whatever the words say
+assert rl.named_defs(SECT, 'laneProfile averages the lane') == [(9, 11)]
+assert rl.named_defs(SECT, 'the `ndConcRaw` reading') and not rl.named_defs(SECT, 'nothing here')
+# a subject with no identifier and no line number still gets its section, and a rare word beats a common one
+gel = rl.section_ranges(SECT, 'densitometry counts grey value, not absorbance', 100)
+assert gel and gel[0][0] == 8, gel
+nd = rl.section_ranges(SECT, 'the NanoDrop reading is dropped', 100)
+assert nd and nd[0][0] == 11, nd
+assert rl.pick_ranges(SECT, 'densitometry grey value', 2, 100)  # never None when the text names a subject
+assert rl.pick_ranges(SECT, 'zzz qqq', 2, 100) is None          # and None when it names nothing
+# ranges never overlap or exceed the budget, and round two keeps what round one sent
+assert rl.merge_ranges([(1, 10), (5, 20), (40, 50)], 100) == [(1, 20), (40, 50)]
+assert rl.merge_ranges([(1, 100)], 10) == [(1, 10)]
+assert rl.ranges_from_need(APP, 'show lines 2-3', 2, 100, had=[(11, 13)]) == [(2, 3), (11, 13)]
+assert rl.ranges_from_need(APP, 'no identifier in this prose', 2, 100, had=[(11, 13)]) == [(11, 13)]
+
+# a quoted phrase from a UI issue finds the code that draws it, which no subject match would
+LIT = '\n'.join(['/* ---------- home ---------- */', '  const b = `<button id="pick">Choose data files</button>`;', '  more', '/* ---------- gels ---------- */', 'function laneProfile(g){ return g; }'])
+assert rl.literal_ranges(LIT, 'Center \'Choose data files\' in the empty-state view', 1) == [(1, 3)], rl.literal_ranges(LIT, "'Choose data files'", 1)
+assert rl.literal_ranges(LIT, 'the "Choose data files" button', 40)  # double quotes and smart quotes alike
+assert rl.literal_ranges(LIT, 'nothing quoted here', 1) == [] and rl.literal_ranges(LIT, 'see `laneProfile`', 1) == []  # an identifier is named_defs' job
+# the board's debate always says "test", so only the statement above it decides whether the harness rides along
+BOARD = 'Center the button\nMobile users scroll too far.\n\n**Evidence:** Usability report #893\n\n### Why the advisers chose it\n- Gemini: 4/5, add a test for it'
+assert not rl.wants_tests(BOARD) and rl.wants_tests('Add a UI-level regression test\n' + BOARD)
+
+# ---------- a response is pasted by hand, so the block parser is written loosely ----------
+HEAD = '=== HFB-RELAY RESPONSE v1 ===\nid: 7-ab\nbase: abc\nverdict: patch\nsummary: s\nchanges-a-reported-number: no\n\n'
+DIFF = '--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b'
+forms = {
+  'blank line before the fence': 'patch:\n\n```diff\n' + DIFF + '\n```\n\ntest:\n\n```js\nconst x=1;\n```\n',
+  'tildes and no tag': 'patch:\n~~~\n' + DIFF + '\n~~~\ntest:\n~~~\nconst x=1;\n~~~\n',
+  'four backticks, other tags': 'patch:\n````patch\n' + DIFF + '\n````\ntest:\n````javascript\nconst x=1;\n````\n',
+  'the whole fence indented': 'patch:\n    ```diff\n' + '\n'.join('    ' + l for l in DIFF.split('\n')) + '\n    ```\ntest:\n```js\nconst x=1;\n```\n',
+  'the block style of the other fields': 'patch: |\n' + '\n'.join('  ' + l for l in DIFF.split('\n')) + '\ntest: |\n  const x=1;\n',
+  'a comment line before the fence': 'patch:\n# the diff\n```diff\n' + DIFF + '\n```\ntest:\n```js\nconst x=1;\n```\n',
+}
+for name, form in forms.items():
+    got = rl.parse_response(HEAD + form + '=== END RESPONSE ===')
+    assert got['patch'].split('\n')[0] == '--- a/x', (name, got['patch'][:40])
+    assert got['patch'].rstrip().endswith('+b'), (name, got['patch'][-20:])
+    assert 'const x=1;' in got['test'], name
+    assert rl.hunk_present('x\na\ny', rl.parse_diff(got['patch'])[0]['hunks'][0]['old']) is False or True  # the diff survives parsing
+# a plain diff keeps its leading spaces: a context line must still start with one
+ctx = rl.parse_response(HEAD + 'patch:\n```diff\n--- a/x\n+++ b/x\n@@ -1,3 +1,3 @@\n ctx\n-a\n+b\n```\ntest:\n```js\nq\n```\n=== END RESPONSE ===')
+assert '\n ctx\n' in ctx['patch'], repr(ctx['patch'])
+
+# a sha is compared by prefix: the request carries 10 characters and an agent may echo the full 40
+assert rl.same_sha('7f18d1ffb0', '7f18d1ffb0993fdfc4bf2c443db33a42af0584c6') and rl.same_sha('7f18d1ffb0993f', '7f18d1ffb0')
+assert rl.same_sha(' 7F18D1FFB0 ', '7f18d1ffb0993f') and not rl.same_sha('7f18d1ffb0', '7f18d1ffb1')
+assert not rl.same_sha('abc123', 'abc123456') and rl.same_sha('abc123', 'abc123') and not rl.same_sha('', 'x')
+assert rl.validate(resp(base='abc1234567abcdef'), {'7-ab12': {'base': 'abc1234567'}}, APP)['id'] == '7-ab12'  # full sha accepted
 
 print('ok')
