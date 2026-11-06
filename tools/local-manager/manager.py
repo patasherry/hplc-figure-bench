@@ -20,7 +20,7 @@ Run:  python tools\\local-manager\\manager.py          (keeps running)
       python tools\\local-manager\\manager.py --once   (one pass)
       python tools\\local-manager\\manager.py --dry    (one pass, prints what it would do, changes nothing)
 """
-import base64, datetime as dt, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
+import base64, datetime as dt, json, os, re, shutil, subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -2418,8 +2418,48 @@ def heartbeat_check_cloud_yield():
         return False
 
 
+HB_EVERY = 240       # seconds between heartbeat refreshes: comfortably inside CLOUD_STANDBY (20 min)
+HB_ID = None         # the heartbeat comment, found once per process
+HB_THREAD = False    # set once the timer below is running, so the per-pass call stands down
+
+
+def hb_body():
+    return f'{HEARTBEAT}{int(time.time())} -->\n_The local manager on Patrick\'s PC is running (last pass {time.strftime("%Y-%m-%d %H:%M")}). While this is recent, the cloud copy stands aside._'
+
+
+def hb_tick():
+    """Write the heartbeat once. Keeps its comment id in a global, so it touches no state file and is safe off the main thread."""
+    global HB_ID
+    if HB_ID is None:
+        c = next((c for c in comments(TRACK) if c['body'].startswith(HEARTBEAT)), None)
+        HB_ID = c and c['id']
+    if HB_ID:
+        gh(f'repos/{REPO}/issues/comments/{HB_ID}', 'PATCH', {'body': hb_body()})
+    else:
+        HB_ID = gh(f'repos/{REPO}/issues/{TRACK}/comments', 'POST', {'body': hb_body()})['id']
+
+
+def hb_start():
+    """Refresh the heartbeat on its own timer. A duty loop cannot do this: one duty (a board meeting, a hard
+    question through the ladder) runs for 20 to 45 minutes, and while it does, a per-duty heartbeat never fires.
+    The cloud copy then reads a stale heartbeat, decides the PC is off and works the same queue in parallel."""
+    global HB_THREAD
+
+    def loop():
+        global HB_ID
+        while True:
+            try:
+                hb_tick()
+            except Exception as e:
+                HB_ID = None  # find the comment again next time, in case it was deleted
+                log(f'heartbeat failed: {e}')
+            time.sleep(HB_EVERY)
+    HB_THREAD = True
+    threading.Thread(target=loop, daemon=True, name='heartbeat').start()
+
+
 def heartbeat(s):
-    """PC: refresh the heartbeat comment on the tracking issue every 5 minutes. Cloud: return its age in minutes (None if there is none)."""
+    """PC: refresh the heartbeat comment on the tracking issue. Cloud: return its age in minutes (None if there is none)."""
     cid = s.get('hb_id')
     if not cid:
         c = next((c for c in comments(TRACK) if c['body'].startswith(HEARTBEAT)), None)
@@ -2429,9 +2469,9 @@ def heartbeat(s):
             return None
         m = re.search(r'pc-heartbeat (\d+)', gh(f'repos/{REPO}/issues/comments/{cid}')['body'])
         return (time.time() - int(m.group(1))) / 60 if m else None
-    if DRY or time.time() - s.get('hb_at', 0) < 300:
-        return 0
-    body = f'{HEARTBEAT}{int(time.time())} -->\n_The local manager on Patrick\'s PC is running (last pass {time.strftime("%Y-%m-%d %H:%M")}). While this is recent, the cloud copy stands aside._'
+    if HB_THREAD or DRY or time.time() - s.get('hb_at', 0) < 300:
+        return 0  # the timer owns the heartbeat whenever it is running; this path is for --once
+    body = hb_body()
     try:
         if cid:
             gh(f'repos/{REPO}/issues/comments/{cid}', 'PATCH', {'body': body})
@@ -2463,8 +2503,8 @@ def one_pass():
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
             continue  # first-pass notes from the local model: off, its time goes to writing code
         s['busy'] = {'duty': name, 'since': time.time()}
-        if not CLOUD:
-            heartbeat(s)  # a long pass (a hard question, a board meeting) must not look like the PC is off
+        if not CLOUD and not HB_THREAD:
+            heartbeat(s)  # --once only: in the keep-running loop the hb_start timer does this, and from inside long duties too
         save(s)
         try:
             duty(s)
@@ -2529,6 +2569,8 @@ if __name__ == '__main__':
         rv.ask_model = lambda system, user: ask_gemini(system + '\n\n' + user)
         rv.MODEL = 'Gemini'
     log(f'manager started ({rv.MODEL}; caps {CAP}){" DRY RUN" if DRY else ""}{" IN THE CLOUD" if CLOUD else ""}')
+    if not DRY and not CLOUD and '--once' not in sys.argv:
+        hb_start()  # on its own timer, so a 40-minute duty cannot make the PC look off to the cloud copy
     if not DRY and not CLOUD and '--once' not in sys.argv and '--no-console' not in sys.argv:
         import console
         console.start(sys.modules[__name__], cfg.get('console_port', 8765))
