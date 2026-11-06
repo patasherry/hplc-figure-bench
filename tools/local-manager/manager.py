@@ -1444,8 +1444,11 @@ def antigravity(s):
 AG_REFUSALS = cfg.get('antigravity_refusals_before_dead', 3)  # consecutive API refusals that mean the key has no quota, not a passing rate limit
 AG_DEAD_HOURS = cfg.get('antigravity_dead_hours', 24)        # how long to leave it alone then, instead of retrying every 6 hours forever
 AG_STALL_MIN = cfg.get('antigravity_stall_minutes', 45)  # a for-antigravity job nobody started by then goes to Jules, so a broken API never stalls the queue
-AG_APP_AT_ONCE = cfg.get('antigravity_app_at_once', 2)      # jobs waiting for Patrick to paste into the Antigravity desktop app
-AG_APP_DEAD = cfg.get('antigravity_app_at_once_dead', 4)    # more of them while the API refuses, since the app is then the only Antigravity there is
+# Both default to 0: the scheduled prompt in docs/ANTIGRAVITY.md has the app session find its own work from the
+# for-antigravity label, so a per-issue prompt is a notification that asks Patrick for something already covered.
+# Set antigravity_app_at_once to 2 in the settings file to get per-issue prompts back.
+AG_APP_AT_ONCE = cfg.get('antigravity_app_at_once', 0)      # jobs waiting for Patrick to paste into the Antigravity desktop app
+AG_APP_DEAD = cfg.get('antigravity_app_at_once_dead', 0)    # the same while the API refuses: the scheduled prompt covers that case too
 AG_APP_PROMPT = """**For the Antigravity desktop app.** Paste this into a task in `C:\\Users\\Patrick\\hfb-antigravity`:
 
 ```
