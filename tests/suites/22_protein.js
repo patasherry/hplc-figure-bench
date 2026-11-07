@@ -329,6 +329,22 @@ ORIGIN
     T.check('7_transl.table11_partial', partialSeq === expPartial, `expected ${expPartial}, got ${partialSeq}`);
     T.check('7_transl.table11_partial_len', partialSeq.length === expPartial.length, `seq length mismatch ${partialSeq.length}`);
 
+    const tf = 'tests/data/22_protein/7_transl.table11_partial';
+    try {
+      await h.addRun(path.join(DATA, 'chrom', '261022_PS_KPP_polish_001_001.zip'));
+      await h.wait(1500);
+      await p.evaluate(() => { const b = document.getElementById('intAuto'); if (b) b.click(); });
+      await h.wait(900);
+      const t = await h.peakTable();
+      const head = t[0] || [];
+      const iv = head.findIndex(c => /^(Ve|Center|Apex|Elution time)\b/.test(c));
+      const rows = t.slice(1).filter(r => r.length > 3).map(r => ({name: r[0], ve: iv >= 0 ? Number(String(r[iv]).replace(/,/g, '').match(/-?\d+(\.\d+)?/)?.[0]) : NaN}));
+      const pk = rows.filter(r => !/^pool/i.test(r.name));
+      const hit8 = pk.find(r => Math.abs(r.ve - 8.59) <= 0.25);
+      T.check(tf, hit8, 'Expected SEC peak at Ve 8.59 to be detected, table has ' + (pk.map(r => r.ve).join(', ') || 'none'));
+    } catch (e) { T.check(tf, false, e.message); }
+
+
     // 2. Complete CDS with GTG start -> translates to M
     const gbComplete = `LOCUS       test_plasmid          96 bp    DNA
 FEATURES             Location/Qualifiers

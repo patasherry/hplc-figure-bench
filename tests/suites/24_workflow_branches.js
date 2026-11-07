@@ -260,4 +260,58 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     T.check('split-discard: methods text contains split', meth.includes('The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 were set aside.'), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
-  T.done(); })();
+    await T.t('yield-table-checks', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), q: src('q')};
+    await h.newProject('Split and Pool Yields Check');
+    await h.gb(F.gb);
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+    await h.addRun(F.sec);
+    await h.suggest();
+    await h.addRun(F.q);
+    await h.suggest();
+    const tl = (await h.timeline()).filter(x => x.k.startsWith('run:'));
+    const ids = tl.map(x => x.k.slice(4));
+    const setFrom = async (p, h, stepKey, value) => { await h.step(stepKey); await p.selectOption('#ssFrom', value); await p.waitForTimeout(500); };
+    await setFrom(p, h, tl[2].k, ids[0]);
+    await p.fill('#ssFromNote', 'fractions B9-B12');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+    await h.step(tl[1].k);
+    await p.fill('#ssFromNote', 'fractions B5-B8');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+
+    // Add concentration to terminal branches to calculate yields based on divergence mass
+    await h.step(tl[1].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
+    await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '2.0'); await p.dispatchEvent('#btw-conc', 'change');
+    await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '5.0'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+
+    await h.step(tl[2].k); await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(400);
+    await openFolds(p.locator('#btw-conc')); await p.fill('#btw-conc', '3.0'); await p.dispatchEvent('#btw-conc', 'change');
+    await openFolds(p.locator('#btw-vOut')); await p.fill('#btw-vOut', '5.0'); await p.dispatchEvent('#btw-vOut', 'change'); await h.wait(400);
+
+    await p.click('#tl [data-step=figure]'); await p.waitForTimeout(700);
+    await p.evaluate(() => {
+      const el = document.getElementById('o-wfYield');
+      if (el) { el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.wait(500);
+
+    const qRow = await p.locator('#sumTable tr').filter({hasText: 'Q 6 mL'}).textContent();
+    T.check('24_workflow_branches/Q row exists in summary table', !!qRow, 'Q row found');
+    if (qRow) {
+      T.check('24_workflow_branches/Q branch overall yield based on IMAC pool divergence mass', qRow.includes('248.8'), 'Q yield row: missing');
+    }
+
+    const secRow = await p.locator('#sumTable tr').filter({hasText: 'Superdex 200 Increase'}).textContent();
+    if (secRow) {
+      T.check('24_workflow_branches/SEC branch overall yield based on IMAC pool divergence mass', secRow.includes('165.8'), 'SEC yield row: missing');
+    }
+
+    T.check('no page errors', !errs.length, errs.join(' | ')); await close();
+  });
+
+  T.done();
+})();

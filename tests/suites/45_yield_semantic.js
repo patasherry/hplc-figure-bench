@@ -65,12 +65,13 @@ async function fresh(id, fn){
     // Case 3: Purity Zero vs Missing
     await p.evaluate(() => {
       const b = document.querySelector('#pr-qcPurity');
-      if (b) { b.value = '0% pure'; b.dispatchEvent(new Event('input', {bubbles: true})); b.dispatchEvent(new Event('change', {bubbles: true})); }
+      if (b) { b.value = '0% pure by gel'; b.dispatchEvent(new Event('input', {bubbles: true})); b.dispatchEvent(new Event('change', {bubbles: true})); }
     });
     await h.step('figure');
     await h.wait(500);
     html2 = await p.evaluate(() => document.querySelector('#paper').innerHTML);
     T.check('purity_zero_shows_in_svg', html2.includes('0% pure'), `SVG includes 0% pure: ${html2.includes('0% pure')}`);
+    T.check('purity_string_test', html2.includes('0% pure by gel'), `SVG includes 0% pure by gel: ${html2.includes('0% pure by gel')}`);
 
     await p.evaluate(() => {
       const b = document.querySelector('#pr-qcPurity');
