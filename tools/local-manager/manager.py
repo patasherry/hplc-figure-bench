@@ -65,7 +65,8 @@ def log(*a):
 
 def cloud_report(s):
     """Cloud: keep one comment on the tracking issue with what the last cloud pass did, since the Actions log is hard to reach."""
-    body = '<!-- cloud-report -->\n**Last cloud manager pass** (GitHub Actions, while the PC is off)\n\n```\n' + '\n'.join(LOGGED[-60:])[-6000:] + '\n```'
+    meta = json.dumps({'ag_off_until': int(s.get('ag_off_until', 0)), 'ag_refused': int(s.get('ag_refused', 0))})
+    body = f'<!-- cloud-report -->\n<!-- cloud-state {meta} -->\n**Last cloud manager pass** (GitHub Actions, while the PC is off)\n\n```\n' + '\n'.join(LOGGED[-60:])[-6000:] + '\n```'
     try:
         cid = s.get('report_id') or next((c['id'] for c in comments(TRACK) if c['body'].startswith('<!-- cloud-report -->')), None)
         if cid:
@@ -87,6 +88,15 @@ def load():
         s['day'], s['count'] = today, {}
     for k in ('answered', 'triaged', 'flagged', 'advised'):
         s.setdefault(k, {})
+    if CLOUD and not s.get('ag_off_until'):
+        try:
+            c = next((c for c in reversed(comments(TRACK)) if '<!-- cloud-state ' in c['body']), None)
+            m = c and re.search(r'<!-- cloud-state (\{.*?\}) -->', c['body'])
+            if m:
+                for k, v in json.loads(m.group(1)).items():
+                    s.setdefault(k, v)
+        except Exception:
+            pass
     return s
 
 
@@ -377,7 +387,15 @@ def ladder(s, i, text, ctx, force=False, show=None):
                 show(f'local search before attempt {k}', 'terms: ' + ', '.join(t) + f' ({found.count("--- ") - found.count(": not found")} matches)')
                 code = (code + '\n\nSearch results:\n' + found)[-24000:]
         prompt = DECIDE + (DEEP.format(k=k, hints=extra) if k > 1 else '')
-        r = local_json(prompt, base + (f'\n\nCode excerpts (app and tests):\n{code}' if code else '')) or {'decision': 'escalate'}
+        if CLOUD and k > 1 and GEMINI_KEY:
+            try:
+                raw = ask_gemini(prompt + '\nAnswer with ONE JSON object and nothing else.\n\n' + base + (f'\n\nCode excerpts (app and tests):\n{code}' if code else ''), REVIEW_MODELS)
+                m = re.search(r'\{.*\}', raw, re.S)
+                r = json.loads(m.group(0)) if m else {'decision': 'escalate'}
+            except Exception:
+                r = {'decision': 'escalate'}
+        else:
+            r = local_json(prompt, base + (f'\n\nCode excerpts (app and tests):\n{code}' if code else '')) or {'decision': 'escalate'}
         d, ans = r.get('decision'), (r.get('answer') or '').strip()
         if d == 'owner':
             return 'owner', ans or 'This would change a number the app reports.'
@@ -406,10 +424,12 @@ def ladder(s, i, text, ctx, force=False, show=None):
             return local, ans, trail + [f'local model answered (attempt {k})']
 
     body = f"{ctx[:6000]}\n\n{issue}\n\nJules' question:\n{text[:4000]}\n\nWhat the local model tried:\n" + '\n'.join(hints)
+    ext_ran = False
     for name, cap, call, who in (('Gemini', 'gemini', ask_gemini, 'You cannot read the repository. Code from the app and the tests around the names in the question is below.'),
                                  ('ChatGPT (Codex, read-only)', 'codex', ask_codex, 'You are in the repository (read-only). Read AGENTS.md, docs/GOALS.md and the code you need before answering. Do not edit anything.')):
-        if (cap == 'gemini' and not GEMINI_KEY) or not use(s, cap):
+        if (cap == 'gemini' and (not GEMINI_KEY or CLOUD or rv.MODEL == 'Gemini')) or (cap == 'codex' and not shutil.which('codex')) or not use(s, cap):
             continue
+        ext_ran = True
         try:
             r = helper_json(call(HELPER.format(who=who, body=body + (f'\n\nCode excerpts:\n{code}' if cap == 'gemini' else ''))))
         except Exception as e:
@@ -427,12 +447,13 @@ def ladder(s, i, text, ctx, force=False, show=None):
         if r.get('why') or r.get('answer'):
             hints.append(f'{name.split()[0]} said: {(r.get("why") or "")} {(r.get("answer") or "")[:600]}')
 
-    kind, ans = attempt(4, 'Gemini and ChatGPT could not settle it either. Their notes may still help:\n' + '\n'.join(hints))
-    if kind == 'owner':
-        return 'owner', ans, trail + ['local model: needs Patrick']
-    if kind == 'answer':
-        return local, ans, trail + ['local model answered (last try, with their notes)']
-    if use(s, 'claude'):  # Claude Code on the owner's PC (read-only), the last step before the lead
+    if ext_ran:
+        kind, ans = attempt(4, 'Gemini and ChatGPT could not settle it either. Their notes may still help:\n' + '\n'.join(hints))
+        if kind == 'owner':
+            return 'owner', ans, trail + ['local model: needs Patrick']
+        if kind == 'answer':
+            return local, ans, trail + ['local model answered (last try, with their notes)']
+    if shutil.which('claude') and use(s, 'claude'):  # Claude Code on the owner's PC (read-only), the last step before the lead
         try:
             r = helper_json(ask_claude(HELPER.format(who='You are Claude Code in the repository, read-only (plan mode). Read AGENTS.md, docs/GOALS.md and the code you need. Do not edit anything.', body=body)))
             show('Claude Code (read-only)', f"{r.get('status') or 'no JSON reply'}: {(r.get('answer') or r.get('why') or '').strip()}")
@@ -903,7 +924,8 @@ def held(s, pr, ilabels):
     if 'from-board' not in ilabels or 'merge-ok' in {l['name'] for l in pr.get('labels', [])}:
         return False
     n, sha = pr['number'], pr['head']['sha']
-    if s.setdefault('asked_owner', {}).get(str(n)) != sha and not DRY:
+    already = 'awaiting-owner' in {l['name'] for l in pr.get('labels', [])} and any(c['body'].startswith(OWNER_ASK) for c in comments(n))
+    if s.setdefault('asked_owner', {}).get(str(n)) != sha and not already and not DRY:
         s['asked_owner'][str(n)] = sha
         label(n, add=['awaiting-owner'])
         post(n, f'{OWNER_ASK}\n**Ready for your OK, Patrick:** this PR comes from a Direction board idea. It passed the tests and the automatic review'
@@ -1134,7 +1156,8 @@ def gate(s):
                 s['gated'][str(n)] = sha
                 log(f'PR #{n} merged (safe, passed the gate)')
                 continue
-            if s.setdefault('passed', {}).get(str(n)) != sha:  # announce once per commit
+            already_passed = 'ready-for-lead' in {l['name'] for l in pr.get('labels', [])} and any('**Passed the automatic review:**' in c['body'] for c in comments(n))
+            if s.setdefault('passed', {}).get(str(n)) != sha and not already_passed:  # announce once per commit
                 s['passed'][str(n)] = sha
                 label(n, add=['ready-for-lead'] + (['needs-owner'] if needs else []))
                 post(n, '**Passed the automatic review:** only the app and tests change, no regressions, at least one check fails on main and passes here, no existing check removed, and no test reaches into the app.' + (' Waiting for Patrick\'s OK on the issue before merging.' if needs else ' It changes a reported number, so the lead reviews the science before merging.' if science else ' It will be merged on a later pass.') + SIGN.format(rv.MODEL))
@@ -1368,6 +1391,13 @@ def unlink_deps(wt):
 
 
 def claude_jobs(s):
+    for i in issues('claude-code-running'):
+        n2, lab = i['number'], {l['name'] for l in i['labels']}
+        if 'claude-code-done' in lab or has_pr(n2):
+            label(n2, remove=['claude-code-running'])
+        else:
+            label(n2, add=['for-claude-code'], remove=['claude-code-running'])
+            log(f'#{n2}: Claude Code job lost in a restart, back to for-claude-code')
     for i in issues(FIRST) + issues('for-claude-code'):
         n = i['number']
         first = any(l['name'] == FIRST for l in i['labels'])
@@ -2440,9 +2470,13 @@ def board_context():
 def board_round(s, topic=''):
     log('board: meeting started' + (f' ({topic[:60]})' if topic else ''))
     ctx, tp = board_context(), (f' (topic: "{topic}")' if topic else '')
-    who = [('the local AI', lambda q: rv.ask_model('You are a careful, critical adviser.', q), None), ('Gemini', ask_gemini, 'gemini'), ('ChatGPT', ask_codex, 'codex')]
-    who = [w for w in who if w[2] is None or ((w[2] != 'gemini' or GEMINI_KEY) and s['count'].get(w[2], 0) + 1 + DEBATE_ROUNDS <= CAP[w[2]] and use(s, w[2]))]
-    if LOCAL_ROLE == 'coder' and rv.MODEL == 'Gemini':  # the local model only writes code now; its seat would just be Gemini twice
+    if CLOUD:
+        who = [('Gemini Flash', lambda q: ask_gemini(q, ['gemini-flash-latest', 'gemini-2.5-flash']), 'gemini'),
+               ('Gemini Flash Lite', lambda q: ask_gemini(q, ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite']), 'gemini')]
+    else:
+        who = [('the local AI', lambda q: rv.ask_model('You are a careful, critical adviser.', q), None), ('Gemini', ask_gemini, 'gemini'), ('ChatGPT', ask_codex, 'codex')]
+    who = [w for w in who if (w[2] != 'codex' or shutil.which('codex')) and (w[2] is None or ((w[2] != 'gemini' or GEMINI_KEY) and s['count'].get(w[2], 0) + 1 + DEBATE_ROUNDS <= CAP[w[2]] and use(s, w[2])))]
+    if not CLOUD and LOCAL_ROLE == 'coder' and rv.MODEL == 'Gemini':  # the local model only writes code now; its seat would just be Gemini twice
         who = [w for w in who if w[0] != 'the local AI']
     props, talk, notes = [], [], []
     def ask(name, f, q):
@@ -2559,7 +2593,14 @@ def board_round(s, topic=''):
 def board(s):
     b = s.setdefault('board', {})
     cs = comments(BOARD)
-    last_round = max((c['id'] for c in cs if c['body'].split('\n', 1)[0] == BOARD_MARK), default=0)
+    last_c = next((c for c in reversed(cs) if c['body'].split('\n', 1)[0] == BOARD_MARK), None)
+    last_round = last_c['id'] if last_c else 0
+    if last_c:
+        try:
+            b['at'] = max(b.get('at', 0), dt.datetime.fromisoformat(last_c['created_at'].replace('Z', '+00:00')).timestamp())
+            b['since'] = max(b.get('since', ''), last_c['created_at'])
+        except Exception:
+            pass
     # Patrick picks proposals: "OK 1, 3"
     for c in cs:
         if c['id'] > last_round and by_owner(c) and NO.match(c['body']) and str(c['id']) not in b.setdefault('picked', {}):
@@ -2683,13 +2724,16 @@ def copilot(s):
 def stuck(s):
     for pr in gh(f'repos/{REPO}/pulls?state=open&per_page=50'):
         k = 'f' + pr['head']['sha']
-        if k in s['flagged']:
+        if k in s['flagged'] or 'for-coordinator' in {l['name'] for l in pr.get('labels', [])}:
             continue
         runs = gh(f"repos/{REPO}/actions/runs?head_sha={pr['head']['sha']}").get('workflow_runs', [])
         t = next((r for r in runs if r['name'] == 'Test suite' and r['status'] == 'completed'), None)
         if t and t['conclusion'] == 'failure':
             age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(t['updated_at'].replace('Z', '+00:00'))).total_seconds()
             if age > 3600:
+                if any('the Test suite has failed on this PR for over an hour' in c['body'] for c in comments(pr['number'])):
+                    s['flagged'][k] = 1
+                    continue
                 label(pr['number'], add=['for-coordinator'])
                 post(pr['number'], '**For the lead:** the Test suite has failed on this PR for over an hour. See the test report comment for the regressions.' + SIGN.format(rv.MODEL))
                 s['flagged'][k] = 1
@@ -2712,12 +2756,17 @@ def advise(s):
         if n in s['advised']:
             continue
         cs = comments(i['number'])
+        if any(c['body'].startswith('### Recommendation for the lead') for c in cs):
+            s['advised'][n] = 1
+            continue
         body = ((i.get('body') or '') + '\n\n' + '\n\n'.join(c['body'] for c in cs[-4:]))[:8000]
         try:
-            if use(s, 'codex'):
+            if shutil.which('codex') and use(s, 'codex'):
                 rec, who = ask_codex(ADVISE.format(n=n, title=i['title'], body=body)), 'ChatGPT (Codex, read-only)'
-            elif use(s, 'claude'):
+            elif shutil.which('claude') and use(s, 'claude'):
                 rec, who = ask_claude(ADVISE.format(n=n, title=i['title'], body=body)), 'Claude Code (read-only)'
+            elif GEMINI_KEY and use(s, 'gemini'):
+                rec, who = ask_gemini(ADVISE.format(n=n, title=i['title'], body=body + '\n\nCode excerpts:\n' + code_for(body)), REVIEW_MODELS), 'Gemini'
             else:
                 log(f'#{n} for-coordinator: daily caps reached, waiting')
                 continue
@@ -2732,6 +2781,9 @@ def advise(s):
 def digest(s):
     now = dt.datetime.now()
     if s.get('digest') == s['day'] or now.hour < DIGEST_HOUR:
+        return
+    if any(c['body'].startswith(f'### Daily digest, {s["day"]}') for c in comments(TRACK)):
+        s['digest'] = s['day']
         return
     cnt = lambda lab: len(issues(lab))
     prs = gh(f'repos/{REPO}/pulls?state=open&per_page=50')
@@ -2786,7 +2838,45 @@ def self_update(s):
             sys.exit(0)
 
 
-PC_ONLY = {'review', 'claude jobs', 'board', 'ux', 'advise', 'digest', 'update'}  # need the local model, Claude Code, Codex or this PC's checkout
+PC_ONLY = {'review', 'claude jobs', 'codex jobs', 'agy jobs', 'openclaw', 'ux', 'update'}  # need the local model, local CLIs or this PC's checkout
+
+
+def reclaim_pc_jobs(s, pc_age):
+    """Cloud: when the PC has been off for >= 30 minutes, reclaim any jobs left in PC-only running or queue labels so Jules can take them."""
+    if not CLOUD or (pc_age is not None and pc_age < 30):
+        return
+    for key, done_lab, back_lab in (('agy', 'agy-done', 'jules-queue'), ('codex', 'codex-done', 'jules-queue'),
+                                    ('openclaw', 'openclaw-done', 'jules-queue'), ('claude-code', 'claude-code-done', 'for-claude-code')):
+        run_lab = f'{key}-running'
+        for i in issues(run_lab):
+            n, lab = i['number'], {l['name'] for l in i['labels']}
+            if done_lab in lab or has_pr(n):
+                label(n, remove=[run_lab])
+                log(f'#{n}: {run_lab} already has a PR or is done, cleared stale label')
+                continue
+            extra = ['ag-returned'] if key == 'agy' else []
+            label(n, add=[back_lab] + extra, remove=[run_lab, 'for-antigravity'])
+            post(n, f'Patrick\'s PC has been off for {int(pc_age or 30)} minutes while `{run_lab}` was set, so the cloud manager moved this job to `{back_lab}`.' + SIGN.format(rv.MODEL))
+            log(f'#{n}: reclaimed stranded {run_lab} -> {back_lab}')
+    if s.get('ag_off_until', 0) > time.time() or not GEMINI_KEY:
+        for q_lab, target in (('for-codex', 'for-claude-code'), ('for-openclaw', 'jules-queue')):
+            for i in issues(q_lab):
+                label(i['number'], add=[target], remove=[q_lab])
+                log(f'#{i["number"]}: moved from PC-only {q_lab} to {target} while PC is off')
+
+
+def wake_leader():
+    """Cloud: if jules-queue has waiting jobs and jules-leader.yml is not already queued or running, dispatch it now."""
+    if not CLOUD or DRY or not issues('jules-queue'):
+        return
+    try:
+        runs = gh(f'repos/{REPO}/actions/workflows/jules-leader.yml/runs?per_page=5').get('workflow_runs', [])
+        if any(r.get('status') in ('queued', 'in_progress', 'waiting') for r in runs):
+            return
+        gh(f'repos/{REPO}/actions/workflows/jules-leader.yml/dispatches', 'POST', {'ref': 'main'})
+        log('cloud: started the Jules leader for queued jobs')
+    except Exception as e:
+        log(f'cloud: could not start the Jules leader: {str(e)[:120]}')
 
 
 def heartbeat_check_cloud_yield():
@@ -2878,6 +2968,7 @@ def one_pass():
         if age is not None and age < CLOUD_STANDBY:
             return log(f'cloud: the PC manager ran {int(age)} min ago, so the cloud copy stands aside')
         log('cloud: the PC manager is off, the cloud copy takes this pass' + (f' (last PC pass {int(age)} min ago)' if age is not None else ''))
+        reclaim_pc_jobs(s, age)
     else:
         heartbeat(s)
     # Patrick is the transport for the relay and the one who answers on PRs, so the duties he waits on come first.
@@ -2901,6 +2992,7 @@ def one_pass():
         save(s)
     s['last_pass'] = time.time()
     if CLOUD and not DRY:
+        wake_leader()
         cloud_report(s)
     save(s)
 

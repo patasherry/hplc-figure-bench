@@ -101,8 +101,12 @@ module.exports = async ({github, context, core}) => {
       s.nudged = true; await putState(i.number, s, `Jules leader: attempt ${s.attempt} has run for ${Math.round(hrs)} h, asked Jules to wrap up.`); say(`#${i.number}: nudged after ${Math.round(hrs)} h`); continue; }
     /* still not done 12 hours in (working, or stuck waiting): free the slot. A fresh attempt in smaller steps, or after the last attempt Codex's heavy model takes it */
     if (['IN_PROGRESS', 'AWAITING_USER_FEEDBACK', 'PAUSED', 'AWAITING_PLAN_APPROVAL', 'QUEUED', 'PLANNING'].includes(st) && hrs > 2*MAX_HOURS) {
-      if ((s.attempt || 1) < MAX_ATTEMPTS) { await start(i, (s.attempt || 1) + 1, `the previous attempt was still unfinished after ${Math.round(hrs)} hours`); }
-      else { await jules(`${s.session}:sendMessage`, {prompt: 'Stop now: do not commit and do not open a pull request. This task has moved to another agent.'}).catch(() => {});
+      const nextAtt = (s.attempt || 1) + 1, why = `the previous attempt was still unfinished after ${Math.round(hrs)} hours`;
+      if ((s.attempt || 1) < MAX_ATTEMPTS) {
+        try { await start(i, nextAtt, why); }
+        catch (e) { await putState(i.number, Object.assign(s, {attempt: nextAtt, lastErr: why}), `Jules leader: attempt ${s.attempt} timed out after ${Math.round(hrs)} h; queued for attempt ${nextAtt} (${e.message.slice(0, 120)}).`);
+          await setLabels(i.number, [L.queue], [L.run]); say(`#${i.number}: retry queued for attempt ${nextAtt} (${e.message.slice(0, 100)})`); }
+      } else { await jules(`${s.session}:sendMessage`, {prompt: 'Stop now: do not commit and do not open a pull request. This task has moved to another agent.'}).catch(() => {});
         await putState(i.number, s, `Jules leader: attempt ${s.attempt} was still unfinished after ${Math.round(hrs)} h, the last attempt Jules gets. Handed to Codex.`); await setLabels(i.number, ['for-codex'], [L.run]); }
       freed.add(i.number); say(`#${i.number}: over ${Math.round(hrs)} h, slot freed`); continue; }
     if (st === 'AWAITING_PLAN_APPROVAL') { await jules(`${s.session}:approvePlan`, {}).catch(() => {}); say(`#${i.number}: approved plan`); continue; }
@@ -144,16 +148,32 @@ module.exports = async ({github, context, core}) => {
       await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: `No answer came within ${LOCAL_FIRST} minutes, so the leader told Jules to decide using AGENTS.md and list the question under "Open questions" in its PR.`});
       say(`#${i.number}: answered a question`); continue; }
     if (st === 'COMPLETED' && pr) { await putState(i.number, Object.assign(s, {pr}), `Jules leader: attempt ${s.attempt} finished. PR: ${pr}`); await setLabels(i.number, [L.done], [L.run]); freed.add(i.number); say(`#${i.number}: PR ${pr}`); continue; }
-    if (st === 'FAILED' || (st === 'COMPLETED' && !pr)) { const why = st === 'FAILED' ? 'session failed' : 'session finished without a PR';
-      if ((s.attempt || 1) < MAX_ATTEMPTS) await start(i, (s.attempt || 1) + 1, why);
-      else { await putState(i.number, s, `Jules leader: ${MAX_ATTEMPTS} attempts ended without a PR (${why}). Needs the coordinator.`); await setLabels(i.number, [L.fail], [L.run]); freed.add(i.number); say(`#${i.number}: gave up`); } } }
+    if (st === 'FAILED' || (st === 'COMPLETED' && !pr)) { const why = st === 'FAILED' ? 'session failed' : 'session finished without a PR', nextAtt = (s.attempt || 1) + 1;
+      if ((s.attempt || 1) < MAX_ATTEMPTS) {
+        try { await start(i, nextAtt, why); }
+        catch (e) { await putState(i.number, Object.assign(s, {attempt: nextAtt, lastErr: why}), `Jules leader: attempt ${s.attempt} ended (${why}); queued for attempt ${nextAtt} (${e.message.slice(0, 120)}).`);
+          await setLabels(i.number, [L.queue], [L.run]); freed.add(i.number); say(`#${i.number}: retry queued for attempt ${nextAtt} (${e.message.slice(0, 100)})`); }
+      } else { await putState(i.number, s, `Jules leader: ${MAX_ATTEMPTS} attempts ended without a PR (${why}). Needs the coordinator.`); await setLabels(i.number, [L.fail], [L.run]); freed.add(i.number); say(`#${i.number}: gave up`); } } }
 
   /* ---------- 1. route the app-changing work to Antigravity, then start what is left ---------- */
   /* Patrick's split (2026-11-05): Antigravity takes the jobs that change the app, Jules keeps the light ones. The routing
      happens here because this is what races: the leader checks every 3 minutes and would otherwise start the job first.
      An issue the manager has handed back (ag-returned) stays with Jules, so a job can never bounce between the two. */
-  let routedAg = false;
+  let routedAg = false, agAvailable = AG_TAKES_APP;
   if (key && AG_TAKES_APP) {
+    try {
+      const tcs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: 17, per_page: 100});
+      const hb = [...tcs].reverse().find(c => c.body.startsWith('<!-- pc-heartbeat '));
+      const hbMatch = hb && hb.body.match(/pc-heartbeat (\d+)/);
+      const pcUp = Boolean(hbMatch && (Date.now() / 1000 - Number(hbMatch[1])) / 60 < 20);
+      const cs = [...tcs].reverse().find(c => c.body.includes('<!-- cloud-state '));
+      const csMatch = cs && cs.body.match(/<!-- cloud-state (\{.*?\}) -->/);
+      const cloudSt = csMatch ? JSON.parse(csMatch[1]) : {};
+      const agApiPaused = Boolean(cloudSt.ag_off_until && cloudSt.ag_off_until > Date.now() / 1000);
+      if (!pcUp && agApiPaused) { agAvailable = false; say('PC is off and Antigravity API is paused: keeping app-changing jobs with Jules'); }
+    } catch (e) { say(`could not check #17 status: ${e.message}`); }
+  }
+  if (key && agAvailable) {
     for (const i of await issues(L.queue)) {
       if (LIGHT(i) || labels(i).some(l => l === 'ag-returned' || l === L.run || l === 'for-antigravity')) continue;
       await setLabels(i.number, ['for-antigravity'], [L.queue]);
@@ -165,7 +185,9 @@ module.exports = async ({github, context, core}) => {
   }
   if (key) { const run = (await issues(L.run)).filter(i => !freed.has(i.number)); let free = MAX_RUNNING - run.length, freeApp = MAX_APP - run.filter(i => !LIGHT(i)).length;
     for (const i of (await issues(L.queue)).filter(i => !labels(i).includes(L.run)).sort((a, b) => (labels(b).includes('from-patrick') - labels(a).includes('from-patrick')) || a.number - b.number)) { if (free <= 0) break; if (!LIGHT(i) && freeApp <= 0) continue;
-      try { await start(i, 1); free--; if (!LIGHT(i)) freeApp--; } catch (e) { say(`#${i.number}: could not start: ${e.message}`); } } }
+      try { const {s: prev} = await getState(i.number).catch(() => ({s: {}}));
+        await start(i, prev.lastErr ? (prev.attempt || 2) : 1, prev.lastErr); free--; if (!LIGHT(i)) freeApp--; }
+      catch (e) { say(`#${i.number}: could not start: ${e.message}`); if (/Jules API (400|429)/.test(e.message)) break; } } }
 
   /* ---------- 3. merge safe PRs ---------- */
   const prs = await github.paginate(github.rest.pulls.list, {owner, repo, state: 'open', per_page: 100});
@@ -194,15 +216,15 @@ module.exports = async ({github, context, core}) => {
     if (rep) { const sec = rep.body.split('#### New checks failing')[1]; if (sec) for (const line of sec.split('\n').filter(l => /^- \S/.test(l)).slice(0, 10)) {
         const id = line.slice(2).split(' (FAIL:')[0].trim(), detail = (line.split('(FAIL:')[1] || '').replace(/\)\s*$/, '').trim();
         const exists = (await github.rest.search.issuesAndPullRequests({q: `repo:${owner}/${repo} is:issue in:title "${id}"`})).data.total_count;
-        if (!exists) { await github.rest.issues.create({owner, repo, title: `Bug found by ${id}`, labels: [L.triage], body: `The check \`${id}\`, added in #${p.number}, fails on main:\n\n> ${detail}\n\nThe PR description in #${p.number} may say more about the cause. Triage: if this is a real app bug, fill in the bug template headings and move it to \`jules-queue\` (or to Claude for scientific changes).`}); say(`follow-up issue for ${id}`); } } }
+        if (!exists) { await github.rest.issues.create({owner, repo, title: `Bug found by ${id}`, labels: [L.triage], body: `The check \`${id}\`, added in #${p.number}, fails on main:\n\n> ${detail}\n\nThe PR description in #${p.number} may say more about the cause. Triage: if this is a real app bug, fill in the bug template headings and move it to \`jules-queue\` (or to Claude for scientific changes).`}); say(`follow-up issue for ${id}`); routedAg = true; } } }
     for (const f of files.filter(f => /^docs\/.*audit.*\.md$/.test(f))) { const raw = await github.rest.repos.getContent({owner, repo, path: f, ref: 'main'}).catch(() => null); if (!raw) continue;
       const md = Buffer.from(raw.data.content, 'base64').toString('utf8'), part = md.split(/^##\s+Ready-to-file issues\s*$/m)[1]; if (!part) continue;
       for (const block of part.split(/^###\s+/m).slice(1, 21)) { const title = block.split('\n')[0].trim(), body = block.split('\n').slice(1).join('\n').trim(); if (!title) continue;
         const exists = (await github.rest.search.issuesAndPullRequests({q: `repo:${owner}/${repo} is:issue in:title "${title.replace(/"/g, '')}"`})).data.total_count;
-        if (!exists) { await github.rest.issues.create({owner, repo, title, labels: [L.triage], body: `${body}\n\n_From ${f} (#${p.number})._`}); say(`follow-up issue: ${title}`); } } } }
+        if (!exists) { await github.rest.issues.create({owner, repo, title, labels: [L.triage], body: `${body}\n\n_From ${f} (#${p.number})._`}); say(`follow-up issue: ${title}`); routedAg = true; } } } }
 
   await wakeCloud(routedAg);
   /* tell the workflow whether to check again soon (GitHub rarely fires the 15-minute schedule) */
-  core.setOutput('active', key && ((await issues(L.run)).length + (await issues(L.queue)).length) > 0 ? 'true' : 'false');
+  core.setOutput('active', key && ((await issues(L.run)).length + (await issues(L.queue)).length + (await issues('for-antigravity')).length) > 0 ? 'true' : 'false');
   await core.summary.addHeading('Jules leader').addList(log.length ? log : ['nothing to do']).write();
 };
