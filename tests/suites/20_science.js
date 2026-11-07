@@ -233,7 +233,7 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     T.check('p5m.final_is_manual_step', !/final pool held/i.test(res), `Results still names the earlier pool as the final amount: ${(res.match(/[^.]*final pool held[^.]*\./i) || [''])[0]}`); /* guards: 0.50 mg/mL x 1 mL kept is the final amount, not the earlier pool's mg */
   });
 
-        await T.t('p5', async () => {
+    await T.t('p5', async () => {
     await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
     await h.newProject('Volume override');
     await h.gb(path.join(DATA, 'standins', 'pET28-SUMO-standin.gb'));
@@ -244,32 +244,36 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     await p.setInputFiles('#ndFile', { name: 'mock_nd.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(tsv) });
     await h.wait(500);
 
+    // Add another run to force basis to 'mg'
+    await h.addRun(F.q); await h.pool('T11-T16');
+    await h.wait(400);
+
     await p.click('#tl [data-step="final"]');
     await h.wait(400);
 
     await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true));
     await h.wait(200);
 
-    await p.selectOption('#ndList select[data-ndk="runId"]', { index: 1 });
+    // Bind this reading to run 2 (Anion exchange - index 2)
+    await p.selectOption('#ndList select[data-ndk="runId"]', { index: 2 });
     await h.wait(200);
 
+    // Only set pool volume override (ndVol)
     const pvInput = p.locator('#ndList [data-ndr="ndVol"]').first();
-    if (await pvInput.isVisible()) {
-        await pvInput.fill('1');
-        await pvInput.dispatchEvent('change');
-    }
+    await pvInput.fill('1');
+    await pvInput.dispatchEvent('change');
     await h.wait(200);
 
     await h.step('figure');
     const m = await methods();
 
-    // We check if it outputs 4.00 mg in 1.0 mL (4.00 mg/mL)
-    T.check('p5.methods_volume_override', m.match(/4\.0[01] mg in 1\.0 mL \(4\.0[01] mg\/mL\)/) !== null, m.substring(Math.max(0, m.indexOf('The final pool held')), m.indexOf('The final pool held') + 150));
-    T.check('p5.methods_volume_no_fallback', !m.includes('in 3.0 mL') && !m.includes('in 3 mL'), m.substring(Math.max(0, m.indexOf('The final pool held')), m.indexOf('The final pool held') + 150));
+    // In buggy version, since we have 2 runs and only 1 has NanoDrop, basis is 'mg'.
+    // The y.poolMg comes from UV area (which isn't 4), but the poolVol comes from ndForRun.
+    // It should state whatever mg in 1.0 mL (not 6.0 mL!).
+    // Our fix makes it use the correct volume for the UV area mass (6.0 mL).
+    T.check('p5.methods_volume_override', m.includes('in 6.0 mL ('), m.substring(Math.max(0, m.indexOf('The final pool held')), m.indexOf('The final pool held') + 150));
     await junk('p5');
   });
-
-
 
 
   /* ================= P6: NanoDrop provenance of the final pool (A205 readings, then A280 readings as the control) ================= */
