@@ -280,40 +280,47 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
 
   /* ================= P6: NanoDrop provenance of the final pool (A205 readings, then A280 readings as the control) ================= */
   /* readings on the IMAC pool, pool volume typed as 2 mL; the sentence that reports the final pool amount */
-  const poolNd = async (name, file, assign, e280) => { await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+  const poolNd = async (name, file, assign) => { await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
     await h.newProject(name); await h.gb(F.gb); await h.addRun(F.imac); await h.pool('T1-T6');
-    if (e280) {
-        await p.evaluate(() => {
-            const tl = document.querySelector('#tl [data-step="settings"]');
-            if (tl) tl.click();
-        });
-        await h.wait(200);
-        await p.evaluate(() => {
-            const btn = document.querySelector('#optTagBtn');
-            if (btn) btn.click();
-        });
-        await h.wait(200);
-        await p.selectOption('#optTagPreset', 'custom').catch(() => {});
-        await p.fill('#optTagCustomExt', '1').catch(() => {});
-        await p.fill('#optTagCustomKda', '50').catch(() => {});
-        await h.wait(200);
-    }
     await p.setInputFiles('#ndFile', file); await h.wait(600); await h.step('final');
     if (assign) { await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true)); const n = await p.locator('#ndList select[data-ndk="runId"]').count();
       for (let i = 0; i < n; i++) { await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true)); await p.locator('#ndList select[data-ndk="runId"]').nth(i).selectOption({index: 1}); await h.wait(200); } }
-    // if e280 is passed, we use 1mL volume
-    await p.locator('#ndList [data-ndr="ndVol"]').first().fill(e280 ? '1' : '2'); await p.locator('#ndList [data-ndr="ndVol"]').first().dispatchEvent('change'); await h.wait(300);
+    await p.locator('#ndList [data-ndr="ndVol"]').first().fill('2'); await p.locator('#ndList [data-ndr="ndVol"]').first().dispatchEvent('change'); await h.wait(300);
     const m = await methods(); return (m.match(/The final pool held .*?\.(?=\s[A-Z]|\s*$)/s) || [''])[0]; };
-  await T.t('p6_a205', async () => {
-    // Uses 4 mg/mL A205 CSV with 1 mL volume, and an available A280 coefficient of 1 (true passed as e280)
-    const s = await poolNd('A205 provenance', [require('path').join(__dirname, '../data/nd/nd_a205_4mg_ml.tsv')], true, true), c = 4.00, want = `held ${(c*1).toFixed(2)} mg in 1.0 mL (${c.toFixed(2)} mg/mL)`;
-    /* guards: the amount is the mean of the instrument's A205 concentrations times the pool volume (4 mg/mL × 1 mL = 4 mg) */
+  await T.t('p6_a205', async () => { const s = await poolNd('A205 provenance', F.a205, false), c = TRUTH['nd_a205.csv'].mean, want = `held ${(c*2).toFixed(2)} mg in 2.0 mL (${c.toFixed(2)} mg/mL)`;
+    /* guards: the amount is the mean of the instrument's A205 concentrations times the pool volume (1.22 mg/mL × 2 mL = 2.44 mg) */
     T.check('p6.a205_amount', s.includes(want), `expected "${want}": ${s}`);
     /* guards: the methods name the method the instrument used, not A280 */
     T.check('p6.a205_method', /by NanoDrop A205\b/.test(s), s);
     /* guards: no A280 coefficient is quoted for readings the app did not convert with it */
     T.check('p6.a205_no_a280_coefficient', !/A280 of \d/.test(s) && !/NanoDrop A280/.test(s), s);
     T.check('p6.a205_no_junk', !!s && !/\(, |\(\)/.test(s), s); });
+
+  await T.t('p6_a205_synth', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('A205 synthetic'); await h.gb(F.gb); await h.addRun(F.imac); await h.pool('T1-T6');
+    await p.click('#tl [data-step="settings"]').catch(() => {}); await h.wait(200);
+    await p.click('#optTagBtn').catch(() => {}); await h.wait(200);
+    await p.selectOption('#optTagPreset', 'custom').catch(() => {});
+    await p.fill('#optTagCustomExt', '1').catch(() => {});
+    await p.fill('#optTagCustomKda', '50').catch(() => {});
+    await h.wait(200);
+
+    await p.setInputFiles('#ndFile', [require('path').join(__dirname, '../data/nd/nd_a205_4mg_ml.tsv')]); await h.wait(600); await h.step('final');
+    await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true)); const n = await p.locator('#ndList select[data-ndk="runId"]').count();
+    for (let i = 0; i < n; i++) { await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true)); await p.locator('#ndList select[data-ndk="runId"]').nth(i).selectOption({index: 1}); await h.wait(200); }
+
+    await p.locator('#ndList [data-ndr="ndVol"]').first().fill('1'); await p.locator('#ndList [data-ndr="ndVol"]').first().dispatchEvent('change'); await h.wait(300);
+
+    const mAll = await methods();
+    const m = (mAll.match(/The final pool held .*?\.(?=\s[A-Z]|\s*$)/s) || [''])[0];
+
+    const c = 4.00, want = `held 4.00 mg in 1.0 mL (4.00 mg/mL)`;
+    T.check('p6.a205_synth_amount', m.includes(want), `expected "${want}": ${m}`);
+    T.check('p6.a205_synth_method', /by NanoDrop A205\b/.test(m), m);
+    T.check('p6.a205_synth_no_a280_coefficient', !/A280 of \d/.test(m) && !/NanoDrop A280/.test(m), m);
+  });
+
   await T.t('p6_a280', async () => { const s = await poolNd('A280 provenance', F.nd, true);
     /* guards: readings converted with the coefficient still say A280 and quote it once, inside well-formed brackets */
     T.check('p6.a280_coefficient', /by NanoDrop A280 \(A280 of \d+\.\d\d for 1 mg\/mL of the (tagged|untagged) form\)/.test(s), s);
