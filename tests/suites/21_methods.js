@@ -131,12 +131,12 @@ const F = {gb: src('gb'), imac: src('his'), q: src('q'), sec: path.join(DATA, 's
     await hn.newProject('IMAC inline conditions'); await hn.addRun(F.imac);
     const notes = () => narrow.$$eval('.trace.run.sel [data-condwarn]', els => els.map(e => ({field: e.dataset.condwarn, text: e.textContent.trim(), shown: !e.hidden, invalid: e.closest('label').querySelector('input').getAttribute('aria-invalid') === 'true'})));
     const initial = await notes();
-    T.check('imac/missing-conditions-inline', JSON.stringify(initial.filter(x => x.shown)) === JSON.stringify([{field: 'mBufA', text: 'Enter buffer A.', shown: true, invalid: true}, {field: 'mFlow', text: 'Enter the flow rate.', shown: true, invalid: true}]), JSON.stringify(initial));
+    T.check('imac/missing-conditions-inline', JSON.stringify(initial.filter(x => x.shown)) === JSON.stringify([{field: 'mBufA', text: 'Enter buffer A to show buffer composition.', shown: true, invalid: true}, {field: 'mFlow', text: 'Enter the flow rate to show run conditions.', shown: true, invalid: true}]), JSON.stringify(initial));
     const unclipped = await narrow.$$eval('.trace.run.sel [data-condwarn]:not([hidden])', els => els.every(e => { const r = e.getBoundingClientRect(), p = e.closest('label').getBoundingClientRect(); return r.left >= p.left - 1 && r.right <= p.right + 1 && e.scrollWidth <= e.clientWidth + 1; }));
     T.check('imac/missing-conditions-mobile-unclipped', unclipped, 'Inline IMAC condition messages clip at 390 px');
     await narrow.locator('.trace.run.sel [data-k=mBufA]').fill('50 mM Tris pH 8.0'); await hn.wait(150);
     { const afterBuffer = await notes(), buf = afterBuffer.find(x => x.field === 'mBufA'), flow = afterBuffer.find(x => x.field === 'mFlow');
-      T.check('imac/buffer-warning-clears', !!buf && !buf.shown && !!flow && flow.shown, JSON.stringify(afterBuffer)); }
+      T.check('imac/buffer-warning-clears', !!buf && !buf.shown && !!flow && flow.shown && flow.text === 'Enter the flow rate to show run conditions.', JSON.stringify(afterBuffer)); }
     await narrow.locator('.trace.run.sel [data-k=mFlow]').fill('1'); await hn.wait(150);
     T.check('imac/condition-warnings-clear', !(await notes()).some(x => x.shown), JSON.stringify(await notes()));
     await closeNarrow();

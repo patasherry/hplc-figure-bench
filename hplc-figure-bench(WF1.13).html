@@ -4455,8 +4455,8 @@ function runCond(r){
   const o = {}; COND_KEYS.forEach(k => { o[k] = v(k) || au[k] || ''; o[k + 'Auto'] = !v(k) && !!au[k]; }); o.auto = au; return o; }
 /* IMAC needs these four values for a reproducible condition. Keep the warning beside the field that resolves it, rather than adding another summary surface. */
 function imacCondWarnings(r){ const c = runCond(r), w = {}; if (guessStep(r) !== 'IMAC') return w;
-  if (!c.mCol) w.mCol = 'Enter the column.'; if (!c.mBufA) w.mBufA = 'Enter buffer A.'; if (!c.mFlow) w.mFlow = 'Enter the flow rate.';
-  if (!c.mBufB && !c.mGrad) w.mGrad = 'Enter buffer B or a gradient/elution.'; return w; }
+  if (!c.mCol) w.mCol = 'Enter the column to identify the resin.'; if (!c.mBufA) w.mBufA = 'Enter buffer A to show buffer composition.'; if (!c.mFlow) w.mFlow = 'Enter the flow rate to show run conditions.';
+  if (!c.mBufB && !c.mGrad) w.mGrad = 'Enter buffer B or a gradient/elution to show run conditions.'; return w; }
 function syncImacCondWarnings(r, card){ if (!card) return; const w = imacCondWarnings(r); card.querySelectorAll('[data-condwarn]').forEach(note => { const msg = w[note.dataset.condwarn] || '', lab = note.closest('label'), input = lab && lab.querySelector('input');
     note.hidden = !msg; note.textContent = msg; if (lab) lab.classList.toggle('condmissing', !!msg); if (input) { if (msg) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid'); } }); }
 /* measurable conditions typed by hand, checked against what the file logged. Only a plain number, or a single linear %B range, is compared;
