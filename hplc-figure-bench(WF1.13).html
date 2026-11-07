@@ -5477,7 +5477,7 @@ $('#sumCsv').addEventListener('click', () => { const q = csvQuote, rows = sumRow
 /* integration table */
 function renderIntTable(run){
   const rows = integRows(run), pool = poolRows(run), hasMg = numOr(opt.eps, 0) > 0, gs = opt.intMethod === 'gauss', u = xUnit(run);
-  const sec = isSec(run), fit = sec ? secFit(secCalFor(run)) : null, hasKav = !!(fit && fit.useKav), hasMw = !!(fit && fit.mw), hasOl = hasMw && secMono() > 0;
+  const sec = isSec(run), fit = sec ? secFit(secCalFor(run)) : null, hasKav = !!(fit && fit.useKav), hasMw = !!(fit && fit.mw), hasOl = false;
   /* A260/A280 at each peak when the run recorded both wavelengths */
   const c280 = run.uvs.find(u => /280/.test(u.name)), c260 = run.uvs.find(u => /260/.test(u.name)), rat = !!(c280 && c260);
   const baseAt = (c, x, a, b) => { if (opt.intBase === 'zero') return 0; const ia = nearestIdx(c.xs, a), ib = nearestIdx(c.xs, b); const xa = c.xs[ia], xb = c.xs[ib], ya = c.ys[ia], yb = c.ys[ib]; return ya + (yb - ya) * (x - xa) / ((xb - xa) || 1); };
