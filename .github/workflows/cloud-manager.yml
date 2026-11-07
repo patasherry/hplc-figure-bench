@@ -18,6 +18,9 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write  # only so actions/cache can save the manager's state between passes: a cache write is refused
+                  # with contents:read alone ("cache write denied: token has no writable scopes"), and the manager
+                  # then started every pass with no memory. It pushes with HFB_TOKEN, never with this token.
 
 jobs:
   pass:
