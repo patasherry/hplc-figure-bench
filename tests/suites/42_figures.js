@@ -468,6 +468,45 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
     } finally { await q.close(); }
   });
 
+  await T.t('nanodrop_spectrum_ticks_spacing', async () => {
+    const q = await open(), hq = H(q.p), pg = q.p;
+    try {
+      await pg.click('#homeQuick'); await hq.wait(600);
+      const wl = [], ab = [];
+      for (let w = 240; w <= 340; w += 2) {
+        wl.push(w);
+        ab.push(0.05 + 0.3 * Math.exp(-0.5 * ((w - 280) / 15) ** 2));
+      }
+      const proj = {
+        app: 'HPLC Figure Bench', version: 1,
+        opt: {preset: 'poster', fs: 24, w: 12, h: 7, wfH: 0.9, tidy13: true, tidy14: true},
+        runs: [{id: 'r1', name: 'Step 1', inWf: true, uvi: 0, uvs: [{name: 'UV', yu: 'mAU', xs: [0, 1], ys: [0, 1]}], fracs: [], phases: [], integ: []}],
+        traces: [], gels: [],
+        nanodrop: [{id: 'nd1', runId: 'r1', stage: 'conc', name: 'Concentrated', spec: {wl, ab}, conc: 1.2, vol: 2}],
+        prep: {on: true, btw: {'r1': {how: 'conc', vOut: 2, device: 'Amicon Ultra-15', mwco: '10'}}}
+      };
+      await pg.setInputFiles('#projFile', {name: 'test_nd_ticks.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(proj))});
+      await hq.wait(500);
+      await pg.evaluate(() => {
+        const wfBtn = document.querySelector('[data-fig="workflow"]');
+        if (wfBtn) wfBtn.click();
+      });
+      await hq.wait(500);
+      const res = await pg.evaluate(() => {
+        const texts = Array.from(document.querySelectorAll('#paper svg text'));
+        const a10 = texts.find(t => t.textContent.includes('A (10 mm)'));
+        const parent = a10 ? a10.parentElement : null;
+        const yLabels = parent ? Array.from(parent.querySelectorAll('text')).filter(t => t.getAttribute('text-anchor') === 'end' && !isNaN(parseFloat(t.textContent))) : [];
+        const ys = yLabels.map(t => parseFloat(t.getAttribute('y'))).sort((a, b) => b - a);
+        let minGap = Infinity;
+        for (let i = 1; i < ys.length; i++) minGap = Math.min(minGap, Math.abs(ys[i] - ys[i - 1]));
+        const fsValue = 24;
+        return {count: ys.length, minGap, fsValue, requiredGap: fsValue * 1.28};
+      });
+      T.check('ncsvg_y_ticks_no_overlap', res.count < 2 || res.minGap >= res.requiredGap, `gap ${res.minGap.toFixed(1)} should be >= ${res.requiredGap}, count: ${res.count}`);
+    } finally { await q.close(); }
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
