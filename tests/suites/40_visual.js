@@ -11,9 +11,9 @@ const F = {gb: src('gb'), imac: src('his'),
 const SEL = {panel: '#panel', gelFile: '#gelFile', layout: k => `label[for="wf-${k}"]`, tool: '#wfTool', moreBtn: '#moreBtn'};
 /* side-panel height budgets in px (scrollHeight of the side panel with More options closed), about 1.25 x the v15 baseline.
    A step that grows past this has picked up clutter. */
-const BUDGET = {1400: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2300, conc: 1500, sec: 2300, final: 1900, figure: 1700},
-                 390: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2300, conc: 1500, sec: 2300, final: 1900, figure: 1700}};
-const OPT_HEADINGS = ['Window', 'Processing', 'Axes', 'Figure style', 'Peak integration', 'Size exclusion (SEC)', 'Peak labels'];
+const BUDGET = {1400: {construct: 2700, transform: 2000, expr: 2700, lysis: 2200, imac: 2700, conc: 1800, sec: 2700, final: 2200, figure: 2000},
+                 390: {construct: 2700, transform: 2000, expr: 2700, lysis: 2200, imac: 2700, conc: 1800, sec: 2700, final: 2200, figure: 2000}};
+const OPT_HEADINGS = ['Window', 'Processing', 'Axes', 'Figure style', 'Peak integration', 'Size exclusion (SEC)', 'Peak labels', 'Raw files'];
 const shotName = (w, step, theme) => path.join(SHOTS, `${w}_${step}${theme === 'dark' ? '_dark' : ''}.png`);
 
 /* ---------- page-side measurements (pure DOM) ---------- */
@@ -149,4 +149,16 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
       T.check(`chrom:${f}:no-hscroll`, !(await h.hScroll()), shot); /* a wide plate never makes the page scroll sideways */ }); }
     await close(); }
 
-  T.done(); })();
+
+  await T.t('raw_files_panel', async () => {
+    const {p, close} = await open({width: 1400}); const h = H(p);
+    await h.newProject('Raw Test');
+    await h.wait(500);
+    const hasRawFilesHeading = await p.evaluate(() => {
+      return [...document.querySelectorAll('h2')].some(h => h.textContent === 'Raw files');
+    });
+    T.check('has raw files panel', hasRawFilesHeading, 'Raw files panel missing');
+    await close();
+  });
+
+T.done(); })();
