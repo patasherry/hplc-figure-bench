@@ -92,6 +92,21 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     }
   });
 
+    await T.t('hasOl_requires_monomer_mass', async () => {
+    // Should NOT have column yet
+    await p.evaluate(() => document.querySelector('#detectAll').click());
+    await h.wait(200);
+    let intText = await p.locator('#intTable').textContent();
+    T.check('hasOl_requires_monomer_mass/no_column_initially', !intText.includes('× monomer'), 'Column should be hidden without secMono');
+
+    // Add monomer mass
+    await setField('#o-secMono', '50');
+    await h.wait(200);
+
+    intText = await p.locator('#intTable').textContent();
+    T.check('hasOl_requires_monomer_mass/column_appears_with_mass', intText.includes('× monomer'), 'Column should appear when secMono is set');
+  });
+
   await T.t('export_and_check_figure', async () => {
     const download = async (selector, timeout = 10000) => {
       const loc = p.locator(selector);

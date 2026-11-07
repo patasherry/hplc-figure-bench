@@ -21,6 +21,17 @@ async function fresh(id, fn){
 
 (async () => {
   // Two 1 mg/mL readings become 3 and 1 while editing: mean 2, sample SD sqrt(2), mass 4 mg in 2 mL.
+    await fresh('nanodrop_comma_decimals_test', async (p, h) => {
+    await h.newProject('NanoDrop Comma Decimals');
+    await h.addRun([path.join(DATA, 'chrom/valid_unicorn.zip')]);
+    await h.pool('1.A.1-1.A.3');
+    await p.setInputFiles(SEL.nd, [path.join(DATA, 'nd/nd_comma_decimal.csv')]);
+    await h.wait(400);
+    await h.step('final'); const text = await p.locator('#ndList').textContent();
+    T.check('nanodrop_comma_decimals/parses_correctly', text.includes('1.50'), text);
+    T.check('nanodrop_comma_decimals/parses_correctly_2', text.includes('2.00'), text);
+  });
+
   for (const stage of ['pool', 'final']) await fresh('live-dilution-' + stage, async (p, h) => {
     const id = 'nd/live-dilution/' + stage;
     await h.newProject('Live dilution ' + stage);
