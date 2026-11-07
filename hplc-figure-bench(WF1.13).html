@@ -1896,14 +1896,16 @@ function clipXY(xs, ys, a, b){
   const i = lowerBound(xs, a), j = lowerBound(xs, b), xx = xs.slice(i, j), yy = ys.slice(i, j);
   if (xx[0] !== a) { xx.unshift(a); yy.unshift(at(a)); } xx.push(b); yy.push(at(b)); return {xs: xx, ys: yy};
 }
+/* the region baseline over a clipped span: 0 mAU, or the straight line between its end points. trapArea is shared with pools */
+const intBaseOf = (xs, ys, mode) => { const xa = xs[0], xb = xs[xs.length - 1], ya = ys[0], yb = ys[ys.length - 1]; return mode === 'zero' ? () => 0 : x => ya + (yb - ya)*(x - xa)/((xb - xa) || 1); };
+/* signed trapezoid area above the baseline: a stretch below it counts as negative, never clamped */
+const trapArea = (xs, ys, base) => { let s = 0; for (let i = 0; i < xs.length - 1; i++) s += ((ys[i] - base(xs[i])) + (ys[i+1] - base(xs[i+1])))/2*(xs[i+1] - xs[i]); return s; };
 function integrateRegion(xs, ys, a, b, mode){
   if (b < a) [a, b] = [b, a];
   ({xs, ys} = clipXY(xs, ys, a, b)); const i0 = 0, i1 = xs.length - 1;
   if (i1 < 1) return null;
-  const xa = xs[i0], xb = xs[i1], ya = ys[i0], yb = ys[i1];
-  const base = mode === 'zero' ? () => 0 : x => ya + (yb - ya)*(x - xa)/((xb - xa) || 1);
-  let area = 0, apex = i0, h = -Infinity;
-  for (let i=i0;i<i1;i++) area += ((ys[i] - base(xs[i])) + (ys[i+1] - base(xs[i+1])))/2*(xs[i+1] - xs[i]);
+  const xa = xs[i0], xb = xs[i1], base = intBaseOf(xs, ys, mode);
+  let area = trapArea(xs, ys, base), apex = i0, h = -Infinity;
   for (let i=i0;i<=i1;i++){ const d = ys[i] - base(xs[i]); if (d > h) { h = d; apex = i; } }
   return {a: xa, b: xb, i0, i1, xs, ys, base, area, apex: xs[apex], apexY: ys[apex], height: h};
 }
@@ -2127,7 +2129,8 @@ function poolRows(run){
   const rng = (arrMax(ys) - arrMin(ys)) || 1, tol = rng*0.003, w = Math.max(1, Math.round(xs.length*0.002));
   const walk = (i, d) => { let j = i; for (let k = 0; k < xs.length; k++) { const n = j + d*w; if (n < 0 || n >= xs.length || ys[n] > ys[j] + tol) break; j = n; } return j; };
   const il = walk(ia, -1), ir = walk(ib, 1), base = opt.intBase === 'zero' ? () => 0 : x => ys[il] + (ys[ir] - ys[il])*(x - xs[il])/((xs[ir] - xs[il]) || 1);
-  let area = 0; B.forEach(k => { const q = clipXY(xs, ys, k.a, k.b); for (let i = 0; i < q.xs.length - 1; i++) area += (Math.max(0, q.ys[i] - base(q.xs[i])) + Math.max(0, q.ys[i+1] - base(q.xs[i+1])))/2*(q.xs[i+1] - q.xs[i]); });
+  /* signed area: a stretch below the baseline takes area away, as in a region (#770); the baseline stays the outward walk */
+  let area = 0; B.forEach(k => { const q = clipXY(xs, ys, k.a, k.b); area += trapArea(q.xs, q.ys, base); });
   const vol = B.reduce((t, k) => t + k.b - k.a, 0), mgA = massOf(area, run), ms = poolMeas(run), pc = ms.c, fv = ms.v, mv = fv !== null && fv >= 0 ? fv : xUnit(run) === 'mL' ? vol : (xUnit(run) === 'min' && uvFlow(run) > 0) ? vol * uvFlow(run) : 0;
   /* a NanoDrop reading of the pool, often after it was concentrated, beats the estimate from the UV area; its volume is the one measured */
   /* a reading on the Concentrated step needs the volume after concentrating, never the pool volume */
@@ -4703,7 +4706,7 @@ function render(){
   else if (kind === 'nd') s2 = `${ndSamples.filter(x => x.spec && !x.hide).length} spectra plotted, absorbance at 10 mm path`;
   else if (kind === 'conc') s2 = 'NanoDrop readings of the concentrated pool, 10 mm path';
   else if (kind === 'struct' && struct) s2 = [struct.method && struct.method.toLowerCase().replace(/^./, c => c.toUpperCase()), struct.res && `${struct.res} Å`, struct.title].filter(Boolean).join(', ').slice(0, 140);
-  else s2 = 'Click a peak to label it';
+  else if (traces.length) s2 = 'Click a peak to label it'; else s2 = '';
   const lblOff = kind === 'overlay' && geo && geo.lblLeft || [];
   if (lblOff.length) s2 = `${lblOff.length} peak label${lblOff.length === 1 ? '' : 's'} left off for lack of room (${lblOff.slice(0, 4).join(', ')}${lblOff.length > 4 ? ', …' : ''}). Try a lower Max per trace, fewer decimals, a wider figure or a higher Y to`;
   if (kind === 'workflow' && PROJ) s2 += '. Click a panel to edit it; drag the selected panel to move it';

@@ -19,4 +19,13 @@ const {open, H, suite} = require('../lib/harness');
     T.check('picker takes several files', !!fc && fc.isMultiple());
   });
 
+  await T.t('empty-bottom-bar', async () => {
+    await p.click('#homeBtn');
+    await h.wait(300);
+    await h.newProject('Empty Project');
+    await h.wait(500);
+    const s2 = (await p.locator('#spec2').innerText()).trim();
+    T.check('no peak label instruction when empty', s2 !== 'Click a peak to label it', 'spec2: ' + s2);
+  });
+
   T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
