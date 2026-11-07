@@ -149,8 +149,8 @@ for sc in ([3, 4, 5], [2, 4, 4], [5, 5, 5], [3, 3, 4], [4, 3, 4]):
     routes.append(r)
 assert routes == ['relay', 'relay', 'queue', 'queue', 'queue'], routes
 # the board marker is not mistaken for a request or its closing marker
-assert rl.MARK_RE.search(rl.BOARD_MARK) is None and rl.DONE_RE.search(rl.BOARD_MARK) is None
-assert rl.outstanding([rl.BOARD_MARK + '\n' + rl.MARK.format('7-ab12', 'abc1234567')]) == {'7-ab12': {'base': 'abc1234567'}}
+assert rl.MARK_RE.search(rl.RELAY_BOARD_MARK) is None and rl.DONE_RE.search(rl.RELAY_BOARD_MARK) is None
+assert rl.outstanding([rl.RELAY_BOARD_MARK + '\n' + rl.MARK.format('7-ab12', 'abc1234567')]) == {'7-ab12': {'base': 'abc1234567'}}
 # block scalars parse the same whatever the indent
 def blk(key, lines, pad):
     return rl.RESP_HEAD + '\nid: 7-ab12\nbase: abc1234567\nverdict: ' + ('answer' if key == 'answer' else 'insufficient') + \

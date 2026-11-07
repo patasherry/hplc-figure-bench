@@ -599,7 +599,7 @@ def request_count(comment_bodies):
 
 
 # ---------- Direction board route (docs/RELAY.md, "Board route") ----------
-BOARD_MARK = '<!-- relay-board -->'  # on the first request of a board-raised issue: later requests and the expiry fallback read it
+RELAY_BOARD_MARK = '<!-- relay-board -->'  # on the first request of a board-raised issue: later requests and the expiry fallback read it
 
 
 def is_strong(scores, n_advisers, go):
