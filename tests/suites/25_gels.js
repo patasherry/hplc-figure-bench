@@ -284,4 +284,32 @@ await T.t('purity-log-vs-linear', async () => {
   }
 });
 
+await T.t('contaminant-cleavage-point', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p);
+    const d = project(gel(im, {
+      labels: 'M, SEC pool, Polish pool',
+      assign: ['', 'r2', 'r3'],
+      marks: [{kda: 100, y: 0.2}, {kda: 27, y: 230.5/360}, {kda: 10, y: 0.8}],
+      tags: []
+    }), {knownOn: true, protKda: 50, tagPreset: 'custom', tagMw: 25});
+    d.runs = [
+      {id: 'r1', name: 'IMAC', stepName: 'IMAC', inWf: true, uvs: [{name: 'UV', yu: 'mAU', xs: [0, 1], ys: [0, 1]}], fracs: [], phases: [], integ: []},
+      {id: 'r2', name: 'SEC', stepName: 'Size exclusion', inWf: true, uvs: [{name: 'UV', yu: 'mAU', xs: [0, 1], ys: [0, 1]}], fracs: [], phases: [], integ: []},
+      {id: 'r3', name: 'Polish', stepName: 'Anion exchange', inWf: true, uvs: [{name: 'UV', yu: 'mAU', xs: [0, 1], ys: [0, 1]}], fracs: [], phases: [], integ: []}
+    ];
+    d.prep = {cleave: true, cleaveAfter: 'r2'};
+    await load(p, d);
+    await p.evaluate(() => { const b = document.querySelector('[data-fig="g1"]'); if (b) b.click(); });
+    await p.waitForTimeout(200);
+    const rows = await csv(p);
+    const preCut = lane(rows, 2), postCut = lane(rows, 3);
+    T.check('contaminant-cleavage.not-called-before-cut', preCut.every(r => !/Ulp1/i.test(r[9] || '')), JSON.stringify(preCut));
+    T.check('contaminant-cleavage.called-after-cut', postCut.some(r => /His-Ulp1/i.test(r[9] || '')), JSON.stringify(postCut));
+  } finally {
+    await a.close();
+  }
+});
+
 T.done();})();

@@ -99,12 +99,12 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     const mx = xs.reduce((sum, x) => sum + x, 0) / n, my = ys.reduce((sum, y) => sum + y, 0) / n;
     let sxx = 0, sxy = 0;
     for (let i = 0; i < n; i++) { sxx += (xs[i] - mx) ** 2; sxy += (xs[i] - mx) * (ys[i] - my); }
-    const b = sxy / sxx, a = my - b * mx;
+    const syy = ys.reduce((sum, y) => sum + (y - my) ** 2, 0), b = sxy / sxx, a = my - b * mx, r2 = (sxy * sxy) / (sxx * syy);
     const mwFromKav = kav => Math.pow(10, a + b * kav);
 
     // 6. Check Kav calculations for each standard shown in the UI
     const fitHintText = await p.textContent('#sec-fit').catch(() => '');
-    T.check('fit_hint_shown', /Fit from 4 standards against Kav/i.test(fitHintText), fitHintText);
+    T.check('fit_hint_shown', /Fit from 4 standards against Kav/i.test(fitHintText) && fitHintText.includes(`log MW = ${a.toFixed(3)} − ${Math.abs(b).toFixed(3)}·Kav, R² = ${r2.toFixed(4)}`), fitHintText);
 
     // Read the SEC calibration inputs from the application DOM
     const domCal = await p.evaluate(() => {

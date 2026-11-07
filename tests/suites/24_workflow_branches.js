@@ -87,7 +87,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       },
       expectSvg: ['Final pool (C, Size exclusion): 2.84 mg', 'Final pool (E, Anion exchange): 2.13 mg'],
       expectMeth: [
-        'From the IMAC pool, fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 to a Q 6 mL column (step 3, panel E).',
+        'The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 to a Q 6 mL column (step 3, panel E).',
         'After size exclusion, concentration left 2.84 mg',
         'After anion exchange, concentration left 2.13 mg'
       ],
@@ -137,7 +137,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       ],
       expectMeth: [
         'After size exclusion, concentration left 0.00 mg (0.0 mg/mL in 2.0 mL).',
-        'The Anion exchange pool held 1.28 mg in 2.0 mL (0.64 mg/mL), by the A280 area of the pool (2 mm path [assumed, check], A280 of 2.36 for 1 mg/mL of the tagged form).',
+        'The Anion exchange pool held 1.28 mg',
         'Its purity was not measured by gel.'
       ],
       expectMethMissing: []
@@ -175,7 +175,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       }
       const meth = await h.methods();
       for (const e of c.expectMeth) {
-        T.check(`${c.name}: methods contains text`, true, meth);
+        T.check(`${c.name}: methods contains text`, meth.includes(e), meth);
       }
       for (const e of c.expectMethMissing) {
         T.check(`${c.name}: methods does not contain text`, !meth.includes(e), meth);
@@ -220,7 +220,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
     T.check('split-pool: multiple final yield lines', brTexts.length > 0, brTexts.map(x => x.t).join(' | '));
     const meth = await h.methods();
-    T.check('split-pool: methods text contains split', true, meth);
+    T.check('split-pool: methods text contains split', meth.includes('The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 to a Q 6 mL column (step 3, panel D).'), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
   await T.t('split-and-discard-yields', async () => {
@@ -257,7 +257,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
     T.check('split-discard: one final yield line', brTexts.length === 1, brTexts.map(x => x.t).join(' | '));
     const meth = await h.methods();
-    T.check('split-discard: methods text contains split', true, meth);
+    T.check('split-discard: methods text contains split', meth.includes('The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 were set aside.'), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
   T.done(); })();

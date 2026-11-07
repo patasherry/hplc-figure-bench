@@ -1871,7 +1871,7 @@ function axisConc(run){
   if (!bb && String(run.mBufB || '').trim()) { const t = String(run.mBufB).trim(), rest = t.replace(/^(buffer\s*)?a\s*(with|\+|plus|containing)\s*/i, '');
     if (rest !== t) bb = parseBufB(rest.split(/,/)[0]);
     else { const B = compsOf(t), d = B.find(b => A.some(a => a.name === b.name && b.c > a.c)) || B.find(b => !A.some(a => a.name === b.name) && /nacl|kcl|imidazole|salt|nh4|ammonium|glycine|arginine/i.test(b.name)); if (d) bb = {c: d.c, u: 'mM', name: d.name === 'nacl' ? 'NaCl' : d.name === 'kcl' ? 'KCl' : d.name.charAt(0).toUpperCase() + d.name.slice(1)}; } }
-  if (!bb) return null; const base = A.find(a => a.name === bb.name.toLowerCase()); const a = base && base.c < bb.c ? base.c*(bb.u === 'mM' ? 1 : 1) : 0;
+  if (!bb) return null; const base = A.find(a => a.name === bb.name.toLowerCase() || a.name === bb.name.toLowerCase().split(/\s+/)[0]), f = bb.u === 'M' ? 1e-3 : bb.u === 'µM' ? 1e3 : 1, a = base && base.c*f < bb.c ? base.c*f : 0;
   return {a, c: bb.c, u: bb.u, name: bb.name}; }
 /* a one-word reading of what the pool is: collected before %B rises (flow-through) or while it is on (elution); typed text wins, "-" hides it */
 function poolCaption(run){
@@ -3217,7 +3217,7 @@ function laneCtx(g, i){
   const postLab = a === 'cleave' || /cleav|ulp|tev|digest|after|post|\bcut\b|reverse|ortho|\brimac\b/i.test(lab);
   const imacL = imacLab && !postLab;
   const iImac = wf.findIndex(x => typ(x) === 'IMAC'), iRev = wf.findIndex(x => typ(x) === 'Reverse IMAC'), k = r ? wf.indexOf(r) : -1;
-  const cut = iRev >= 0 ? iRev : iImac >= 0 ? iImac + 1 : -1;
+  const c0 = cutAfterIndex(), cut = c0 >= 0 ? c0 + 1 : !prep.on && iImac >= 0 ? iImac + 1 : -1;
   return {has: !!r || imacLab || postLab, proteome,
     ecoli: !proteome && (imacL || (r && typ(r) === 'IMAC') || (k >= 0 && iImac >= 0 && k <= iImac) || (k === 0 && iImac < 0)),
     post: !proteome && (postLab || (k >= 0 && cut >= 0 && k >= cut))};
@@ -4538,14 +4538,14 @@ function methodsText(){
     const nt = String(r.note || '').trim().replace(/\.$/, ''), verb = /^[A-Za-z]+(ed|en)\b/.test(nt), tagNote = !prep.cleave && PROT_NOTE.test(nt) && !PROT_NOT.test(nt);
     if (pool) t += ` Fractions ${pool.replace(/^Pool\s*/, '')}${vol} were pooled${nt && !tagNote ? (verb ? ` and ${lc(nt)}` : ` (next: ${nt})`) : ''}.`;
     if (tagNote) t += ` The tag was then removed (${lc(nt)}).`;
-    const allR = runs.concat(manSteps().map(m => manObj(m))); const children = allR.filter(x => wfFromOf(x) === r.id && (x.inWf || Object.keys(x).includes("file")));
+    const par = wfParents(wf), children = wf.filter((x, idx) => (!x.prep || x.prep === 'manual') && par[idx] === i).concat(runs.filter(x => !x.inWf && wfFromOf(x) === r.id));
     if (children.length > 1) {
       const parts = children.map((c, ci) => {
         const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
         const cLt = letterOf(c), sRef = cLt ? `step ${ck}, panel ${cLt}` : `step ${ck}`;
-        const fn = wfFromNoteOf(c), desc = fn ? lc(fn) : (ci === 0 ? 'one portion' : ci === children.length - 1 ? 'the remainder' : 'another portion');
+        const isDisc = !c.inWf && c.prep !== 'manual', fn = wfFromNoteOf(c), baseDesc = fn ? lc(fn) : (ci === 0 ? 'one portion' : ci === children.length - 1 ? 'the remainder' : 'another portion'), desc = isDisc ? `${baseDesc} ${/fractions\b/i.test(baseDesc) ? 'were' : 'was'} set aside` : baseDesc;
         const vb = /fractions\b/i.test(desc) ? 'were applied to' : 'was applied to';
-        return {desc, vb, col, sRef};
+        return {desc, vb, col, sRef, isDisc};
       });
       let splitTxt = ` The ${stepTitle(r)} pool was split: `;
       if (parts.length === 2) {
@@ -6057,10 +6057,10 @@ function parseNanoDrop(text){
     return r.length > 2 && nm.length > 0 && !nm.endsWith(':') && !/^vendor/i.test(nm);
   }).map((r, i) => {
     const typ = cType >= 0 ? r[cType] : '', unitTxt = ((cUnit >= 0 ? r[cUnit] : '') + ' ' + (cConc >= 0 ? hn[cConc] : '')).toLowerCase();
-    const kind = /ng\s*\/\s*[µu]l|nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
+    const isProt = /protein|1\s*abs|bsa|igg|lysozyme|ext|ε/i.test(unitTxt + ' ' + typ), kind = /nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) || (/ng\s*\/\s*[µu]l/i.test(unitTxt + ' ' + typ) && !isProt && !(cA205 >= 0 || /a ?205|scopes/i.test(typ))) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
     let conc = cConc >= 0 ? ndNum(r[cConc], d) : null;
     const g = c => c >= 0 ? ndNum(r[c], d) : null, a280 = g(cA280), a260 = g(cA260); let corr = g(cCorr);
-    if (/[µu]g\s*\/\s*ml/.test(unitTxt)) { if (conc != null) conc /= 1000; if (corr != null) corr /= 1000; }
+    if (kind !== 'nucleic' && /[µu]g\s*\/\s*ml|ng\s*\/\s*[µu]l/i.test(unitTxt)) { if (conc != null) conc /= 1000; if (corr != null) corr /= 1000; }
     const s = ndNew({name: r[cName], row: i, when: [cDate >= 0 ? r[cDate] : '', cTime >= 0 ? r[cTime] : ''].filter(Boolean).join(' '), type: typ, kind, a280, a260, a230: g(cA230), a340: g(cA340), r280: g(cR280), r230: g(cR230),
       conc, unit: kind === 'nucleic' ? 'ng/µL' : 'mg/mL', base: cBase >= 0 ? r[cBase] : '', baseA: g(cBaseA), corr, imp: cImp >= 0 && r[cImp] ? {name: r[cImp], a280: g(cImpA)} : null, hide: CRUDE_RE.test(r[cName])});
     if (s.r280 == null && a260 != null && a280 > 0) s.r280 = a260/a280; if (s.r230 == null && a260 != null && s.a230 > 0) s.r230 = a260/s.a230;
