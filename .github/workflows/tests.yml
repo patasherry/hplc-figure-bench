@@ -29,7 +29,7 @@ jobs:
         with:
           sparse-checkout: tests/suites
       - id: ls
-        run: echo "suites=$(ls tests/suites | sed -n 's/^\([0-9]\{1,\}_\).*\.js$/\1/p;s/^\(test_\).*\.js$/\1/p' | sort -u | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split()))')" >> "$GITHUB_OUTPUT"
+        run: echo "suites=$(ls tests/suites | sed -n 's/^\([0-9]\{1,\}_.*\)\.js$/\1/p;s/^\(test_.*\)\.js$/\1/p' | sort -u | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split()))')" >> "$GITHUB_OUTPUT"
 
   suite:
     needs: list
@@ -93,11 +93,14 @@ jobs:
         run: |
           python3 - <<'EOF'
           import json, glob, os, re
-          # one row per suite file: '30_robust.js' becomes key '30_' and label 'robust'
+          # one row per suite file: '30_robust.js' becomes key '30_robust' and label 'robust'
           names = {}
           for f in sorted(os.listdir('tests/suites')):
-              m = re.match(r'(\d+_)(.*)\.js$', f)
-              if m and m.group(1) not in names: names[m.group(1)] = m.group(2).replace('_', ' ')
+              m = re.match(r'((\d+|test)_.*)\.js$', f)
+              if m:
+                  key = m.group(1)
+                  label_match = re.match(r'(?:\d+|test)_(.*)', key)
+                  names[key] = label_match.group(1).replace('_', ' ') if label_match else key
           rows, regs, fixes, total_reg, missing, newfail = [], [], [], 0, [], []
           touched = {os.path.basename(f)[:-3] for f in (open('changed.txt').read().split() if os.path.exists('changed.txt') else []) if f.startswith('tests/suites/') and f.endswith('.js')}
           for key, label in names.items():
