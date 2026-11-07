@@ -771,7 +771,7 @@ def relay_labelled_by_board(n, issue):
 def relay_send(n, issue, app_text, base, ranges, board=False):
     rid = rl.new_id(n)
     why = (f"**The board raised this one because the advisers' scores were split.** Issue #{n} was adopted on the Direction board (#{BOARD}) without every adviser backing it strongly, "
-           'so it comes here for a bigger reasoning budget before it goes to the work queue.\n\n' + rl.BOARD_MARK + '\n') if board else ''
+           'so it comes here for a bigger reasoning budget before it goes to the work queue.\n\n' + rl.RELAY_BOARD_MARK + '\n') if board else ''
     body = re.sub(r'^.*relay-lines:.*$', '', issue.get('body') or '', flags=re.M).strip()[:6000]
     exp = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=RELAY_HOURS)
     # The excerpt first, then whatever room is left for the attached files: a request has to stay something an agent will
@@ -852,7 +852,7 @@ def relay_collect(n, issue):
     cs = comments(n)
     bodies = [c['body'] for c in cs]
     reqs = rl.outstanding(bodies)
-    board = any(rl.BOARD_MARK in b for b in bodies)  # raised by the Direction board: later requests say so, and expiry falls back to the queue
+    board = any(rl.RELAY_BOARD_MARK in b for b in bodies)  # raised by the Direction board: later requests say so, and expiry falls back to the queue
     now = dt.datetime.now(dt.timezone.utc)
     for rid in list(reqs):  # expiry
         c = next((c for c in cs if f'<!-- relay-req {rid} ' in c['body']), None)
