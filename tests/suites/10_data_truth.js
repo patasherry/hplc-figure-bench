@@ -62,6 +62,12 @@ async function chromFile(e){ const id = e.file.replace(/\.[^.]+$/, ''), t0 = Dat
     const known = e.peaks.concat(e.forbid || []), extra = pk.filter(r => r.pct >= 2 && !known.some(x => Math.abs(r.ve - x.ve) <= Math.max(x.tol, 0.3)));
     // guards: noise and baseline drift do not create peaks of 2% or more of the area
     T.check(`${id}/no-spurious`, !extra.length, `unexpected peaks: ${extra.map(r => r.ve + ' (' + r.pct + '%)').join(', ')}`);
+
+    if (id === '261022_PS_KPP_polish_001_001') {
+      const hit8 = pk.find(r => Math.abs(r.ve - 8.59) <= 0.25);
+      T.check('tests/data/22_protein/7_transl.table11_partial', hit8, 'Expected SEC peak at Ve 8.59 to be detected, table has ' + (pk.map(r => r.ve).join(', ') || 'none'));
+    }
+
     if (e.pool) { await h.pool(e.pool.label); const pr = (await peaks(p, h)).rows.find(r => /^pool/i.test(r.name));
       // guards: the pool spans from the first pooled fraction mark to the mark after the last one
       if (T.check(`${id}/pool-row`, pr, 'no Pool row in the peak table')) {
