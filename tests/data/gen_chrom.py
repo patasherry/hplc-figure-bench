@@ -420,7 +420,7 @@ def uneven_fractions():
         ('UV', 'ml', 'mAU', x, y),
         ('Fraction', 'ml', 'Fraction', ev, None)
     ])
-    add(dict(file='fixture_frac_uneven.csv', note='uneven fractions: 1, 2, 3, 1, 2, 1 mL then waste', format='csv', kind='sec', step='Size exclusion', unit='mL', column='Superdex 200 Increase 10/300 GL', cv=24.0, flow=0.5, path_mm=2, frac=dict(n=6, first='F1', last='F6'), injection=0.0, peaks=[dict(ve=9.5, tol=0.1, must=True, note='main peak')], pool=None))
+    add(dict(file='fixture_frac_uneven.csv', note='uneven fractions: 1, 2, 3, 1, 2, 1 mL then waste', format='csv', kind='sec', step='fixture frac uneven', unit='mL', column='e.g. HisTrap FF 5 mL', cv=None, flow=1, path_mm=2, frac=dict(n=6, first='F1', last='F6'), injection=0.0, peaks=[dict(ve=9.5, tol=0.1, must=True, note='main peak')], pool=None))
 
 if __name__ == '__main__':
     for f in (imac_step, imac_grad, iex, u5, sec_min, sec_semicolon_csv, sec_plates_csv, sec_zip_basic, sec_zip_hard, sec_zip_edge, hplc_min_flow, hplc_min_noflow, au_trace, last_frac_runs, large_header_run, hplc_export, cross_format_files, time_formats, uneven_fractions): f()
