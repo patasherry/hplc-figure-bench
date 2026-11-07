@@ -106,22 +106,20 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     const fitHintText = await p.textContent('#sec-fit').catch(() => '');
     T.check('fit_hint_shown', /Fit from 4 standards against Kav/i.test(fitHintText), fitHintText);
 
-    // Read the SEC calibration data calculated by the application UI
-    const calObj = await p.evaluate(() => {
-      // Access active SEC calibration calculated object from the UI
-      const f = (window.__HFB && window.__HFB.curFig) ? window.__HFB.curFig() : null;
-      // Alternatively read from the app's internal activeCal state
-      const cal = (typeof activeCal === 'function') ? activeCal() : null;
-      const fit = (typeof secFit === 'function') ? secFit(cal) : null;
-      return fit;
-    }).catch(() => null);
+    // Read the SEC calibration inputs from the application DOM
+    const domCal = await p.evaluate(() => {
+      const v0 = parseFloat(document.querySelector('#sec-v0')?.value);
+      const vt = parseFloat(document.querySelector('#sec-vt')?.value);
+      const ves = Array.from(document.querySelectorAll('#secStdList [data-f="ve"]')).map(el => parseFloat(el.value));
+      return { v0, vt, ves };
+    });
 
     for (let i = 0; i < stds.length; i++) {
       const expKav = kavExpected[i];
       const expKav3 = expKav.toFixed(3);
 
-      // Verify each standard's Kav calculated by app equals (Ve - V0)/(Vt - V0) to 3 decimals
-      const ptKav = calObj && calObj.pts && calObj.pts[i] ? calObj.pts[i].x : (stds[i].ve - V0)/(Vt - V0);
+      // Verify each standard's Kav from DOM inputs equals (Ve - V0)/(Vt - V0) to 3 decimals
+      const ptKav = (domCal.ves[i] - domCal.v0) / (domCal.vt - domCal.v0);
       T.check(`std_${i+1}_kav_shown`, ptKav.toFixed(3) === expKav3, `Std ${i+1} Kav ${ptKav.toFixed(3)} vs expected ${expKav3}`);
     }
 

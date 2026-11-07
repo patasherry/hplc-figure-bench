@@ -1420,7 +1420,7 @@ tidyLists();
 function saveOpt(){ try { localStorage.setItem('hplc-fig-opt', JSON.stringify(opt)); } catch(e) {} }
 
 let wfSel = null, wfSelKey = '', gelMovedAt = 0;
-let traces = [], runs = [], gels = [], uid = 1, G = null, cur = 'overlay', marking = null, tagMode = '';
+let traces = [], runs = [], gels = [], uid = 1, G = null, cur = 'overlay', marking = null, tagMode = '', srcDiag = {};
 
 /* ---------- helpers ---------- */
 const csvQuote = v => `"${String(v).replace(/"/g, '""')}"`;
@@ -1669,11 +1669,38 @@ async function parseUnicornZip(buf, fname){
   return ak; }
 
 /* ---------- traces and runs ---------- */
+function getSourceDiag(src){
+  if (!src) return null;
+  const s = String(src).trim(), base = s.replace(/\.[^.]+$/, '');
+  if (srcDiag[s]) return srcDiag[s];
+  if (srcDiag[base]) return srcDiag[base];
+  for (const k of Object.keys(srcDiag)) { if (k.replace(/\.[^.]+$/, '') === base) return srcDiag[k]; }
+  return null;
+}
+function setSourceDiag(src, diag){
+  if (!src) return;
+  const s = String(src).trim(), base = s.replace(/\.[^.]+$/, '');
+  if (!diag) {
+    delete srcDiag[s]; delete srcDiag[base];
+    for (const k of Object.keys(srcDiag)) { if (k.replace(/\.[^.]+$/, '') === base) delete srcDiag[k]; }
+    return;
+  }
+  clearSourceDiag(s);
+  srcDiag[s] = diag;
+}
+function clearSourceDiag(src){ setSourceDiag(src, null); }
+function renderSourceDiag(diag){
+  if (!diag) return '';
+  return `<details class="cardtext source-diag" data-kind="${esc(diag.kind || '')}" open>
+    <summary class="warnc">Import warning: ${esc(diag.summary || 'incomplete source')}</summary>
+    <p class="hint source-diag-msg">${esc(diag.msg || '')}</p>
+  </details>`;
+}
 function makeTrace(name, p, ex){
   const xc = p.xc ?? 0, yc = p.yc ?? 1;
   const mx = (p.cols[xc] || '').match(/\(([^)]+)\)/), my = (p.cols[yc] || '').match(/\(([^)]+)\)/);
   return {id: uid++, name, color: paletteColor(traces.length, traces.length+1), visible: true, rows: p.rows, cols: p.cols,
-    xc, yc, offset: 0, scale: 1, xshift: 0, peaks: [], ex: !!ex, xu: mx ? mx[1] : null, yu: my ? my[1] : null};
+    xc, yc, offset: 0, scale: 1, xshift: 0, peaks: [], ex: !!ex, xu: mx ? mx[1] : null, yu: my ? my[1] : null, source: p.source || null};
 }
 function makeRun(p){ const r = Object.assign({id: 'r' + (uid++), color: RUN_COLORS.uv, uvi: 0, xmin:'', xmax:'', ymin:'', ymax:'', shade:'', inWf: true, integ: [], secMode: 'auto'}, p);
   r.secAuto = secGuess(r); applyInjShift(r);
@@ -3904,7 +3931,7 @@ function finalYield(path){
   if (!meas && prep.on) { const wf = path || wfList(); for (let j = wf.indexOf(fin.r) + 1; j > 0 && j < wf.length; j++) if (wf[j].prep === 'manual' && manMg(wf[j].man) !== null) { const m = wf[j].man; fc = numOr(m.conc, null); fv = numOr(m.vol, null); meas = true; manLoad = mgOf(fin); } }
   const mg = meas ? fc*fv : pm;
   const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, perG = cG > 0 ? mg/cG : null;
-  const poolVol = fin.nd && fin.nd.mg !== null ? fin.nd.vol : fin.p && fin.p.measured ? fin.p.measVol : fin.p && fin.p.vol >= 0 ? fin.p.vol : null;
+  const poolVol = ['nd', 'umol', 'ndmol'].includes(allRows.basis) ? (fin.nd && fin.nd.mg !== null ? fin.nd.vol : null) : (fin.p && fin.p.measured ? fin.p.measVol : fin.p && fin.p.vol >= 0 ? fin.p.vol : null);
   return {fin, k: allRows.indexOf(fin), mg, poolMg: pm, poolVol, poolPerL: cL > 0 ? pm/cL : null, meas, fc, fv, perL: cL > 0 ? mg/cL : null, perG, cL, basis: meas ? 'final' : allRows.basis, poolBasis: allRows.basis, pur: fin.pur, purEst: fin.purEst,
     perGTxt: perG == null ? '' : `${sig2(perG)} mg per g of wet cells`, odd: rows.some(x => x.yld > 100 || x.stepY > 105),
     loaded: (() => { if (manLoad > 0) return {mg: manLoad, kept: false, r: fin.r}; const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r) : null; return k ? {mg: k, kept: true, r: fin.r} : mgOf(pr) > 0 ? {mg: mgOf(pr), kept: false, r: fin.r} : null; })(),
@@ -4719,7 +4746,7 @@ $('#figtabs').addEventListener('keydown', e => { const k = {ArrowRight: 1, Arrow
 
 function gelMeta(g){
   const asg = gelLabels(g).map((_, i) => laneAssign(g, i)), short = t => t.length > 18 ? t.slice(0, 17) + '…' : t;
-  const parts = PREP_LANE.map(k => { const c = asg.filter(a => a === k).length; return c ? `${PREP_NAME[k]} ×${c}` : ''; }).concat(runs.map(r => { const c = asg.filter(a => a === r.id).length; return c ? `${esc(short(shortRunName(r)))} ×${c}` : ''; })).filter(Boolean), nm = asg.filter(a => a === 'marker').length;
+  const parts = PREP_LANE.map(k => { const c = asg.filter(a => a === k).length; return c ? `${PREP_NAME[k]} ×${c}` : ''; }).concat(runs.map(r => { const c = asg.filter(a => a === r.id).length; return c ? `<span title="${esc(r.name)}">${esc(short(shortRunName(r)))}</span> ×${c}` : ''; })).filter(Boolean), nm = asg.filter(a => a === 'marker').length;
   return (parts.length ? parts.join(', ') : 'No lanes assigned to a run') + (nm ? `, ladder ×${nm}` : ''); }
 function gelCardBody(g){
   const labs = gelLabels(g), asg = labs.map((_, i) => laneAssign(g, i)), samp = new Set(asg.filter(a => a !== 'marker'));
@@ -4763,6 +4790,7 @@ function renderList(){
         <button type="button" class="icon" data-act="del" title="Remove run" aria-label="Remove run">✕</button>
       </div>
       <div class="meta"><span class="mk">${r.inWf ? `Step ${runs.filter(x => x.inWf).indexOf(r) + 1}` : r.isStd ? 'Standards' : 'Not in workflow'}</span>${r.timeStr ? `<span>${esc(r.timeStr)}</span>` : ''}<br>${segs.length ? `${segs.length} fractions, ${esc(segs[0].label)} to ${esc(segs[segs.length-1].label)}` : 'No fractions collected'}${r.shift || r.injShift ? `, ${xUnit(r) === 'min' ? 'times' : 'volumes'} from injection` : ''}${nGel ? `, ${nGel} gel${nGel > 1 ? 's' : ''}` : ''}${fracRepeats(r) ? `<br>Tube names repeat after a full rack, so write T5#2 for the second T5.` : ''}${fracNotes(r)}</div>
+      ${renderSourceDiag(getSourceDiag(r.source) || getSourceDiag(r.file) || getSourceDiag(r.name))}
       ${segs.length ? '' : '<!--'}<label class="f">Pooled fractions<span class="joined"><input type="text" id="sh${r.id}" data-k="shade" value="${esc(r.shade)}" placeholder="${isPlate(r) ? 'e.g. E6-F9, plate 2: #2A1' : 'e.g. T3-T6'}"${isPlate(r) ? ' title="Plate 1 wells by name (E6-F9). Another plate with # and its number: #2A1-#2A6"' : ''}><button type="button" class="btn" data-act="suggest" title="Pick the fractions under the main peak. You can edit the result.">Suggest fractions</button></span></label>${segs.length ? '' : '-->'}
       ${segs.length && r.inWf ? (pr0 => (ms => ms.src !== 'card' ? (pr0 && pr0.measured ? `<p class="hint">${sig2(pr0.mg)} mg after concentrating (${fmt(pr0.conc, 2)} mg/mL × ${fmtAuto(pr0.measVol)} mL, from ${fmt(pr0.vol, 1)} ${xUnit(r)}). The peak mg use this amount. Change it on the Concentrated step.</p>` : '') : `<div class="row"><label class="f" title="Your NanoDrop reading. If you concentrated the pool first, this is the reading of the concentrated protein">NanoDrop (mg/mL)<input type="number" step="any" min="0" id="pc${r.id}" data-k="poolConc" value="${esc(ms.src === 'card' || (ms.src === 'btw' && !ms.nd) ? ms.c : '')}" placeholder="${ms.nd ? `${fmt(ms.nd.m, 2)}, from NanoDrop file` : 'mg/mL'}"></label><label class="f" title="The volume the reading was taken in. After concentrating, the volume left in the concentrator. Empty means the pool volume from the fractions">Volume after concentrating (mL)<input type="number" step="any" min="0" id="pv${r.id}" data-k="poolFinalVol" value="${esc((ms.src === 'card' || ms.src === 'btw') && ms.v > 0 ? ms.v : '')}" placeholder="${pr0 && xUnit(r) === 'mL' && pr0.vol > 0 ? `not concentrated: ${fmt(pr0.vol, 1)}` : 'pool volume'}"></label></div>${pr0 && pr0.measured ? `<p class="hint">Measured ${sig2(pr0.mg)} mg (${fmtAuto(pr0.conc)} mg/mL × ${fmtAuto(pr0.measVol)} mL${pr0.concentrated ? `, concentrated from ${fmt(pr0.vol, 1)} ${xUnit(r)}` : ''})${pr0.mgArea > 0 ? `, ${fmt(100*pr0.mg/pr0.mgArea, 0)}% of the ${sig2(pr0.mgArea)} mg from the UV area` : ''}. Every peak on this run is scaled by the same factor, so any loss while concentrating is folded into the peak mg.${pr0.src === 'btw' ? ' Also shown on the Concentrated step after this column.' : pr0.src === 'nd' ? ' From the NanoDrop readings marked Final.' : ''}</p>` : ''}`)(poolMeas(r)))(poolRows(r)) : ''}
       ${uvSel}
@@ -4810,6 +4838,7 @@ function renderList(){
         <button type="button" class="icon" data-act="up" title="Move up" aria-label="Move up">↑</button>
         <button type="button" class="icon" data-act="del" title="Remove trace" aria-label="Remove trace">✕</button>
       </div>
+      ${renderSourceDiag(getSourceDiag(t.source) || getSourceDiag(t.name) || getSourceDiag(t.file))}
       ${t.cols.length > 2 ? `<div class="row"><label class="f">X column${colSel('xc')}</label><label class="f">Y column${colSel('yc')}</label></div>` : ''}
       <div class="row3">
         <label class="f">Y offset<input type="number" step="any" id="off${t.id}" data-k="offset" value="${t.offset}"></label>
@@ -4857,13 +4886,13 @@ list.addEventListener('click', e => {
       if (prep.btw && prep.btw[t.id]) { const wf = runs.filter(r => r.inWf), k = wf.indexOf(t), to = wf.slice(0, Math.max(0, k)).reverse().find(r => !prep.btw[r.id]);
         if (to) { prep.btw[to.id] = prep.btw[t.id]; ndSamples.forEach(x => { if (x.stage === 'conc' && x.runId === t.id) x.runId = to.id; }); toast(`The Concentrated step moved to after ${stepTitle(to)}`); }
         else { const n = ndSamples.filter(x => x.stage === 'conc' && x.runId === t.id).length; ndSamples = ndSamples.filter(x => !(x.stage === 'conc' && x.runId === t.id)); if (n || prep.btw[t.id].vOut) toast(`Removed its Concentrated step too${n ? ` and ${n} NanoDrop reading${n === 1 ? '' : 's'}` : ''}`); } }
-      runs.splice(i, 1); gels.forEach(g => { if (g.runId === t.id) g.runId = ''; if (g.assign) g.assign = g.assign.map(a => a === t.id ? '' : a); g._auto = g._prepA = null; }); if (prep.btw) delete prep.btw[t.id]; if (prep.stepMeta) { delete prep.stepMeta['run:' + t.id]; delete prep.stepMeta['btw:' + t.id]; } if (PROJ && (curStep === 'run:' + t.id || curStep === 'btw:' + t.id)) curStep = 'figure'; }
+      runs.splice(i, 1); const srcK = t.source || t.file; if (srcK && !runs.some(r => (r.source || r.file) === srcK)) clearSourceDiag(srcK); gels.forEach(g => { if (g.runId === t.id) g.runId = ''; if (g.assign) g.assign = g.assign.map(a => a === t.id ? '' : a); g._auto = g._prepA = null; }); if (prep.btw) delete prep.btw[t.id]; if (prep.stepMeta) { delete prep.stepMeta['run:' + t.id]; delete prep.stepMeta['btw:' + t.id]; } if (PROJ && (curStep === 'run:' + t.id || curStep === 'btw:' + t.id)) curStep = 'figure'; }
     else if (a === 'up' && i > 0) { runs.splice(i, 1); runs.splice(i-1, 0, t); }
     else if (a === 'suggest') { let sg = suggestPool(t); if (!sg) { toast('No clear peak in the collected fractions'); return; } if (isPlate(t)) sg = sg.split(/\s*([,;–-])\s*/).map(x => /^[,;–-]$/.test(x) ? x : plateShort(x)).join(''); t.shade = sg; toast(`Pooled ${sg} (suggested)`); } }
   else if (kind === 'gel') { if (a === 'del') { gels.splice(gels.indexOf(t), 1); if (marking && marking.gelId === t.id) marking = null; } }
   else {
     const i = traces.indexOf(t);
-    if (a === 'del') traces.splice(i, 1);
+    if (a === 'del') { traces.splice(i, 1); const srcK = t.source || t.file; if (srcK && !traces.some(tr => (tr.source || tr.file) === srcK)) clearSourceDiag(srcK); }
     else if (a === 'up' && i > 0) { traces.splice(i, 1); traces.splice(i-1, 0, t); }
     else if (a === 'detect') detectPeaks(t);
     else if (a === 'clear') t.peaks = [];
@@ -5584,7 +5613,23 @@ async function loadFiles(files){
       if (/\.zip$/i.test(f.name)) { if (typeof DecompressionStream === 'undefined') { bad.push(`${f.name} (this browser cannot unpack it, export the run as .csv from UNICORN)`); continue; }
         const ak = await isUnicornZip(f) ? await parseUnicornZip(await f.arrayBuffer(), f.name.replace(/\.[^.]+$/, '')) : null;
         if (ak && ak.bad) bad.push(`${f.name} (a UNICORN result archive, but ${ak.bad}: export the result from UNICORN again, or export its curves as .csv)`);
-        else if (ak) { if (ak.lost) { lost.push(`${ak.lost.join(', ')} in ${f.name}`); delete ak.lost; } newRuns.push(makeRun(ak)); } else bad.push(`${f.name} (not a UNICORN result archive)`); continue; }
+        else if (ak) {
+          ak.source = f.name;
+          if (ak.lost && ak.lost.length) {
+            lost.push(`${ak.lost.join(', ')} in ${f.name}`);
+            setSourceDiag(f.name, {
+              source: f.name,
+              kind: 'unicorn',
+              lost: ak.lost.slice(),
+              summary: `${ak.lost.length} unreadable curve${ak.lost.length > 1 ? 's' : ''} omitted (${ak.lost.join(', ')})`,
+              msg: `Curves with no readable data points were left out: ${ak.lost.join('; ')}. Export the result from UNICORN again to include them.`
+            });
+            delete ak.lost;
+          } else {
+            clearSourceDiag(f.name);
+          }
+          newRuns.push(makeRun(ak));
+        } else bad.push(`${f.name} (not a UNICORN result archive)`); continue; }
       const text = decode(await f.arrayBuffer()), nm = f.name.replace(/\.[^.]+$/, '');
       if (looksNanoDrop(text) || isNanoDropHead(text.split(/\r?\n/).filter(l => l.trim()))) {
         const nd = parseNanoDrop(text);
@@ -5593,7 +5638,25 @@ async function loadFiles(files){
       }
       const ak = parseAkta(text, nm);
       if (ak && ak.bad) { bad.push(`${f.name} (${ak.bad})`); continue; }
-      if (ak) newRuns.push(makeRun(ak)); else added.push({name: nm, parsed: parseText(text)});
+      if (ak) {
+        clearSourceDiag(f.name);
+        ak.source = f.name;
+        newRuns.push(makeRun(ak));
+      } else {
+        const parsed = parseText(text);
+        if (parsed.skipped) {
+          setSourceDiag(f.name, {
+            source: f.name,
+            kind: 'generic',
+            skipped: parsed.skipped,
+            summary: `${parsed.skipped} row${parsed.skipped > 1 ? 's' : ''} omitted (split by unreadable value)`,
+            msg: `Left out ${parsed.skipped} row${parsed.skipped > 1 ? 's' : ''} of ${nm}: a row with an unreadable value splits the data, and only the longest unbroken block is kept. Check the file.`
+          });
+        } else {
+          clearSourceDiag(f.name);
+        }
+        added.push({name: nm, parsed, source: f.name});
+      }
     } catch (err) { bad.push(f.size === 0 ? `${f.name} (the file is empty)` : err.message === 'has no data points' ? `${f.name} (a chromatogram file, but has no data points: check that data was exported)` : `${f.name} (no columns of numbers found)`); }
   }
   if ((added.length || newRuns.length) && traces.length && traces.every(t => t.ex)) { traces = []; opt.xmin = opt.xmax = opt.ymin = opt.ymax = ''; }
@@ -5635,7 +5698,7 @@ async function loadFiles(files){
 function addParsed(added, quiet){
   if (!added.length) return;
   if (traces.length && traces.every(t => t.ex)) { traces = []; opt.xmin = opt.xmax = opt.ymin = opt.ymax = ''; }
-  added.forEach(a => { const t = makeTrace(a.name, a.parsed); traces.push(t); detectPeaks(t); });
+  added.forEach(a => { const t = makeTrace(a.name, a.parsed); if (a.source) t.source = a.source; traces.push(t); detectPeaks(t); });
   if (opt.palette === 'blues' || opt.palette === 'warm') applyPalette();
   if (!quiet) { cur = 'overlay'; renderList(); syncControls(); render(); }
 }
@@ -5653,7 +5716,20 @@ document.addEventListener('drop', e => { drop.classList.remove('over'); if (e.da
 let pasteN = 1;
 $('#pasteAdd').addEventListener('click', () => {
   const txt = $('#pasteText').value; if (!txt.trim()) { toast('Paste two or more columns first'); return; }
-  try { addParsed([{name: 'Pasted trace ' + (pasteN++), parsed: parseText(txt)}]); $('#pasteText').value = ''; }
+  try {
+    const nm = 'Pasted trace ' + (pasteN++), parsed = parseText(txt);
+    if (parsed.skipped) {
+      setSourceDiag(nm, {
+        source: nm,
+        kind: 'generic',
+        skipped: parsed.skipped,
+        summary: `${parsed.skipped} row${parsed.skipped > 1 ? 's' : ''} omitted (split by unreadable value)`,
+        msg: `Left out ${parsed.skipped} row${parsed.skipped > 1 ? 's' : ''} of ${nm}: a row with an unreadable value splits the data, and only the longest unbroken block is kept. Check the file.`
+      });
+    }
+    addParsed([{name: nm, parsed, source: nm}]);
+    $('#pasteText').value = '';
+  }
   catch (e) { toast('Could not find two numeric columns in the pasted text'); }
 });
 
@@ -6055,7 +6131,7 @@ function ndForRun(r){
   const pv = numOr(r.ndVol, 0) > 0 ? +r.ndVol : ndPoolVol(r), fv = numOr(r.ndFinalVol, 0) > 0 ? +r.ndFinalVol : numOr(((prep.btw || {})[r.id] || {}).vOut, 0) > 0 ? +prep.btw[r.id].vOut : null, E = ndEpsFor(r.id);
   const pmg = P && pv ? P.m*pv : null, fmg = F && fv ? F.m*fv : null, mg = fmg != null ? fmg : pmg;
   const used = ss.filter(s => fmg != null ? s.stage === 'final' : s.stage !== 'final').map(s => s.r280).filter(v => v != null);
-  return {P, F, pv, fv, vol: fmg != null ? fv : pv, pvAuto: !(numOr(r.ndVol, 0) > 0), pmg, fmg, mg, r280: used.length ? used.reduce((x, y) => x + y, 0)/used.length : null, mgml: (fmg != null ? F : P || F || {}).m, kda: E && E.kda, umol: mg != null && E && E.kda ? mg/E.kda : null}; }
+  return {P, F, pv, fv, vol: mg === fmg ? fv : pv, pvAuto: !(numOr(r.ndVol, 0) > 0), pmg, fmg, mg, r280: used.length ? used.reduce((x, y) => x + y, 0)/used.length : null, mgml: (fmg != null ? F : P || F || {}).m, kda: E && E.kda, umol: mg != null && E && E.kda ? mg/E.kda : null}; }
 /* the readings behind a step's NanoDrop amount: the final sample's when it has a volume, else the pool's */
 const ndUsedOf = r => { const st = ndForRun(r), ss = ndSamples.filter(s => s.runId === r.id && s.stage !== 'conc' && s.kind !== 'nucleic' && !CRUDE_RE.test(s.name)); return st && st.fmg != null ? ss.filter(s => s.stage === 'final') : ss.filter(s => s.stage !== 'final'); };
 const r280Flag = x => x == null ? '' : x > 0.8 ? 'hi' : x > 0.6 ? 'mid' : '';
@@ -6317,7 +6393,7 @@ function projectData(){
   /* The name shown to the user is Protein Purification Bench. This schema field stays 'HPLC Figure Bench' for good:
      change it and every project file saved before the rename fails to import, and every file saved after it fails to
      open in an older copy. The same goes for the 'hplc-fig-opt' settings key and the 'hfb-projects' database. */
-  return {app: 'HPLC Figure Bench', version: 1, saved: new Date().toISOString(), cur, opt: plain(opt), runs: runs.map(r => noId(r, 'blobId')), traces: traces.filter(t => !t.ex).map(t => noId(t, 'blobId')), gels: gs, struct: struct ? noId(struct, 'blobId') : null, nanodrop: ndSamples.map(n => noId(n, 'specId')), prep};
+  return {app: 'HPLC Figure Bench', version: 1, saved: new Date().toISOString(), cur, opt: plain(opt), runs: runs.map(r => noId(r, 'blobId')), traces: traces.filter(t => !t.ex).map(t => noId(t, 'blobId')), gels: gs, struct: struct ? noId(struct, 'blobId') : null, nanodrop: ndSamples.map(n => noId(n, 'specId')), prep, srcDiag: Object.assign({}, srcDiag)};
 }
 let projUndo = null, failedGels = [];
 /* a project file can be partial or damaged: keep what can be used and count what was skipped */
@@ -6337,6 +6413,7 @@ function cleanProject(d){
     if (Array.isArray(d.opt.secCals)) d.opt.secCals.forEach(c => { if (c && typeof c === 'object' && !('unit' in c)) c.unit = 'mL'; });
     if (!('secStds' in d.opt) && (d.runs.some(r => r.secMode === 'on') || (Array.isArray(d.opt.secCals) && d.opt.secCals.length > 0))) d.opt.secStds = true;
   }
+  if (!d.srcDiag || typeof d.srcDiag !== 'object' || Array.isArray(d.srcDiag)) d.srcDiag = {};
   return skipped; }
 async function openProject(data, name, noUndo){
   if (!data || data.app !== 'HPLC Figure Bench' || !Array.isArray(data.runs)) { toast(`${name || 'That file'} is not a project saved by this tool`); return; }
@@ -6348,6 +6425,7 @@ async function openProject(data, name, noUndo){
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
       Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
   runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: Array.isArray(t.peaks) ? t.peaks : []})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
+  srcDiag = (data.srcDiag && typeof data.srcDiag === 'object' && !Array.isArray(data.srcDiag)) ? Object.assign({}, data.srcDiag) : {};
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
     { const pq = Array.isArray(opt.myQuick) ? opt.myQuick : [], del = new Set([...(myQDel || []), ...(Array.isArray(opt.myQuickDel) ? opt.myQuickDel : [])]); opt.myQuickDel = [...del]; opt.myQuick = myQ.concat(pq.filter(q => !myQ.some(m => m.id === q.id))).filter(q => !del.has(q.id)); }
@@ -6410,14 +6488,14 @@ const lostCount = P => P.lost.runs.length + P.lost.traces.length + P.lost.gels.l
 function snapshot(){
   prep.nextUid = uid;
   const S = {meta: {kind: 'project', name: PROJ.name, protein: projProtein(), created: PROJ.created, dots: stepDots()}, step: curStep};
-  if (STORE.mode === 'cloud') Object.assign(S, {opt: plain(opt), prep: JSON.parse(JSON.stringify(prep)), runs: runs.map(r => ({obj: r, o: plain(r)})), traces: traces.filter(t => !t.ex).map(t => ({obj: t, o: plain(t)})),
+  if (STORE.mode === 'cloud') Object.assign(S, {opt: plain(opt), prep: JSON.parse(JSON.stringify(prep)), srcDiag: Object.assign({}, srcDiag), runs: runs.map(r => ({obj: r, o: plain(r)})), traces: traces.filter(t => !t.ex).map(t => ({obj: t, o: plain(t)})),
     gels: gels.map(g => ({obj: g, o: plain(g)})), struct, nd: ndSamples.map(n => ({obj: n, o: Object.assign({}, n)}))});
   else if (STORE.mode === 'local') { const d = projectData(); d.step = curStep; S.data = d; }
   return S;
 }
 /* the project as small JSON, with the heavy parts (run curves, gel images, the structure, spectra) uploaded once and referenced */
 async function packCloud(S, P){
-  const st = {app: 'HPLC Figure Bench', version: 2, opt: S.opt, prep: S.prep, step: S.step, runs: [], traces: [], gels: [], struct: null, nanodrop: []}, refs = [];
+  const st = {app: 'HPLC Figure Bench', version: 2, opt: S.opt, prep: S.prep, step: S.step, srcDiag: S.srcDiag || {}, runs: [], traces: [], gels: [], struct: null, nanodrop: []}, refs = [];
   for (const {obj: r, o} of S.runs) { if (!r.blobId) { const h = {}; RUN_HEAVY.forEach(k => { if (k in r) h[k] = r[k]; }); r.blobId = await upJSON(h); } const c = Object.assign({}, o, {blobId: r.blobId}); RUN_HEAVY.forEach(k => delete c[k]); st.runs.push(c); refs.push(r.blobId); }
   for (const {obj: t, o} of S.traces) { if (!t.blobId) t.blobId = await upJSON({rows: t.rows}); const c = Object.assign({}, o, {blobId: t.blobId}); delete c.rows; st.traces.push(c); refs.push(t.blobId); }
   for (const {obj: g, o} of S.gels) { if (!g.imageId) g.imageId = await upPNG(g.src); const c = Object.assign({}, o, {imageId: g.imageId}); ['src', 'thumb', 'out', 'pix', 'hist', 'crop', 'cropPrev', 'bandHist', 'image'].forEach(k => delete c[k]); st.gels.push(c); refs.push(g.imageId); }
@@ -6438,7 +6516,7 @@ async function unpackCloud(st){
   const s2 = st.struct && st.struct.blobId ? await one(st.struct, 'struct', async () => Object.assign(await get(st.struct.blobId), {ent: st.struct.ent, blobId: st.struct.blobId})) : null;
   const nd2 = (await Promise.all((st.nanodrop || []).map(async o => o.specId ? await one(o, 'nd', async () => Object.assign({}, o, {spec: await get(o.specId)})) : o))).filter(Boolean);
   if (names.length) toast(`Could not load ${names.slice(0, 3).join(', ')}${names.length > 3 ? ' and more' : ''}. They are kept and will load next time.`);
-  return {app: 'HPLC Figure Bench', version: 2, opt: st.opt, prep: st.prep, runs: runs2, traces: tr2, gels: gels2, struct: s2, nanodrop: nd2, step: st.step, _lost: lost};
+  return {app: 'HPLC Figure Bench', version: 2, opt: st.opt, prep: st.prep, srcDiag: st.srcDiag || {}, runs: runs2, traces: tr2, gels: gels2, struct: s2, nanodrop: nd2, step: st.step, _lost: lost};
 }
 function projProtein(){ const m = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null; return String(opt.targetName || '').trim() || (m && m.pn !== 'protein' ? m.pn : ''); }
 function stepDots(){ return stepList().filter(s => !s.add).map(s => s.warn ? 2 : s.done ? 1 : 0); }
@@ -6546,7 +6624,7 @@ function leaveWorkspace(){
 }
 function showHome(){ leaveWorkspace().then(() => { if (MODE === 'home') renderHome(); }); setSaveState(''); document.body.classList.remove('proj'); $('#home').hidden = false; document.querySelector('.app').hidden = true; applyProjUI(); renderHome(); }
 function enterApp(){ $('#home').hidden = true; document.querySelector('.app').hidden = false; }
-function resetWorkspace(){ runs = []; traces = []; gels = []; struct = null; ndSamples = []; prep = JSON.parse(JSON.stringify(PREP_DEF)); prep.on = true;
+function resetWorkspace(){ runs = []; traces = []; gels = []; struct = null; ndSamples = []; srcDiag = {}; prep = JSON.parse(JSON.stringify(PREP_DEF)); prep.on = true;
   QKEYS.forEach(k => { opt[k] = DEF[k]; }); cur = 'overlay'; marking = null; tagMode = ''; nextHidden.clear(); projUndo = null; }
 const newPid = () => 'p-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 async function newProject(name, protein){

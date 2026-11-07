@@ -29,7 +29,7 @@ jobs:
         with:
           sparse-checkout: tests/suites
       - id: ls
-        run: echo "suites=$(ls tests/suites | sed -n 's/^\([0-9][0-9]_\).*\.js$/\1/p' | sort -u | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split()))')" >> "$GITHUB_OUTPUT"
+        run: echo "suites=$(ls tests/suites | sed -n 's/^\([0-9]\{1,\}_\).*\.js$/\1/p;s/^\(test_\).*\.js$/\1/p' | sort -u | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split()))')" >> "$GITHUB_OUTPUT"
 
   suite:
     needs: list
@@ -96,7 +96,7 @@ jobs:
           # one row per suite file: '30_robust.js' becomes key '30_' and label 'robust'
           names = {}
           for f in sorted(os.listdir('tests/suites')):
-              m = re.match(r'(\d\d_)(.*)\.js$', f)
+              m = re.match(r'(\d+_)(.*)\.js$', f)
               if m and m.group(1) not in names: names[m.group(1)] = m.group(2).replace('_', ' ')
           rows, regs, fixes, total_reg, missing, newfail = [], [], [], 0, [], []
           touched = {os.path.basename(f)[:-3] for f in (open('changed.txt').read().split() if os.path.exists('changed.txt') else []) if f.startswith('tests/suites/') and f.endswith('.js')}
