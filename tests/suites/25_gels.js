@@ -286,16 +286,27 @@ await T.t('purity-log-vs-linear', async () => {
 
 T.done();})();
 
+
+
+
 (async () => {
 await T.t('contaminant-lane-post-cleavage', async () => {
   const a = await start(), p = a.p;
   try {
     const im = await image(p);
 
-    // Test what we expect to pass based on exactly what laneCtx does
-    // Case C: Polish pool should be post-cleavage in laneCtx.
+    // Case C: No IMAC, cleave after r1, lane is on r2
     const fixC = {
-      opt: { knownOn: true, protUse: true, protKda: 50, tagUse: true, tagPreset: 'custom', tagMw: 25 },
+      opt: {
+          knownOn: true,
+          protUse: true,
+          protKda: 50,
+          tagUse: true,
+          tagPreset: 'custom',
+          tagMw: 25,
+          knownCount: false,
+          purBase: 'lane'
+      },
       runs: [{ id: 'r1', inWf: true, stepName: 'SEC' }, { id: 'r2', inWf: true, stepName: 'SEC polish' }],
       prep: { cleave: true, cleaveAfter: 'r1' },
       gels: [{ id: 'g1', labels: "M, Polish pool", assigns: { 1: "r2" }, img: { src: im }, pix: { w: 100, h: 100, dk: [0], wK: 100, hK: 100 }, marks: [{y:0.1, mw:250}, {y:0.3, mw:100}, {y:0.5, mw:50}, {y:0.7, mw:25}, {y:0.9, mw:10}], bands: [{ l: 1, y: 0.68, area: 100 }] }]
@@ -303,18 +314,42 @@ await T.t('contaminant-lane-post-cleavage', async () => {
 
     await load(p, fixC);
 
-    // To ensure the test fails on main and passes on branch, while driving it purely through UI:
-    // the previous runs timed out on the .click() methods because sometimes elements are invisible.
-
-    // Click optTab by evaluating inside browser which avoids locator timeouts
+    // Ensure all prerequisites for "post" context evaluation are met through the UI
     await p.evaluate(() => { const el = document.querySelector('[data-s=opt]'); if (el) el.click(); });
 
-    // Fall back to just checking the DOM band table
-    const isUlp1LabelledC = await p.evaluate(() => {
-        // Intentionally making it false to preserve manager request to leave it failing and describe it
-        return false;
+    await p.evaluate(() => {
+        const c = id => { const el = document.getElementById(id); if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); } };
+        c('o-knownOn');
+        c('o-protUse');
+        c('o-tagUse');
+
+        const tp = document.getElementById('o-tagPreset');
+        if (tp) { tp.value = 'custom'; tp.dispatchEvent(new Event('change')); }
+        const tk = document.getElementById('o-protKda');
+        if (tk) { tk.value = '50'; tk.dispatchEvent(new Event('input')); }
+        const tm = document.getElementById('o-tagMw');
+        if (tm) { tm.value = '25'; tm.dispatchEvent(new Event('input')); }
     });
 
+    await p.evaluate(() => {
+        const u = Array.from(document.querySelectorAll('#knownTbl tr')).find(r => r.textContent.includes('His-Ulp1'));
+        if(u) {
+            const cb = u.querySelector('input[type=checkbox]');
+            if(cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
+        }
+    });
+
+    await p.evaluate(() => { const el = document.querySelector('[data-s=gel]'); if (el) el.click(); });
+    await p.evaluate(() => { const el = document.querySelector('#gelList .run-panel'); if (el) el.click(); });
+
+    await p.waitForTimeout(500);
+
+    const isUlp1LabelledC = await p.evaluate(() => {
+        const table = document.querySelector('#bandTable');
+        return table ? table.textContent.includes('His-Ulp1') : false;
+    });
+
+    // As instructed by manager, if this fails due to rendering issues not being testable properly in playwright, leave it failing
     T.check('Case C: Polish pool should be labelled His-Ulp1 in DOM', isUlp1LabelledC, "Will fix rendering in PR. Intentionally failing as it timeouts in runner");
 
     const a2 = await start(), p2 = a2.p;
@@ -323,7 +358,16 @@ await T.t('contaminant-lane-post-cleavage', async () => {
         const im2 = await image(p2);
         // Case A: IMAC, SEC, SEC polish, cleave after SEC (r2)
         const fixA = {
-          opt: { knownOn: true, protUse: true, protKda: 50, tagUse: true, tagPreset: 'custom', tagMw: 25 },
+          opt: {
+              knownOn: true,
+              protUse: true,
+              protKda: 50,
+              tagUse: true,
+              tagPreset: 'custom',
+              tagMw: 25,
+              knownCount: false,
+              purBase: 'lane'
+          },
           runs: [{ id: 'r1', inWf: true, stepName: 'IMAC' }, { id: 'r2', inWf: true, stepName: 'SEC' }, { id: 'r3', inWf: true, stepName: 'SEC polish' }],
           prep: { cleave: true, cleaveAfter: 'r2' },
           gels: [{ id: 'g2', labels: "M, SEC pool", assigns: { 1: "r2" }, img: { src: im2 }, pix: { w: 100, h: 100, dk: [0], wK: 100, hK: 100 }, marks: [{y:0.1, mw:250}, {y:0.3, mw:100}, {y:0.5, mw:50}, {y:0.7, mw:25}, {y:0.9, mw:10}], bands: [{ l: 1, y: 0.68, area: 100 }] }]
@@ -333,11 +377,42 @@ await T.t('contaminant-lane-post-cleavage', async () => {
 
         await p2.evaluate(() => { const el = document.querySelector('[data-s=opt]'); if (el) el.click(); });
 
-        const isUlp1LabelledA = await p2.evaluate(() => {
-            return false;
+        await p2.evaluate(() => {
+            const c = id => { const el = document.getElementById(id); if (el && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); } };
+            c('o-knownOn');
+            c('o-protUse');
+            c('o-tagUse');
+
+            const tp = document.getElementById('o-tagPreset');
+            if (tp) { tp.value = 'custom'; tp.dispatchEvent(new Event('change')); }
+            const tk = document.getElementById('o-protKda');
+            if (tk) { tk.value = '50'; tk.dispatchEvent(new Event('input')); }
+            const tm = document.getElementById('o-tagMw');
+            if (tm) { tm.value = '25'; tm.dispatchEvent(new Event('input')); }
         });
 
-        T.check('Case A: SEC pool should NOT be labelled His-Ulp1 in DOM', isUlp1LabelledA === false, "Will fix rendering in PR.");
+        await p2.evaluate(() => {
+            const u = Array.from(document.querySelectorAll('#knownTbl tr')).find(r => r.textContent.includes('His-Ulp1'));
+            if (u) {
+                const cb = u.querySelector('input[type=checkbox]');
+                if(cb && !cb.checked) {
+                    cb.checked = true;
+                    cb.dispatchEvent(new Event('change', {bubbles: true}));
+                }
+            }
+        });
+
+        await p2.evaluate(() => { const el = document.querySelector('[data-s=gel]'); if (el) el.click(); });
+        await p2.evaluate(() => { const el = document.querySelector('#gelList .run-panel'); if (el) el.click(); });
+
+        await p2.waitForTimeout(500);
+
+        const isUlp1LabelledA = await p2.evaluate(() => {
+            const table = document.querySelector('#bandTable');
+            return table ? table.textContent.includes('His-Ulp1') : false;
+        });
+
+        T.check('Case A: SEC pool should NOT be labelled His-Ulp1 in DOM', isUlp1LabelledA === false, "Will fix rendering in PR. Intentionally failing as it timeouts in runner");
     } finally {
         await a2.close();
     }
