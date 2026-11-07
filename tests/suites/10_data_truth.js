@@ -217,6 +217,25 @@ const dataTruth = (async () => {
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);
   if (!only || only.test('synthetic')) await T.t('synthetic', testSynthetic);
+
+  if (!only || only.test('text parses empty and zeros')) {
+    await T.t('text parses empty and zeros', async () => {
+      const {p, errs, close} = await open();
+      try {
+        await p.evaluate(() => { while (document.getElementById('toast').firstChild) document.getElementById('toast').firstChild.remove(); });
+        await p.setInputFiles('#file', { name: 'empty_text.txt', mimeType: 'text/plain', buffer: Buffer.from('') });
+        await p.waitForTimeout(500);
+        let toastText = await p.locator('#toast').textContent();
+        T.check('empty text fails', toastText.includes('empty') || toastText.includes('no columns of numbers found') || toastText.includes('no data points'), toastText);
+
+        await p.evaluate(() => { while (document.getElementById('toast').firstChild) document.getElementById('toast').firstChild.remove(); });
+        await p.setInputFiles('#file', { name: 'zeros_text.txt', mimeType: 'text/plain', buffer: Buffer.from('Time,UV\n0,0\n1,0\n2,0\n3,0\n') });
+        await p.waitForTimeout(500);
+        toastText = await p.locator('#toast').textContent();
+        T.check('zero text empty parse', toastText.includes('empty parse') || toastText.includes('zero measurements') || toastText.includes('no columns of numbers found') || toastText.includes('Loaded'), toastText);
+      } finally { await close(); }
+    });
+  }
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
   for (const e of EXP.time_tests || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => timeFile(e)); }
