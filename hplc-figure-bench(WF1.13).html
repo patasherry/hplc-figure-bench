@@ -6045,7 +6045,7 @@ function parseNanoDrop(text){
   const cName = col(h => ND_NAME.test(h)), cR280 = col(h => /a?\s?260\s*\/\s*a?\s?280/.test(h)), cR230 = col(h => /a?\s?260\s*\/\s*a?\s?230/.test(h));
   const absCol = w => col(h => new RegExp(`\\ba ?${w}\\b|^${w}$`).test(h) && !/\//.test(h) && !/conc|mg|µg|ug|ng|raw/.test(h));
   const cA280 = absCol(280), cA260 = absCol(260), cA230 = absCol(230), cA205 = absCol(205), cA340 = col(h => /\b340\b/.test(h) && !/baseline/.test(h));
-  const cConc = col(h => /conc|mg\s*\/\s*ml|ng\s*\/\s*[µu]l|[µu]g\s*\/\s*ml/.test(h) && !/\/\s*a/.test(h) && !/dye|corrected/.test(h)), cUnit = col(h => /^units?$/.test(h));
+  const cConc = col(h => /conc|mg\s*\/\s*ml|ng\s*\/\s*[µu]l|[µu]g\s*\/\s*ml|ng\s*\/\s*[µu]l/.test(h) && !/\/\s*a/.test(h) && !/dye|corrected/.test(h)), cUnit = col(h => /^units?$/.test(h));
   const cCorr = col(h => /corrected/.test(h) && /mg|conc/.test(h)), cImp = col(h => /^impurity 1$/.test(h)), cImpA = col(h => /^impurity 1 a ?280/.test(h)), cBaseA = col(h => /baseline abs/.test(h));
   const cType = col(h => /sample type|application|^type$/.test(h)), cDate = col(h => /date/.test(h)), cTime = col(h => /^time$/.test(h)), cBase = col(h => /baseline/.test(h));
   const wcols = H.map((h, i) => ({i, w: parseFloat(h)})).filter(x => isWl(H[x.i]) && x.w >= 190 && x.w <= 850);
@@ -6060,7 +6060,7 @@ function parseNanoDrop(text){
     const isProt = /protein|1\s*abs|bsa|igg|lysozyme|ext|ε/i.test(unitTxt + ' ' + typ), kind = /nucleic|dsdna|ssdna|\brna\b|oligo/i.test(unitTxt + ' ' + typ) || (/ng\s*\/\s*[µu]l/i.test(unitTxt + ' ' + typ) && !isProt && !(cA205 >= 0 || /a ?205|scopes/i.test(typ))) ? 'nucleic' : (cA205 >= 0 || /a ?205|scopes/i.test(typ)) ? 'a205' : dyeFile || /label/i.test(typ) ? 'labels' : 'protein';
     let conc = cConc >= 0 ? ndNum(r[cConc], d) : null;
     const g = c => c >= 0 ? ndNum(r[c], d) : null, a280 = g(cA280), a260 = g(cA260); let corr = g(cCorr);
-    if (kind !== 'nucleic' && /[µu]g\s*\/\s*ml|ng\s*\/\s*[µu]l/i.test(unitTxt)) { if (conc != null) conc /= 1000; if (corr != null) corr /= 1000; }
+    if (kind !== 'nucleic' && /[µu]g\s*\/\s*ml|ng\s*\/\s*[µu]l|ng\s*\/\s*[µu]l/i.test(unitTxt)) { if (conc != null) conc /= 1000; if (corr != null) corr /= 1000; }
     const s = ndNew({name: r[cName], row: i, when: [cDate >= 0 ? r[cDate] : '', cTime >= 0 ? r[cTime] : ''].filter(Boolean).join(' '), type: typ, kind, a280, a260, a230: g(cA230), a340: g(cA340), r280: g(cR280), r230: g(cR230),
       conc, unit: kind === 'nucleic' ? 'ng/µL' : 'mg/mL', base: cBase >= 0 ? r[cBase] : '', baseA: g(cBaseA), corr, imp: cImp >= 0 && r[cImp] ? {name: r[cImp], a280: g(cImpA)} : null, hide: CRUDE_RE.test(r[cName])});
     if (s.r280 == null && a260 != null && a280 > 0) s.r280 = a260/a280; if (s.r230 == null && a260 != null && s.a230 > 0) s.r230 = a260/s.a230;
