@@ -1164,6 +1164,7 @@ button,input,select,textarea{font-family:inherit}
         </label>
         <label class="f">Inset size (fraction of width)<input type="number" step="0.05" min="0.15" max="0.6" id="o-zoomInsetSize" data-opt="zoomInsetSize"></label>
       </div>
+      <div class="btns"><button class="btn quiet" id="zoomInsetHide" type="button">Hide inset</button><button class="btn quiet" id="zoomInsetRestore" type="button">Restore last visible</button><button class="btn quiet" id="zoomInsetReset" type="button">Reset inset layout</button></div>
       <div class="btns"><button class="btn quiet" id="resetRange" type="button">Reset to auto</button><button class="btn quiet" id="zoomPeak" type="button" title="Zoom to selected peak">Zoom to peak</button></div>
       <p class="hint" data-for="run">The window is saved per run and also applies in the workflow figure.</p>
     </section>
@@ -2231,6 +2232,45 @@ function style(ov){
 function withOpt(patch, fn){ const old = {}; Object.keys(patch).forEach(k => { old[k] = opt[k]; opt[k] = patch[k]; }); try { return fn(); } finally { Object.keys(old).forEach(k => { opt[k] = old[k]; }); } }
 const zoomSize = () => Math.max(0.15, Math.min(0.6, numOr(opt.zoomInsetSize, 0.4)));
 const zoomPos = () => ['tr', 'tl', 'br', 'beside'].includes(opt.zoomInsetPos) ? opt.zoomInsetPos : 'tr';
+/* A layout belongs to the chart that owns the inset.  The old four geometry keys are
+   read too, so a figure positioned in an earlier copy stays where its author put it. */
+function insetLayout(z, make){
+  if (!z || typeof z !== 'object') return null;
+  if (!z.zoomInsetLayout || typeof z.zoomInsetLayout !== 'object' || Array.isArray(z.zoomInsetLayout)) {
+    if (!make) return null;
+    const old = {};
+    ['X','Y','W','H'].forEach(k => { const v = z['zoomInset' + k]; if (v !== null && v !== undefined && isFinite(+v) && +v > (k === 'X' || k === 'Y' ? -1 : 0)) old[k.toLowerCase()] = +v; });
+    z.zoomInsetLayout = Object.assign({visible: null, lastVisible: null, manual: false}, old);
+  }
+  return z.zoomInsetLayout;
+}
+function insetVisible(z, fallback){ const l = insetLayout(z, false); return !l || l.visible !== false ? fallback : false; }
+function insetSource(){ const f = curFig(); if (f && f.kind === 'run') return f.run; if (f && f.kind === 'workflow' && wfSel) { const it = wfItem(wfSel); if (it && it.run) return it.run; } return opt; }
+function insetRemember(z, geo){
+  const l = insetLayout(z, true); Object.assign(l, {x: geo.x, y: geo.y, w: geo.w, h: geo.h, manual: true, visible: true});
+  ['X','Y','W','H'].forEach(k => { z['zoomInset' + k] = l[k.toLowerCase()]; });
+  return l;
+}
+function insetClear(z){
+  if (!z || typeof z !== 'object') return;
+  delete z.zoomInsetLayout;
+  z.zoomInsetW = z.zoomInsetH = z.zoomInsetX = z.zoomInsetY = null;
+}
+function insetAvoid(svg, g){
+  const out = [], fs = Math.max(5, fontSize()*0.85), add = (x, y, t) => { if (isFinite(x) && isFinite(y) && t) out.push({x0:x - Math.min(80, t.length*fs*.28), x1:x + Math.min(80, t.length*fs*.28), y0:y - fs, y1:y + fs*.3}); };
+  const tagged = []; String(svg || '').replace(/<g class="zoom-inset-avoid"[^>]*>([\s\S]*?)<\/g>/g, (_, s) => { tagged.push(s); return _; });
+  tagged.join('').replace(/<text\b([^>]*)>([^<]*)<\/text>/g, (_, a, t) => { const x = /\bx="([^"]+)"/.exec(a), y = /\by="([^"]+)"/.exec(a), tr = /translate\(([-.\d]+)[ ,]([-.\d]+)/.exec(a); add(x ? +x[1] : tr ? +tr[1] : NaN, y ? +y[1] : tr ? +tr[2] : NaN, t.replace(/&[^;]+;/g, 'x')); return _; });
+  return out.filter(b => b.x1 >= g.L && b.x0 <= g.R && b.y1 >= g.T && b.y0 <= g.B);
+}
+function insetDefault(S, m, iw, ih, beside){
+  const g = m.geo, pad = 3;
+  if (beside) return {x:S.W-iw, y:0};
+  const c = [{x:g.R-iw-pad,y:g.T+pad,k:'tr'}, {x:g.L+pad,y:g.T+pad,k:'tl'}, {x:g.R-iw-pad,y:g.B-ih-pad,k:'br'}, {x:g.L+pad,y:g.B-ih-pad,k:'bl'}];
+  const avoid = insetAvoid(m.svg, g), prefer = zoomPos();
+  c.forEach(q => { q.x = Math.max(0, Math.min(S.W-iw, q.x)); q.y = Math.max(0, Math.min(S.H-ih, q.y)); q.score = q.k === prefer ? -iw*ih*.8 : .01;
+    avoid.forEach(b => { const w = Math.max(0, Math.min(q.x+iw,b.x1)-Math.max(q.x,b.x0)), h = Math.max(0, Math.min(q.y+ih,b.y1)-Math.max(q.y,b.y0)); q.score += w*h; }); });
+  c.sort((a,b) => a.score - b.score || a.k.localeCompare(b.k)); return c[0];
+}
 /* the region zoomed into: the x-window; with none set, the middle third of the run */
 function zoomWindow(lo, hi, a, b){
   const hasA = numOr(a, null) !== null, hasB = numOr(b, null) !== null;
@@ -2240,12 +2280,15 @@ function zoomWindow(lo, hi, a, b){
 function zoomCompose(S, m, win, buildIn, zObj){
   const o = opt, pos = zoomPos(), beside = pos === 'beside', g = m.geo, {L, R, T, B} = g;
   zObj = zObj || opt;
-  let iw = (zObj && numOr(zObj.zoomInsetW, 0) > 0) ? +zObj.zoomInsetW : (beside ? S.W*zoomSize() : (R - L)*zoomSize());
-  let ih = (zObj && numOr(zObj.zoomInsetH, 0) > 0) ? +zObj.zoomInsetH : (beside ? S.H : Math.min((B - T)*0.8, iw*S.H/S.W*1.15));
+  const lay = insetLayout(zObj, false), val = v => v !== null && v !== undefined && isFinite(+v) ? +v : null, old = k => lay && val(lay[k]) !== null ? val(lay[k]) : (zObj ? val(zObj['zoomInset' + k.toUpperCase()]) : null), ar = Math.max(.2, (R-L)/Math.max(1, B-T));
+  let iw = old('w') > 0 ? old('w') : (beside ? S.W*zoomSize() : (R - L)*zoomSize());
+  let ih = old('h') > 0 ? old('h') : (beside ? S.H : iw/ar);
   iw = Math.max(30, Math.min(S.W, iw)); ih = Math.max(20, Math.min(S.H, ih));
   const pad = 3;
-  let ix = (zObj && zObj.zoomInsetX !== null && zObj.zoomInsetX !== undefined && isFinite(+zObj.zoomInsetX)) ? +zObj.zoomInsetX : (beside ? S.W - iw : pos === 'tl' ? L + pad : R - iw - pad);
-  let iy = (zObj && zObj.zoomInsetY !== null && zObj.zoomInsetY !== undefined && isFinite(+zObj.zoomInsetY)) ? +zObj.zoomInsetY : (beside ? 0 : pos === 'br' ? B - ih - pad : T + pad);
+  if (!beside && ih > B-T-pad*2) { ih = B-T-pad*2; iw = ih*ar; }
+  const def = insetDefault(S, m, iw, ih, beside);
+  let ix = old('x') !== null ? old('x') : def.x;
+  let iy = old('y') !== null ? old('y') : def.y;
   ix = Math.max(0, Math.min(S.W - iw, ix)); iy = Math.max(0, Math.min(S.H - ih, iy));
   if (ix + iw > S.W) iw = Math.max(30, S.W - ix);
   if (iy + ih > S.H) ih = Math.max(20, S.H - iy);
@@ -2294,6 +2337,7 @@ function zoomCompose(S, m, win, buildIn, zObj){
   if (FIG_SCREEN && !beside) {
     const hw = 7, hit = 14;
     handles = `<g class="zoom-inset-handles">`
+      + `<rect class="zoom-inset-handle" data-handle="move" x="${r2(iw/2-hw)}" y="0" width="${hw*2}" height="${hw}" rx="1" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:move;pointer-events:all;"/>`
       + `<rect class="zoom-inset-handle" data-handle="se" x="${r2(iw - hw)}" y="${r2(ih - hw)}" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:se-resize;pointer-events:all;"/>`
       + `<rect data-handle="se" x="${r2(iw - hit)}" y="${r2(ih - hit)}" width="${hit}" height="${hit}" fill="transparent" style="cursor:se-resize;pointer-events:all;"/>`
       + `<rect class="zoom-inset-handle" data-handle="sw" x="0" y="${r2(ih - hw)}" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:sw-resize;pointer-events:all;"/>`
@@ -2393,7 +2437,7 @@ function buildOverlaySVG(ov){
       it.Y0 = Math.max(T + it.h, Math.min(it.Y, isFinite(m) ? py(m) - 3 : it.Y)); });
     items.sort((a,b) => b.Y0 - a.Y0);
     const leaders = [];
-    s.push(`<g font-size="${r2(pf)}">`);
+    s.push(`<g class="zoom-inset-avoid" font-size="${r2(pf)}">`);
     /* a label that would have to leave the figure to clear the others is left off and named under the figure */
     items.forEach(it => {
       let bot, w = it.w;
@@ -2420,7 +2464,7 @@ function buildOverlaySVG(ov){
     const items = o.mode === 'stack' ? P.slice().reverse() : P;
     const rowH = fs*1.3, ll = fs*1.6, maxW = Math.max(...items.map(p=>p.t.name.length))*cw;
     const x0 = o.legend === 'inside' ? R - fs*0.4 - maxW - ll - 4 : L + fs*0.8;
-    s.push(`<g>`);
+    s.push(`<g class="zoom-inset-avoid">`);
     items.forEach((p,k) => { const y = T + fs*0.8 + k*rowH;
       s.push(`<line x1="${r2(x0)}" y1="${r2(y - fs*0.3)}" x2="${r2(x0+ll)}" y2="${r2(y - fs*0.3)}" stroke="${p.t.color}" stroke-width="${Math.max(lw,1)}" stroke-linecap="round"/>`);
       s.push(`<text x="${r2(x0+ll+4)}" y="${r2(y)}" fill="#000000">${esc(p.t.name)}</text>`); });
@@ -2447,7 +2491,7 @@ function buildOverlaySVG(ov){
 
 function buildSVG(ov){
   ov = ov || {};
-  if (!opt.zoomInset || ov.noZoom || ov.nest) return buildOverlaySVG(ov);
+  if (!insetVisible(opt, opt.zoomInset) || ov.noZoom || ov.nest) return buildOverlaySVG(ov);
   const S = style(), wa = opt.xmin, wb = opt.xmax, beside = zoomPos() === 'beside';
   const m = withOpt({xmin: '', xmax: ''}, () => buildOverlaySVG(beside ? {noZoom: true, nest: true, wPt: S.W*(1 - zoomSize()), hPt: S.H} : {noZoom: true}));
   if (!m.svg) return m;
@@ -2462,7 +2506,7 @@ function runXLabel(run){ const o = opt; if (o.rxlabel !== DEF.rxlabel) return o.
   return u === 'min' ? (isSec(run) ? 'Elution time (min)' : 'Time (min)') : isSec(run) ? 'Elution volume (mL)' : o.rxlabel; }
 function buildRunSVG(run, ov){
   ov = ov || {};
-  const doZoom = ov.nest ? run.wfZoom : opt.zoomInset;
+  const doZoom = ov.nest ? (run.wfZoom && insetVisible(run, true)) : insetVisible(run, opt.zoomInset);
   if (!doZoom || run.prep || ov.noZoom) return buildRunPlainSVG(run, ov);
   const S = style(ov), wa = run.xmin, wb = run.xmax, beside = zoomPos() === 'beside', put = (a, b) => { run.xmin = a; run.xmax = b; };
   let m; try { put('', ''); m = buildRunPlainSVG(run, beside ? Object.assign({}, ov, {noZoom: true, wPt: S.W*(1 - zoomSize()), hPt: S.H}) : Object.assign({}, ov, {noZoom: true})); } finally { put(wa, wb); }
@@ -4973,7 +5017,7 @@ function onOpt(e){
     else { opt.showY = true; opt.scalebar = false; if (opt.legend === 'direct') opt.legend = 'inside'; }
     syncControls();
   }
-  if (['zoomInsetPos', 'zoomInsetSize'].includes(k)) { opt.zoomInsetW = opt.zoomInsetH = opt.zoomInsetX = opt.zoomInsetY = null; const cr = curRun(); if (cr) cr.zoomInsetW = cr.zoomInsetH = cr.zoomInsetX = cr.zoomInsetY = null; }
+  if (['zoomInsetPos', 'zoomInsetSize'].includes(k)) { insetClear(opt); const cr = curRun(); if (cr) insetClear(cr); }
   if (k === 'peakDec') renderList();
   if (k === 'runCond') syncControls();
   render();
@@ -4996,6 +5040,9 @@ $('#panel').addEventListener('change', e => { if (e.target.type === 'radio') onO
 $('#o-dpi').addEventListener('change', onOpt);
 $('#resetRange').addEventListener('click', () => { const ro = rangeObj(); RANGE.forEach(k => ro[k] = ''); syncControls(); render(); });
 $('#zoomPeak').addEventListener('click', () => { const ro = rangeObj(); const rs = curRun() ? [curRun()] : traces; for (const r of rs) { let pk = null; if (r.integ && r.integ.length) { const q = r.integ[r.integ.length-1]; pk = {a: q.a, b: q.b}; } else if (r.peaks && r.peaks.length) { const p = r.peaks.find(x => x.label) || r.peaks.slice().sort((p1,p2)=>p2.prom-p1.prom)[0]; if (p) { const pr = processTrace(r); const idx = peakApex(pr.xs, pr.ys, p.x); let l = idx, r_idx = idx; while(l > 0 && pr.ys[l] > pr.ys[idx]*0.1) l--; while(r_idx < pr.ys.length-1 && pr.ys[r_idx] > pr.ys[idx]*0.1) r_idx++; pk = {a: pr.xs[l], b: pr.xs[r_idx]}; } } if (pk && pk.a != null && pk.b != null) { const w = pk.b - pk.a; ro.xmin = pk.a - w*0.1; ro.xmax = pk.b + w*0.1; syncControls(); render(); return; } } });
+$('#zoomInsetHide').addEventListener('click', () => { const z = insetSource(), l = insetLayout(z, true); if (G && G.zoomInset && G.zoomInset.zObj === z) l.lastVisible = {x:G.zoomInset.x, y:G.zoomInset.y, w:G.zoomInset.w, h:G.zoomInset.h}; else if (l.x != null) l.lastVisible = {x:l.x, y:l.y, w:l.w, h:l.h}; l.visible = false; saveOpt(); render(); });
+$('#zoomInsetRestore').addEventListener('click', () => { const z = insetSource(), l = insetLayout(z, true); if (l.lastVisible) Object.assign(l, l.lastVisible); l.visible = true; saveOpt(); render(); });
+$('#zoomInsetReset').addEventListener('click', () => { const z = insetSource(); insetClear(z); saveOpt(); render(); });
 $('#detectAll').addEventListener('click', () => { traces.forEach(detectPeaks); renderList(); render(); });
 $('#clearAll').addEventListener('click', () => { traces.forEach(t => t.peaks = []); renderList(); render(); });
 
@@ -5196,31 +5243,32 @@ paper.addEventListener('pointerdown', e => {
   const p0 = svgPoint(e); if (!p0) return;
   const zi = G.zoomInset;
   const targetHandle = e.target && e.target.dataset && e.target.dataset.handle;
-  const action = targetHandle || insetHit(p0, zi);
+  const action = targetHandle;
   if (!action) return;
   e.preventDefault(); e.stopImmediatePropagation();
+  if (paper.setPointerCapture) paper.setPointerCapture(e.pointerId);
+  const insetEl = e.target.closest && e.target.closest('#zoomInsetContainer'), insetRect = insetEl && insetEl.getBoundingClientRect();
   insetDrag = {
     action, p0, x0: zi.x, y0: zi.y, w0: zi.w, h0: zi.h,
-    aspect: zi.w / zi.h, figW: zi.figW, figH: zi.figH, zObj: zi.zObj
+    aspect: insetRect && insetRect.width > 0 && insetRect.height > 0 ? insetRect.width/insetRect.height : zi.w/zi.h, figW: zi.figW, figH: zi.figH, zObj: zi.zObj, pointerId: e.pointerId
   };
 }, true);
 window.addEventListener('pointermove', e => {
   if (!insetDrag) {
-    if (G && G.zoomInset) {
-      const p = svgPoint(e), act = insetHit(p, G.zoomInset);
+    if (G && G.zoomInset && e.target && e.target.dataset) {
+      const act = e.target.dataset.handle;
       if (act === 'se' || act === 'nw') paper.style.cursor = 'nwse-resize';
       else if (act === 'sw' || act === 'ne') paper.style.cursor = 'nesw-resize';
       else if (act === 'move') paper.style.cursor = 'move';
     }
     return;
   }
-  const d = insetDrag, p = svgPoint(e); if (!p) return;
+  const d = insetDrag; if (e.pointerId !== d.pointerId) return; const p = svgPoint(e); if (!p) return;
   const dx = p.x - d.p0.x, dy = p.y - d.p0.y, shift = e.shiftKey;
   if (d.action === 'move') {
     let newX = Math.max(0, Math.min(d.figW - d.w0, d.x0 + dx));
     let newY = Math.max(0, Math.min(d.figH - d.h0, d.y0 + dy));
-    d.zObj.zoomInsetX = r2(newX);
-    d.zObj.zoomInsetY = r2(newY);
+    insetRemember(d.zObj, {x:r2(newX), y:r2(newY), w:d.w0, h:d.h0});
   } else {
     let newW = d.w0, newH = d.h0, newX = d.x0, newY = d.y0;
     const minW = 30, minH = 20;
@@ -5285,16 +5333,14 @@ window.addEventListener('pointermove', e => {
     }
     newX = Math.max(0, Math.min(d.figW - newW, newX));
     newY = Math.max(0, Math.min(d.figH - newH, newY));
-    d.zObj.zoomInsetX = r2(newX);
-    d.zObj.zoomInsetY = r2(newY);
-    d.zObj.zoomInsetW = r2(newW);
-    d.zObj.zoomInsetH = r2(newH);
+    insetRemember(d.zObj, {x:r2(newX), y:r2(newY), w:r2(newW), h:r2(newH)});
   }
   cancelAnimationFrame(insetRaf);
   insetRaf = requestAnimationFrame(render);
 });
-['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, () => {
-  if (insetDrag) {
+['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, e => {
+  if (insetDrag && e.pointerId === insetDrag.pointerId) {
+    if (paper.hasPointerCapture && paper.hasPointerCapture(insetDrag.pointerId)) paper.releasePointerCapture(insetDrag.pointerId);
     insetDrag = null;
     paper.style.cursor = '';
     render();
