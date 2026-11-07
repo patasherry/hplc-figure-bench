@@ -342,5 +342,58 @@ async function fresh(id, fn){
     }
   });
 
+  // #1065: tied best NanoDrop assignment scores leave readings unassigned with a review prompt; unique best matches assign automatically.
+  await fresh('tied-assignment-review', async (p, h) => {
+    const id = 'nd/tied-assignment';
+    await h.newProject('Tied assignment review');
+    await h.addRun(F.unicorn('imac_affinity_step.tsv'));
+    await h.addRun(F.unicorn('imac_polishing_step.tsv'));
+    await h.step('final');
+
+    // Load two readings:
+    // 1. "IMAC pool" matches both runs equally (word 'IMAC') -> tied, must remain unassigned with review prompt.
+    // 2. "Polishing pool" uniquely matches run 2 (word 'POLISHING') -> unique match, must auto-assign to run 2 without review prompt.
+    await p.setInputFiles(SEL.nd, F.nd('tied_and_unique.tsv', [
+      ['IMAC pool', '2.00', '2.00'],
+      ['Polishing pool', '3.00', '3.00']
+    ], false));
+    await p.locator(SEL.row).nth(1).waitFor();
+
+    // Check rows and flags
+    const rows = await p.$$eval(SEL.row, els => els.map(el => ({
+      name: el.querySelector('input[data-ndk="name"]')?.value,
+      value: el.querySelector('.nd-v')?.textContent.trim(),
+      flag: el.querySelector('.nd-tied')?.textContent.trim() || ''
+    }))).then(r => r.sort((a, b) => a.name.localeCompare(b.name)));
+    T.check(id + '/flags', JSON.stringify(rows) === JSON.stringify([
+      {name: 'IMAC pool', value: '2.00 mg/mL', flag: '▲ Review required: select step'},
+      {name: 'Polishing pool', value: '3.00 mg/mL', flag: ''}
+    ]), JSON.stringify(rows));
+
+    // Neither run should have pool stats for the tied reading:
+    // Run 1 has 0 readings assigned -> no stats
+    // Run 2 has only "Polishing pool" (3.00 mg/mL) assigned -> "3.00 mg/mL"
+    const stats = await p.$$eval(SEL.poolStats, els => els.map(e => e.textContent.trim()).filter(Boolean));
+    T.check(id + '/run-stats-initial', JSON.stringify(stats) === JSON.stringify(['3.00 mg/mL']), JSON.stringify(stats));
+
+    // Find the tied reading ("IMAC pool") row and verify option prompt
+    const tiedIdx = await p.$$eval(SEL.row, els => els.findIndex(el => el.querySelector('input[data-ndk="name"]')?.value === 'IMAC pool'));
+    const tiedRow = p.locator(SEL.row).nth(tiedIdx);
+    await tiedRow.locator(SEL.edit).click();
+    const promptOpt = await tiedRow.locator(SEL.run + ' option').first().textContent();
+    T.check(id + '/dropdown-prompt', promptOpt === 'Select step…', promptOpt);
+
+    // Manually assign the tied reading to Run 1 (index 1)
+    await tiedRow.locator(SEL.run).selectOption({index: 1});
+
+    // Flag should disappear from the row
+    const flagAfter = await tiedRow.locator('.nd-tied').count();
+    T.check(id + '/flag-cleared-after-select', flagAfter === 0, 'Expected flag to be cleared');
+
+    // Both runs now have their respective readings assigned
+    const statsAfter = await p.$$eval(SEL.poolStats, els => els.map(e => e.textContent.trim()).filter(Boolean));
+    T.check(id + '/run-stats-after-select', JSON.stringify(statsAfter) === JSON.stringify(['2.00 mg/mL', '3.00 mg/mL']), JSON.stringify(statsAfter));
+  });
+
   T.done();
 })();
