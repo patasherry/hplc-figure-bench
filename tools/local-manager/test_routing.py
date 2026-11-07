@@ -11,6 +11,8 @@ def iss(n, title, *labels):
 # the light test matches the leader's wording
 assert rt.is_light('Test the zoom box') and rt.is_light('audit of tags') and rt.is_light('Docs: fix typo')
 assert rt.is_light('Add a failing test for ticks') and rt.is_light('verify the ladder')
+assert rt.is_light('26_sec_calibration reaches into window.__HFB') and rt.is_light('796_tag_mass crashes')
+assert rt.is_light('test_nanodrop_units fails on main') and rt.is_light('The test report merges suites that share a number')
 assert not rt.is_light('Fix overlapping tick labels') and not rt.is_light('Testing harness drifts')
 
 # mixed queue: the app-changing issue wins even though a light one is newer

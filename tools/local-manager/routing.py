@@ -3,7 +3,7 @@
 is_light mirrors LIGHT in .github/scripts/jules-leader.js (line 16); keep the two regexes identical."""
 import re
 
-LIGHT_RE = re.compile(r'^(tests?|audit|docs?)\b|^add (a |one )?(failing |ui[- ]level )?(tests?|checks?)\b|^(prove|verify|confirm)\b', re.I)
+LIGHT_RE = re.compile(r'^(tests?|audit|docs?)\b|^add (a |one )?(failing |ui[- ]level )?(tests?|checks?)\b|^(prove|verify|confirm)\b|\b(\d+|test)_[a-z0-9_]+\b|\b(window\.__HFB|test (suite|report)|compare\.js|failures\.js)\b', re.I)
 MAX_TRIES = 2  # Antigravity attempts per issue before it stays with Jules
 
 
