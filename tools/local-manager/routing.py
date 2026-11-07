@@ -40,3 +40,14 @@ def pick(queue, tried, limit, max_tries=MAX_TRIES):
     hard = [i for i in ok if not is_light(i.get('title'))]
     pool = hard or ok
     return sorted(pool, key=lambda i: i['number'], reverse=True)[:max(0, limit)]
+
+
+def prefer_unlocked(waiting, busy_secs, secs_of):
+    """Keep waiting items in priority order, but put items whose app sections do not overlap `busy_secs` ahead of overlapping ones."""
+    if not busy_secs or len(waiting) <= 1:
+        return list(waiting)
+    free, locked = [], []
+    for item in waiting:
+        iss = item[0] if isinstance(item, tuple) else item
+        (locked if (secs_of(iss) & busy_secs) else free).append(item)
+    return free + locked

@@ -48,4 +48,9 @@ assert route(contested, 'Widen the legend box') == 'relay'
 assert route(contested, 'Test the legend box') == 'queue'
 assert route(unanimous, 'Widen the legend box') == 'queue' and route(unanimous, 'Test the legend box') == 'queue'
 assert route(contested, 'Widen the legend box', cap) == 'queue'
+# section-aware conflict avoidance: non-overlapping jobs go ahead of jobs touching a busy section
+smap = {1: {'gels'}, 2: {'nanodrop'}, 3: {'gels', 'ui'}}
+wPairs = [(iss(1, 'Fix gel crop'), 'for-antigravity'), (iss(2, 'Fix nanodrop units'), 'for-antigravity'), (iss(3, 'Fix gel UI'), 'for-antigravity')]
+assert [x[0]['number'] for x in rt.prefer_unlocked(wPairs, {'gels'}, lambda i: smap[i['number']])] == [2, 1, 3]
+assert [x[0]['number'] for x in rt.prefer_unlocked(wPairs, set(), lambda i: smap[i['number']])] == [1, 2, 3]
 print('test_routing: all asserts passed')
