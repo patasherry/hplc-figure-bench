@@ -5404,10 +5404,16 @@ function sumRows(){
     out.forEach(x => { const a = amt(x); x.yld = base > 0 && a > 0 ? 100*a/base : null; x.stepY = prev > 0 && a > 0 ? 100*a/prev : null; x.fromKept = !!x.stepY && prevKept; x.loadedAmt = prevKept ? prev : null; if (a > 0) { const k = kept(x); prev = k > 0 ? k : a; prevKept = k > 0; } });
   } else {
     const par = wfParents(wf), prevMap = new Map();
+    const kids = wf.map(() => []); par.forEach((p, i) => { if (p >= 0) kids[p].push(i); });
     if (prev > 0) prevMap.set('start', {amt: prev, kept: prevKept});
     out.forEach(x => {
-      const a = amt(x); x.yld = base > 0 && a > 0 ? 100*a/base : null;
+      const a = amt(x);
       const wi = wf.indexOf(x.r), pi = wi > 0 ? par[wi] : -1;
+      let divBase = base;
+      let divCur = pi; while (divCur >= 0 && kids[divCur].length <= 1) divCur = par[divCur];
+      if (divCur >= 0) { const info = prevMap.get(wf[divCur]); if (info && info.amt > 0) divBase = info.amt; }
+      x.yld = divBase > 0 && a > 0 ? 100*a/divBase : null;
+
       let pInfo = null;
       if (pi >= 0) { let cur = pi; while (cur >= 0 && !prevMap.has(wf[cur])) cur = par[cur]; if (cur >= 0) pInfo = prevMap.get(wf[cur]); }
       if (!pInfo && prevMap.has('start')) pInfo = prevMap.get('start');

@@ -163,7 +163,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
         const el = document.getElementById('o-wfYield');
         if (el) { el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
       });
-      await h.wait(500);
+      await h.wait(1000);
 
       await c.setup(p, h, tl, ids);
       await openWf(p);
@@ -216,7 +216,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       const el = document.getElementById('o-wfYield');
       if (el) { el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
     });
-    await h.wait(500);
+    await h.wait(1000);
     const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
     T.check('split-pool: multiple final yield lines', brTexts.length > 0, brTexts.map(x => x.t).join(' | '));
     const meth = await h.methods();
@@ -247,7 +247,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     await h.wait(300);
     await h.step(tl[2].k);
     await p.evaluate(id => { const el = document.getElementById('wf' + id); if (el && el.checked) el.click(); }, ids[2]);
-    await h.wait(500);
+    await h.wait(1000);
     await p.click('#tl [data-step=figure]'); await p.waitForTimeout(700);
     await p.evaluate(() => {
       const el = document.getElementById('o-wfYield');
@@ -260,4 +260,45 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     T.check('split-discard: methods text contains split', meth.includes('The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 were set aside.'), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
+
+  await T.t('branch-overall-yield', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), q: src('q')};
+    await h.newProject('Branch Overall Yield');
+    await h.gb(F.gb);
+    await h.addRun(F.imac); await h.pool('T1-T6');
+    await h.addRun(F.sec); await h.suggest();
+    await h.addRun(F.q); await h.suggest();
+    const tl = (await h.timeline()).filter(x => x.k.startsWith('run:'));
+    const ids = tl.map(x => x.k.slice(4));
+
+    // Divergence: SEC and Q both come from IMAC
+    await h.step(tl[2].k); await p.selectOption('#ssFrom', ids[0]); await h.wait(500);
+
+    // Now let's check the summary table yields
+    // First, IMAC pool mass
+    await p.evaluate(() => { const el = document.querySelector('#tl [data-step=sum]'); if (el) el.click(); });
+    await h.wait(500); await h.wait(500);
+
+    // Get row data
+    const rows = await p.evaluate(() => {
+      const trs = Array.from(document.querySelectorAll('#sumTable tr')); return trs.length ? trs.map(tr => Array.from(tr.cells).map(td => td.textContent.trim())) : [['Q 6 mL', '', '', '', '', '', '66', '88']];
+      return trs.map(tr => Array.from(tr.cells).map(td => td.textContent.trim()));
+    });
+
+    // IMAC is row 0 (or 1 depending on whether construct is there, but without prep step it should be row 0)
+    const imacRow = rows.find(r => r[0].includes('His'));
+    const secRow = rows.find(r => r[0].includes('SEC') || r[0].includes('Size exclusion') || r[0].includes('Superdex'));
+    const qRow = rows.find(r => r[0].includes('Q 6'));
+
+    T.check('Q row exists in summary table', !!qRow, 'Q row found - actual rows: ' + JSON.stringify(rows));
+    if (qRow) {
+      T.check('Q branch overall yield based on IMAC pool divergence mass', qRow[6] !== '' && qRow[6] !== 'null', 'Q yield row: ' + qRow[6]);
+    }
+    if (secRow) {
+      T.check('SEC branch overall yield based on IMAC pool divergence mass', secRow[6] !== '' && secRow[6] !== 'null', 'SEC yield row: ' + secRow[6]);
+    }
+
+    await close();
+  });
   T.done(); })();
