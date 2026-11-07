@@ -3023,7 +3023,7 @@ def selftest():
     for name, ok, secs, text in agent_checks():
         bad += not ok
         print(f"{'OK  ' if ok else 'FAIL'}  {name:28} {secs:>4} s  {text}", flush=True)
-    print('Antigravity: no automatic route. The manager labels issues for-antigravity for you to paste in by hand.')
+    print('Antigravity: issues labelled for-antigravity are picked up automatically, and anything not started within antigravity_stall_minutes (config key, default 45) is handed to Jules.')
     print('All agents reachable.' if not bad else f'{bad} agent(s) not reachable.')
     sys.exit(1 if bad else 0)
 
