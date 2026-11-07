@@ -121,6 +121,29 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       expectMethMissing: []
     },
     {
+      name: 'branch aware yield table',
+      setup: async (p, h, tl, ids) => {
+        // IMAC step 1, SEC step 2, Q step 3. Q branched from IMAC.
+        await setFrom(p, h, tl[2].k, ids[0]); await h.wait(300);
+      },
+      expectSvg: [],
+      expectMeth: [],
+      expectMethMissing: [],
+      checkSumTable: async (p, T, h) => {
+        await h.step('figure'); await h.wait(500);
+        const rows = await p.$eval('#sumTable tr', trs => Array.from(trs).map(tr => Array.from(tr.querySelectorAll('td, th')).map(td => td.textContent.trim())));
+
+        const secRow = rows.find(r => r[0] && r[0].includes('Superdex'));
+        const qRow = rows.find(r => r[0] && r[0].includes('Q 6 mL'));
+
+        T.check('SEC row exists in summary table', !!secRow, 'SEC row found');
+        T.check('Q row exists in summary table', !!qRow, 'Q row found');
+
+        T.check('SEC branch overall yield based on IMAC pool divergence mass', !!secRow && secRow.some(x => /^[689]$/.test(x) || /^1[0-9]$/.test(x)), 'SEC yield row: ' + (secRow ? secRow.join('|') : 'missing'));
+        T.check('Q branch overall yield based on IMAC pool divergence mass', !!qRow && qRow.some(x => /^[478]$/.test(x)), 'Q yield row: ' + (qRow ? qRow.join('|') : 'missing'));
+      }
+    },
+    {
       name: 'zero versus unknown',
       setup: async (p, h, tl, ids) => {
         await setFrom(p, h, tl[2].k, ids[0]); await h.wait(300);
@@ -180,6 +203,7 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
       for (const e of c.expectMethMissing) {
         T.check(`${c.name}: methods does not contain text`, !meth.includes(e), meth);
       }
+      if (c.checkSumTable) await c.checkSumTable(p, T, h);
 
       T.check('no page errors', !errs.length, errs.join(' | '));
       await close();

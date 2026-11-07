@@ -5406,8 +5406,23 @@ function sumRows(){
     const par = wfParents(wf), prevMap = new Map();
     if (prev > 0) prevMap.set('start', {amt: prev, kept: prevKept});
     out.forEach(x => {
-      const a = amt(x); x.yld = base > 0 && a > 0 ? 100*a/base : null;
+      const a = amt(x);
       const wi = wf.indexOf(x.r), pi = wi > 0 ? par[wi] : -1;
+      let divAmt = base;
+      let curDiv = wi;
+      while (curDiv >= 0) {
+        const fromId = wfFromOf(wf[curDiv]);
+        if (fromId) {
+          const divNode = out.find(o => String(o.r.id) === fromId);
+          if (divNode) {
+            const da = amt(divNode);
+            if (da > 0) divAmt = da;
+          }
+          break;
+        }
+        curDiv = par[curDiv];
+      }
+      x.yld = divAmt > 0 && a > 0 ? 100*a/divAmt : null;
       let pInfo = null;
       if (pi >= 0) { let cur = pi; while (cur >= 0 && !prevMap.has(wf[cur])) cur = par[cur]; if (cur >= 0) pInfo = prevMap.get(wf[cur]); }
       if (!pInfo && prevMap.has('start')) pInfo = prevMap.get('start');
