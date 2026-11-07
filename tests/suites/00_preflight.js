@@ -22,8 +22,8 @@ const { suite } = require('../lib/harness');
 
     const badFiles = [];
     for (const f of files) {
-      // Exact match for specific allowed workflow modifications (like test.yml matrices) or AGENTS.md edits
-      if (f === '.github/workflows/tests.yml' || f === 'AGENTS.md') continue;
+      // Exact match for specific allowed workflow modifications (like test.yml matrices) or AGENTS.md / CLAUDE.md edits
+      if (f === '.github/workflows/tests.yml' || f === 'AGENTS.md' || f === 'CLAUDE.md') continue;
 
       if (ALLOWED.test(f) || SAFE.test(f)) continue;
 

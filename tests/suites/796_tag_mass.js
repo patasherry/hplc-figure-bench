@@ -1,9 +1,9 @@
 const { open, H, suite, path, DATA, fs } = require('../lib/harness');
 
-const T = suite('796_tag_mass_sync');
+const T = suite('796_tag_mass');
 
 T.t('10_tag_mass_sync', async () => {
-  const { p, h, close, errs } = await open();
+  const { p, close, errs } = await open();
 
   // 1. New project; add the synthetic gel stand-in and select the gel step so the gel figure is shown.
   await p.evaluate(() => { document.querySelector('#pickGel').click(); });
@@ -15,6 +15,7 @@ T.t('10_tag_mass_sync', async () => {
   await p.evaluate(() => {
     const e = document.querySelector('#o-tagPreset');
     e.value = 'sumo';
+    e.dispatchEvent(new Event('input', {bubbles: true}));
     e.dispatchEvent(new Event('change', {bubbles: true}));
   });
   await p.waitForTimeout(200);

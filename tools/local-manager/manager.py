@@ -946,7 +946,7 @@ def gate_problems(pr, files, diff, rep):
     if '### ✅ No regressions' not in rep:
         out.append('The Test suite reports regressions. Fix them, or explain in the PR why the new result is right.')
     new_fail = rep.split('#### New checks failing', 1)[1].split('Full results', 1)[0] if '#### New checks failing' in rep else ''
-    own = sorted({m for m in re.findall(r'^- (\d+_\w+)/', new_fail, re.M)} & {re.sub(r'^tests/suites/(\d+_\w+)\.js$', r'\1', f) for f in files})
+    own = sorted({m for m in re.findall(r'^- ((?:\d+|test)_\w+)/', new_fail, re.M)} & {re.sub(r'^tests/suites/((?:\d+|test)_\w+)\.js$', r'\1', f) for f in files})
     own_fail = [l[2:].strip() for l in new_fail.splitlines() if l.startswith('- ') and any(l[2:].startswith(o + '/') for o in own) and 'perf.' not in l]
     if own_fail:
         out.append('A check this PR adds fails on the PR itself: ' + '; '.join(own_fail[:3])[:500] + '. Make the test work through the UI.')
@@ -954,10 +954,10 @@ def gate_problems(pr, files, diff, rep):
     app_diff = [b for b in re.split(r'(?m)^diff --git ', diff) if b.startswith(f'a/{APP_}')]
     app_lines = [l[1:] for b in app_diff for l in b.splitlines() if l.startswith(('+', '-')) and not l.startswith(('+++', '---'))]
     is_num = any(re.search(r'\b(Math\.|parseFloat|parseInt|Number|csvSplit|match|replace|split|substring)\b|(?<=\w)\s*[+*/%]=?\s*(?=\w)|(?<=\w)\s*[-+*/%]=?\s*(?=\d)|(?<=\s)-\s*(?=\w)|(?<=\w)\s*-\s+(?=\w)|/.*?/', l) for l in app_lines)
-    # \d+ not \d\d: a suite numbered with three or four digits is a suite. tests/suites/770_pool_area.js in PR #1095
+    # \d+ not \d\d: a suite numbered with three or four digits (or test_*) is a suite. tests/suites/770_pool_area.js in PR #1095
     # failed 2 checks on main and passed all 6 on the branch, and this said no check fails on main, because the
     # number was not two digits long. 1007_untagged_default.js has never been compared either.
-    if APP_ in files and is_num and not re.search(r'^- \d+_', fixes, re.M):
+    if APP_ in files and is_num and not re.search(r'^- (?:\d+|test)_', fixes, re.M):
         out.append('No check fails on main and passes on this PR for this numerical/parsing change, so nothing shows the fix works. Add a check that fails on main, for example one that reads the exact number or text the issue says is wrong.')
     tests = [b for b in re.split(r'(?m)^diff --git ', diff) if b.startswith('a/tests/suites/')]
     removed = [l for b in tests for l in b.splitlines() if l.startswith('-') and not l.startswith('---') and re.search(r'T\.check\(|await T\.t\(', l)]
@@ -1786,14 +1786,14 @@ def bg_worker(s, key):
             handled.add(n)
         except Exception as e:
             tried[str(n)] = rt.tries(tried.get(str(n))) + 1  # a count. A timestamp read back as 1 for ever, so AG_MAX_TRIES was never reached
-            back = 'jules-queue' if j['src'] == W['own'] else j['src']  # a job labelled for this worker gets one try per label, then Jules takes it
-            # ag-returned, or the job comes straight back. The Jules leader re-labels any jules-queue issue that is not
-            # light as for-antigravity unless it carries ag-returned, and the own-label branch below does not consult
-            # `tried`, so agy picked the same failing job up again every few minutes and spent its whole daily cap on it.
-            # The API route has always set this label on hand-back; the CLI route never did.
-            gone = [f'{key}-running'] + (['for-antigravity'] if W['own'] == 'for-antigravity' else [])
-            label(n, add=[back] + (['ag-returned'] if W['own'] == 'for-antigravity' else []), remove=gone)
-            post(n, f'The {W["name"]} job did not produce a usable change ({str(e)[:300]}), so the job goes to `{back}`.' + SIGN.format(rv.MODEL))
+            more = key == 'agy' and tried[str(n)] < AG_MAX_TRIES
+            back = 'for-antigravity' if more else ('jules-queue' if j['src'] == W['own'] else j['src'])  # a job labelled for this worker gets AG_MAX_TRIES (for agy) or one try, then Jules takes it
+            # ag-returned once tries are spent, or the job comes straight back. The Jules leader re-labels any jules-queue
+            # issue that is not light as for-antigravity unless it carries ag-returned, and fresh() below now also caps
+            # agy at AG_MAX_TRIES, so agy cannot pick the same failing job up again and spend its whole daily cap on it.
+            gone = [f'{key}-running'] + (['for-antigravity'] if W['own'] == 'for-antigravity' and not more else [])
+            label(n, add=[back] + (['ag-returned'] if W['own'] == 'for-antigravity' and not more else []), remove=gone)
+            post(n, f'The {W["name"]} job did not produce a usable change ({str(e)[:300]}), so the job goes ' + ('back to Antigravity for one more try.' if more else f'to `{back}`.') + SIGN.format(rv.MODEL))
             log(f'#{n}: {W["name"]} job failed: {e}')
             handled.add(n)
         finally:
@@ -1825,9 +1825,10 @@ def bg_worker(s, key):
     if s.get('update_wanted'):  # an update is overdue: start no new job, so the manager can update between jobs
         return
     busy = {n for k in _bg for n in _bg[k]}
-    ok = lambda i: str(i['number']) not in tried and i['number'] not in busy and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
+    max_t = AG_MAX_TRIES if key == 'agy' else 1
+    ok = lambda i: rt.tries(tried.get(str(i['number']))) < max_t and i['number'] not in busy and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
     cop_off = COPILOT_MODE == 'off' or max(_copilot['off_until'], s.get('copilot_off_until', 0)) > time.time()
-    fresh = lambda i: i['number'] not in busy and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
+    fresh = lambda i: (key != 'agy' or rt.tries(tried.get(str(i['number']))) < AG_MAX_TRIES) and i['number'] not in busy and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
     seen = s.setdefault('q_seen', {}); now = time.time()
     queue = sorted(issues('jules-queue'), key=lambda x: -x['number'])
     for i in queue:
