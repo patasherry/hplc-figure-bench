@@ -30,7 +30,7 @@ Each run, work at most ONE job:
 
 3. Skip a job if any of these is true, and say which rule you applied:
      - an open pull request already exists for it: a branch ending /issue-<N>, or a body saying "Closes #<N>"
-     - it carries jules-running, antigravity-running, claude-code-running, codex-running or antigravity-done
+     - it carries jules-running, antigravity-running, agy-running, claude-code-running, codex-running, antigravity-done or agy-done
      - it carries needs-owner without owner-approved (it changes a reported number and is waiting on the owner)
      - you already failed it twice: do not take it a third time, say so and move on
    Take the newest issue that survives. If none survive, report "queue empty" and end the run. Do not cancel
@@ -82,7 +82,7 @@ For each job:
 
 2. Skip a job if any of these is true, and say which rule you applied:
      - an open pull request already exists for it: a branch ending /issue-<N>, or a body saying "Closes #<N>"
-     - it carries jules-running, antigravity-running, claude-code-running, codex-running or antigravity-done
+     - it carries jules-running, antigravity-running, agy-running, claude-code-running, codex-running, antigravity-done or agy-done
      - it carries needs-owner without owner-approved (it changes a reported number and is waiting on the owner)
    Take the newest issue that survives.
 

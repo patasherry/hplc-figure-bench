@@ -492,12 +492,19 @@ Return {"kind": "safe" or "scientific", "summary": "one plain sentence for the o
 SCI_WORDS = re.compile(r'needs owner ok|yield|extinction|ε|concentrat|mg/ml|\bmg\b|purity|cleav|\bkda\b|molecular weight|\bkav\b|calibrat|integrat|baseline|absorb|a280|a260|nanodrop|unit', re.I)
 
 
+ALL_RUNNING = {'jules-running', 'antigravity-running', 'agy-running', 'codex-running', 'openclaw-running', 'copilot-running', 'claude-code-running', 'claude-cloud-running'}
+ALL_DONE = {'jules-done', 'antigravity-done', 'agy-done', 'codex-done', 'openclaw-done', 'copilot-done', 'claude-code-done', 'claude-cloud-done'}
+ALL_QUEUES = {'jules-queue', 'for-antigravity', 'for-claude-first', 'for-claude-code', 'for-claude-cloud', 'for-codex', 'for-openclaw', 'for-copilot', 'relay-pending', 'needs-relay', 'relay-from-board'}
+
+
 def triage(s):
     for i in issues('needs-triage'):
         n = str(i['number'])
-        if {'owner-approved', 'board-approved'} & {l['name'] for l in i['labels']}:
-            label(i['number'], add=['jules-queue'], remove=['needs-triage'])  # already approved: nothing to ask
-            log(f'#{n} already approved, queued for Jules'); s['triaged'][n] = 'approved'
+        names = {l['name'] for l in i['labels']}
+        if {'owner-approved', 'board-approved'} & names:
+            add = [] if (names & (ALL_RUNNING | ALL_DONE | ALL_QUEUES)) or has_pr(i['number']) else ['jules-queue']
+            label(i['number'], add=add, remove=['needs-triage'])  # already approved: nothing to ask
+            log(f'#{n} already approved, ' + ('queued for Jules' if add else 'cleared needs-triage')); s['triaged'][n] = 'approved'
             continue
         r = local_json(TRIAGE, f"{direction()}\n{UNTRUSTED}\n{i['title']}\n{(i.get('body') or '')[:5000]}") or {'kind': 'scientific'}
         kind = r.get('kind')
@@ -531,7 +538,7 @@ def owner_replies(s):
             continue
         names = {l['name'] for l in i.get('labels', [])}
         if YES.match(reply['body']):
-            add = ['owner-approved'] + ([] if names & {'jules-running', 'jules-done', 'jules-queue'} or 'pull_request' in i else ['jules-queue'])
+            add = ['owner-approved'] + ([] if (names & (ALL_RUNNING | ALL_DONE | ALL_QUEUES)) or 'pull_request' in i or has_pr(i['number']) else ['jules-queue'])
             label(i['number'], add=add, remove=['needs-owner'])
             post(i['number'], 'Approved by Patrick. ' + ('Queued for Jules. ' if 'jules-queue' in add else '') + 'The lead will merge the fix once its tests pass.' + SIGN.format(rv.MODEL))
             log(f'#{i["number"]} approved by Patrick')
@@ -619,7 +626,9 @@ def science_inbox(s):
         return
     for i in issues(FIRST):  # nobody took it in a day (daily caps): Jules gets it
         if (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(i['created_at'].replace('Z', '+00:00'))).total_seconds() > FIRST_HOURS*3600:
-            label(i['number'], add=['jules-queue'], remove=[FIRST]); log(f'#{i["number"]}: no Claude worker took it in {FIRST_HOURS} h, queued for Jules')
+            names = {l['name'] for l in i['labels']}
+            add = [] if (names & (ALL_RUNNING | ALL_DONE)) or has_pr(i['number']) else ['jules-queue']
+            label(i['number'], add=add, remove=[FIRST]); log(f'#{i["number"]}: no Claude worker took it in {FIRST_HOURS} h, ' + ('queued for Jules' if add else f'cleared {FIRST}'))
     seen = s.setdefault('science', {})
     cs = comments(SCIENCE)
     skip = lambda c: re.match(r'^\W*(note\b|file anyway:|@)', c['body'], re.I)
@@ -1054,7 +1063,7 @@ def gate(s):
             gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
             post(n, 'This pull request changes no files, so it cannot fix anything. Closed without merging, because merging it would close its issue while the bug stays.' + SIGN.format(rv.MODEL))
             if iss:
-                label(iss, add=['jules-queue'], remove=['jules-running', 'jules-done', 'claude-cloud-running', 'claude-code-running'])
+                label(iss, add=['jules-queue'], remove=list(ALL_RUNNING | ALL_DONE))
                 post(iss, f'PR #{n} for this issue changed no files, so it was closed without merging and the issue is queued again. The fix still has to be made in the app, with a check that fails on main and passes on the branch.' + SIGN.format(rv.MODEL))
             log(f'PR #{n}: empty, closed and #{iss} requeued')
             continue
@@ -1077,7 +1086,7 @@ def gate(s):
                  ['GitHub waits for a person to approve the tests on this Copilot PR, so the manager rebuilds it on its own branch, where they run.'] if waits_approval else gate_problems(full, files, diff, report_of(n)))
         m = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
         issue = int(m.group(1)) if m else linked_issue(n)
-        cop = 'copilot' in pr['user']['login'].lower() or COPILOT_CLI_MARK in (pr.get('body') or '') or AG_MARK in (pr.get('body') or '') or OC_MARK in (pr.get('body') or '') or BG['codex']['mark'] in (pr.get('body') or '')
+        cop = 'copilot' in pr['user']['login'].lower() or COPILOT_CLI_MARK in (pr.get('body') or '') or AG_MARK in (pr.get('body') or '') or BG['agy']['mark'] in (pr.get('body') or '') or OC_MARK in (pr.get('body') or '') or BG['codex']['mark'] in (pr.get('body') or '')
         mine = bool(re.search(r'Generated (?:with|by) \[Claude Code\]|claude\.ai/code/session_', pr.get('body') or '')) or CC_MARK in (pr.get('body') or '')  # the lead's rebuilds and Claude Code jobs are not sent back to Jules
         if probs and issue and all(p.startswith(JUNK_ONLY) for p in probs) and CLEAN_MARK not in (pr.get('body') or ''):
             new = clean_rebuild(full, files, issue)  # only stray files or a conflict: fix it here instead of a Jules retry
@@ -1086,25 +1095,25 @@ def gate(s):
                 s['gated'][str(n)] = sha
                 continue
         first_try = mine and 'as a first try for an audit finding' in (pr.get('body') or '')  # Claude went first on an audit finding: a failure goes on to Jules, not to the lead
-        if probs and issue and (not mine or first_try) and not cop and s['sentback'].get(str(issue), 0) < MAX_SENDBACKS:
-            k = s['sentback'][str(issue)] = s['sentback'].get(str(issue), 0) + 1
+        ibody = (gh(f'repos/{REPO}/issues/{issue}').get('body') or '') if probs and issue else ''
+        sb_prev = max(s['sentback'].get(str(issue), 0), len(re.findall(r'^### Automatic review of PR #\d+', ibody, re.M))) if issue else 0
+        if probs and issue and (not mine or first_try) and not cop and sb_prev < MAX_SENDBACKS:
+            k = s['sentback'][str(issue)] = sb_prev + 1
             notes = '\n'.join(f'- {x}' for x in probs)
-            body = gh(f'repos/{REPO}/issues/{issue}').get('body') or ''
             if not DRY:
-                gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n### Automatic review of PR #{n} (attempt {k}): fix these, then open a new PR\n\n{notes}\n\nKeep the parts of #{n} that are right. Then commit and open the PR.'})
+                gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': ibody + f'\n\n### Automatic review of PR #{n} (attempt {k}): fix these, then open a new PR\n\n{notes}\n\nKeep the parts of #{n} that are right. Then commit and open the PR.'})
                 post(n, f'**Sent back to Jules** by the automatic review (no Claude tokens used):\n\n{notes}\n\nThe instructions were added to #{issue}.' + SIGN.format(rv.MODEL))
                 gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
-            label(issue, add=['jules-queue'], remove=['jules-done', 'jules-running', 'needs-coordinator', 'for-coordinator'])
+            label(issue, add=['jules-queue'], remove=list(ALL_RUNNING | ALL_DONE | {'needs-coordinator', 'for-coordinator'}))
             log(f'PR #{n} sent back to Jules on #{issue} ({len(probs)} problems)')
         elif probs and issue and not mine:  # Jules is out of tries: Claude Code on the owner's PC takes the job
             notes = '\n'.join(f'- {x}' for x in probs)
             if not DRY:
-                body = gh(f'repos/{REPO}/issues/{issue}').get('body') or ''
-                gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n### Automatic review of PR #{n} (Jules out of tries)\n\n{notes}'})
+                gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': ibody + f'\n\n### Automatic review of PR #{n} (Jules out of tries)\n\n{notes}'})
                 post(n, ('**Handed to Claude Code** on the owner\'s PC: Copilot\'s attempt did not pass either.' if cop else f'**Handed to Copilot**, then Claude Code if needed: Jules was sent back {MAX_SENDBACKS} times.') + f' Problems:\n\n{notes}' + SIGN.format(rv.MODEL))
                 gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
             nxt = 'for-claude-code' if cop or COPILOT_MODE == 'off' else 'for-copilot'
-            label(issue, add=[nxt], remove=['jules-queue', 'jules-done', 'jules-running', 'needs-coordinator', 'copilot-done'])
+            label(issue, add=[nxt], remove=list(ALL_RUNNING | ALL_DONE | {'jules-queue', 'needs-coordinator'}))
             log(f'PR #{n}: #{issue} handed to {"Claude Code" if nxt == "for-claude-code" else "Copilot"}')
         elif probs:
             label(n, add=['for-coordinator'])
@@ -1440,7 +1449,7 @@ def antigravity(s):
     mine = lambda i: str(i['number']) not in a and not ({'needs-owner'} & {l['name'] for l in i['labels']} and 'owner-approved' not in {l['name'] for l in i['labels']})
     waiting = [(i, 'for-antigravity') for i in issues('for-antigravity') if mine(i)] + \
               ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
-              ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] if CLOUD else [])
+              ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] + [(i, 'for-codex') for i in issues('for-codex') if ok(i)] if CLOUD else [])
     # from-patrick (Claude Science findings) is allowed: science_inbox moves a finding from for-claude-first to jules-queue only after FIRST_HOURS, so the Claude window has lapsed
     queue = [i for i in issues('jules-queue') if ok(i, AG_MAX_TRIES)]
     if not waiting and len(queue) >= AG_WHEN_QUEUE:
@@ -1488,7 +1497,7 @@ def antigravity(s):
         kind = rt.kind(i['title'])
         a[str(n)] = {'id': it['id'], 'at': time.time(), 'title': i['title'], 'src': src, 'kind': kind}
         label(n, add=['antigravity-running'], remove=[src])
-        why = {'for-copilot': 'Copilot is paused', 'for-claude-code': "Claude Code needs Patrick's PC, which is off"}.get(src, f'Jules has {len(queue)} jobs waiting')
+        why = {'for-copilot': 'Copilot is paused', 'for-claude-code': "Claude Code needs Patrick's PC, which is off", 'for-codex': "Codex needs Patrick's PC, which is off"}.get(src, f'Jules has {len(queue)} jobs waiting')
         post(n, f'Handed to the **Google Antigravity agent** through the Gemini API ({why}; {kind} job). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
         log(f'#{n}: handed to Antigravity ({kind}, attempt {rt.tries(tried.get(str(n))) + 1})')
 
@@ -1560,7 +1569,7 @@ def ag_app_done(i):
     """True when a job no longer needs Patrick to paste it: another worker holds it, or a pull request already exists.
     Both loops in antigravity_app must agree on this, or they fight over the label pass after pass."""
     lab = {l['name'] for l in i['labels']}
-    return bool(lab & {'antigravity-done', 'jules-running', 'antigravity-running', 'claude-code-running', 'codex-running'}) or has_pr(i['number'])
+    return bool(lab & (ALL_RUNNING | {'antigravity-done', 'agy-done'})) or has_pr(i['number'])
 
 
 def antigravity_app(s):
@@ -1765,7 +1774,7 @@ def bg_worker(s, key):
     exe = agy_exe() if key == 'agy' else shutil.which(W['exe'])  # agy may be a shim, or named outright in the settings file
     if CLOUD or not exe or not cfg.get(key + '_jobs_on', key != 'openclaw'):  # OpenClaw is off unless openclaw_jobs_on is true: it failed every job (#500, #514, #515)
         return
-    tried = s.setdefault(f'{key}_tried', {})
+    tried = s.setdefault('ag_tried' if key == 'agy' else f'{key}_tried', {})
     handled = set()  # settled in this pass, so the stale listing below must not undo it
     for n, j in list(jobs.items()):  # finished, or over time
         if j['proc'].poll() is None and time.time() - j['t'] < BG_HOURS[key] * 3600:
@@ -1793,7 +1802,7 @@ def bg_worker(s, key):
             # agy at AG_MAX_TRIES, so agy cannot pick the same failing job up again and spend its whole daily cap on it.
             gone = [f'{key}-running'] + (['for-antigravity'] if W['own'] == 'for-antigravity' and not more else [])
             label(n, add=[back] + (['ag-returned'] if W['own'] == 'for-antigravity' and not more else []), remove=gone)
-            post(n, f'The {W["name"]} job did not produce a usable change ({str(e)[:300]}), so the job goes ' + ('back to Antigravity for one more try.' if more else f'to `{back}`.') + SIGN.format(rv.MODEL))
+            post(n, f'The {W["name"].removeprefix("the ")} job did not produce a usable change ({str(e)[:300]}), so the job goes ' + ('back to Antigravity for one more try.' if more else f'to `{back}`.') + SIGN.format(rv.MODEL))
             log(f'#{n}: {W["name"]} job failed: {e}')
             handled.add(n)
         finally:
@@ -1841,7 +1850,8 @@ def bg_worker(s, key):
         waiting = [(i, W['own']) for i in issues(W['own']) if fresh(i)] + \
                   ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] if W['takes_claude'] else []) + \
                   ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
-                  [(i, 'jules-queue') for i in queue if ok(i) and 'from-patrick' not in {l['name'] for l in i['labels']}]
+                  [(i, 'jules-queue') for i in queue if ok(i) and 'from-patrick' not in {l['name'] for l in i['labels']}
+                   and now - seen[str(i['number'])] >= OC_WAIT_MIN * 60 and (key != 'agy' or not rt.is_light(i['title']))]
     if not waiting or not use(s, W['cap']):
         return
     i, src = waiting[0]
@@ -1948,11 +1958,15 @@ def act_on_review(s, pr, issue, who, r):
     elif dec == 'send_back' and issue:
         if DRY:
             return log(f'[dry] {who} would send #{n} back')
-        post(n, f'{head}: sent back.\n\n{summ}\n\n{notes}' + SIGN.format(rv.MODEL))
         body = gh(f'repos/{REPO}/issues/{issue}').get('body') or ''
+        if len(re.findall(r'^### Lead review of PR #\d+', body, re.M)) >= MAX_SENDBACKS:
+            post(n, f'{head}: left for Claude (the lead) after {MAX_SENDBACKS} lead-review send-backs.\n\n{summ}\n\n{notes}' + SIGN.format(rv.MODEL))
+            label(n, add=['for-coordinator'])
+            return log(f'PR #{n}: {who} would send back again, escalated to the lead')
+        post(n, f'{head}: sent back.\n\n{summ}\n\n{notes}' + SIGN.format(rv.MODEL))
         gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': body + f'\n\n### Lead review of PR #{n} by {who}: fix these, then open a new PR\n\n{notes or summ}'})
         gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
-        label(issue, add=['jules-queue'], remove=['jules-done', 'antigravity-done', 'codex-done', 'openclaw-done', 'copilot-done', 'claude-code-done', 'for-coordinator', 'needs-coordinator'])
+        label(issue, add=['jules-queue'], remove=list(ALL_DONE | ALL_RUNNING | {'for-coordinator', 'needs-coordinator'}))
         log(f'PR #{n} sent back by the lead review ({who})')
     else:
         post(n, f'{head}: left for Claude (the lead).\n\n{summ}\n\n{notes}' + SIGN.format(rv.MODEL))
@@ -2249,7 +2263,7 @@ def board_round(s, topic=''):
     log('board: meeting started' + (f' ({topic[:60]})' if topic else ''))
     ctx, tp = board_context(), (f' (topic: "{topic}")' if topic else '')
     who = [('the local AI', lambda q: rv.ask_model('You are a careful, critical adviser.', q), None), ('Gemini', ask_gemini, 'gemini'), ('ChatGPT', ask_codex, 'codex')]
-    who = [w for w in who if w[2] is None or ((w[2] != 'gemini' or GEMINI_KEY) and use(s, w[2]))]
+    who = [w for w in who if w[2] is None or ((w[2] != 'gemini' or GEMINI_KEY) and s['count'].get(w[2], 0) + 1 + DEBATE_ROUNDS <= CAP[w[2]] and use(s, w[2]))]
     if LOCAL_ROLE == 'coder' and rv.MODEL == 'Gemini':  # the local model only writes code now; its seat would just be Gemini twice
         who = [w for w in who if w[0] != 'the local AI']
     props, talk, notes = [], [], []
@@ -2692,7 +2706,7 @@ def one_pass():
     # Behind 'questions' they used to wait out the whole question ladder, which routinely holds a pass for 20 to 45
     # minutes: #1060 sat on relay-from-board with no request posted because of that, and it reads as a stall.
     for name, duty in (('relay', relay), ('owner', owner_replies), ('owner merge', owner_merge_replies), ('science inbox', science_inbox),
-                       ('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('codex jobs', codex_jobs), ('agy jobs', lambda s: bg_worker(s, 'agy')), ('claude jobs', claude_jobs), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+                       ('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('claude jobs', claude_jobs), ('codex jobs', codex_jobs), ('agy jobs', lambda s: bg_worker(s, 'agy')), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':

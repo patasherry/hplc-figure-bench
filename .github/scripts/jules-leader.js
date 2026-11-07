@@ -147,6 +147,7 @@ module.exports = async ({github, context, core}) => {
   /* Patrick's split (2026-11-05): Antigravity takes the jobs that change the app, Jules keeps the light ones. The routing
      happens here because this is what races: the leader checks every 3 minutes and would otherwise start the job first.
      An issue the manager has handed back (ag-returned) stays with Jules, so a job can never bounce between the two. */
+  let routedAg = false;
   if (key && AG_TAKES_APP) {
     for (const i of await issues(L.queue)) {
       if (LIGHT(i) || labels(i).some(l => l === 'ag-returned' || l === L.run || l === 'for-antigravity')) continue;
@@ -154,6 +155,7 @@ module.exports = async ({github, context, core}) => {
       await github.rest.issues.createComment({owner, repo, issue_number: i.number,
         body: 'Routed to the Google Antigravity agent, which takes the jobs that change the app while Jules keeps the light ones. If Antigravity cannot take it, the local manager hands it back here.'});
       say(`#${i.number}: routed to Antigravity (app-changing)`);
+      routedAg = true;
     }
   }
   if (key) { const run = (await issues(L.run)).filter(i => !freed.has(i.number)); let free = MAX_RUNNING - run.length, freeApp = MAX_APP - run.filter(i => !LIGHT(i)).length;
@@ -194,7 +196,7 @@ module.exports = async ({github, context, core}) => {
         const exists = (await github.rest.search.issuesAndPullRequests({q: `repo:${owner}/${repo} is:issue in:title "${title.replace(/"/g, '')}"`})).data.total_count;
         if (!exists) { await github.rest.issues.create({owner, repo, title, labels: [L.triage], body: `${body}\n\n_From ${f} (#${p.number})._`}); say(`follow-up issue: ${title}`); } } } }
 
-  await wakeCloud(false);
+  await wakeCloud(routedAg);
   /* tell the workflow whether to check again soon (GitHub rarely fires the 15-minute schedule) */
   core.setOutput('active', key && ((await issues(L.run)).length + (await issues(L.queue)).length) > 0 ? 'true' : 'false');
   await core.summary.addHeading('Jules leader').addList(log.length ? log : ['nothing to do']).write();
