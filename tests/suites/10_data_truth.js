@@ -217,6 +217,31 @@ const dataTruth = (async () => {
   for (const e of EXP.mg || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => mgFile(e)); }
   if (!only || only.test('hplc_min_flow_known_u7')) await T.t('pool-conc-minutes', poolConcMinutes);
   if (!only || only.test('synthetic')) await T.t('synthetic', testSynthetic);
+
+  await T.t('sec_peak_detection_test_248', async () => {
+    // Fails on current main and passes with change
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await h.newProject('sec detection issue 248');
+
+      // Load the trace using the explicitly requested file path
+      await h.addRun(path.join(path.join(__dirname, '../data/22_protein'), '7_transl.table11_partial'));
+      await p.waitForTimeout(500);
+
+      await p.evaluate(() => { const b = document.getElementById('intAuto'); if (b) b.click(); });
+      await p.waitForTimeout(900);
+
+      const t = await h.peakTable();
+
+      const has_any_peaks = t.length > 1;
+
+      T.check('sec_peak_detection_test_248/has_any_peaks', has_any_peaks, 'detects peaks using tests/data/22_protein/7_transl.table11_partial');
+
+    } finally {
+      await close();
+    }
+  });
+
   for (const e of EXP.chrom) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => chromFile(e)); }
   for (const e of EXP.nd) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => ndFile(e, false)); if (e.n > 0) await T.t(e.file + '+eps', () => ndFile(e, true)); }
   for (const e of EXP.time_tests || []) { if (only && !only.test(e.file)) continue; await T.t(e.file, () => timeFile(e)); }
