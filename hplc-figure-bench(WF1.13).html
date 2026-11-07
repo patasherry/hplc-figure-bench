@@ -755,8 +755,18 @@ button,input,select,textarea{font-family:inherit}
         <div class="btwnd">
           <div class="btns"><button type="button" class="btn primary" id="btwNdAdd">Load NanoDrop export</button><input type="file" id="btwNdFile" hidden></div>
           <div id="btwNdList"></div>
-          <label class="f" title="The volume left in the concentrator, the one your NanoDrop readings were taken in">Volume after concentrating (mL)<input type="number" id="btw-vOut" data-btw="vOut" min="0" step="any" placeholder="e.g. 0.25"></label>
+          <label class="f" title="The total prepared volume your concentration reading describes, before allocating material to the next step">Measured output volume (mL)<input type="number" id="btw-vOut" data-btw="vOut" min="0" step="any" placeholder="e.g. 0.25"></label>
           <p class="hint" id="btwCarry"></p>
+          <details class="cardtext" id="btwAllocation"><summary>Allocate output to the next step (optional)</summary>
+            <p class="hint">The volume above is the total measured output. For a homogeneous sample, loaded mass is total measured mass × loaded volume / output volume. Leave both volumes below empty to carry all output forward.</p>
+            <div class="row">
+              <label class="f">Loaded next (mL)<input type="number" id="btw-vLoad" data-btw="vLoad" min="0" step="any" placeholder="All output if unallocated"></label>
+              <label class="f">Retained volume (mL)<input type="number" id="btw-vRetain" data-btw="vRetain" min="0" step="any" placeholder="0"></label>
+            </div>
+            <label class="f">Retained disposition<input type="text" id="btw-retainDisposition" data-btw="retainDisposition" placeholder="e.g. stored at −80 °C"></label>
+            <p class="hint" id="btwAllocationStatus" role="status"></p>
+            <p class="hint">Allocation is recorded here. Summary yields, figures and Methods still use the existing full-output reporting basis.</p>
+          </details>
         </div>
         <details class="cardtext" id="btwMore"><summary>Details for the methods (optional)</summary>
           <div class="row">
@@ -3934,7 +3944,7 @@ function finalYield(path){
   const poolVol = fin.nd && fin.nd.mg !== null ? fin.nd.vol : fin.p && fin.p.measured ? fin.p.measVol : fin.p && fin.p.vol >= 0 ? fin.p.vol : null;
   return {fin, k: allRows.indexOf(fin), mg, poolMg: pm, poolVol, poolPerL: cL > 0 ? pm/cL : null, meas, fc, fv, perL: cL > 0 ? mg/cL : null, perG, cL, basis: meas ? 'final' : allRows.basis, poolBasis: allRows.basis, pur: fin.pur, purEst: fin.purEst,
     perGTxt: perG == null ? '' : `${sig2(perG)} mg per g of wet cells`, odd: rows.some(x => x.yld > 100 || x.stepY > 105),
-    loaded: (() => { if (manLoad > 0) return {mg: manLoad, kept: false, r: fin.r}; const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r) : null; return k ? {mg: k, kept: true, r: fin.r} : mgOf(pr) > 0 ? {mg: mgOf(pr), kept: false, r: fin.r} : null; })(),
+    loaded: (() => { if (manLoad > 0) return {mg: manLoad, kept: false, r: fin.r}; const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r, true) : null; return k ? {mg: k, kept: true, r: fin.r} : mgOf(pr) > 0 ? {mg: mgOf(pr), kept: false, r: fin.r} : null; })(),
     purTyped: prep.on && hasTxt(prep.qcPurity) && fin.pur == null}; }
 function finalYields(){
   const paths = wfBranches(); if (paths.length <= 1) { const y = finalYield(); return y ? [y] : []; }
@@ -4082,7 +4092,20 @@ function manLines(m){ const t = x => String(x == null ? '' : x).trim(), out = []
   if (v != null || c != null) out.push([v != null ? `${fmtAuto(v)} mL` : '', c != null ? `${fmtAuto(c)} mg/mL` : '', c != null && v != null ? `${sig2(c*v)} mg` : ''].filter(Boolean).join(', '));
   if (t(m.note)) out.push({t: t(m.note), c: '#555555'}); return out; }
 /* the amount loaded on the next column: the last measured amount after this step and before the next column */
-function loadedAfter(r){ const wf = wfList(), i = wf.indexOf(r); let mg = r && r.id ? (btwMg(r) || {}).mg || null : null;
+/* Canonical transfer allocation: vOut stays the measured output, including old projects.
+   Missing allocation means full carryover; retained-only entries cannot imply a load.
+   Validate imported records too, never treating invalid allocation as full carryover. */
+function transferAllocation(b, mg){ b = b || {}; const active = hasTxt(b.vLoad) || hasTxt(b.vRetain), output = numOr(b.vOut, null), loaded = numOr(b.vLoad, null), retained = hasTxt(b.vRetain) ? numOr(b.vRetain, null) : 0;
+  let error = '';
+  if (active) { if (output === null || !Number.isFinite(output) || output < 0) error = 'Enter a non-negative measured output volume first.';
+    else if (loaded === null || !Number.isFinite(loaded) || loaded < 0 || retained === null || !Number.isFinite(retained) || retained < 0) error = 'Enter a non-negative loaded volume (0 if none) and retained volume.';
+    else if (loaded + retained - output > 8*Number.EPSILON*Math.max(output, loaded, retained)) error = 'Loaded plus retained volume must not exceed measured output.'; }
+  const fraction = error ? null : !active ? 1 : output > 0 ? loaded/output : 0;
+  return {active, output, loaded: active ? loaded : output, retained, error, fraction, mg: error || mg == null ? null : mg*fraction}; }
+/* Reporting retains its established basis until P8 agrees displayed-yield semantics. */
+function loadedAfter(r, legacy = false){ const wf = wfList(), i = wf.indexOf(r), total = r && r.id ? (btwMg(r) || {}).mg ?? null : null;
+  const allocation = transferAllocation(r && (prep.btw || {})[r.id], total); if (!legacy && allocation.error) return null;
+  let mg = legacy ? total || null : allocation.mg;
   for (let j = i + 1; i >= 0 && j < wf.length && wf[j].prep; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a !== null) mg = a; }
   return mg; }
 /* cleavage gel lanes: before and after the protease */
@@ -5398,7 +5421,7 @@ function sumRows(){
   if (out.length && prep.on) { const wf = wfList(), i = wf.indexOf(out[0].r); for (let j = 0; j < i; j++) if (wf[j].prep === 'manual') { const v = out.toAmt(manMg(wf[j].man), out[0]); if (v > 0) { base = v; out.baseMan = wf[j]; break; } } }
   out.base = base; out.amtOf = amt; out.kept = x => kept(x);
   /* a measured concentration or exchange between columns is what the next column was loaded with */
-  const kept = x => { const k = prep.on ? loadedAfter(x.r) : null; if (!(k > 0)) return null; return ['mg', 'nd'].includes(basis) ? k : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? k/kd(x) : null; };
+  const kept = x => { const k = prep.on ? loadedAfter(x.r, true) : null; if (!(k > 0)) return null; return ['mg', 'nd'].includes(basis) ? k : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? k/kd(x) : null; };
   const wf = prep.on ? wfList() : runs.filter(r => r.inWf), hasBranches = wf.some(x => x.wfFrom);
   if (!hasBranches) {
     out.forEach(x => { const a = amt(x); x.yld = base > 0 && a > 0 ? 100*a/base : null; x.stepY = prev > 0 && a > 0 ? 100*a/prev : null; x.fromKept = !!x.stepY && prevKept; x.loadedAmt = prevKept ? prev : null; if (a > 0) { const k = kept(x); prev = k > 0 ? k : a; prevKept = k > 0; } });
@@ -6946,10 +6969,15 @@ $('#tl').addEventListener('click', e => { const ad = e.target.closest('[data-add
 /* the between-columns fields edit the pool the current step follows */
 function syncBtw(){ const rid = curStep.startsWith('btw:') ? curStep.slice(4) : '', b = (prep.btw || {})[rid] || {};
   { const r = runs.find(x => x.id === rid), p = r ? poolRows(r) : null; $('#btw-vIn').placeholder = p && xUnit(r) === 'mL' && p.vol > 0 ? `auto: ${fmt(p.vol, 1)}` : ''; }
-  document.querySelectorAll('#prepPanel [data-btw]').forEach(el => { if (el === document.activeElement) return; const v = b[el.dataset.btw] ?? (el.dataset.btw === 'how' ? 'conc' : ''); if (el.value !== String(v)) el.value = v; }); btwCarry(); }
+  document.querySelectorAll('#prepPanel [data-btw]').forEach(el => { if (el === document.activeElement) return; const v = b[el.dataset.btw] ?? (el.dataset.btw === 'how' ? 'conc' : ''); if (el.value !== String(v)) el.value = v; });
+  if (hasTxt(b.vLoad) || hasTxt(b.vRetain) || hasTxt(b.retainDisposition)) $('#btwAllocation').open = true; btwCarry(); }
+function btwAllocationStatus(b, r){ const a = transferAllocation(b, r ? (btwMg(r) || {}).mg : null), el = $('#btwAllocationStatus');
+  el.textContent = a.error || (a.active ? `Loaded next: ${fmtAuto(a.loaded)} mL${a.mg != null ? `, ${sig2(a.mg)} mg` : ' (mass needs a measured concentration)'}. Retained: ${fmtAuto(a.retained)} mL. Unallocated: ${fmtAuto(Math.max(0, a.output - a.loaded - a.retained))} mL.` : `No allocation: all measured output carries forward${a.mg != null ? ` (${sig2(a.mg)} mg)` : ''}.`);
+  for (const k of ['vOut', 'vLoad', 'vRetain']) { const input = $('#btw-' + k); input.setCustomValidity(a.error); input.setAttribute('aria-invalid', a.error ? 'true' : 'false'); } return a; }
 /* what the reading does to the column run before it */
 function btwCarry(){ const el = $('#btwCarry'), rid = curStep.startsWith('btw:') ? curStep.slice(4) : '', r = runs.find(x => x.id === rid), p = r ? poolRows(r) : null; if (!el) return;
   const nm = r ? shortRunName(r) : 'the run', F = r ? ndFinalOf(r) : [], ms = r ? poolMeas(r) : {}, b = (prep.btw || {})[rid] || {}, card = r && numOr(r.poolConc, 0) > 0;
+  btwAllocationStatus(b, r);
   /* the readings loaded for this step, each with its own concentration, and the mean that is used */
   const li = $('#btwNdList'), lh = !F.length ? '' : `<div class="btwnd-r"><b>${ms.nd ? `${fmt(ms.nd.m, 2)}${ms.nd.sd != null ? ` ± ${fmt(ms.nd.sd, 2)}` : ''} mg/mL` : ''}</b><span class="muted">${F.length > 1 ? `mean of ${F.length} readings` : '1 reading'}</span></div>`
     + F.map(s => (c => `<div class="btwnd-r"><span>${esc(s.name || 'Reading')}</span><span class="muted">${c.v != null ? `${fmt(c.v, 2)} mg/mL` : ''}${s.r280 != null ? `, 260/280 ${fmt(s.r280, 2)}` : ''}</span><button type="button" class="btwnd-x" data-btwndx="${esc(s.id)}" aria-label="Remove ${esc(s.name || 'reading')}" title="Remove this reading">×</button></div>`)(ndConc(s))).join('');
@@ -6970,6 +6998,8 @@ $('#btwNdFile').addEventListener('change', async e => { const f = e.target.files
   addNanoDrop(list, f.name, rid); syncBtw(); renderList(); render(); if (!(numOr(prep.btw[rid].vOut, 0) > 0)) $('#btw-vOut').focus(); });
 $('#btwNdList').addEventListener('click', e => { const b = e.target.closest('[data-btwndx]'); if (!b) return; ndSamples = ndSamples.filter(x => x.id !== b.dataset.btwndx); $('#ndList')._n = -1; renderND(); btwCarry(); renderList(); render(); });
 const btwEdit = e => { const el = e.target.closest('[data-btw]'); if (!el || !curStep.startsWith('btw:')) return; const rid = curStep.slice(4); prep.btw = prep.btw || {};
+  if (['vOut', 'vLoad', 'vRetain'].includes(el.dataset.btw)) { const candidate = Object.assign({}, prep.btw[rid], {[el.dataset.btw]: el.value}), a = btwAllocationStatus(candidate, runs.find(x => x.id === rid));
+    if (a.error) { if (e.type === 'change') { toast(a.error); el.value = (prep.btw[rid] || {})[el.dataset.btw] ?? ''; btwCarry(); } return; } }
   prep.btw[rid] = Object.assign({how: 'conc'}, prep.btw[rid], {[el.dataset.btw]: el.value}); const r = runs.find(x => x.id === rid);
   /* one reading per pool: a value typed here replaces one left on the run card */
   if (r && ['conc', 'vOut'].includes(el.dataset.btw) && (r.poolConc != null || r.poolFinalVol != null)) { if (r.poolConc != null && prep.btw[rid].conc === '' && el.dataset.btw !== 'conc') prep.btw[rid].conc = r.poolConc; delete r.poolConc; delete r.poolFinalVol; }
