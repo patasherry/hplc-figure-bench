@@ -274,6 +274,8 @@ details.paste[open]{display:grid;gap:8px}
 .meta .mk{color:var(--ink);font-weight:600}
 .peaks{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
 .plabel{font-size:12px;color:var(--muted);margin-right:2px}
+.pkin{font:inherit;font-size:12px;padding:2px 6px;width:110px;min-height:22px;border:1px solid var(--line);border-radius:4px;background:var(--field);color:var(--ink)}
+.pkin::placeholder{color:var(--muted)}
 .chip{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:999px;background:var(--panel);padding:1px 2px 1px 8px}
 .chip input{border:0;background:transparent;padding:2px 0;width:5.2em;font-size:12px;min-height:0;box-shadow:none!important}
 .chip input::placeholder{color:var(--muted)}
@@ -1740,6 +1742,26 @@ function processTrace(t, full){
   for (const r of t.rows) { const x = r[t.xc], y = r[t.yc]; if (x != null && y != null && isFinite(x) && isFinite(y)) { if (xs.length && x+sh < xs[xs.length-1]) sorted = false; xs.push(x+sh); ys.push(y); } }
   if (!sorted) { const idx = xs.map((_,i)=>i).sort((a,b)=>xs[a]-xs[b]); xs = idx.map(i=>xs[i]); ys = idx.map(i=>ys[i]); }
   return processXY(xs, ys, full ? -Infinity : numOr(opt.xmin, -Infinity), full ? Infinity : numOr(opt.xmax, Infinity), opt.normalize, numOr(t.scale, 1));
+}
+function parsePeaks(val){
+  if (Array.isArray(val)) {
+    return val.map(p => typeof p === 'object' && p ? {x: numOr(p.x, 0), label: p.label || '', auto: !!p.auto} : {x: numOr(p, 0), label: ''});
+  }
+  if (typeof val !== 'string' || !val.trim()) return [];
+  const s = val.trim();
+  const parts = s.includes(',') ? s.split(/\s*,\s*/) : (/[xX]/.test(s) ? s.split(/\s*[xX]\s*/) : s.split(/\s+/));
+  return parts.map(tok => {
+    tok = tok.trim();
+    if (!tok) return null;
+    const m = tok.match(/^([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)(?:\s*[:=]\s*(.*))?$/) || tok.match(/^(?:(.*?)\s*[:=]\s*)?([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)$/);
+    if (m) {
+      const x = parseFloat(m[1] && isFinite(+m[1]) ? m[1] : m[2]);
+      const label = (m[1] && isFinite(+m[1]) ? m[2] : m[1]) || '';
+      return isFinite(x) ? {x, label: label.trim()} : null;
+    }
+    const x = parseFloat(tok);
+    return isFinite(x) ? {x, label: ''} : null;
+  }).filter(Boolean).sort((a,b) => a.x - b.x);
 }
 function detectPeaks(t){
   /* peaks are found in the X window, judged against what is shown; a window too narrow to search (under 7 points) falls back to the whole trace, keeping only peaks inside the window */
@@ -4877,6 +4899,7 @@ function renderList(){
     const colSel = k => `<select data-k="${k}" id="${k}${t.id}">${t.cols.map((c,i)=>`<option value="${i}" ${t[k]===i?'selected':''}>${esc(c)}</option>`).join('')}</select>`;
     const sh = +t.xshift || 0;
     const chips = t.peaks.map((p,i) => `<span class="chip"><input id="pk${t.id}-${i}" data-k="plabel" data-p="${i}" value="${esc(p.label)}" placeholder="${fmt(p.x+sh, numOr(opt.peakDec,2))}" aria-label="Label for peak at ${fmt(p.x+sh,2)}"><button type="button" data-act="pdel" data-p="${i}" aria-label="Remove label">×</button></span>`).join('');
+    const peakStr = (t.peaks || []).map(p => fmt(p.x+sh, numOr(opt.peakDec,2))).join(', ');
     return `<div class="trace" data-id="${t.id}" data-kind="trace">
       <div class="thead">
         <input type="color" id="c${t.id}" data-k="color" value="${t.color}" aria-label="Trace color">
@@ -4892,7 +4915,9 @@ function renderList(){
         <label class="f">Y scale ×<input type="number" step="any" id="sc${t.id}" data-k="scale" value="${t.scale}"></label>
         <label class="f">X shift<input type="number" step="any" id="xs${t.id}" data-k="xshift" value="${t.xshift}"></label>
       </div>
-      <div class="peaks"><span class="plabel">Peaks</span>${chips || '<span class="hint">none</span>'}
+      <div class="peaks"><span class="plabel">Peaks</span>
+        <input type="text" id="pkf${t.id}" data-k="peaks" class="pkin" placeholder="e.g. 5.2, 8.4" value="${esc(peakStr)}" aria-label="Peaks" title="Peak positions separated by commas (e.g. 5.2, 8.4)">
+        ${chips}
         <button type="button" class="mini" data-act="detect">Detect peaks</button>
         <button type="button" class="mini" data-act="clear">Clear</button></div>
     </div>`;
@@ -4904,6 +4929,7 @@ const itemOf = el => { const c = el.closest('.trace'); if (!c) return null; cons
 list.addEventListener('input', e => {
   const el = e.target, t = itemOf(el), k = el.dataset.k; if (!t || !k) return;
   if (k === 'plabel') t.peaks[+el.dataset.p].label = el.value;
+  else if (k === 'peaks') { const sh = +t.xshift || 0; t.peaks = parsePeaks(el.value).map(p => ({x: p.x - sh, label: p.label})); if (!opt.showPeaks && t.peaks.length) { opt.showPeaks = true; syncControls(); } }
   else if (k === 'visible' || k === 'inWf') t[k] = el.checked;
   else if (k === 'secOn') { t.secMode = el.checked ? 'on' : 'off'; applyInjShift(t); if (el.checked && !t.integ.length) autoIntegrate(t); renderList(); renderSec(); }
   else if (k === 'secCal') { t.secCal = el.value; renderSec(); }
@@ -4920,7 +4946,9 @@ list.addEventListener('input', e => {
   if (k === 'runId' || k === 'inWf') { renderList(); }
   render();
 });
-list.addEventListener('change', e => { if (['poolConc', 'poolFinalVol'].includes(e.target.dataset.k)) { const t = itemOf(e.target); if (t) measToStep(t); }
+list.addEventListener('change', e => {
+  if (e.target.dataset.k === 'peaks') { const t = itemOf(e.target); if (t) { const sh = +t.xshift || 0; t.peaks = parsePeaks(e.target.value).map(p => ({x: p.x - sh, label: p.label})); renderList(); render(); return; } }
+  if (['poolConc', 'poolFinalVol'].includes(e.target.dataset.k)) { const t = itemOf(e.target); if (t) measToStep(t); }
   if (['poolConc', 'poolFinalVol', 'path'].includes(e.target.dataset.k)) { setTimeout(() => { const f = document.activeElement && document.activeElement.id; renderList(); render(); const n = f && document.getElementById(f); if (n && n !== document.activeElement) n.focus(); }, 0); return; } if (e.target.dataset.k === 'xc' || e.target.dataset.k === 'yc') { const t = itemOf(e.target); if (t) { t.peaks = []; renderList(); render(); } } });
 list.addEventListener('click', e => {
   const c = e.target.closest('.trace'); if (!c) return;
@@ -6474,6 +6502,8 @@ function cleanProject(d){
     }
   });
   d.traces = keep(d.traces, t => isO(t) && Array.isArray(t.rows));
+  d.traces.forEach(t => { if (typeof t.peaks === 'string') t.peaks = parsePeaks(t.peaks); });
+  d.runs.forEach(r => { if (typeof r.peaks === 'string') r.peaks = parsePeaks(r.peaks); });
   d.gels = keep(d.gels, isO); d.nanodrop = keep(d.nanodrop, isO);
   if (!isO(d.struct)) d.struct = null; if (!isO(d.opt)) d.opt = null;
   if (d.opt) {
@@ -6491,7 +6521,7 @@ async function openProject(data, name, noUndo){
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
       Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
-  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: Array.isArray(t.peaks) ? t.peaks : []})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
+  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
   srcDiag = (data.srcDiag && typeof data.srcDiag === 'object' && !Array.isArray(data.srcDiag)) ? Object.assign({}, data.srcDiag) : {};
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
