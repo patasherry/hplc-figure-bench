@@ -79,7 +79,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .tl li.done .mk{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .tl li.cur .mk{box-shadow:0 0 0 3px var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .tl li.done.cur .mk{color:var(--accent-ink)}
-.tl .tt{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl .tt{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;max-height:2.6em}
 .tl li.cur .tt{color:var(--accent)}
 .tl .ts{grid-column:2 / span 2;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tl [data-step="figure"] .ts{white-space:normal;overflow:visible;text-overflow:clip}
@@ -242,7 +242,7 @@ details.sub > *:not(summary){margin-top:10px}
 details.sub > summary + *{margin-top:10px}
 details.paste[open]{display:grid;gap:8px}
 /* data list cards: the only boxed objects in the column */
-.traces{display:grid;gap:8px}
+.traces{display:grid;gap:8px;max-height:min(54vh,600px);overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
 .trace{border:1px solid var(--line);border-radius:var(--r);padding:10px;display:grid;gap:8px;background:var(--field);transition:border-color .12s,box-shadow .12s}
 .trace.run,.trace.gelc{cursor:pointer}
 #list.focus .trace.run:not(.sel) > :not(.thead),#list.focus .trace.gelc:not(.sel) > :not(.thead){display:none}
@@ -452,7 +452,7 @@ details.koff #knownList,details.koff #knownList + .btns{opacity:.5}
 .colorrow input[type=color]{width:32px;height:32px;padding:2px;border:1px solid var(--line2);border-radius:var(--r-s);background:var(--field);flex:none;cursor:pointer}
 .paper > svg{display:block;width:100%;height:auto;max-height:max(320px,calc(100vh - 370px));cursor:crosshair}
 body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
-.paper .empty{color:#5a6177;font-size:14px;text-align:center;max-width:36ch;line-height:1.5}
+.paper .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#5a6177;font-size:14px;text-align:center;max-width:36ch;line-height:1.5;margin:auto}
 .figmodal{width:min(1200px,calc(100vw - 32px));height:min(90vh,calc(100vh - 32px));max-width:none;max-height:none;border:1px solid var(--line2);border-radius:12px;background:var(--panel);color:var(--ink);padding:0;box-shadow:var(--shadow)}
 .figmodal::backdrop{background:rgba(15,18,26,.58)}
 .figmodal-head{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
@@ -4674,7 +4674,7 @@ function render(){
   gels.forEach(ensureLadder);
   const f = curFig(); if (f) cur = f.id;
   const {svg, geo} = buildFig(f, true); G = geo;
-  paper.innerHTML = svg || '<div class="empty">Load a CSV or ASCII export to start.</div>';
+  paper.innerHTML = svg || '<div class="empty"><p>Load a CSV or ASCII export to start.</p><button type="button" class="btn primary" id="paperPick">Choose data files</button></div>';
   const kind = f ? f.kind : 'overlay';
   document.body.classList.toggle('stepfig', kind === 'step');
   { const g = curGel(), ls = $('#ladderStatus'); if (ls) ls.textContent = g ? (g.ladderMsg || '') : ''; if (g) stepStatus(g); }
@@ -5459,7 +5459,7 @@ function renderSumTable(){
   if (rows.some(x => x.purEst && x.pur != null)) notes.push('≈ Purity is estimated from bands within 8% of the expected size (the tagged form counts only before the tag is removed), weighted over the pool\'s lanes; "unclear" means too little signal at that size. Mark the target band on a gel to measure it.');
   { const mt = $('#methodsText'); if (mt && $('#methodsBox').open) { const t = methodsText(); if (mt.value !== t) mt.value = t;
     /* each gap named by what is missing, or by its paragraph when the bracket only says "not entered" */
-    const gp = [...new Set(t.split(/\n\n/).flatMap(par => (par.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).map(g => { const w = g.slice(1, -1).replace(/\s*not entered\s*/i, '').trim(); return w || (par.match(/^([^:(]+)/) || ['', 'a step'])[1].trim(); })))], ge = $('#methodsGaps'); ge.hidden = !gp.length; ge.textContent = gp.length ? `Still to fill in: ${gp.join(', ')}. Each is marked in [brackets] below.` : ''; } }
+    const gp = [...new Set(t.split(/\n\n/).flatMap(par => (par.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).map(g => { const w = g.slice(1, -1).replace(/\s*not entered\s*/i, '').trim(); return w || (par.match(/^([^:(]+)/) || ['', 'a step'])[1].trim(); })))], ge = $('#methodsGaps'); ge.hidden = !gp.length; ge.innerHTML = gp.length ? `Still to fill in: ${gp.map(w => `<button type="button" class="linkbtn gap-btn" data-gap="${esc(w)}">${esc(w)}</button>`).join(', ')}. Each is marked in [brackets] below.` : ''; } }
   /* the core columns show; the rest wait behind More columns (the CSV keeps them all) */
   { const tb = $('#sumTable'), hd = [...(tb.rows[0] || {cells: []}).cells].map(c => c.textContent), allNd = rows.every(x => x.pur == null);
     const extra = hd.map(t => /A₂₈₀ area|NanoDrop|^Form|nmol|mg per|^Purity/.test(t) && !(/^Purity/.test(t) && !allNd));
@@ -5468,6 +5468,7 @@ function renderSumTable(){
   const nEl = $('#sumNotes'); if (nEl) { nEl.innerHTML = notes.map(t => `<li>${esc(t)}</li>`).join(''); nEl.hidden = !notes.length; }
 }
 $('#methodsBox').addEventListener('toggle', () => { if ($('#methodsBox').open) $('#methodsText').value = methodsText(); });
+$('#methodsGaps').addEventListener('click', e => { const b = e.target.closest('.gap-btn'); if (!b) return; const w = b.dataset.gap; if (!w) return; if (/transform/i.test(w)) { if (typeof selectStep === 'function') selectStep('transform'); const el = $('#pr-trPlasmid') || $('#pr-strain2'); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); } } else if (/expression/i.test(w)) { if (typeof selectStep === 'function') selectStep('expr'); const el = $('#pr-medium') || $('#pr-inducer'); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); } } else if (/lysis/i.test(w)) { if (typeof selectStep === 'function') selectStep('lysis'); const el = $('#pr-lysMethod') || $('#pr-lysBuffer'); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); } } else if (/cleav|dialysis|protease/i.test(w)) { if (typeof selectStep === 'function') selectStep('cleave'); const el = $('#pr-protease') || $('#pr-dialBuffer'); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); } } else { const wf = runs.filter(r => r.inWf); let targetRun = null, targetField = null; for (const r of wf) { const c = runCond(r); if (/col/i.test(w) && !c.mCol) { targetRun = r; targetField = '#mCol' + r.id; break; } if (/flow/i.test(w) && !c.mFlow) { targetRun = r; targetField = '#mFlow' + r.id; break; } if (/buf/i.test(w) && !c.mBufA) { targetRun = r; targetField = '#mBufA' + r.id; break; } if (/elut/i.test(w) && !c.mGrad && !c.mBufB) { targetRun = r; targetField = '#mGrad' + r.id; break; } } if (!targetRun && wf.length) targetRun = wf[0]; if (targetRun) { if (typeof selectStep === 'function') selectStep('run:' + targetRun.id); if (targetField) { const el = document.querySelector(targetField); if (el) { const rc = el.closest('details'); if (rc) rc.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); } } } } });
 $('#methodsCopy').addEventListener('click', () => { const ta = $('#methodsText'); ta.value = methodsText();
   const fb = () => { ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} toast(ok ? 'Methods copied' : 'Select the text and copy it'); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(() => { toast('Methods copied'); const b = $('#methodsCopy'); b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy methods'; }, 1500); }, fb); else fb(); });
@@ -5523,6 +5524,7 @@ $('#intCsv').addEventListener('click', () => {
 });
 paper.addEventListener('mouseleave', () => { $('#readout').textContent = ''; });
 paper.addEventListener('click', e => {
+  if (e.target.id === 'paperPick') { $('#file').click(); return; }
   if (!G) return;
   if (G.gel) {
     if ((!marking || marking.gelId !== G.gel.id) && tagMode) {
@@ -5938,7 +5940,7 @@ function renderPrep(){
       else if (mt && mt.mm && mt.mm.length) h += ` <span class="warnc">Differs from the Protein section at ${mt.mm.length} position${mt.mm.length === 1 ? '' : 's'} (${esc(mt.mm.slice(0, 4).join(', '))}${mt.mm.length > 4 ? ', …' : ''}).</span> <button type="button" class="linkbtn" id="gbUse">Use the ORF instead</button>`;
       else if (mt) h += ` <span class="warnc">Does not contain the Protein section's sequence.</span> <button type="button" class="linkbtn" id="gbUse">Use the ORF instead</button>`; } }
   else if (m) h = `Drawn from the Protein section${m.tagParts.length ? ` with the ${esc(m.tagParts.join('-'))} tag` : ''}. Load the plasmid's GenBank file to draw its own parts.`;
-  else h = 'Paste the protein sequence in the Protein section, or load a GenBank file.';
+  else h = '<button type="button" class="linkbtn" id="gbGoProt">Enter protein sequence</button>, or load a GenBank file.';
   if (st._h !== h) { st._h = h; st.innerHTML = h; }
 }
 let prepT = 0;
@@ -5953,7 +5955,8 @@ $('#gbPaste').addEventListener('click', () => { const b = $('#gbPasteBox'); b.hi
 $('#gbPasteGo').addEventListener('click', () => { const t = $('#gbText').value; if (!t.trim()) { toast('Paste the GenBank text first.'); return; } loadGenBankText(t, 'Pasted text'); });
 $('#gbClear').addEventListener('click', () => { prep.gb = null; prep.prevProt = null; render(); });
 $('#gbStatus').addEventListener('click', e => { if (e.target.id === 'gbUse') { prep.prevProt = null; useOrf(constructModel()); }
-  else if (e.target.id === 'gbBack' && prep.prevProt) { Object.assign(opt, prep.prevProt); prep.prevProt = null; applyProt(); } });
+  else if (e.target.id === 'gbBack' && prep.prevProt) { Object.assign(opt, prep.prevProt); prep.prevProt = null; applyProt(); }
+  else if (e.target.id === 'gbGoProt') { if (typeof selectStep === 'function' && PROJ && curStep !== 'construct') selectStep('construct'); const p = $('#protPanel'), el = $('#protSeq'); if (p) { p.hidden = false; const d = p.closest('details'); if (d) d.open = true; } if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); } } });
 /* structure figure: Cα trace of the asymmetric unit, turned so its longest axis runs across, colored by chain, with a 10 Å bar */
 function eig3(A){ const a = A.map(r => r.slice()), V = [[1,0,0],[0,1,0],[0,0,1]];
   for (let it = 0; it < 50; it++) { let p = 0, q = 1; if (Math.abs(a[0][2]) > Math.abs(a[p][q])) { p = 0; q = 2; } if (Math.abs(a[1][2]) > Math.abs(a[p][q])) { p = 1; q = 2; } if (Math.abs(a[p][q]) < 1e-9) break;
