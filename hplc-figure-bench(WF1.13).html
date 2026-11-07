@@ -2974,7 +2974,7 @@ function applyAutoCrop(g, quiet){
 }
 /* ---------- gel densitometry: lane profiles, bands, ladder calibration ---------- */
 /* detector settings (tuned on synthetic gels with known bands; see the blind test) */
-const DET = {laneLo: 0.2, laneHi: 0.8, smooth: 0.003, bgWin: 0.1, sep: 0.014, minAbs: 2.5, edgeTop: 0.03, edgeBot: 0.02, tail: 0.05, noiseK: 0, promRel: 0.05, gelRel: 0.07, madK: 0, mode: 'sep', shoulderK: 6, fit: false, satRatio: 0.3, shRatio: 1.15, shDist: 2.2, track: true, trackPen: 0.7, ladRef: 0.3, ladExtra: 4, ladSkip: 2, ladMiss: 0.02, ladFit: 1, ladAcross: 0.8};
+const DET = {laneLo: 0.2, laneHi: 0.8, smooth: 0.003, bgWin: 0.1, sep: 0.014, minAbs: 2.5, edgeTop: 0.03, edgeBot: 0.02, noiseK: 0, promRel: 0.05, gelRel: 0.07, madK: 0, mode: 'sep', shoulderK: 6, fit: false, satRatio: 0.3, shRatio: 1.15, shDist: 2.2, track: true, ladRef: 0.3, ladExtra: 4, ladSkip: 2, ladMiss: 0.02, ladFit: 1, ladAcross: 0.8};
 /* band energy image: each column minus its vertical morphological opening, so bands (short, dark) stay and smears, the gel
    background and gel edges go. Cached per processed image. */
 function bandEnergy(g){
