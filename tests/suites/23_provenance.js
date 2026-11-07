@@ -98,6 +98,64 @@ const F = {gb: src('gb'), imac: src('his'), grad: path.join(DATA, 'chrom/imac_Hi
     T.check('cond_schema.typed_kept', /2\.5 mL\/min/.test(m2) && /0–50% B/.test(m2), `the typed values are still what Methods states: ${m2}`); /* guards: the check flags, it does not overwrite */
   });
 
+  await T.t('source_import_diagnostics', async () => {
+    await p.click('text=All projects').catch(() => {}); await h.wait(600);
+    await h.newProject('Source Diagnostics');
+
+    // 1. Interrupted generic numeric block (generic CSV with an unreadable row splitting data)
+    const malformedCsv = 'Time (min),UV 280 (mAU)\n0,0\n1,0bad\n2,0\n3,0\n';
+    await p.setInputFiles('#file', {name: 'broken_block.csv', mimeType: 'text/csv', buffer: Buffer.from(malformedCsv)});
+    await h.wait(600);
+
+    const diagGeneric = p.locator('.trace:not(.run) .source-diag');
+    T.check('generic_diag_present', (await diagGeneric.count()) > 0, 'source-level warning/details view appears on generic trace card');
+    const genericSummary = await diagGeneric.locator('summary').textContent().catch(() => '');
+    T.check('generic_diag_summary', /Import warning/i.test(genericSummary) && /2 rows/i.test(genericSummary), `summary mentions import warning and skipped rows: ${genericSummary}`);
+    const genericMsg = await diagGeneric.locator('.source-diag-msg').textContent().catch(() => '');
+    T.check('generic_diag_message', /Left out 2 rows of broken_block/i.test(genericMsg), `message has full diagnostic text: ${genericMsg}`);
+
+    // 2. Unreadable UNICORN curves (.zip with unreadable/omitted Conductivity curve)
+    const lostCurveZip = path.join(DATA, 'chrom', 'lost_curve.zip');
+    await p.setInputFiles('#file', {name: 'lost_curve.zip', mimeType: 'application/zip', buffer: fs.readFileSync(lostCurveZip)});
+    await h.wait(800);
+
+    const diagUnicorn = p.locator('.trace.run .source-diag');
+    T.check('unicorn_diag_visible', await diagUnicorn.isVisible(), 'source-level warning/details view appears on UNICORN run card');
+    const unicornSummary = await diagUnicorn.locator('summary').textContent().catch(() => '');
+    T.check('unicorn_diag_summary', /Import warning/i.test(unicornSummary) && /Conductivity/i.test(unicornSummary), `summary mentions omitted curve: ${unicornSummary}`);
+    const unicornMsg = await diagUnicorn.locator('.source-diag-msg').textContent().catch(() => '');
+    T.check('unicorn_diag_message', /Curves with no readable data points were left out: Conductivity/i.test(unicornMsg), `message has UNICORN loss text: ${unicornMsg}`);
+
+    // 3. Persists through project export/import round-trip
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
+    const savePath = path.join(__dirname, '..', 'results', 'diag_test_proj.json');
+    await dl.saveAs(savePath);
+
+    await p.click('#homeBtn').catch(() => {});
+    await h.wait(500);
+    await p.click('#homeQuick');
+    await h.wait(1000);
+
+    await p.setInputFiles('#projFile', savePath);
+    await h.wait(2000);
+
+    const roundtripGeneric = p.locator('.trace:not(.run) .source-diag');
+    const roundtripUnicorn = p.locator('.trace.run .source-diag');
+    T.check('roundtrip_generic_diag_persists', (await roundtripGeneric.count()) > 0, 'generic import diagnostic persisted across project import');
+    T.check('roundtrip_unicorn_diag_persists', await roundtripUnicorn.isVisible(), 'unicorn import diagnostic persisted across project import');
+
+    // 4. Replaced / cleared when source is successfully reimported
+    const cleanCsv = 'Time (min),UV 280 (mAU)\n0,0\n1,0\n2,0\n3,0\n';
+    await p.setInputFiles('#file', {name: 'broken_block.csv', mimeType: 'text/csv', buffer: Buffer.from(cleanCsv)});
+    await h.wait(600);
+    T.check('reimport_clean_generic_clears_diag', (await p.locator('.trace:not(.run) .source-diag').count()) === 0, 'reimporting clean generic source clears warning');
+
+    const cleanUnicornZip = path.join(DATA, 'chrom', 'valid_unicorn.zip');
+    await p.setInputFiles('#file', {name: 'lost_curve.zip', mimeType: 'application/zip', buffer: fs.readFileSync(cleanUnicornZip)});
+    await h.wait(800);
+    T.check('reimport_clean_unicorn_clears_diag', (await p.locator('.trace.run .source-diag').count()) === 0, 'reimporting clean UNICORN archive clears warning');
+  });
+
   await close();
   T.done();
 })();

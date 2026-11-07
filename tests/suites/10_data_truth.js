@@ -295,5 +295,26 @@ async function pelletMassNoCultureVol() {
     }
   }
   if (!only || only.test('pellet_mass_no_culture_vol')) await T.t('pellet_mass_no_culture_vol', pelletMassNoCultureVol);
+  if (!only || only.test('molar_buffer_axis_floor')) await T.t('molar_buffer_axis_floor', async () => {
+    const id = 'molar_buffer_axis_floor', {p, errs, close} = await open(), h = H(p);
+    try {
+      await h.newProject('Molar buffer axis floor');
+      await h.addRun(path.join(DATA, 'standins/iex_q_6ml.csv'));
+      await p.waitForTimeout(300);
+      await setRun(p, 'mBufA', '20 mM Tris, 0.5 M Guanidine');
+      await setRun(p, 'bufB', '6 M Guanidine');
+      await p.waitForTimeout(200);
+      let txts = (await h.svgTexts()).map(x => x.t), rTicks = txts.slice(txts.indexOf('Absorbance (mAU)') + 1, txts.indexOf('Guanidine (M)'));
+      T.check(`${id}/guanidine-floor`, rTicks[0] === '1' && !rTicks.includes('0'), rTicks.join(', '));
+      await setRun(p, 'mBufA', '20 mM Tris, 1500 mM X');
+      await setRun(p, 'bufB', '6 M X');
+      await p.waitForTimeout(200);
+      txts = (await h.svgTexts()).map(x => x.t); rTicks = txts.slice(txts.indexOf('Absorbance (mAU)') + 1, txts.indexOf('X (M)'));
+      T.check(`${id}/millimolar-in-molar-floor`, rTicks[0] === '2' && !rTicks.includes('0'), rTicks.join(', '));
+    } finally {
+      T.check(`${id}/no-page-errors`, !errs.length, errs.join(' | '));
+      await close();
+    }
+  });
   T.done();
 })();

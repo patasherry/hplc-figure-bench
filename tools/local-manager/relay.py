@@ -482,13 +482,23 @@ def parse_diff(diff):
 
 
 def hunk_present(app_text, old):
-    """True when the hunk's old side (context and removed lines) appears verbatim, contiguous, in the app. Trailing whitespace is ignored."""
-    while old and old[-1] == '':
+    """True when the hunk's old side (context and removed lines) appears in the app as a contiguous run of lines,
+    comparing each line with its leading and trailing whitespace removed.
+
+    Indentation is the first thing a hand-carried diff loses. #1064's answer was correct and sat exactly at the lines its
+    own header named, 6039 to 6044, and was rejected twice, burning both of Patrick's trips and the round limit, because
+    four of its context lines carried three spaces where the file has two. A context line in a unified diff already has a
+    leading marker, so one space either way is the easiest mistake there is to make.
+
+    A passing patch is filed as an issue for a coding agent to carry out, never fed to `git apply`, so matching the
+    content is what the check is for. Line order and contiguity still have to hold, so an invented hunk is still caught."""
+    while old and not old[-1].strip():
         old = old[:-1]  # trailing blank lines are often lost at the end of a pasted diff
-    if not any(l.strip() for l in old):
+    need = [l.strip() for l in old]
+    if not any(need):
         return False
-    hay = '\n' + '\n'.join(l.rstrip() for l in app_text.split('\n')) + '\n'
-    return '\n' + '\n'.join(l.rstrip() for l in old) + '\n' in hay
+    hay = [l.strip() for l in app_text.split('\n')]
+    return any(hay[i:i + len(need)] == need for i in range(len(hay) - len(need) + 1))
 
 
 def check_paths(files):
@@ -510,17 +520,33 @@ def same_sha(a, b):
     return a[:n] == b[:n]
 
 
-def validate(resp_text, requests, app_text):
+def validate(resp_text, requests, app_text, base_text=None):
     """The six checks, in order, stopping at the first failure.
     requests: {id: {'base': ...}} of the open requests on the issue. Returns the parsed response, or raises Bad.
-    Check 4 reads the app file at current main (app_text), not a base sha: unrelated merges change the sha without touching the hunk."""
+
+    Check 4 prefers the app file at current main (app_text), since a patch that still applies there is the easy case and
+    unrelated merges change the sha without touching the hunk. A hunk that matches only the app as it was at the request's
+    own base (base_text) is accepted too, and the response is marked 'rebase', so the filed issue tells the worker to make
+    the same change where that code now lives instead of running git apply. The round trip is a person carrying text
+    between two machines and this repository merges app changes all day: #1064's request went out at 08:13 and its answer
+    came back at 18:03. A hunk that matches neither is stale, because then the context was never there.
+
+    This fallback is a safety net, not the fix for #1064. That one failed on indentation, in hunk_present."""
     r = parse_response(resp_text)                                                    # 1
     req = requests.get(r['id'])
+    if req is None and len(requests) == 1:
+        # One open request on the issue, so there is nothing for this answer to be about but that one. On #1090 the agent
+        # echoed `1064-1bab`, the id of an exchange on another issue entirely, and a usable answer was thrown away over
+        # it. Ambiguity is the only thing the id protects against, and with a single open request there is none.
+        r['id'], req = next(iter(requests)), next(iter(requests.values()))
+        r['id_fixed'] = True
     if req is None:                                                                  # 2
-        raise Bad('reply', f'there is no open request with the id "{r["id"]}" on this issue. '
-                           'Either it was already answered and filed, or it expired, or the id was mistyped: '
-                           'check the newest request comment for the id to echo')
-    if not same_sha(r['base'], req['base']):                                         # 3
+        raise Bad('reply', f'there is no open request with the id "{r["id"]}" on this issue, and there is more than one '
+                           'open, so I cannot tell which it answers. Check the newest request comment for the id to echo')
+    # The base only matters for a patch, which has to apply to known code. An 'insufficient' or 'answer' carries no hunks,
+    # so refusing it over a stale base throws away the one thing it is for: naming what the agent still needs. #1090's
+    # answer named four functions and was discarded because its base came from an older exchange.
+    if r['verdict'] == 'patch' and not same_sha(r['base'], req['base']):             # 3
         raise Bad('stale', f'base "{r["base"]}" is not the request\'s base "{req["base"]}"')
     files = parse_diff(r['patch']) if r['verdict'] == 'patch' else []
     if r['verdict'] == 'patch':
@@ -530,8 +556,13 @@ def validate(resp_text, requests, app_text):
             if f['path'] != APP and f['old'] != APP:
                 continue
             for i, h in enumerate(f['hunks'], 1):
-                if not hunk_present(app_text, h['old']):
-                    raise Bad('stale', f'hunk {i} for the app file does not match the app at current main (its context lines are not there verbatim)')
+                if hunk_present(app_text, h['old']):
+                    continue
+                if base_text and hunk_present(base_text, h['old']):
+                    r['rebase'] = True  # right code, but main moved under it while the answer was being carried back
+                    continue
+                raise Bad('stale', f'hunk {i} for the app file matches neither the app at current main nor the app at the '
+                                   f'request\'s own base ({(requests.get(r["id"]) or {}).get("base", "?")}), so its context lines were never there')
         check_paths(files)                                                           # 5
         if not (r['test'] or '').strip():                                            # 6
             raise Bad('reply', 'a patch needs a "test" block with the UI-level case')
@@ -543,6 +574,10 @@ def filed_body(r, issue, rid):
     """The body of the issue filed for a passing patch response."""
     num = ('\n\n**This patch changes a reported number.** The PR needs one UI-level check that fails on main and passes on the PR (AGENTS.md, rule for reported numbers), so the gate accepts it.'
            if r['changes-a-reported-number'] == 'yes' else '')
+    num += ('\n\n**Apply this by intent, not with `git apply`.** The patch matches the app as it was at the request\'s base, '
+            'not as main is now: the answer was carried back by hand and main moved at those lines in between. The change it '
+            'describes is still the right one, so make the same change where that code now lives, and keep whatever moved it.'
+            if r.get('rebase') else '')
     return (f'From the offline relay: request `{rid}` on #{issue}, answered by an agent with no access to the repository, carried back by Patrick (posting it is his OK).\n\n'
             f'**Summary:** {r["summary"]}{num}\n\n'
             '**Not applied.** The patch was written against an excerpt and checked only for context lines present in the app at the time it was posted. Apply it to current main, rebase where a hunk drifted, run the suites and open the PR through the usual gate. Synthetic data only.\n\n'

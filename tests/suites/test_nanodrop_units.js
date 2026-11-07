@@ -1,4 +1,4 @@
-const {open, H, suite, fs} = require('../lib/harness');
+const {open, H, suite, path, DATA, fs} = require('../lib/harness');
 const T = suite('test_nanodrop_units');
 
 async function fresh(id, fn){
@@ -11,7 +11,7 @@ async function fresh(id, fn){
 (async () => {
   await fresh('nanodrop_unit_conversion', async (p, h) => {
     await h.newProject('Unit conversion test');
-    await h.addRun('data/chrom/valid_unicorn.zip');
+    await h.addRun(path.join(DATA, 'chrom/valid_unicorn.zip'));
     await p.waitForTimeout(500);
     await h.step('final');
     await p.waitForTimeout(200);

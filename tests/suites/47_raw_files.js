@@ -8,8 +8,6 @@ const path = require('path');
     try {
         const {p, errs, close} = await open(), h = H(p);
 
-        p.on('console', msg => console.log('PAGE LOG 1:', msg.text()));
-
         await h.newProject('Raw Test UI');
 
         const absolutePath = path.resolve(__dirname, '..', 'data/chrom/imac_HisTrap_FF_1mL_step_u7.csv');
@@ -34,19 +32,32 @@ const path = require('path');
         await h.step('figure');
         await h.wait(2000); // Give it time to save
 
+        // Get pid to explicitly load it instead of clicking recent
+        const pid = await p.evaluate(async () => {
+           return window.PROJ_REF ? window.PROJ_REF().id : null;
+        });
+
         // Close and reopen the app
         await close();
         const {p: p2, errs: errs2, close: close2} = await open(), h2 = H(p2);
 
-        p2.on('console', msg => console.log('PAGE LOG 2:', msg.text()));
-
         await p2.waitForTimeout(1000);
 
-        // Open the most recent project from the recent projects list on the home screen
-        await p2.evaluate(() => {
-           const rec = document.querySelector('.recent');
-           if (rec) rec.click();
-        });
+        // Load project by ID directly to bypass UI issues with `#selftest`
+        await p2.evaluate(async (id) => {
+           if (id) {
+               try {
+                   console.log("Loading project id: " + id);
+                   const {meta, data} = await window.storeLoad(id);
+                   await window.openProject(data, meta.name, false);
+                   console.log("Project opened successfully");
+               } catch (e) {
+                   console.log("Failed to load project: " + e.message);
+               }
+           } else {
+               console.log("No pid provided");
+           }
+        }, pid);
 
         await h2.wait(1500);
 

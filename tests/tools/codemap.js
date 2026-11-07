@@ -61,7 +61,7 @@ for (let i = 0; i < sections.length; i++) {
   }
 }
 
-const isTable = process.argv.includes('--table') || true; // default to table format
+const isTable = !process.argv.includes('--plain'); // default to table format unless --plain is passed
 
 if (isTable) {
   console.log('| Lines | Section | Purpose |');
