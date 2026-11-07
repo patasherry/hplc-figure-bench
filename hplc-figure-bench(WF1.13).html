@@ -1145,7 +1145,8 @@ button,input,select,textarea{font-family:inherit}
 
     <section class="grp optsec" data-for="overlay run">
       <h2>Window</h2>
-      <label class="check"><input type="checkbox" id="o-zoomMode" data-opt="zoomMode">Zoom mode: drag on figure to select window</label>
+      <label class="check"><input type="checkbox" id="o-zoomMode" data-opt="zoomMode">Zoom mode (touch): drag to zoom instead of integrate</label>
+      <div class="hint">Hint: Shift+Drag on the figure to zoom.</div>
       <div class="row">
         <label class="f">X from<input type="number" step="any" id="o-xmin" data-opt="xmin" placeholder="auto"></label>
         <label class="f">X to<input type="number" step="any" id="o-xmax" data-opt="xmax" placeholder="auto"></label>
@@ -5335,10 +5336,12 @@ window.addEventListener('pointermove', e => {
 ['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, e => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; wfDragCursor(e); }));
 $('#gelOffReset').addEventListener('click', () => { runs.forEach(r => { r.gelOff = {}; }); prep.offs = {}; render(); });
 paper.addEventListener('pointerdown', e => {
-  const c = chartAt(); if (!c || (!c.run && !opt.zoomMode && !e.shiftKey) || e.button !== 0) return;
+  const c = chartAt(); if (!c || e.button !== 0) return;
+  const isZoom = opt.zoomMode || e.shiftKey;
+  if (!c.run && !isZoom) return;
   const p = svgPoint(e); if (!p) return; const lx = p.x - c.ox, ly = p.y - c.oy, g = c.g;
   if (lx < g.L || lx > g.R || ly < g.T || ly > g.B) return;
-  e.preventDefault(); drag = {c, x0: lx, zoom: opt.zoomMode || e.shiftKey};
+  e.preventDefault(); drag = {c, x0: lx, zoom: isZoom};
 });
 window.addEventListener('pointermove', e => {
   if (!drag) return; const p = svgPoint(e), svg = paper.querySelector('svg'); if (!p || !svg) return;

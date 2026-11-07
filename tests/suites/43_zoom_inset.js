@@ -15,6 +15,22 @@ const plotAreas = p => p.evaluate(() => document.querySelectorAll('#paper svg cl
 const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [data-plot=inset]').length);
 
 (async () => {
+  /* zoom mode UI hint */
+  {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      const {labelText, hintText} = await p.evaluate(() => {
+        const inp = document.getElementById('o-zoomMode');
+        const lbl = inp && inp.parentElement;
+        let labelText = lbl ? lbl.textContent.trim() : '';
+        const hint = lbl && lbl.nextElementSibling && lbl.nextElementSibling.classList.contains('hint') ? lbl.nextElementSibling.textContent.trim() : '';
+        return {labelText, hintText: hint};
+      });
+      T.check('zoom_mode_label_text', labelText.includes('Zoom mode (touch)'), `Label is ${labelText}`);
+      T.check('zoom_mode_hint_text', hintText === 'Hint: Shift+Drag on the figure to zoom.', `Hint is ${hintText}`);
+    } finally { T.check('zoom_mode_ui_hint_no_errors', !errs.length, errs.join(' | ')); await close(); }
+  }
+
   /* overlay figure (Quick-Figure mode loads the example chromatograms) */
   {
     const {p, errs, close} = await open(), h = H(p);
