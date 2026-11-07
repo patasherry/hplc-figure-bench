@@ -3189,8 +3189,8 @@ function laneCtx(g, i){
   const imacLab = /wash|elu|imac|\bni\b|nickel|his[\s.-]*trap|^e\d+\b|eluate/i.test(lab), proteome = /^(lys|crude|sup|pel|load|input|ft\b|flow|cleared|total|sol|insol|induc|uninduc|pre)/i.test(lab);
   const postLab = a === 'cleave' || /cleav|ulp|tev|digest|after|post|\bcut\b|reverse|ortho|\brimac\b/i.test(lab);
   const imacL = imacLab && !postLab;
-  const iImac = wf.findIndex(x => typ(x) === 'IMAC'), iRev = wf.findIndex(x => typ(x) === 'Reverse IMAC'), k = r ? wf.indexOf(r) : -1;
-  const cut = iRev >= 0 ? iRev : iImac >= 0 ? iImac + 1 : -1;
+  const iImac = wf.findIndex(x => typ(x) === 'IMAC'), k = r ? wf.indexOf(r) : -1;
+  const c0 = cutAfterIndex(); const cut = c0 >= 0 ? c0 + 1 : (iImac >= 0 ? iImac + 1 : -1);
   return {has: !!r || imacLab || postLab, proteome,
     ecoli: !proteome && (imacL || (r && typ(r) === 'IMAC') || (k >= 0 && iImac >= 0 && k <= iImac) || (k === 0 && iImac < 0)),
     post: !proteome && (postLab || (k >= 0 && cut >= 0 && k >= cut))};
