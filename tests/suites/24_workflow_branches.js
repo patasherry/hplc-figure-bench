@@ -260,4 +260,51 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     T.check('split-discard: methods text contains split', meth.includes('The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 were set aside.'), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
+
+  await T.t('split-and-discard-mass-balance', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    const F = {gb: src('gb'), imac: src('his'), sec: path.join(DATA, 'science/sec_inject2.csv'), q: src('q')};
+    await h.newProject('Split and Discard Mass Balance');
+    await h.gb(F.gb);
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+    await h.addRun(F.sec);
+    await h.suggest();
+    await h.addRun(F.q);
+    await h.suggest();
+    const tl = (await h.timeline()).filter(x => x.k.startsWith('run:'));
+    const ids = tl.map(x => x.k.slice(4));
+
+    // Create the branches. First we make both SEC and Q inherit from IMAC
+    const setFrom = async (p, h, stepKey, value) => { await h.step(stepKey); await p.selectOption('#ssFrom', value); await p.waitForTimeout(500); };
+    await setFrom(p, h, tl[2].k, ids[0]);
+    await p.fill('#ssFromNote', 'fractions B9-B12');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+    await h.step(tl[1].k);
+    await p.fill('#ssFromNote', 'fractions B5-B8');
+    await p.dispatchEvent('#ssFromNote', 'change');
+    await h.wait(300);
+
+    // Discard the Q run branch
+    await h.step(tl[2].k);
+    await p.evaluate(id => { const el = document.getElementById('wf' + id); if (el && el.checked) el.click(); }, ids[2]);
+    await h.wait(500);
+
+    // Enable yields display
+    await p.click('#tl [data-step=figure]'); await p.waitForTimeout(700);
+    await p.evaluate(() => {
+      const el = document.getElementById('o-wfYield');
+      if (el) { el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.wait(500);
+
+    // Now, there should be exactly one final yield line, the one for SEC, and NOT the discarded Q run.
+    const brTexts = (await h.svgTexts()).filter(t => /Final (pool|sample)/.test(t.t));
+
+    // Under incorrect logic, both SEC and Q runs would be displayed, or none if we have the undefined fallback bug
+    T.check('mass balance filtering: exactly one final yield line is shown', brTexts.length === 1, brTexts.map(x => x.t).join(' | '));
+    T.check('no page errors', !errs.length, errs.join(' | '));
+    await close();
+  });
   T.done(); })();

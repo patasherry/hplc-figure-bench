@@ -3937,10 +3937,16 @@ function finalYield(path){
     loaded: (() => { if (manLoad > 0) return {mg: manLoad, kept: false, r: fin.r}; const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r) : null; return k ? {mg: k, kept: true, r: fin.r} : mgOf(pr) > 0 ? {mg: mgOf(pr), kept: false, r: fin.r} : null; })(),
     purTyped: prep.on && hasTxt(prep.qcPurity) && fin.pur == null, qcPurity: prep.on && hasTxt(prep.qcPurity) ? prep.qcPurity : null}; }
 function finalYields(){
-  const paths = wfBranches(); if (paths.length <= 1) { const y = finalYield(); return y ? [y] : []; }
+  let paths = wfBranches();
+  paths = paths.filter(p => {
+    const end = p[p.length - 1];
+    return !(!end.inWf && end.prep !== 'manual');
+  });
+  if (paths.length === 0) return [];
+  if (paths.length === 1) { const y = finalYield(paths[0]); return y ? [y] : []; }
   const ys = [], seenFin = new Set();
   paths.forEach(p => { const y = finalYield(p); if (y && !seenFin.has(y.fin.r)) { seenFin.add(y.fin.r); ys.push(y); } });
-  return ys.length ? ys : (finalYield() ? [finalYield()] : []);
+  return ys.length ? ys : (finalYield(paths[0]) ? [finalYield(paths[0])] : []);
 }
 function yieldLine(res){
   if (opt.wfYield === false || !res || !res.svg || !res.geo) return res; const ys = finalYields(); if (!ys.length) return res;
