@@ -295,5 +295,33 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       T.check('resize/no-errors', errs.length === 0, errs.join(' | '));
     } catch (e) { T.check('resize/threw', false, String(e).slice(0, 300)); } finally { await close(); }
   }
+  /* Source-local visibility recovery and a deterministic recomputed layout (Issue #1034). */
+  {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await p.click('#homeQuick'); await h.wait(900);
+      await setOpt(p, 'o-zoomInset', true); await h.wait(500);
+      const controls = await p.evaluate(() => ['zoomInsetHide', 'zoomInsetRestore', 'zoomInsetReset'].every(id => {
+        const el = document.getElementById(id); return !!el && el.offsetParent !== null;
+      }));
+      T.check('layout/recovery-controls-visible', controls, 'Hide, Restore last visible, and Reset inset layout controls are visible');
+      if (controls) {
+        const initial = await p.$eval('#zoomInsetContainer', el => el.getAttribute('transform'));
+        await p.click('#zoomInsetHide'); await h.wait(400);
+        T.check('layout/hide-is-source-local', (await insetCount(p)) === 0, 'inset hidden without changing the window');
+        await p.click('#zoomInsetRestore'); await h.wait(400);
+        const restored = await p.$eval('#zoomInsetContainer', el => el.getAttribute('transform'));
+        T.check('layout/restore-last-visible', restored === initial, `initial ${initial}, restored ${restored}`);
+
+        const move = await p.evaluate(() => { const r = document.querySelector('#zoomInsetContainer [data-handle="move"]').getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2}; });
+        await p.mouse.move(move.x, move.y); await p.mouse.down(); await p.mouse.move(move.x - 45, move.y + 35, {steps: 4}); await p.mouse.up(); await h.wait(400);
+        const moved = await p.$eval('#zoomInsetContainer', el => el.getAttribute('transform'));
+        await p.click('#zoomInsetReset'); await h.wait(400);
+        const reset = await p.$eval('#zoomInsetContainer', el => el.getAttribute('transform'));
+        T.check('layout/reset-recomputes-default', moved !== reset && reset === initial, `initial ${initial}, moved ${moved}, reset ${reset}`);
+      }
+      T.check('layout/no-errors', errs.length === 0, errs.join(' | '));
+    } catch (e) { T.check('layout/threw', false, String(e).slice(0, 300)); } finally { await close(); }
+  }
   T.done();
 })();
