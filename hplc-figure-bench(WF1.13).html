@@ -2124,12 +2124,17 @@ function gaussRows(uv, regs){
 let procMemo = new WeakMap();
 const procFull = run => { const cv = uvOf(run), k = `${opt.smooth}|${opt.baseline}|${cv.xs.length}|${cv.xs[0]}`, m = procMemo.get(cv.ys); if (m && m.k === k && m.xs === cv.xs) return m.q; const q = processXY(cv.xs, cv.ys, -Infinity, Infinity, false, 1); procMemo.set(cv.ys, {k, xs: cv.xs, q}); return q; };
 const windowXY = (q, lo, hi) => { const i0 = lowerBound(q.xs, lo); let i1 = q.xs.length; while (i1 > i0 && q.xs[i1-1] > hi) i1--; return {xs: q.xs.slice(i0, i1), ys: q.ys.slice(i0, i1)}; };
+/* the Gaussian fit depends only on the trace, the regions and the baseline rule, so a workflow that draws a run several times per update fits it once (#769) */
+let gaussMemo = new WeakMap();
+const gaussRowsMemo = (uv, regs) => { const k = `${opt.intBase}|${uv.xs.length}|${uv.xs[0]}|${uv.xs[uv.xs.length-1]}|${regs.map(r => r.a + ':' + r.b).join(',')}`; let m = gaussMemo.get(uv.ys);
+  if (!m || m.k !== k || m.xs !== uv.xs) { m = {k, xs: uv.xs, rows: gaussRows(uv, regs).map(r => Object.assign({}, r, {reg: regs.indexOf(r.reg)}))}; gaussMemo.set(uv.ys, m); }
+  return m.rows.map(r => Object.assign({}, r, {reg: regs[r.reg]})); };
 /* peak areas read the recorded trace, like pool areas: the figure's smoothing and baseline change the picture only; integration has its own baseline (opt.intBase) */
 function integRows(run){
   const uv = uvOf(run);
   let rows = [];
   const regs = (run.integ || []).slice().sort((p, q) => p.a - q.a);
-  if (opt.intMethod === 'gauss') rows = gaussRows(uv, regs);
+  if (opt.intMethod === 'gauss') rows = gaussRowsMemo(uv, regs);
   else regs.forEach(reg => { const r = integrateRegion(uv.xs, uv.ys, reg.a, reg.b, opt.intBase); if (r) rows.push(Object.assign(r, {reg})); });
   const tot = rows.reduce((t, r) => t + Math.max(0, r.area), 0);
   const fit = isSec(run) ? secFit(secCalFor(run)) : null;
