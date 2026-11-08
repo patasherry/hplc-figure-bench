@@ -18,6 +18,7 @@ const CONC = 5, VOUT = 5;
       await h.addRun(src('his')); await h.pool('T1-T6');
       await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=conc]'); await h.wait(500);
       await setVal('#btw-conc', CONC); await setVal('#btw-vOut', VOUT); await h.wait(300);
+      const sum = p.locator('#btwSplitBox > summary'); if (await sum.isVisible()) await sum.click(); await h.wait(150); /* the fields sit behind a closed disclosure so the card stays short */
       const fields = await p.evaluate(() => ['#btw-vLoad', '#btw-vKeep', '#btw-keepAs'].map(s => { const e = document.querySelector(s); return !!e && !!e.offsetParent; }));
       if (split) { for (const [k, v] of Object.entries(split)) await setVal(`#btw-${k}`, v); await h.wait(400); }
       const hint = await p.$eval('#btwSplit', e => e.hidden ? '' : e.textContent).catch(() => '');
@@ -55,5 +56,10 @@ const CONC = 5, VOUT = 5;
   await T.t('over', async () => { const S = await scenario({vLoad: 2, vKeep: 4});
     T.check('over.flagged', /is 6\.0 mL, more than the 5\.0 mL/.test(S.hint), S.hint); /* guards: an impossible split is said out loud */
     T.check('over.step_yield_from_all', near(S, CONC*VOUT), info(S, CONC*VOUT)); });
+
+  /* ================= nothing loaded (0 mL): no amount to count from, flagged and counted as all, never a silent fallback ================= */
+  await T.t('zero', async () => { const S = await scenario({vLoad: 0, vKeep: 5});
+    T.check('zero.flagged', /load of 0 mL/.test(S.hint), S.hint);
+    T.check('zero.step_yield_from_all', near(S, CONC*VOUT), info(S, CONC*VOUT)); });
   T.done();
 })();

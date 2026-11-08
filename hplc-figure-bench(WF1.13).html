@@ -756,12 +756,14 @@ button,input,select,textarea{font-family:inherit}
           <div class="btns"><button type="button" class="btn primary" id="btwNdAdd">Load NanoDrop export</button><input type="file" id="btwNdFile" hidden></div>
           <div id="btwNdList"></div>
           <label class="f" title="The volume left in the concentrator, the one your NanoDrop readings were taken in">Volume after concentrating (mL)<input type="number" id="btw-vOut" data-btw="vOut" min="0" step="any" placeholder="e.g. 0.25"></label>
+          <details class="cardtext" id="btwSplitBox"><summary>Only part went on to the next step (optional)</summary>
           <div class="row">
             <label class="f" title="How much of it went onto the next step. Left empty, all of it did. The next step's yield counts from this share of the mg">Loaded on the next step (mL)<input type="number" id="btw-vLoad" data-btw="vLoad" min="0" step="any" placeholder="all"></label>
             <label class="f" title="The rest, kept and not loaded">Kept back (mL)<input type="number" id="btw-vKeep" data-btw="vKeep" min="0" step="any"></label>
           </div>
           <label class="f" title="What was done with the volume kept back">Kept as<input type="text" id="btw-keepAs" data-btw="keepAs" placeholder="e.g. flash-frozen, −80 °C"></label>
           <p class="hint warnc" id="btwSplit" hidden></p>
+          </details>
           <p class="hint" id="btwCarry"></p>
         </div>
         <details class="cardtext" id="btwMore"><summary>Details for the methods (optional)</summary>
@@ -4396,7 +4398,7 @@ const arrowNote = r => String(r.note || '').trim();
 /* the share of a measured output loaded on the next step, for a well-mixed sample: loaded / output. Neither volume (older projects) means all of it, only the kept volume means the rest;
    loaded plus kept above the output is not a split, and counts as all until fixed */
 function btwSplit(b){ const vo = numOr(b && b.vOut, null), vk = numOr(b && b.vKeep, null); let vl = numOr(b && b.vLoad, null);
-  if (vl == null && vk == null) return {f: 1, set: false}; const bad = !(vo > 0) ? 'novol' : vl != null && vl < 0 || vk != null && vk < 0 ? 'neg' : (vl || 0) + (vk || 0) > vo*(1 + 1e-9) ? 'over' : '';
+  if (vl == null && vk == null) return {f: 1, set: false}; const bad = !(vo > 0) ? 'novol' : vl != null && vl < 0 || vk != null && vk < 0 ? 'neg' : vl === 0 ? 'zero' : (vl || 0) + (vk || 0) > vo*(1 + 1e-9) ? 'over' : '';
   if (bad) return {f: 1, set: false, bad, vo, vl, vk}; if (vl == null) vl = vo - vk; return {f: vl/vo, set: true, vo, vl, vk}; }
 function btwMg(r){ const b = btwOf(r); if (!b) return null; const ms = poolMeas(r), c = ms.src === 'btw' ? ms.c : null, vo = numOr(b.vOut, null); if (c == null || vo == null) return null; const p = poolRows(r), mg = c*vo; return {mg, pct: p && p.mgArea > 0 ? 100*mg/p.mgArea : null}; }
 function btwSentence(b){
@@ -6989,8 +6991,9 @@ function btwCarry(){ const el = $('#btwCarry'), rid = curStep.startsWith('btw:')
   /* the split between the next step and what was kept back */
   const sp = btwSplit(b), se = $('#btwSplit'), sm = r ? (btwMg(r) || {}).mg : null;
   se.textContent = sp.bad === 'over' ? `Loaded plus kept back is ${fmtAuto((sp.vl || 0) + (sp.vk || 0))} mL, more than the ${fmtAuto(sp.vo)} mL after concentrating. Until that is fixed, all of it counts as loaded on the next step.`
-    : sp.bad === 'novol' ? 'Enter the volume after concentrating too. Until then, all of it counts as loaded on the next step.' : sp.bad === 'neg' ? 'A volume can’t be below 0. Until that is fixed, all of it counts as loaded on the next step.'
+    : sp.bad === 'novol' ? 'Enter the volume after concentrating too. Until then, all of it counts as loaded on the next step.' : sp.bad === 'zero' ? 'A load of 0 mL leaves no amount to count the next step’s yield from. Until that is fixed, all of it counts as loaded on the next step.' : sp.bad === 'neg' ? 'A volume can’t be below 0. Until that is fixed, all of it counts as loaded on the next step.'
     : sp.set && sm > 0 ? `${sig2(sm*sp.f)} mg (${fmtAuto(sp.vl)} of ${fmtAuto(sp.vo)} mL) went on to the next step${sp.vk > 0 ? `, ${fmtAuto(sp.vk)} mL kept back` : ''}.` : '';
+  if (numOr(b.vLoad, null) != null || numOr(b.vKeep, null) != null || String(b.keepAs || '').trim()) $('#btwSplitBox').open = true;
   se.hidden = !se.textContent; se.classList.toggle('warnc', !!sp.bad); }
 /* a NanoDrop export loaded on the Concentrated step: every protein reading in it is the concentrated sample of the column before */
 $('#btwNdAdd').addEventListener('click', () => $('#btwNdFile').click());
