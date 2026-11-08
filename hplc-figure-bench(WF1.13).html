@@ -291,6 +291,7 @@ details.paste[open]{display:grid;gap:8px}
 .canvas-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding:10px 14px;border-top:1px solid var(--line)}
 .export{justify-content:flex-end;gap:8px}
 .export select{width:auto;min-height:32px}
+.btngroup{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
 .readout{position:absolute;top:10px;right:10px;font-size:11.5px;color:var(--paper-ink);background:var(--paper);border:1px solid var(--paper-edge);border-radius:6px;padding:2px 8px;pointer-events:none;box-shadow:0 1px 2px rgba(21,26,40,.08);z-index:10}
 .readout:empty{display:none}
 .cardopts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
@@ -1309,14 +1310,13 @@ button,input,select,textarea{font-family:inherit}
     <div class="canvas-foot">
       <div class="spec"><span id="spec"></span><span id="spec2"></span></div>
       <div class="btns export">
-        <button class="btn" id="copySvg" type="button">Copy SVG</button>
+        <span class="btngroup" id="svgGroup" role="group" aria-label="SVG"><button class="btn" id="copySvg" type="button">Copy SVG</button><button class="btn primary" id="saveSvg" type="button">Save SVG</button></span>
         <span class="joined"><button class="btn" id="savePng" type="button">Save PNG</button><select id="o-dpi" data-opt="dpi" data-type="num" aria-label="PNG resolution">
           <option value="300">300 dpi</option>
           <option value="600">600 dpi</option>
           <option value="1200">1200 dpi</option>
         </select></span>
         <button class="btn" id="saveAll" type="button" hidden>Save all (ZIP)</button>
-        <button class="btn primary" id="saveSvg" type="button">Save SVG</button>
       </div>
     </div>
     </section>
