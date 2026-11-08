@@ -227,13 +227,19 @@ module.exports = async ({github, context, core}) => {
     await github.rest.pulls.merge({owner, repo, pull_number: p.number, merge_method: 'squash', commit_title: `${p.title} (#${p.number})`});
     say(`PR #${p.number}: merged (tests/docs only, no regressions)`);
     /* ---------- 4. follow-ups from what was merged ---------- */
-    if (rep) { const sec = rep.body.split('#### New checks failing')[1]; if (sec) for (const line of sec.split('\n').filter(l => /^- \S/.test(l)).slice(0, 10)) {
-        const id = line.slice(2).split(' (FAIL:')[0].trim(), detail = (line.split('(FAIL:')[1] || '').replace(/\)\s*$/, '').trim();
-        const exists = (await github.rest.search.issuesAndPullRequests({q: `repo:${owner}/${repo} is:issue in:title "${id}"`})).data.total_count;
-        if (!exists) {
-          const suite = id.split('/')[0];
-          const hint = `Target test suite: tests/suites/${suite}.js\nReproduce command: node tests/suites/${suite}.js\nGoal: Investigate and resolve this check failure. If the test check timed out or has an incorrect expectation, fix tests/suites/${suite}.js. If it revealed a bug in the application, fix hplc-figure-bench(WF1.13).html. Ensure 'node tests/suites/${suite}.js' passes without regressions.`;
-          await github.rest.issues.create({owner, repo, title: `Bug found by ${id}`, labels: [L.triage], body: `The check \`${id}\`, added in #${p.number}, fails on main:\n\n> ${detail}\n\nThe PR description in #${p.number} may say more about the cause.\n\n${hint}`}); say(`follow-up issue for ${id}`); routedAg = true; } } }
+    if (rep) { const sec = rep.body.split('#### New checks failing')[1]; if (sec) {
+        const filedPrefixes = new Set();
+        for (const line of sec.split('\n').filter(l => /^- \S/.test(l)).slice(0, 10)) {
+          const id = line.slice(2).split(' (FAIL:')[0].trim(), detail = (line.split('(FAIL:')[1] || '').replace(/\)\s*$/, '').trim();
+          const parts = id.split('/');
+          const prefix = parts.length > 2 ? `${parts[0]}/${parts[1]}` : id;
+          if (filedPrefixes.has(prefix)) continue; // group related failures for the same test/fixture
+          const exists = (await github.rest.search.issuesAndPullRequests({q: `repo:${owner}/${repo} is:issue in:title "${prefix}"`})).data.total_count;
+          if (!exists) {
+            filedPrefixes.add(prefix);
+            const suite = parts[0];
+            const hint = `Target test suite: tests/suites/${suite}.js\nReproduce command: node tests/suites/${suite}.js\nGoal: Investigate and resolve this check failure. If the test check timed out or has an incorrect expectation, fix tests/suites/${suite}.js. If it revealed a bug in the application, fix hplc-figure-bench(WF1.13).html. Ensure 'node tests/suites/${suite}.js' passes without regressions.`;
+            await github.rest.issues.create({owner, repo, title: `Bug found by ${id}`, labels: [L.triage], body: `The check \`${id}\`, added in #${p.number}, fails on main:\n\n> ${detail}\n\nThe PR description in #${p.number} may say more about the cause.\n\n${hint}`}); say(`follow-up issue for ${id}`); routedAg = true; } } } }
     for (const f of files.filter(f => /^docs\/.*audit.*\.md$/.test(f))) { const raw = await github.rest.repos.getContent({owner, repo, path: f, ref: 'main'}).catch(() => null); if (!raw) continue;
       const md = Buffer.from(raw.data.content, 'base64').toString('utf8'), part = md.split(/^##\s+Ready-to-file issues\s*$/m)[1]; if (!part) continue;
       for (const block of part.split(/^###\s+/m).slice(1, 21)) { const title = block.split('\n')[0].trim(), body = block.split('\n').slice(1).join('\n').trim(); if (!title) continue;

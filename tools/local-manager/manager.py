@@ -2327,7 +2327,9 @@ def ux_scope(s):
     # A timeout costs a whole UX_LOOK_S of the pass, and everything behind this duty waits it out. The local model
     # either reads screenshots today or it does not, so after UX_GIVE_UP in a row stop asking for the rest of the walk
     # rather than paying that again per step: on 2026-11-05 three timeouts in one walk held the pass for 30 minutes.
-    vision, misses = True, 0
+    has_vision_model = any(k in str(rv.MODEL).lower() for k in ('vision', 'llava', 'vl', 'multimodal', 'gemini'))
+    vision = has_vision_model and not u.get('no_vision') and cfg.get('ux_vision') is not False
+    misses = 0
     for st in rep_['steps']:
         st['notes'] = []
         if vision and st.get('shot') and Path(st['shot']).exists():
@@ -2338,7 +2340,8 @@ def ux_scope(s):
                 misses += 1
                 if misses >= UX_GIVE_UP:
                     vision = False
-                    log(f'ux: the local model failed on {misses} screenshots in a row, so the rest of this walk is plain checks only')
+                    u['no_vision'] = True
+                    log(f'ux: the local model failed on {misses} screenshots in a row, so vision is disabled for future walks')
             else:
                 st['notes'], misses = n, 0
     failed = [st for st in rep_['steps'] if not st['ok']]
@@ -2739,6 +2742,29 @@ def stuck(s):
                 post(pr['number'], '**For the lead:** the Test suite has failed on this PR for over an hour. See the test report comment for the regressions.' + SIGN.format(rv.MODEL))
                 s['flagged'][k] = 1
                 log(f'PR #{pr["number"]} flagged: failing tests')
+    # auto-reconcile open 'Bug found by' issues whose suite now passes on main
+    node = shutil.which('node')
+    if node and not DRY and not CLOUD:
+        reconciled = s.setdefault('reconciled_bugs', {})
+        for i in issues('jules-queue') + issues('needs-triage'):
+            n = str(i['number'])
+            title = i.get('title', '')
+            if not title.startswith('Bug found by ') or n in reconciled:
+                continue
+            check_id = title[len('Bug found by '):].strip(' `')
+            suite = check_id.split('/')[0]
+            suite_file = ROOT / 'tests' / 'suites' / f'{suite}.js'
+            if not suite_file.exists():
+                continue
+            try:
+                r = subprocess.run([node, f'tests/suites/{suite}.js'], cwd=ROOT, capture_output=True, text=True, timeout=60)
+                if r.returncode == 0 and '0 fail' in r.stdout:
+                    post(i['number'], f'**Resolved on main:** `tests/suites/{suite}.js` passes with 0 failures on current main. Closing issue directly per AGENTS.md rules.' + SIGN.format(rv.MODEL))
+                    gh(f'repos/{REPO}/issues/{i["number"]}', 'PATCH', {'state': 'closed'})
+                    reconciled[n] = 1
+                    log(f'reconciled fixed issue #{i["number"]} ({title})')
+            except Exception:
+                pass
 
 
 ADVISE = """You are advising the lead coordinator of the Protein Purification Bench repository (read AGENTS.md and docs/GOALS.md first, and weigh your advice by the priorities in GOALS.md).

@@ -101,4 +101,27 @@ assert(!isPlanAsk, 'Multi-paragraph question with scientific context must NOT tr
 assert(leaderSrc.includes('LOCAL_FIRST = 10'), 'LOCAL_FIRST should be 10 minutes matching AGENTS.md');
 assert(leaderSrc.includes('Date.now() - at > 5 * 60e3'), 'Re-nudge timeout should be 5 minutes');
 
+// Test 7: Verify prefix grouping for related check failures to prevent duplicate issue filing
+const sampleChecks = [
+  '10_data_truth/fixture_frac_uneven/step-name (FAIL: expected Size exclusion)',
+  '10_data_truth/fixture_frac_uneven/flow (FAIL: expected 0.5)',
+  '10_data_truth/fixture_frac_uneven/column (FAIL: expected Superdex)',
+  '30_robust/imac-warnings.all-missing (FAIL: missing warnings)'
+];
+
+const filedPrefixes = new Set();
+const filedTitles = [];
+for (const line of sampleChecks) {
+  const id = line.split(' (FAIL:')[0].trim();
+  const parts = id.split('/');
+  const prefix = parts.length > 2 ? `${parts[0]}/${parts[1]}` : id;
+  if (filedPrefixes.has(prefix)) continue;
+  filedPrefixes.add(prefix);
+  filedTitles.push(`Bug found by ${id}`);
+}
+
+assert.strictEqual(filedTitles.length, 2, 'Should group 3 fixture_frac_uneven checks into 1 issue');
+assert.strictEqual(filedTitles[0], 'Bug found by 10_data_truth/fixture_frac_uneven/step-name');
+assert.strictEqual(filedTitles[1], 'Bug found by 30_robust/imac-warnings.all-missing');
+
 console.log('All jules-leader tests passed successfully!');
