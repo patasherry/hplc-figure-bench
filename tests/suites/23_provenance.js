@@ -154,6 +154,45 @@ const F = {gb: src('gb'), imac: src('his'), grad: path.join(DATA, 'chrom/imac_Hi
     await p.setInputFiles('#file', {name: 'lost_curve.zip', mimeType: 'application/zip', buffer: fs.readFileSync(cleanUnicornZip)});
     await h.wait(800);
     T.check('reimport_clean_unicorn_clears_diag', (await p.locator('.trace.run .source-diag').count()) === 0, 'reimporting clean UNICORN archive clears warning');
+
+    // 5. Generic export with separated substantial data blocks (warning identifies both blocks without rejecting the file)
+    const lines1 = Array.from({length: 30}, (_, i) => `${(i * 0.1).toFixed(1)},${(Math.sin(i / 5)).toFixed(3)}`);
+    const lines2 = Array.from({length: 20}, (_, i) => `${(i * 0.1).toFixed(1)},${(Math.cos(i / 5)).toFixed(3)}`);
+    const multiBlockCsv = ['Time (min),UV 280 (mAU)', ...lines1, '[Run 2]', 'Time (min),UV 280 (mAU)', ...lines2].join('\n');
+    await p.setInputFiles('#file', {name: 'multi_block.csv', mimeType: 'text/csv', buffer: Buffer.from(multiBlockCsv)});
+    await h.wait(600);
+
+    const multiDiag = p.locator('.trace:not(.run) .source-diag').last();
+    T.check('multiblock_diag_present', (await multiDiag.count()) > 0, 'source-level warning appears for discarded substantial block');
+    const mbSummary = await multiDiag.locator('summary').textContent().catch(() => '');
+    T.check('multiblock_diag_summary', /Import warning/i.test(mbSummary) && /20 rows/i.test(mbSummary), `summary identifies omitted block count: ${mbSummary}`);
+    const mbMsg = await multiDiag.locator('.source-diag-msg').textContent().catch(() => '');
+    T.check('multiblock_identifies_both_blocks', /30 rows/i.test(mbMsg) && /lines 2[–-]31/i.test(mbMsg) && /20 rows/i.test(mbMsg) && /lines 34[–-]53/i.test(mbMsg), `message identifies both retained and omitted blocks with line ranges and row counts: ${mbMsg}`);
+
+    // Persists across project export/reload
+    const [dl2] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
+    const savePath2 = path.join(__dirname, '..', 'results', 'diag_multiblock_proj.json');
+    await dl2.saveAs(savePath2);
+
+    await p.click('#homeBtn').catch(() => {});
+    await h.wait(500);
+    await p.click('#homeQuick');
+    await h.wait(1000);
+
+    await p.setInputFiles('#projFile', savePath2);
+    await h.wait(2000);
+
+    const reloadMbDiag = p.locator('.trace:not(.run) .source-diag').last();
+    T.check('multiblock_diag_persists_reload', (await reloadMbDiag.count()) > 0, 'multiblock warning persists across project reload');
+    const reloadMbMsg = await reloadMbDiag.locator('.source-diag-msg').textContent().catch(() => '');
+    T.check('multiblock_reload_identifies_both_blocks', /30 rows/i.test(reloadMbMsg) && /20 rows/i.test(reloadMbMsg), `reloaded message identifies both blocks: ${reloadMbMsg}`);
+
+    // 6. Harmless metadata table (< minimum row threshold) does not trigger warning
+    const metaCsv = ['# Metadata', 'Flow,1.0', 'Temp,20', 'Pressure,5', 'Time (min),UV 280 (mAU)', ...lines1].join('\n');
+    await p.setInputFiles('#file', {name: 'clean_meta.csv', mimeType: 'text/csv', buffer: Buffer.from(metaCsv)});
+    await h.wait(600);
+    const metaTrace = p.locator('.trace:not(.run)').filter({hasText: 'clean_meta'});
+    T.check('metadata_table_no_false_warning', (await metaTrace.locator('.source-diag').count()) === 0, 'harmless metadata table does not trigger discarded block warning');
   });
 
   await close();

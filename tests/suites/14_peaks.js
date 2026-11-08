@@ -180,6 +180,56 @@ async function overlap() {
   } finally { T.check('overlap/no-page-errors', !errs.length, errs.join(' | ')); await close(); }
 }
 
+// #1141: a peak tag at the left plot edge must not overlap a y-axis tick label.
+async function axisTickCollision() {
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    let csv = 'Time (min),UV (mAU)\n';
+    for (let i = 0; i <= 100; i++) {
+      const x = i / 10, y = i === 0 ? 75 : 0;
+      csv += x.toFixed(1) + ',' + y + '\n';
+    }
+    await p.click('#homeQuick'); await h.wait(800);
+    await p.setInputFiles('#file', {name: 'axis_tick_tag.csv', mimeType: 'text/csv', buffer: Buffer.from(csv)});
+    await h.wait(600);
+    await p.evaluate(() => {
+      [['o-xmin', '0'], ['o-xmax', '10'], ['o-ymin', '73'], ['o-ymax', '77']].forEach(([id, value]) => {
+        const el = document.getElementById(id); el.value = value;
+        el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true}));
+      });
+      const ticks = document.getElementById('o-ticksOut'); ticks.checked = false;
+      ticks.dispatchEvent(new Event('input', {bubbles: true})); ticks.dispatchEvent(new Event('change', {bubbles: true}));
+      const peaks = document.querySelector('input[data-k="peaks"]'); peaks.value = '0:T13';
+      peaks.dispatchEvent(new Event('input', {bubbles: true})); peaks.dispatchEvent(new Event('change', {bubbles: true}));
+    });
+    await h.wait(500);
+    const boxes = await p.evaluate(() => {
+      const svg = document.querySelector('#paper svg');
+      const box = text => { const el = [...svg.querySelectorAll('text')].find(t => t.textContent.trim() === text); if (!el) return null; const r = el.getBoundingClientRect(); return {l:r.left, r:r.right, t:r.top, b:r.bottom}; };
+      return {tag: box('T13'), tick: box('75')};
+    });
+    T.check('axis_tick/tag-and-tick-found', !!boxes.tag && !!boxes.tick, `tag: ${JSON.stringify(boxes.tag)}, tick: ${JSON.stringify(boxes.tick)}`);
+    if (boxes.tag && boxes.tick) {
+      const hit = boxes.tag.l < boxes.tick.r && boxes.tag.r > boxes.tick.l && boxes.tag.t < boxes.tick.b && boxes.tag.b > boxes.tick.t;
+      T.check('axis_tick/tag-does-not-overlap-tick', !hit, `tag ${JSON.stringify(boxes.tag)}, tick ${JSON.stringify(boxes.tick)}`);
+    }
+    await p.evaluate(() => {
+      [['o-ymin', '74'], ['o-ymax', '76']].forEach(([id, value]) => {
+        const el = document.getElementById(id); el.value = value;
+        el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true}));
+      });
+    });
+    await h.wait(300);
+    const zoomed = await p.evaluate(() => {
+      const svg = document.querySelector('#paper svg');
+      const box = match => { const el = [...svg.querySelectorAll('text')].find(match); if (!el) return null; const r = el.getBoundingClientRect(); return {l:r.left, r:r.right, t:r.top, b:r.bottom}; };
+      return {tag: box(t => t.textContent.trim() === 'T13'), tick: box(t => Number(t.textContent.trim()) === 75)};
+    });
+    const zoomHit = zoomed.tag && zoomed.tick && zoomed.tag.l < zoomed.tick.r && zoomed.tag.r > zoomed.tick.l && zoomed.tag.t < zoomed.tick.b && zoomed.tag.b > zoomed.tick.t;
+    T.check('axis_tick/zoomed-tag-does-not-overlap-tick', !!zoomed.tag && !!zoomed.tick && !zoomHit, `tag ${JSON.stringify(zoomed.tag)}, tick ${JSON.stringify(zoomed.tick)}`);
+  } finally { T.check('axis_tick/no-page-errors', !errs.length, errs.join(' | ')); await close(); }
+}
+
 // #398: a zoom window too narrow to search (under 7 points) falls back to the whole trace, keeping peaks inside the window
 async function zoomPeak() {
   const {p, errs, close} = await open(), h = H(p);
@@ -294,6 +344,7 @@ async function peakSeparator() {
 
 (async () => {
   await T.t('overlap', overlap);
+  await T.t('axis_tick_collision', axisTickCollision);
   await T.t('zoom_peak', zoomPeak);
   for (const e of EXP) {
     await T.t(e.file, () => peakFile(e));
