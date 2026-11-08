@@ -8,7 +8,10 @@ MAX_TRIES = 2  # Antigravity attempts per issue before it stays with Jules
 
 
 def is_light(title):
-    return bool(LIGHT_RE.search(title or ''))
+    t = title or ''
+    if re.match(r'^bug\b', t, re.I):
+        return False
+    return bool(LIGHT_RE.search(t))
 
 
 def kind(title):
