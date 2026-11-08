@@ -2140,7 +2140,7 @@ function poolMeas(run){ const pc = numOr(run.poolConc, null); if (pc !== null &&
   const b = prep.btw && prep.btw[run.id], bv = b ? numOr(b.vOut, null) : null;
   const F = ndFinalOf(run), st = F.length ? ndStats(F) : null, fv = numOr(run.ndFinalVol, null) != null ? numOr(run.ndFinalVol, null) : bv;
   if (st && st.m >= 0) return (fv !== null && fv >= 0) || b ? {c: st.m, v: fv, src: b ? 'btw' : 'nd', nd: st, how: b && (b.how || 'conc')} : {c: null, v: null, src: null, nd: st};
-  const bc = b ? numOr(b.conc, null) : null; if (bc !== null && bc >= 0) return {c: bc, v: bv, src: 'btw', how: b.how || 'conc'};
+  const bc = b && b.conc !== '' && b.conc != null ? Number(b.conc) : null; if (bc !== null && bc >= 0) return {c: bc, v: bv, src: 'btw', how: b.how || 'conc'};
   return {c: null, v: null, src: null}; }
 /* NanoDrop readings of the concentrated sample after a column */
 const ndFinalOf = run => typeof ndSamples === 'undefined' ? [] : ndSamples.filter(x => x.runId === run.id && x.stage === 'conc' && x.kind !== 'nucleic' && !x.hide && !CRUDE_RE.test(x.name));
@@ -4008,7 +4008,7 @@ function buildRunFig(run){
 const sig2 = v => v >= 100 ? fmt(v, 0) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2) : v >= 0.1 || v === 0 ? fmt(v, 2) : fmt(v, 3);
 function finalYield(path){
   const allRows = sumRows(), rows = path ? allRows.filter(x => path.includes(x.r)) : allRows, mgOf = allRows.mgOf || (() => null);
-  const fin = rows.slice().reverse().find(x => mgOf(x) !== null); if (!fin) return null;
+  const fin = rows.slice().reverse()[0]; if (!fin) return null;
   /* the final sample's own concentration and volume, when entered, give the amount kept; the last pool stays the chromatography figure */
   const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc !== null ? kc : mgOf(fin);
   let fc = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finConc, null) : null, fv = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finVol, null) : null, meas = fc !== null && fv !== null && fc >= 0 && fv >= 0;
@@ -4576,7 +4576,7 @@ function runCondLines(r, mode){
 }
 /* a methods paragraph for the whole workflow, from everything entered */
 function methodsText(){
-  const P = [], wf = wfList(), v = x => String(x == null ? '' : x).trim(), cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
+  const P = [], baseWf = wfList(), wf = prep.on ? baseWf.concat(runs.filter(r => !baseWf.includes(r) && (prep.btw && prep.btw[r.id]))).sort((a, b) => a.id - b.id) : baseWf, v = x => String(x == null ? '' : x).trim(), cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
   /* lower-case a phrase's first letter, unless it starts an acronym or a name with capitals inside (SUMO, BugBuster) */
   const lc = t => !t ? t : /^[A-Z][A-Z0-9]|^[A-Z][a-z]+[A-Z]/.test(t) ? t : t.replace(/^./, c => c.toLowerCase());
   const art = t => /^[aeiouäÄ]/i.test(t) || /^[FHLMNRSX][A-Z0-9]/.test(t) ? 'an' : 'a', deg = t => unitIf(t, '°C'), hrs = t => unitIf(t, 'h');

@@ -44,6 +44,28 @@ async function fresh(id, fn){
     let html = await p.evaluate(() => document.querySelector('#paper').innerHTML);
     T.check('zero_measured_shows_sample_svg', html.includes('Final sample:') || html.includes('Final sample ('), `SVG includes Final sample: ${html.includes('Final sample:')}`);
 
+    // 1.5. Evidence rule: test explicit 0 in pool Meas
+    await p.evaluate(() => { const btns = document.querySelectorAll('#tl button[data-step]'); const r = Array.from(btns).find(b=>b.dataset.step.startsWith('run:')); if(r) r.click(); }); await h.wait(400);
+    await p.evaluate(() => {
+      const c = document.querySelector('.trace.run.sel [data-k="poolConc"]');
+      if(c){
+        let d = c.closest('details'); while(d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); }
+        c.value = '0';
+        c.dispatchEvent(new Event('input', {bubbles: true}));
+        c.dispatchEvent(new Event('change', {bubbles: true}));
+      }
+      const v = document.querySelector('.trace.run.sel [data-k="poolFinalVol"]');
+      if(v){
+        let d = v.closest('details'); while(d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); }
+        v.value = '0';
+        v.dispatchEvent(new Event('input', {bubbles: true}));
+        v.dispatchEvent(new Event('change', {bubbles: true}));
+      }
+    });
+    await h.wait(400);
+    await h.step('figure'); await h.wait(500);
+    let html15 = await p.evaluate(() => document.querySelector('#paper').innerHTML);
+    T.check('explicit_zero_pool_meas_svg', html15.includes('unknown') === false && (html15.includes('0.00 mg') || html15.includes('0 mg')), `SVG includes 0 mg instead of unknown`);
     // 2. Now let's test missing/unknown data by disabling the reading
     const steps = await p.$$eval('#tl button[data-step]', els => els.map(e => e.getAttribute('data-step')));
     const manStep = steps.find(s => s.startsWith('man:'));
