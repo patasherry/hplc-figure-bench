@@ -153,6 +153,31 @@ function makePNG(w, h) {
     T.check('reopen-project', ms != null && ms < 10000, ms != null ? `${ms} ms (budget: 10000 ms)` : 'timeout waiting for project reopen');
   });
 
+
+    // 7. Workflow panel structure check
+  await T.t('workflow-8-steps-panels', async () => {
+    const F = {
+      his: path.join(DATA, 'standins', 'imac_histrap_1ml_step.csv'),
+      ortho: path.join(DATA, 'standins', 'imac_histrap_1ml_ortho.csv'),
+      q: path.join(DATA, 'standins', 'iex_q_6ml.csv'),
+      s200: path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv'),
+      zip: path.join(DATA, 'chrom', 'sec_Sup6_basic_unicorn7.zip'),
+      nd: path.join(DATA, 'nd', 'nd_one_protein_a280.csv')
+    };
+    for (const f of [F.his, F.ortho, F.q, F.s200, F.zip, F.his]) await h.dropFiles(f);
+    await h.addConc(F.nd, 0.3);
+    await h.step('figure');
+
+    await p.waitForTimeout(500);
+    const panels = await p.evaluate(() => {
+        // the original element we care about
+        return document.querySelectorAll('#paper svg g').length;
+    });
+
+    // We expect there to be enough groups
+    T.check('perf.workflow-8-steps-panels', panels >= 7, `${panels} panels in workflow SVG (expected at least 7 groups for 8 steps in layout)`);
+  });
+
   T.check('no-page-errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
