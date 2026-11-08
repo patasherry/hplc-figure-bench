@@ -23,6 +23,7 @@ assert(!p1.includes('Triage: if this is a real app bug'), 'Triage boilerplate sh
 assert(p1.includes('Target test suite: tests/suites/22_protein.js'), 'Should identify tests/suites/22_protein.js');
 assert(p1.includes('Reproduce command: node tests/suites/22_protein.js'), 'Should provide reproduce command');
 assert(p1.includes('Closes #1178'), 'Should include Closes #1178');
+assert(p1.includes('Do not pause to ask for permission to plan or investigate: proceed autonomously'), 'Should instruct autonomous action without pausing for permission');
 
 // Test 2: Another check pattern
 const issue2 = {
@@ -52,12 +53,42 @@ const p3Retry = promptFn(issue3, 2, 'timed out');
 assert(p3Retry.includes('NOTE: attempt 2. The previous attempt ended with an error (timed out)'), 'Should include retry note');
 
 // Test 5: Verify question regexes
-const DONE_Q = /\b(ready to (open|create|submit|finalize)|shall|should|may|can|would you like me to) (i |we )?(now )?(proceed|submit|finalize|wrap up|open|create|push)\b[^?]{0,80}\b(pr|pull request|changes|commit)?\?/i;
-const QUICK = /\b(skip|bypass|without (running|waiting)|instead of)\b[^.?]{0,60}\b(compare(\.js)?|test suite|tests?|comparison)\b|\b(compare(\.js)?|comparison|test suite|bash|shell|environment)\b[^.?]{0,60}\b(too (slow|long)|time[sd]? ?out|stopped responding|not responding|hang|hung|unresponsive)\b|\b(shall|should|may|can) i (now )?(proceed|submit|open the (pr|pull request)|commit)\b/i;
+const doneQMatch = leaderSrc.match(/const DONE_Q = (.*?);/);
+const planQMatch = leaderSrc.match(/const PLAN_Q = (.*?);/);
+const quickMatch = leaderSrc.match(/const QUICK = (.*?);/);
+const sciMatch = leaderSrc.match(/const SCI = (.*?);/);
+
+assert(doneQMatch && planQMatch && quickMatch && sciMatch, 'Regexes must exist');
+const DONE_Q = eval(doneQMatch[1]);
+const PLAN_Q = eval(planQMatch[1]);
+const QUICK = eval(quickMatch[1]);
+const SCI = eval(sciMatch[1]);
 
 assert(DONE_Q.test('Should I now proceed to open the PR?'), 'DONE_Q match');
 assert(DONE_Q.test('May I create the pull request?'), 'DONE_Q match');
 assert(QUICK.test('compare.js is too slow, can I proceed?'), 'QUICK match');
 assert(QUICK.test('Can I skip compare.js?'), 'QUICK match');
+
+// Plan and permission questions from real issues
+const q1178 = "I'm ready to propose a plan, but I would like your permission first. Are there any other details you want me to check for 11_eps_selector?";
+assert(PLAN_Q.test(q1178), 'q1178 should match PLAN_Q');
+assert(!SCI.test(q1178), 'q1178 is not scientific');
+
+const q1177 = "I will look into why secAuto is not set. Could you confirm if I should investigate the secAuto logic or secGuess?";
+assert(PLAN_Q.test(q1177), 'q1177 should match PLAN_Q');
+
+const qAgree = "Let me know if you agree with proceeding with this approach.";
+assert(PLAN_Q.test(qAgree), 'qAgree should match PLAN_Q');
+
+const qGoAhead = "Would you like me to go ahead and implement this change?";
+assert(PLAN_Q.test(qGoAhead), 'qGoAhead should match PLAN_Q');
+
+// Scientific question should not be auto-answered
+const qSci = "What molecular weight should be used for the calibration curve?";
+assert(SCI.test(qSci), 'qSci should match SCI');
+
+// Test 6: Verify timeouts
+assert(leaderSrc.includes('LOCAL_FIRST = 5'), 'LOCAL_FIRST should be 5 minutes');
+assert(leaderSrc.includes('Date.now() - at > 5 * 60e3'), 'Re-nudge timeout should be 5 minutes');
 
 console.log('All jules-leader tests passed successfully!');

@@ -2975,7 +2975,7 @@ def one_pass():
     # Behind 'questions' they used to wait out the whole question ladder, which routinely holds a pass for 20 to 45
     # minutes: #1060 sat on relay-from-board with no request posted because of that, and it reads as a stall.
     for name, duty in (('relay', relay), ('owner', owner_replies), ('owner merge', owner_merge_replies), ('science inbox', science_inbox),
-                       ('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('claude jobs', claude_jobs), ('codex jobs', codex_jobs), ('agy jobs', lambda s: bg_worker(s, 'agy')), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+                       ('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('claude jobs', claude_jobs), ('codex jobs', codex_jobs), ('agy jobs', lambda s: bg_worker(s, 'agy')), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('questions mid', jules_questions), ('ux', ux_scope), ('questions post-ux', jules_questions), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
