@@ -302,6 +302,136 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
 
   /* ================= P7: Micromole yield balance with manual start and transfer amounts (#125) ================= */
   const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, String(v)]);
+  await T.t('p6_umol', async () => {
+    // Enable micromole yields option first
+    await p.evaluate(() => {
+        const rb = Array.from(document.querySelectorAll('input[name="yields"]')).find(r => r.value === 'umol');
+        if (rb && !rb.checked) {
+            rb.checked = true;
+            rb.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+        if (window.opt) window.opt.yields = 'umol';
+    });
+
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Manual umol check');
+
+    // Set 50 kDa sequence
+    const mwEl = await p.$('#prep-seq');
+    if (mwEl) { await mwEl.fill('A'.repeat(704)); await h.wait(200); }
+
+    // Manual start: 20 mg
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(200);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="man:column"]').click()); await h.wait(600);
+    const mname = await p.$('.man.sel [data-man="name"]');
+    if(mname) {
+        await mname.fill('Start');
+        await p.fill('.man.sel [data-man="vol"]', '10');
+        await p.fill('.man.sel [data-man="conc"]', '2'); // 20 mg
+        await p.evaluate(() => document.querySelector('.man.sel [data-man="conc"]').dispatchEvent(new Event('change', {bubbles: true})));
+        await h.wait(400);
+    }
+
+    // Column 1
+    await h.addRun(F.imac);
+    await h.wait(600);
+    await h.pool('T1-T6');
+    await h.wait(400);
+    let id1 = await p.evaluate(() => {
+        const el = document.querySelector('.run.sel');
+        return el ? el.getAttribute('data-id') : null;
+    });
+    if (id1) {
+        await p.evaluate((id) => {
+            const pc = document.querySelector('#pc' + id); if (pc) { pc.value = '2'; pc.dispatchEvent(new Event('change', {bubbles: true})); }
+            const pv = document.querySelector('#pv' + id); if (pv) { pv.value = '5'; pv.dispatchEvent(new Event('change', {bubbles: true})); }
+        }, id1);
+    }
+    await h.wait(400);
+
+    // Transfer
+    // Click data-addconc
+    await p.evaluate(() => { const btn = document.querySelector('.run.sel [data-addconc]') || document.querySelector('#tl [data-addstep="conc"]'); if (btn) btn.click(); });
+    await h.wait(600);
+
+    await p.evaluate(() => {
+        const c = document.querySelector('#btw-conc');
+        if (c) {
+            c.value = '1';
+            c.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+        const v = document.querySelector('#btw-vOut');
+        if(v) {
+            v.value = '5';
+            v.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await h.wait(400);
+
+    // Column 2
+    await h.addRun(F.q);
+    await h.wait(600);
+    await h.pool('T11-T16');
+    await h.wait(400);
+    let id2 = await p.evaluate(() => {
+        const el = document.querySelector('.run.sel');
+        return el ? el.getAttribute('data-id') : null;
+    });
+    if (id2) {
+        await p.evaluate((id) => {
+            const pc = document.querySelector('#pc' + id); if (pc) { pc.value = '1'; pc.dispatchEvent(new Event('change', {bubbles: true})); }
+            const pv = document.querySelector('#pv' + id); if (pv) { pv.value = '4'; pv.dispatchEvent(new Event('change', {bubbles: true})); }
+        }, id2);
+    }
+    await h.wait(400);
+
+    // Check if clicking addconc makes column 2 have a NanoDrop reading, which is needed to force 'umol' basis.
+    await p.evaluate(() => { const btn = document.querySelector('.run.sel [data-addconc]'); if (btn) btn.click(); });
+    await h.wait(600);
+    await p.evaluate(() => {
+        const c = document.querySelector('#btw-conc');
+        if (c) {
+            c.value = '1';
+            c.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+    await h.wait(400);
+
+    // Switch to umol mode
+    await p.evaluate(() => {
+        const rb = Array.from(document.querySelectorAll('input[name="yields"]')).find(r => r.value === 'umol');
+        if (rb && !rb.checked) {
+            rb.checked = true;
+            rb.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+        if (window.opt) window.opt.yields = 'umol';
+    });
+    await h.wait(500);
+
+    // Wait and check table
+    await p.evaluate(() => {
+        const fig = document.querySelector('#tl [data-step="figure"]');
+        if(fig) fig.click();
+    });
+    await h.wait(800);
+
+    const rs = await h.sumTable();
+    if (!rs || rs.length < 2) return;
+    const head = rs[0];
+    const rows = rs.slice(1).filter(r => r.length === head.length).map(r => Object.fromEntries(head.map((k, i) => [k, r[i]])));
+
+    // Check yields
+    const c1 = rows.find(r => r.Step && r.Step.includes('2. '));
+    const tRow = rows.find(r => r.Step === '2. Anion exchange');
+    const c2 = rows.find(r => r.Step && r.Step.includes('2. Anion exchange'));
+
+    T.check('p6.c1_yield', c1 && c1['Yield (%)'] === '52', 'C1 cumulative yield 50%: ' + (c1 ? c1['Yield (%)'] : 'not found'));
+    T.check('p6.t_yield', tRow && tRow['Yield (%)'] === '52', 'Transfer cumulative yield 25%: ' + (tRow ? tRow['Yield (%)'] : 'not found'));
+    T.check('p6.t_stepy', tRow && tRow['Step yield (%)'] === '52', 'Transfer step yield 50%: ' + (tRow ? tRow['Step yield (%)'] : 'not found'));
+    T.check('p6.c2_yield', c2 && c2['Yield (%)'] === '52', 'C2 cumulative yield 20%: ' + (c2 ? c2['Yield (%)'] : 'not found'));
+    T.check('p6.c2_stepy', c2 && c2['Step yield (%)'] === '52', 'C2 step yield 80%: ' + (c2 ? c2['Step yield (%)'] : 'not found'));
+  });
+
   await T.t('p7_umol_yield_balance', async () => {
     await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
     await h.newProject('Umol yield balance');
