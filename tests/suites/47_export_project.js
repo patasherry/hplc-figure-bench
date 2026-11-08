@@ -27,6 +27,18 @@ const {open, H, suite, src, fs, path, DATA} = require('../lib/harness');
     // Reopen App
     await p.click('#homeBtn').catch(() => {});
     await h.wait(500);
+
+    const homeGuidance = await p.$eval('#homeWhere', el => el.textContent);
+    const saveHiddenHome = await p.$eval('#projSave', el => el.hidden);
+
+    // Reopen project from home screen
+    await p.click('#projList .pcard');
+    await h.wait(500);
+    const saveVisibleStored = await p.isVisible('#projSave');
+
+    // Return to home and import exported file
+    await p.click('#homeBtn').catch(() => {});
+    await h.wait(500);
     await p.click('#homeQuick');
     await h.wait(1500);
 
@@ -45,6 +57,11 @@ const {open, H, suite, src, fs, path, DATA} = require('../lib/harness');
     // Verify button text
     const btnText = await p.$eval('#projSave', el => el.innerText);
     T.check('export project button text', btnText === 'Export project', `Expected "Export project", got "${btnText}"`);
+
+    const saveVisibleImported = await p.isVisible('#projSave');
+    T.check('home guidance explains export availability and export control is available when open',
+      homeGuidance.includes('Open a project, then choose Export project') && saveHiddenHome && saveVisibleStored && saveVisibleImported,
+      `Guidance: ${homeGuidance}, hiddenOnHome: ${saveHiddenHome}, visibleInStored: ${saveVisibleStored}, visibleInImported: ${saveVisibleImported}`);
 
     T.check('no page errors', !errs.length, errs.join(' | '));
     await close();
