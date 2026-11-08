@@ -14,6 +14,8 @@ assert rt.is_light('Add a failing test for ticks') and rt.is_light('verify the l
 assert rt.is_light('26_sec_calibration reaches into window.__HFB') and rt.is_light('796_tag_mass crashes')
 assert rt.is_light('test_nanodrop_units fails on main') and rt.is_light('The test report merges suites that share a number')
 assert not rt.is_light('Fix overlapping tick labels') and not rt.is_light('Testing harness drifts')
+assert not rt.is_light('Bug found by 22_protein/10_cleavage_consistency:threw')
+assert not rt.is_light('Bug: SEC calibration calculation error')
 
 # mixed queue: the app-changing issue wins even though a light one is newer
 q = [iss(10, 'Fix baseline slope'), iss(12, 'Test the legend'), iss(11, 'Docs: wording')]
