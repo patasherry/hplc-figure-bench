@@ -157,6 +157,76 @@ function parseZip(buffer) {
     await h.step('figure');
     await h.wait(500);
 
+    await T.t('export-format-groups-mobile', async () => {
+      await p.setViewportSize({ width: 390, height: 844 });
+      const res = await p.evaluate(() => {
+        const copySvg = document.querySelector('#copySvg');
+        const saveSvg = document.querySelector('#saveSvg');
+        const savePng = document.querySelector('#savePng');
+        const oDpi = document.querySelector('#o-dpi');
+        const foot = document.querySelector('.canvas-foot');
+
+        const svgGroup = copySvg ? copySvg.parentElement : null;
+        const pngGroup = savePng ? savePng.parentElement : null;
+
+        const svgGroupMembership = !!(
+          svgGroup &&
+          saveSvg &&
+          saveSvg.parentElement === svgGroup &&
+          svgGroup !== pngGroup &&
+          svgGroup !== document.querySelector('.export') &&
+          svgGroup.classList.contains('joined')
+        );
+
+        const pngDpiAdjacency = !!(
+          pngGroup &&
+          oDpi &&
+          oDpi.parentElement === pngGroup &&
+          savePng.nextElementSibling === oDpi
+        );
+
+        const items = [
+          { id: 'copySvg', el: copySvg },
+          { id: 'saveSvg', el: saveSvg },
+          { id: 'savePng', el: savePng },
+          { id: 'oDpi', el: oDpi }
+        ].map(it => {
+          const r = it.el.getBoundingClientRect();
+          return { id: it.id, top: Math.round(r.top), left: Math.round(r.left) };
+        });
+        items.sort((a, b) => (Math.abs(a.top - b.top) > 5 ? a.top - b.top : a.left - b.left));
+        const order = items.map(it => it.id);
+        const svgAdjacent = Math.abs(order.indexOf('copySvg') - order.indexOf('saveSvg')) === 1;
+        const pngAdjacent = Math.abs(order.indexOf('savePng') - order.indexOf('oDpi')) === 1;
+        const orderExpected = (
+          order.join(',') === 'copySvg,saveSvg,savePng,oDpi' ||
+          order.join(',') === 'saveSvg,copySvg,savePng,oDpi'
+        );
+
+        const docEl = document.documentElement;
+        const noPageOverflow = docEl.scrollWidth <= docEl.clientWidth;
+        const noFootOverflow = foot.scrollWidth <= foot.clientWidth;
+
+        return {
+          svgGroupMembership,
+          pngDpiAdjacency,
+          svgAdjacent,
+          pngAdjacent,
+          orderExpected,
+          order,
+          noPageOverflow,
+          noFootOverflow
+        };
+      });
+
+      T.check('export.svg_group_membership', res.svgGroupMembership, 'Copy SVG and Save SVG share joined SVG action group');
+      T.check('export.png_dpi_adjacency', res.pngDpiAdjacency, 'Save PNG directly paired with DPI selector');
+      T.check('export.mobile_visible_ordering', res.svgAdjacent && res.orderExpected, 'Visible mobile ordering groups SVG actions together: ' + res.order.join(' -> '));
+      T.check('export.mobile_no_horizontal_overflow', res.noPageOverflow && res.noFootOverflow, 'No horizontal overflow at 390px viewport');
+
+      await p.setViewportSize({ width: 1280, height: 800 });
+    });
+
     // SVG Export (#saveSvg)
     const svg = await download('#saveSvg');
     T.check('export.svg.download', !!svg, 'SVG figure downloaded');

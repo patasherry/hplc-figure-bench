@@ -299,7 +299,7 @@ details.paste[open]{display:grid;gap:8px}
 .joined > :first-child{border-top-right-radius:0;border-bottom-right-radius:0;flex:1;min-width:0}
 .joined > :last-child{border-top-left-radius:0;border-bottom-left-radius:0;margin-left:-1px;flex:none;width:auto}
 .joined > .btn{min-height:32px;padding-inline:11px}
-.joined > :focus,.joined > :focus-visible{position:relative;z-index:1}
+.joined > :focus,.joined > :focus-visible,.joined > :hover{position:relative;z-index:1}
 .cardopts .check{font-size:12px;color:var(--muted)}
 ul.sumnotes{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}
 .cardtext{border-top:1px solid var(--line);padding-top:6px}
@@ -1309,14 +1309,13 @@ button,input,select,textarea{font-family:inherit}
     <div class="canvas-foot">
       <div class="spec"><span id="spec"></span><span id="spec2"></span></div>
       <div class="btns export">
-        <button class="btn" id="copySvg" type="button">Copy SVG</button>
+        <span class="joined export-svg"><button class="btn" id="copySvg" type="button">Copy SVG</button><button class="btn primary" id="saveSvg" type="button">Save SVG</button></span>
         <span class="joined"><button class="btn" id="savePng" type="button">Save PNG</button><select id="o-dpi" data-opt="dpi" data-type="num" aria-label="PNG resolution">
           <option value="300">300 dpi</option>
           <option value="600">600 dpi</option>
           <option value="1200">1200 dpi</option>
         </select></span>
         <button class="btn" id="saveAll" type="button" hidden>Save all (ZIP)</button>
-        <button class="btn primary" id="saveSvg" type="button">Save SVG</button>
       </div>
     </div>
     </section>
