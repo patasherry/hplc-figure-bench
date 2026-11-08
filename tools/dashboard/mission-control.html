@@ -89,7 +89,7 @@ details.log pre { font-size: .75rem; max-height: 16rem; overflow: auto; backgrou
   <p class="err" id="err" hidden></p>
 
   <section class="card">
-    <div><h2>Needs you</h2><p class="note">Decisions only you can make: changes to numbers the app reports, and jobs to paste into Antigravity.</p></div>
+    <div><h2>Needs you</h2><p class="note">Decisions only you can make: changes to numbers the app reports. Issues labelled for-antigravity are picked up automatically, and anything not started within antigravity_stall_minutes (config key, default 45) is handed to Jules.</p></div>
     <div id="inbox"></div>
     <p class="cta">Hit a problem while using the app? <a href="https://github.com/patasherry/hplc-figure-bench/issues/new?template=from-patrick.md" target="_blank" rel="noopener">Report it with the From Patrick form</a>. Those go to the front of the queue.</p>
   </section>
@@ -191,7 +191,7 @@ async function load() {
     const inbox = [];
     for (const i of open) { if (i.pull_request) continue; const l = names(i);
       if (l.has('needs-owner')) inbox.push({n: i.number, title: i.title, why: 'Needs your OK', url: i.html_url});
-      if (l.has('for-antigravity')) inbox.push({n: i.number, title: i.title, why: 'Paste into Antigravity', url: i.html_url}); }
+      if (l.has('for-antigravity')) inbox.push({n: i.number, title: i.title, why: 'Issues labelled for-antigravity are picked up automatically, and anything not started within antigravity_stall_minutes (config key, default 45) is handed to Jules', url: i.html_url}); }
     if (checkin) for (const line of checkin.body.split('\n')) { const m = line.match(/^\s*[-*]\s*\**Patrick:?\**:?\s*(.+)/); if (m) inbox.push({n: TRACK, title: clean(m[1]), why: 'From the lead check-in', url: checkin.html_url}); }
 
     const work = [];

@@ -1522,7 +1522,7 @@ function parseText(text){
     /* the column header of an export with no points can sit under a long metadata block (LabSolutions ASCII: [Header], [Sample Information], ...) */
     const isChrom = lines.slice(0, 200).some(L => { const s = L.trim(); if (!s) return false;
       for (const d of ['\t', ',', ';']) { const fs = splitLine(s, d).map(clean);
-        if (fs.length >= 2 && fs.some(f => /\b(time|min|sec|vol|ml|retention)\b/i.test(f)) && fs.some(f => /\b(uv|absorb|sig|mau|au|od|fluor|intensity|resp|\d{3}\s*nm)\b/i.test(f))) return true; }
+        if (fs.length >= 2 && fs.some(f => /\b(time|min|sec|vol(?:ume)?|ml|retention)\b/i.test(f)) && fs.some(f => /\b(uv|absorb(?:ance)?|sig(?:nal)?|mau|au|od|fluor(?:escence)?|intensity|resp(?:onse)?|\d{3}\s*nm)\b/i.test(f))) return true; }
       return false; });
     if (isChrom) throw new Error('has no data points');
     throw new Error('No numeric columns found');
@@ -3040,7 +3040,7 @@ function applyAutoCrop(g, quiet){
 }
 /* ---------- gel densitometry: lane profiles, bands, ladder calibration ---------- */
 /* detector settings (tuned on synthetic gels with known bands; see the blind test) */
-const DET = {laneLo: 0.2, laneHi: 0.8, smooth: 0.003, bgWin: 0.1, sep: 0.014, minAbs: 2.5, edgeTop: 0.03, edgeBot: 0.02, tail: 0.05, noiseK: 0, promRel: 0.05, gelRel: 0.07, madK: 0, mode: 'sep', shoulderK: 6, fit: false, satRatio: 0.3, shRatio: 1.15, shDist: 2.2, track: true, trackPen: 0.7, ladRef: 0.3, ladExtra: 4, ladSkip: 2, ladMiss: 0.02, ladFit: 1, ladAcross: 0.8};
+const DET = {laneLo: 0.2, laneHi: 0.8, smooth: 0.003, bgWin: 0.1, sep: 0.014, minAbs: 1.09, edgeTop: 0.03, edgeBot: 0.02, noiseK: 0, promRel: 0.05, gelRel: 0.07, madK: 0, mode: 'sep', shoulderK: 6, fit: false, satRatio: 0.3, shRatio: 1.15, shDist: 2.2, track: true, ladRef: 0.3, ladExtra: 4, ladSkip: 2, ladMiss: 0.02, ladFit: 1, ladAcross: 0.8};
 /* band energy image: each column minus its vertical morphological opening, so bands (short, dark) stay and smears, the gel
    background and gel edges go. Cached per processed image. */
 function bandEnergy(g){
@@ -4362,7 +4362,8 @@ function ncSVG(W, H, fs, aw, run){ const nf = fs*0.85, lh = nf*1.3, s = [], line
   lines.forEach((o, i) => { const x = typeof o === 'string' ? {t: o} : o; s.push(`<text x="${r2(L0)}" y="${r2(y)}" font-size="${r2(i === 0 ? fs : nf)}"${i === 0 ? ' font-weight="bold"' : ''} fill="${x.c || '#000000'}">${esc(x.t)}</text>`); y += i === 0 ? fs*1.3 : lh; });
   if (!sp.length) { s.push(prepGlyph('conc', L0, y + fs*0.4, Math.min(fs*3, H*0.3), aw)); PREP_USED = H; return s.join(''); }
   const xlo = 240, xhi = 340, pal = PAL.okabe, ys = sp.flatMap(q => q.spec.ab.filter((v, i) => q.spec.wl[i] >= xlo && q.spec.wl[i] <= xhi)), y0 = Math.min(0, ...ys), y1 = Math.max(...ys)*1.08 || 1;
-  const yt = ticks(y0, y1, 3); if (yt.v.length > 1) yt.v = yt.v.filter(v => v > y0); const ytl = yt.v.map(v => fmt(v, yt.dec)), L = L0 + yTitleW + Math.max(...ytl.map(t => t.length))*tf*0.56 + 4, R = W - fs*0.9, B = NC_ALIGN && NC_ALIGN.B > y + fs*3 ? NC_ALIGN.B : H - tf*2.9, T = Math.max(y + fs*0.3, NC_ALIGN ? NC_ALIGN.T : 0);
+  const B = NC_ALIGN && NC_ALIGN.B > y + fs*3 ? NC_ALIGN.B : H - tf*2.9, T = Math.max(y + fs*0.3, NC_ALIGN ? NC_ALIGN.T : 0);
+  let yt = ticks(y0, y1, 3); yt = fitTicks(yt, y0, y1, 3, B - T, 0, fs*1.28); if (yt.v.length > 1) yt.v = yt.v.filter(v => v > y0); const ytl = yt.v.map(v => fmt(v, yt.dec)), L = L0 + yTitleW + Math.max(...ytl.map(t => t.length))*tf*0.56 + 4, R = W - fs*0.9;
   const px = x => L + (x - xlo)/(xhi - xlo)*(R - L), py = v => B - (v - y0)/(y1 - y0)*(B - T), tl = fs*0.35;
   s.push(`<line x1="${r2(px(280))}" y1="${r2(T)}" x2="${r2(px(280))}" y2="${r2(B)}" stroke="#a0a0a0" stroke-width="${r2(aw*0.6)}" stroke-dasharray="2 2"/>`);
   sp.forEach((q, k) => { let d = ''; q.spec.wl.forEach((w, i) => { if (w < xlo || w > xhi) return; d += (d ? 'L' : 'M') + r2(px(w)) + ' ' + r2(py(q.spec.ab[i])); }); s.push(`<path d="${d}" fill="none" stroke="${sp.length > 1 ? pal[k % pal.length] : '#0072B2'}" stroke-width="${r2(Math.max(0.6, aw*1.1))}" stroke-linejoin="round"/>`); });

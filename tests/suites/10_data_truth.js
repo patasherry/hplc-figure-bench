@@ -39,6 +39,7 @@ async function chromFile(e){ const id = e.file.replace(/\.[^.]+$/, ''), t0 = Dat
     // guards: the column is read from the file name or the UNICORN log
     if (e.column) { const c = (await field(p, 'mCol')).replace(/^auto:\s*/i, '').replace(/\s*\(from the file.*$/i, '').trim(); T.check(`${id}/column`, c.toLowerCase() === e.column.toLowerCase(), `expected "${e.column}", got "${c}"`); }
     // guards: the flow rate is read from the exported flow curve
+    if (id === 'fixture_frac_uneven') { await p.evaluate(() => { const el = document.querySelector('.trace.run.sel input[data-k="secOn"]'); if (el) { el.click(); } }); await p.waitForTimeout(300); }
     if (e.flow) { const f = num((await field(p, 'mFlow')).replace(/^auto:\s*/i, '')); T.check(`${id}/flow`, Math.abs(f - e.flow) < 0.01, `expected ${e.flow}, got ${f}`); }
     // guards: the UV path stored in a UNICORN archive (CurveUVInfo/UVPathLength) is used, and the "UV cell path length" curve is not a trace
     if (/\.zip$/.test(e.file)) { const pv = num(await field(p, 'path')); T.check(`${id}/uv-path`, Math.abs(pv - e.path_mm) < 0.01, `expected ${e.path_mm} mm, got ${pv}`); }
