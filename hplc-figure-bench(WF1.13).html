@@ -5494,6 +5494,12 @@ function sumRows(){
       x.loadedAmt = pKept ? pAmt : null;
       if (a > 0) { const k = kept(x); prevMap.set(x.r, {amt: k > 0 ? k : a, kept: k > 0}); }
     });
+    /* each branch end against the amount where its branch split off (what was kept there, as for the step yield), not only against step 1 */
+    const kids = wf.map(() => 0); par.forEach(q => { if (q >= 0) kids[q]++; });
+    out.forEach(x => { const wi = wf.indexOf(x.r), a = amt(x); x.brY = null; if (wi < 0 || kids[wi] || !(a > 0)) return;
+      let d = par[wi]; while (d >= 0 && kids[d] < 2) d = par[d]; if (d < 0) return;
+      const o = wf[d], dv = o.prep === 'manual' ? out.toAmt(manMg(o.man), x) : (prevMap.get(o) || {}).amt;
+      if (dv > 0) { x.brY = 100*a/dv; x.brFrom = o; } });
   }
   out.basis = basis;
   return out;
@@ -5527,6 +5533,7 @@ function renderSumTable(){
     if (x.yld > 100) notes.push(`${nm}: above 100% of ${rows.baseMan ? `the ${rows.baseMan.name} step` : 'step 1'}. Check each run's UV path (mm), then the yield basis and volumes.`);
     else if (x.stepY > 105) notes.push(`${nm}: ${fmt(x.stepY, 0)}% of ${x.fromKept ? 'the amount measured before it was loaded' : 'the step before'}, which can't be a real gain. Check its UV path (mm) on the run card (HPLC cells are often 10 mm), then whether the pool was concentrated before loading.`);
     else if (x.stepY != null && x.stepY < 20) notes.push(`${nm}: only ${fmt(x.stepY, 0)}% of the step before was recovered, so most protein was lost here. Check the unpooled peaks and the flow-through.`);
+    if (x.brY != null) { const o = x.brFrom, j = rows.findIndex(y => y.r === o); notes.push(`${nm}: ${fmt(x.brY, 0)}% of ${j >= 0 ? `step ${j + 1} (${stepTitle(o) !== o.name ? stepTitle(o) : shortRunName(o)})` : `the ${o.name} step`}, where its branch splits off (branch yield).`); }
     if (x.nd && x.nd.mg > 0 && x.p.mg > 0 && Math.max(x.nd.mg/x.p.mg, x.p.mg/x.nd.mg) > 2) notes.push(`${nm}: NanoDrop (${fmt(x.nd.mg, 2)} mg) and the A280 area (${fmt(x.p.mg, 2)} mg) disagree more than 2-fold; the yield uses ${['umol', 'nd', 'ndmol'].includes(rows.basis) ? 'NanoDrop' : 'the A280 area'}.${x.nd.r280 > 0.8 ? ` A260/A280 ${fmt(x.nd.r280, 2)} points to nucleic acid in the sample.` : ''}`);
     if (x.secMw) { const mono = secMono(); notes.push(`${nm}: main pooled peak at ${fmt(x.secMw.ve, 2)} ${xUnit(x.r)}, apparent ${x.secMw.extrap ? '~' : ''}${kdaRound(x.secMw.mw)} kDa${mono > 0 ? ` (${fmt(x.secMw.mw/mono, 1)}× the ${kdaRound(mono)} kDa monomer)` : ''}.${x.secMw.extrap ? ' It elutes outside the range of the standards, so this size is extrapolated from the calibration.' : ''} Apparent size from SEC depends on shape; confirm the oligomer state by SEC-MALS or AUC.`); }
     if (x.pur == null && x.satL.length) notes.push(`${nm}: purity n.d. * Lane ${x.satL.join(', ')} is saturated, so it can't be measured. Load less or use a shorter exposure.`); });
