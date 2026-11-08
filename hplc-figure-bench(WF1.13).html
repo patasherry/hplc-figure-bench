@@ -6609,7 +6609,7 @@ async function packCloud(S, P){
 async function unpackCloud(st){
   const get = id => fetch('/_blob/' + id).then(r => { if (!r.ok) throw new Error('missing'); return r.json(); }), names = [], lost = {runs: [], traces: [], gels: [], struct: null, nd: []};
   const one = async (o, kind, f) => { try { return await f(); } catch (e) { names.push(o.name || o.code || 'an item'); if (kind === 'struct') lost.struct = o; else lost[kind].push(o); return null; } };
-  const runs2 = (await Promise.all((st.runs || []).map(o => one(o, 'runs', async () => o.blobId ? Object.assign({}, o, await get(o.blobId)) : o)))).filter(Boolean);
+  const runs2 = (await Promise.all((st.runs || []).map(o => one(o, 'runs', async () => { const r = o.blobId ? Object.assign({}, o, await get(o.blobId)) : o; r.secAuto = secGuess(r); return r; })))).filter(Boolean);
   const tr2 = (await Promise.all((st.traces || []).map(o => one(o, 'traces', async () => Object.assign({}, o, await get(o.blobId)))))).filter(Boolean);
   const gels2 = (st.gels || []).map(o => Object.assign({}, o, {image: '/_blob/' + o.imageId}));
   const s2 = st.struct && st.struct.blobId ? await one(st.struct, 'struct', async () => Object.assign(await get(st.struct.blobId), {ent: st.struct.ent, blobId: st.struct.blobId})) : null;
