@@ -4576,7 +4576,7 @@ function runCondLines(r, mode){
 }
 /* a methods paragraph for the whole workflow, from everything entered */
 function methodsText(){
-  const P = [], wf = prep.on ? wfFigListRaw() : wfList(), v = x => String(x == null ? '' : x).trim(), cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
+  const P = [], wf = wfList(), v = x => String(x == null ? '' : x).trim(), cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
   /* lower-case a phrase's first letter, unless it starts an acronym or a name with capitals inside (SUMO, BugBuster) */
   const lc = t => !t ? t : /^[A-Z][A-Z0-9]|^[A-Z][a-z]+[A-Z]/.test(t) ? t : t.replace(/^./, c => c.toLowerCase());
   const art = t => /^[aeiouäÄ]/i.test(t) || /^[FHLMNRSX][A-Z0-9]/.test(t) ? 'an' : 'a', deg = t => unitIf(t, '°C'), hrs = t => unitIf(t, 'h');
