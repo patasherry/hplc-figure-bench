@@ -2444,7 +2444,10 @@ function buildOverlaySVG(ov){
   s.push('</g>');
   const lblLeft = [];
   if (anyPeaks) {
-    const pf = fs*0.85, pcw = pf*0.56, boxes = [], items = [];
+    const pf = fs*0.85, pcw = pf*0.56, boxes = [], items = [], axisBoxes = [];
+    /* peak labels can reach into the margin at the plot edge; keep this collision scope to tick text only */
+    xt.v.forEach(v => { const t = tkf(v, xt.dec), x = px(v), y = xly; axisBoxes.push({x1:x - t.length*cw/2, x2:x + t.length*cw/2, y1:y - fs*0.8, y2:y + fs*0.2}); });
+    if (o.showY) yt.v.forEach((v, i) => { const y = py(v) + fs*0.35, x = L - tOut - 3, w = ytl[i].length*cw; axisBoxes.push({x1:x - w, x2:x, y1:y - fs*0.8, y2:y + fs*0.2}); });
     P.forEach(p => {
       const col = o.peakColor === 'trace' ? p.t.color : '#000000', sh = +p.t.xshift || 0;
       p.t.peaks.forEach(pk => {
@@ -2469,6 +2472,14 @@ function buildOverlaySVG(ov){
         bot = placeLabel(boxes, it.X - w/2, it.X + w/2, it.Y0, it.h, 0);
       }
       if (bot == null) { lblLeft.push(it.raw); return; }
+      const own = () => o.peakRot ? {x1:it.X - it.h/2, x2:it.X + it.h/2, y1:bot - w, y2:bot} : {x1:it.X - w/2, x2:it.X + w/2, y1:bot - it.h, y2:bot};
+      const hit = (a, b) => a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
+      /* A fixed nudge stays stable as the axis ticks change with a zoom; the opposite direction is the fixed fallback near the top edge. */
+      if (axisBoxes.some(b => hit(own(), b))) {
+        const other = boxes.slice(0, -1), off = fs*1.1;
+        const moved = [bot - off, bot + off].find(y => { const was = bot; bot = y; const q = own(); bot = was; return q.y1 >= 0 && q.y2 <= B - 1 && !axisBoxes.some(b => hit(q, b)) && !other.some(b => hit(q, b)); });
+        if (moved !== undefined) { bot = moved; Object.assign(boxes[boxes.length - 1], own()); }
+      }
       if (it.Y - bot > fs*1.2) leaders.push({x: it.X, a: bot + 1.5, b: it.Y, own: boxes.length - 1});
       const txt = esc(it.raw);
       if (o.peakRot) s.push(`<text transform="translate(${r2(it.X + pf*0.35)} ${r2(bot)}) rotate(-90)" fill="${it.col}">${txt}</text>`);
