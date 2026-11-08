@@ -169,6 +169,95 @@ const IMAC = require('../data/gen_imac_missing');
     }
   });
 
+  await T.t('quoted_generic_csv_fields', async () => {
+    await p.reload();
+    await h.wait(500);
+    await p.click('#homeQuick');
+    await h.wait(500);
+
+    // Fixture 1: Generic CSV with quoted commas in column heading
+    const csvQuoted = [
+      'Time (min),"UV, 280 nm",Conductivity',
+      '0.0,10.0,100.0',
+      '0.5,20.0,105.0',
+      '1.0,15.0,110.0',
+      '1.5,5.0,95.0'
+    ].join('\n');
+
+    await p.setInputFiles('#file', {
+      name: 'quoted_channel.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(csvQuoted)
+    });
+    await p.waitForTimeout(600);
+
+    // Visible channel options in the Y-column selector
+    const yOptsQuoted = await p.locator('.trace select[data-k="yc"]').first().locator('option').allInnerTexts();
+    T.check('quoted_comma/channel_names', yOptsQuoted.length === 3 && yOptsQuoted[0] === 'Time (min)' && yOptsQuoted[1] === 'UV, 280 nm' && yOptsQuoted[2] === 'Conductivity', `yOpts: ${JSON.stringify(yOptsQuoted)}`);
+
+    const selYQuoted = await p.locator('.trace select[data-k="yc"]').first().locator('option:checked').innerText();
+    T.check('quoted_comma/selected_y_label', selYQuoted === 'UV, 280 nm', `selected: ${selYQuoted}`);
+
+    // Plotted trace path in the figure SVG
+    const pathUV = await p.locator('#paper svg g[clip-path] path').first().getAttribute('d');
+    T.check('quoted_comma/plotted_trace_uv', !!pathUV && pathUV.startsWith('M'), `pathUV: ${pathUV?.slice(0, 40)}`);
+
+    // Switch Y channel to Conductivity and assert plotted trace updates
+    await p.locator('.trace select[data-k="yc"]').first().selectOption('2');
+    await p.waitForTimeout(300);
+    const selYCond = await p.locator('.trace select[data-k="yc"]').first().locator('option:checked').innerText();
+    T.check('quoted_comma/selected_y_conductivity', selYCond === 'Conductivity', `selected: ${selYCond}`);
+
+    const pathCond = await p.locator('#paper svg g[clip-path] path').first().getAttribute('d');
+    T.check('quoted_comma/plotted_trace_switched', !!pathCond && pathCond !== pathUV, `pathCond matches pathUV: ${pathCond === pathUV}`);
+
+    // Fixture 2: Escaped quotes in column heading
+    const csvEscaped = [
+      'Time (min),"Detector ""A"", 280 nm",Reference',
+      '0.0,12.0,1.0',
+      '0.5,24.0,1.1',
+      '1.0,18.0,1.0',
+      '1.5,6.0,0.9'
+    ].join('\n');
+
+    await p.setInputFiles('#file', {
+      name: 'escaped_quotes.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(csvEscaped)
+    });
+    await p.waitForTimeout(600);
+
+    const escCard = p.locator('.trace').nth(1);
+    const yOptsEsc = await escCard.locator('select[data-k="yc"] option').allInnerTexts();
+    T.check('escaped_quotes/channel_names', yOptsEsc.length === 3 && yOptsEsc[1] === 'Detector "A", 280 nm' && yOptsEsc[2] === 'Reference', `yOptsEsc: ${JSON.stringify(yOptsEsc)}`);
+
+    const selYEsc = await escCard.locator('select[data-k="yc"] option:checked').innerText();
+    T.check('escaped_quotes/selected_y_label', selYEsc === 'Detector "A", 280 nm', `selected: ${selYEsc}`);
+
+    // Fixture 3: Semicolon-delimited generic file with quoted semicolon
+    const csvSemicolon = [
+      'Time (min);"UV; 280 nm";Conductivity',
+      '0,0;10,0;100,0',
+      '0,5;20,0;105,0',
+      '1,0;15,0;110,0',
+      '1,5;5,0;95,0'
+    ].join('\n');
+
+    await p.setInputFiles('#file', {
+      name: 'semicolon_quoted.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(csvSemicolon)
+    });
+    await p.waitForTimeout(600);
+
+    const semiCard = p.locator('.trace').nth(2);
+    const yOptsSemi = await semiCard.locator('select[data-k="yc"] option').allInnerTexts();
+    T.check('quoted_semicolon/channel_names', yOptsSemi.length === 3 && yOptsSemi[1] === 'UV; 280 nm' && yOptsSemi[2] === 'Conductivity', `yOptsSemi: ${JSON.stringify(yOptsSemi)}`);
+
+    const selYSemi = await semiCard.locator('select[data-k="yc"] option:checked').innerText();
+    T.check('quoted_semicolon/selected_y_label', selYSemi === 'UV; 280 nm', `selected: ${selYSemi}`);
+  });
+
   T.check('no-page-errors', !errs.length, errs.join(' | '));
   await close();
   T.done();
