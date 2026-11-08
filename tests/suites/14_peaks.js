@@ -226,6 +226,72 @@ async function zoomToPeakButton() {
   } finally { T.check('zoom_to_peak_button_no_errors', !errs.length, errs.join(' | ')); await close(); }
 }
 
+// Issue #828: Migrate peak field separator from 'x' to comma, with UI input hint and legacy 'x' fallback
+async function peakSeparator() {
+  const {p, errs, close} = await open(), h = H(p);
+  try {
+    await p.click('#homeQuick');
+    await p.waitForTimeout(600);
+
+    const pkInput = p.locator('input[data-k="peaks"]').first();
+    const exists = (await pkInput.count()) > 0;
+    const placeholder = exists ? await pkInput.getAttribute('placeholder') : '';
+    T.check('peaks_field_hint_comma', placeholder === 'e.g. 5.2, 8.4', `Peaks input placeholder: "${placeholder}", expected "e.g. 5.2, 8.4"`);
+
+    if (exists) {
+      // 1. Comma-separated input
+      await pkInput.fill('5.0, 7.5');
+      await pkInput.dispatchEvent('change');
+      await p.waitForTimeout(400);
+
+      const val = await pkInput.inputValue();
+      const chips = await p.$$eval('.peaks .chip input', els => els.map(e => e.placeholder));
+      T.check('peaks_comma_separated_parsing', val.includes('5.00') && val.includes('7.50') && val.includes(',') && chips.includes('5.00') && chips.includes('7.50'), `Parsed comma peaks: "${val}", chips: ${JSON.stringify(chips)}`);
+
+      // 2. Legacy 'x'-delimited fallback
+      await pkInput.fill('4.2 x 6.8');
+      await pkInput.dispatchEvent('change');
+      await p.waitForTimeout(400);
+
+      const valFallback = await pkInput.inputValue();
+      const chipsFallback = await p.$$eval('.peaks .chip input', els => els.map(e => e.placeholder));
+      T.check('peaks_legacy_x_fallback', valFallback.includes('4.20') && valFallback.includes('6.80') && valFallback.includes(',') && chipsFallback.includes('4.20') && chipsFallback.includes('6.80'), `Migrated legacy 'x' to comma: "${valFallback}", chips: ${JSON.stringify(chipsFallback)}`);
+    } else {
+      T.check('peaks_comma_separated_parsing', false, 'Peaks input missing');
+      T.check('peaks_legacy_x_fallback', false, 'Peaks input missing');
+    }
+
+    // 3. Legacy project file import with 'x'-delimited string peaks (zero data loss)
+    const legacyProject = {
+      app: 'HPLC Figure Bench',
+      version: 1,
+      runs: [],
+      traces: [{
+        id: 1,
+        name: 'Legacy Trace',
+        rows: [[0, 0], [3.2, 100], [5.0, 10], [8.6, 120], [10, 0]],
+        peaks: '3.2 x 8.6'
+      }]
+    };
+    await p.click('#homeBtn');
+    await p.waitForTimeout(400);
+    await p.setInputFiles('#projFile', {
+      name: 'legacy_x_peaks_proj.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(legacyProject))
+    });
+    await p.waitForTimeout(600);
+
+    const legacyInput = p.locator('input[data-k="peaks"]').first();
+    const legacyVal = (await legacyInput.count() > 0) ? await legacyInput.inputValue() : '';
+    const legacyChips = await p.$$eval('.peaks .chip input', els => els.map(e => e.placeholder));
+    T.check('legacy_project_x_peaks_restored', legacyVal.includes('3.20') && legacyVal.includes('8.60') && legacyChips.includes('3.20') && legacyChips.includes('8.60'), `Restored legacy project peaks: "${legacyVal}", chips: ${JSON.stringify(legacyChips)}`);
+  } finally {
+    T.check('peak_separator/no-page-errors', !errs.length, errs.join(' | '));
+    await close();
+  }
+}
+
 (async () => {
   await T.t('overlap', overlap);
   await T.t('zoom_peak', zoomPeak);
@@ -233,5 +299,6 @@ async function zoomToPeakButton() {
     await T.t(e.file, () => peakFile(e));
   }
   await T.t('zoom_to_peak_button', zoomToPeakButton);
+  await T.t('peak_separator', peakSeparator);
   T.done();
 })();
