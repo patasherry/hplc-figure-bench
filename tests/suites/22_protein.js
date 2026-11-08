@@ -588,17 +588,22 @@ ORIGIN
   });
 
 
-  /* ================= 10. Cleavage consistency ================= */
+    /* ================= 10. Cleavage consistency ================= */
   await T.t('10_cleavage_consistency', async () => {
     // 1. New project; add the synthetic gel stand-in and select the gel step so the gel figure is shown.
     await p.evaluate(() => { window.location.hash = ''; });
     await p.reload();
     await h.wait(500);
+    await h.newProject('Test10');
     await h.addRun([path.join(DATA, 'gels/formats/gel_8bit.png')]);
 
     // select gel step
     await h.step('gel');
     await p.waitForSelector('#gelWrap svg', { state: 'visible' });
+
+    // Now go to protein step because setProtSeq needs #protSeq
+    await h.step('construct');
+    await h.wait(500);
 
     // 2. Paste the 100-residue sequence into `#protSeq`; leave `#o-tagPreset` at `sumo`.
     const seq = 'ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY';
@@ -631,6 +636,9 @@ ORIGIN
     T.check('10_cleavage_consistency.tag_only_kda_not_null', tagOnlyKDa !== null, 'Tag only kDa is null');
     T.check('10_cleavage_consistency.untagged_kda_not_null', untaggedKDa !== null, 'Untagged kDa is null');
 
+    await h.step('gel');
+    await h.wait(500);
+
     // 4. Tick `#o-cleaveDetect`; type the `Untagged` kDa into `#o-protKda`.
     const setOptLocal = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; if(el.type === 'checkbox') { el.checked = v; } else { el.value = v; } el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, v]);
 
@@ -655,10 +663,13 @@ ORIGIN
     }
   });
 
-
   /* ================= 11. Extinction coefficient selector ================= */
   await T.t('11_eps_selector', async () => {
-    // Drop file to create project
+    // Re-initialize for test 11
+    await p.evaluate(() => { window.location.hash = ''; });
+    await p.reload();
+    await h.wait(500);
+    await h.newProject('Test11');
     await h.dropFiles([path.join(DATA, 'chrom', 'imac_HisTrap_FF_1mL_step_u7.csv')]);
     await h.wait(500);
 
