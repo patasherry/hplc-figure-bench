@@ -4025,7 +4025,11 @@ function finalYield(path){
 function finalYields(){
   const paths = wfBranches(); if (paths.length <= 1) { const y = finalYield(); return y ? [y] : []; }
   const ys = [], seenFin = new Set();
-  paths.forEach(p => { const y = finalYield(p); if (y && !seenFin.has(y.fin.r)) { seenFin.add(y.fin.r); ys.push(y); } });
+  paths.forEach(p => {
+    const lastNode = p[p.length - 1];
+    if (lastNode && !lastNode.inWf && lastNode.prep !== 'manual') return;
+    const y = finalYield(p); if (y && !seenFin.has(y.fin.r)) { seenFin.add(y.fin.r); ys.push(y); }
+  });
   return ys.length ? ys : (finalYield() ? [finalYield()] : []);
 }
 function yieldLine(res){
