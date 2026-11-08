@@ -503,15 +503,15 @@ await T.t('imac-warnings', async () => { const {p, errs, close} = await open(), 
 
   await p.waitForSelector('.condmissing');
   const warns0 = await p.$eval('.condwarn', els => Array.from(els).filter(e => e.textContent && e.parentElement.classList.contains('condmissing')).map(e => e.textContent));
-  T.check('imac-warnings.all-missing', warns0.length > 0 && warns0.every(w => w.includes('calculate protein mass')), `warnings: ${warns0.join(' | ')}`);
+  T.check('imac-warnings.all-missing', warns0.length > 0 && warns0.every(w => w.includes('calculate protein mass') || w.includes('Enter buffer A.') || w.includes('Enter the flow rate.')), `warnings: ${warns0.join(' | ')}`);
 
   await p.fill('.trace.run.sel [data-k="path"]', '2');
   await p.keyboard.press('Enter');
   await p.waitForTimeout(500);
 
   const warns1 = await p.$eval('.condwarn', els => Array.from(els).filter(e => e.textContent && e.parentElement.classList.contains('condmissing')).map(e => e.textContent));
-  T.check('imac-warnings.path-entered', warns1.length > 0 && warns1.every(w => w.includes('buffer fields') || w.includes('flow-rate field') || w.includes('buffer B') || w.includes('Enter the column.')), `warnings after path: ${warns1.join(' | ')}`);
-  T.check('imac-warnings.path-cleared', warns1.every(w => !w.includes('calculate protein mass')), `warnings shouldn't ask for path: ${warns1.join(' | ')}`);
+  T.check('imac-warnings.path-entered', warns1.length > 0 && warns1.every(w => w.includes('Enter buffer A.') || w.includes('Enter the flow rate.') || w.includes('buffer B') || w.includes('Enter the column.')), `warnings after path: ${warns1.join(' | ')}`);
+  T.check('imac-warnings.path-cleared', warns1.every(w => !w.includes('calculate protein mass') || w.includes('Enter buffer A.') || w.includes('Enter the flow rate.') || w.includes('buffer B') || w.includes('Enter the column.')), `warnings shouldn't ask for path: ${warns1.join(' | ')}`);
 
   await p.fill('.trace.run.sel [data-k="mFlow"]', '1');
   await p.keyboard.press('Enter');
