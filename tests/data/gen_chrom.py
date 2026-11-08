@@ -416,10 +416,10 @@ def uneven_fractions():
     x = np.round(np.arange(0, 20.0001, 0.05), 4)
     y = signal(x, [(9.5, 0.5, 2000.0)])
     ev = [(5.0, 'F1'), (6.0, 'F2'), (8.0, 'F3'), (11.0, 'F4'), (12.0, 'F5'), (14.0, 'F6'), (15.0, 'Waste')]
-    write_unicorn_csv(os.path.join(OUT, 'fixture_frac_uneven.csv'), [
-        ('UV', 'ml', 'mAU', x, y),
-        ('Fraction', 'ml', 'Fraction', ev, None)
-    ])
+    cur = [('UV', 'ml', 'mAU', x, y), ('Fraction', 'ml', 'Fraction', ev, None), ('System flow', 'ml', 'ml/min', x[::10], np.full(x[::10].size, 0.5))]
+    log = [(0.0, 'Method: sec_run'), (0.0, 'Base CV, Vc=24.000 {ml}, Superdex 200 Increase 10/300 GL')]
+    cur.append(('Run Log', 'ml', 'Logbook', log, None))
+    write_unicorn_csv(os.path.join(OUT, 'fixture_frac_uneven.csv'), cur)
     add(dict(file='fixture_frac_uneven.csv', note='uneven fractions: 1, 2, 3, 1, 2, 1 mL then waste', format='csv', kind='sec', step='Size exclusion', unit='mL', column='Superdex 200 Increase 10/300 GL', cv=24.0, flow=0.5, path_mm=2, frac=dict(n=6, first='F1', last='F6'), injection=0.0, peaks=[dict(ve=9.5, tol=0.1, must=True, note='main peak')], pool=None))
 
 if __name__ == '__main__':
