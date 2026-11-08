@@ -2111,7 +2111,7 @@ function poolMeas(run){ const pc = numOr(run.poolConc, null); if (pc !== null &&
   const b = prep.btw && prep.btw[run.id], bv = b ? numOr(b.vOut, null) : null;
   const F = ndFinalOf(run), st = F.length ? ndStats(F) : null, fv = numOr(run.ndFinalVol, null) != null ? numOr(run.ndFinalVol, null) : bv;
   if (st && st.m >= 0) return (fv !== null && fv >= 0) || b ? {c: st.m, v: fv, src: b ? 'btw' : 'nd', nd: st, how: b && (b.how || 'conc')} : {c: null, v: null, src: null, nd: st};
-  const bc = b ? numOr(b.conc, null) : null; if (bc !== null && bc >= 0) return {c: bc, v: bv, src: 'btw', how: b.how || 'conc'};
+  const bc = b && b.conc !== '' && b.conc != null ? Number(b.conc) : null; if (bc !== null && bc >= 0) return {c: bc, v: bv, src: 'btw', how: b.how || 'conc'};
   return {c: null, v: null, src: null}; }
 /* NanoDrop readings of the concentrated sample after a column */
 const ndFinalOf = run => typeof ndSamples === 'undefined' ? [] : ndSamples.filter(x => x.runId === run.id && x.stage === 'conc' && x.kind !== 'nucleic' && !x.hide && !CRUDE_RE.test(x.name));
@@ -3925,7 +3925,7 @@ function buildRunFig(run){
 const sig2 = v => v >= 100 ? fmt(v, 0) : v >= 10 ? fmt(v, 1) : v >= 1 ? fmt(v, 2) : v >= 0.1 || v === 0 ? fmt(v, 2) : fmt(v, 3);
 function finalYield(path){
   const allRows = sumRows(), rows = path ? allRows.filter(x => path.includes(x.r)) : allRows, mgOf = allRows.mgOf || (() => null);
-  const fin = rows.slice().reverse().find(x => mgOf(x) !== null); if (!fin) return null;
+  const fin = rows.slice().reverse()[0]; if (!fin) return null;
   /* the final sample's own concentration and volume, when entered, give the amount kept; the last pool stays the chromatography figure */
   const kc = prep.on && fin.p.viaConc ? (btwMg(fin.r) || {}).mg : null, pm = kc !== null ? kc : mgOf(fin);
   let fc = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finConc, null) : null, fv = (!path || wfBranches().length <= 1) && prep.on ? numOr(prep.finVol, null) : null, meas = fc !== null && fv !== null && fc >= 0 && fv >= 0;
@@ -4518,11 +4518,12 @@ function methodsText(){
   const need = t => `[${t} not entered]`;
   /* a step that comes from an earlier step other than the one before says so; the full branch wording is for later */
   const brTxt = r => { const f = wfFromOf(r), q = f && wfFigListRaw().find(x => x.id === f); return q ? ` (from ${stepTitle(q)})` : ''; };
-  wf.forEach((r, i) => { const ttl = stepTitle(r), Lt = letterOf(r);
-    if (r.prep === 'manual') { P.push(manSentence(r, Lt, wf) + brTxt(r)); return; }
+  const methodRuns = wfList().concat(runs.filter(r => !r.inWf && prep.on && prep.btw && prep.btw[r.id])).sort((a,b) => runs.indexOf(a) - runs.indexOf(b));
+  methodRuns.forEach((r, i) => { const ttl = stepTitle(r), Lt = letterOf(r);
+    if (r.prep === 'manual') { P.push(manSentence(r, Lt, methodRuns) + brTxt(r)); return; }
     if (r.prep === 'cleave') { const pr = cleaveProtease(), ra = v(prep.ratio), bf = v(prep.dialBuffer), T = v(prep.clvTemp), h = v(prep.clvTime), mw = v(prep.mwco);
       P.push(`Tag removal${Lt ? ` (panel ${Lt})` : ''}: the pool was ${bf ? `dialyzed${mw ? ` (${unitIf(mw, 'kDa')} MWCO)` : ''} against ${bf}` : 'dialyzed'}${pr ? ` with ${pr}${ra ? ` at ${/^\d/.test(ra) && !/:/.test(ra) ? '1:' + ra : ra}${/w\/w|mol/i.test(ra) ? '' : ' (w/w)'}` : ''}` : ''}${T ? ` at ${deg(T)}` : ''}${h ? ` for ${hrs(h)}` : ''}.`); return; }
-    const k = steps.indexOf(r) + 1, c = runCond(r), sec = isSec(r), first = !wf.slice(0, wf.indexOf(r)).some(x => !x.prep || x.prep === 'manual'), cap = poolCaption(r), ft = /flow/i.test(cap);
+    const k = steps.indexOf(r) + 1, c = runCond(r), sec = isSec(r), first = !methodRuns.slice(0, methodRuns.indexOf(r)).some(x => !x.prep || x.prep === 'manual'), cap = poolCaption(r), ft = /flow/i.test(cap);
     const src = c.mLoad ? c.mLoad : first && prep.on && LYS_KEYS.some(q => hasTxt(prep[q])) ? 'the clarified lysate' : first ? 'the sample' : 'the pool';
     /* a column name read from the file name is marked for checking; one typed by hand or logged by UNICORN is not */
     const colChk = '';
@@ -4541,7 +4542,7 @@ function methodsText(){
     const nt = String(r.note || '').trim().replace(/\.$/, ''), verb = /^[A-Za-z]+(ed|en)\b/.test(nt), tagNote = !prep.cleave && PROT_NOTE.test(nt) && !PROT_NOT.test(nt);
     if (pool) t += ` Fractions ${pool.replace(/^Pool\s*/, '')}${vol} were pooled${nt && !tagNote ? (verb ? ` and ${lc(nt)}` : ` (next: ${nt})`) : ''}.`;
     if (tagNote) t += ` The tag was then removed (${lc(nt)}).`;
-    const par = wfParents(wf), children = wf.filter((x, idx) => (!x.prep || x.prep === 'manual') && par[idx] === i).concat(runs.filter(x => !x.inWf && wfFromOf(x) === r.id));
+    const par = wfParents(methodRuns), children = methodRuns.filter((x, idx) => (!x.prep || x.prep === 'manual') && par[idx] === i).concat(runs.filter(x => !methodRuns.includes(x) && wfFromOf(x) === r.id));
     if (children.length > 1) {
       const parts = children.map((c, ci) => {
         const ck = steps.indexOf(c) + 1, cCond = runCond(c), col = cCond.mCol ? `${art(cCond.mCol)} ${cCond.mCol}${/column$/i.test(cCond.mCol) ? '' : ' column'}` : 'the column';
