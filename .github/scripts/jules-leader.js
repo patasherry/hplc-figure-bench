@@ -12,12 +12,12 @@
 /* questions Jules asks again and again (may it skip the slow comparison, is it OK to open the PR now): answered at once by rule, without waiting for an AI */
 const DONE_Q = /\b(ready to (open|create|submit|finalize)|shall|should|may|can|would you like me to) (i |we )?(now )?(proceed|submit|finalize|wrap up|open|create|push)\b[^?]{0,80}\b(pr|pull request|changes|commit)?\?/i;
 const DONE_ANSWER = 'Approved. Your changes and commit are ready: do not run any more test commands and do not ask any more questions. Complete and finish this session immediately so the pull request is created.';
-const PLAN_Q = /\b(propose a plan|permission|agree with proceeding|confirm if (i should|we should|the goal)|should i (investigate|implement|proceed|fix)|(would|do) you (like|want) me to (go ahead|proceed|investigate|implement|fix)|let me know if you agree)\b/i;
+const PLAN_Q = /\b(propose a plan|permission to (proceed|start|implement)|agree with proceeding|confirm if (i should|we should|the goal)|should i (investigate|implement|proceed|fix)|(would|do) you (like|want) me to (go ahead|proceed|investigate|implement|fix)|let me know if you agree with proceeding)\b/i;
 const PLAN_ANSWER = 'Approved. Proceed with the approach you outlined using AGENTS.md. Choose the smallest safe change, ensure your target test suite passes, and do not change scientific constants without request. Complete your implementation, commit, and open the pull request without waiting for further approval.';
 const QUICK = /\b(skip|bypass|without (running|waiting)|instead of)\b[^.?]{0,60}\b(compare(\.js)?|test suite|tests?|comparison)\b|\b(compare(\.js)?|comparison|test suite|bash|shell|environment)\b[^.?]{0,60}\b(too (slow|long)|time[sd]? ?out|stopped responding|not responding|hang|hung|unresponsive)\b|\b(shall|should|may|can) i (now )?(proceed|submit|open the (pr|pull request)|commit)\b/i;
 const SCI = /yield|extinction|concentrat|mg\/ml|purity|kda|molecular weight|calibrat|integrat|baseline|a280|a260|which (value|number|default)|scientific/i; /* a question about a number still goes to the managers */
 const QUICK_ANSWER = 'Do not skip, weaken or delete any check. If node compare.js is too slow or the shell stops responding, run only the suites you changed (node tests/suites/NN_name.js) and fix any failure in your own new checks. Then commit and complete the session immediately so the pull request is created: the Test suite action runs the full comparison on the PR. If a check fails because the app looks wrong, keep it failing and explain it in the PR.';
-const MAX_RUNNING = 15, MAX_APP = 8, REBASE_AFTER = 6, AG_TAKES_APP = process.env.AG_TAKES_APP !== '0', LIGHT = i => !/^bug\b/i.test(i.title || '') && /^(tests?|audit|docs?)\b|^add (a |one )?(failing |ui[- ]level )?(tests?|checks?)\b|^(prove|verify|confirm)\b|\b(\d+|test)_[a-z0-9_]+\b|\b(window\.__HFB|test (suite|report)|compare\.js|failures\.js)\b/i.test(i.title || ''), MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, LOCAL_FIRST = 5, API = 'https://jules.googleapis.com/v1alpha/';
+const MAX_RUNNING = 15, MAX_APP = 8, REBASE_AFTER = 6, AG_TAKES_APP = process.env.AG_TAKES_APP !== '0', LIGHT = i => !/^bug\b/i.test(i.title || '') && /^(tests?|audit|docs?)\b|^add (a |one )?(failing |ui[- ]level )?(tests?|checks?)\b|^(prove|verify|confirm)\b|\b(\d+|test)_[a-z0-9_]+\b|\b(window\.__HFB|test (suite|report)|compare\.js|failures\.js)\b/i.test(i.title || ''), MAX_ATTEMPTS = 3, MAX_REPLIES = 6, MAX_HOURS = 6, LOCAL_FIRST = 10, API = 'https://jules.googleapis.com/v1alpha/';
 const L = {queue: 'jules-queue', run: 'jules-running', done: 'jules-done', fail: 'needs-coordinator', triage: 'needs-triage'};
 const MARK = '<!-- jules-leader ';
 const SAFE = f => /^(tests\/|docs\/|\.github\/ISSUE_TEMPLATE\/)/.test(f) || f === 'README.md' || f === 'tests/README.md';
@@ -142,9 +142,10 @@ module.exports = async ({github, context, core}) => {
       /* the local manager on the owner's PC answers first: post the question once, then give it LOCAL_FIRST minutes before the automatic reply */
       if (qt && s.posted !== qt) {
         const lastPara = String(q || '').trim().split(/\n\s*\n/).pop() || '';
-        const isDoneAsk = DONE_Q.test(lastPara) && !/\b(which|clarify|how should|or should|is there a specific)\b/i.test(lastPara);
-        const isPlanAsk = PLAN_Q.test(q) && !SCI.test(lastPara);
-        if (isDoneAsk || isPlanAsk || (QUICK.test(q) && !SCI.test(lastPara))) { const ansText = isDoneAsk ? DONE_ANSWER : (isPlanAsk ? PLAN_ANSWER : QUICK_ANSWER);
+        const hasSci = SCI.test(q);
+        const isDoneAsk = DONE_Q.test(lastPara) && !/\b(which|clarify|how should|or should|is there a specific)\b/i.test(lastPara) && !hasSci;
+        const isPlanAsk = PLAN_Q.test(q) && !hasSci;
+        if (isDoneAsk || isPlanAsk || (QUICK.test(q) && !hasSci)) { const ansText = isDoneAsk ? DONE_ANSWER : (isPlanAsk ? PLAN_ANSWER : QUICK_ANSWER);
           await jules(`${s.session}:sendMessage`, {prompt: ansText}).catch(e => say(`#${i.number}: quick answer failed: ${e.message}`));
           Object.assign(s, {posted: qt, postedAt: new Date().toISOString(), replies: n, asked: qt, answeredAt: new Date().toISOString()}); await putState(i.number, s, 'Jules leader: answered the question at once by rule (tests and finishing).');
           await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: `Jules asked:\n\n${quote}\n\nAnswer for Jules: ${ansText}\n\n_Answered at once by the Jules leader's standing rule about tests and finishing. Anyone can still add a fuller answer with a comment starting "Answer for Jules:"._`});

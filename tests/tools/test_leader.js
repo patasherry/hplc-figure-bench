@@ -77,7 +77,7 @@ assert(!SCI.test(q1178), 'q1178 is not scientific');
 const q1177 = "I will look into why secAuto is not set. Could you confirm if I should investigate the secAuto logic or secGuess?";
 assert(PLAN_Q.test(q1177), 'q1177 should match PLAN_Q');
 
-const qAgree = "Let me know if you agree with proceeding with this approach.";
+const qAgree = "Let me know if you agree with proceeding.";
 assert(PLAN_Q.test(qAgree), 'qAgree should match PLAN_Q');
 
 const qGoAhead = "Would you like me to go ahead and implement this change?";
@@ -87,8 +87,18 @@ assert(PLAN_Q.test(qGoAhead), 'qGoAhead should match PLAN_Q');
 const qSci = "What molecular weight should be used for the calibration curve?";
 assert(SCI.test(qSci), 'qSci should match SCI');
 
+// Multi-paragraph negative test: scientific context in earlier paragraph, plan request at the end
+const multiParaSci = "I looked at the SEC calibration curve and extinction coefficient values.\n\nI'm ready to propose a plan, but I would like your permission to proceed.";
+assert(PLAN_Q.test(multiParaSci), 'PLAN_Q matches wording');
+assert(SCI.test(multiParaSci), 'Full-text SCI catches scientific context across paragraphs');
+const lastPara = multiParaSci.trim().split(/\n\s*\n/).pop() || '';
+assert(!SCI.test(lastPara), 'Last paragraph alone does not contain scientific keyword');
+const hasSci = SCI.test(multiParaSci);
+const isPlanAsk = PLAN_Q.test(multiParaSci) && !hasSci;
+assert(!isPlanAsk, 'Multi-paragraph question with scientific context must NOT trigger plan fast-path');
+
 // Test 6: Verify timeouts
-assert(leaderSrc.includes('LOCAL_FIRST = 5'), 'LOCAL_FIRST should be 5 minutes');
+assert(leaderSrc.includes('LOCAL_FIRST = 10'), 'LOCAL_FIRST should be 10 minutes matching AGENTS.md');
 assert(leaderSrc.includes('Date.now() - at > 5 * 60e3'), 'Re-nudge timeout should be 5 minutes');
 
 console.log('All jules-leader tests passed successfully!');
