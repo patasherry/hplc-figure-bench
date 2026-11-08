@@ -595,7 +595,7 @@ ORIGIN
     await p.reload();
     await h.wait(500);
     await h.newProject('Test10');
-    await h.addRun([path.join(DATA, 'gels/formats/gel_8bit.png')]);
+    await h.dropFiles([path.join(DATA, 'gels/formats/gel_8bit.png')]);
 
     // select gel step
     await h.step('gel');
