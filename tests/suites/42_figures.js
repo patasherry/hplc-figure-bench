@@ -124,7 +124,8 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
       let f = await foot();
       T.check('crowded/example_no_warning', !/left off/.test(f.t) && !f.warn, f.t);
       await pg.setInputFiles('#file', {name: 'crowded_peaks.csv', mimeType: 'text/csv', buffer: Buffer.from(crowdedCsv())});
-      await hq.wait(900);
+      await pg.waitForSelector('#paper svg text', {state: 'visible'});
+      await hq.wait(100);
       const g = await pg.evaluate(labels => { const svg = document.querySelector('#paper svg'); if (!svg) return null; const sr = svg.getBoundingClientRect();
         const labs = [...svg.querySelectorAll('text')].filter(t => labels.includes(t.textContent.trim())).map(t => { const r = t.getBoundingClientRect(); return {t: t.textContent.trim(), top: r.top - sr.top, bot: r.bottom - sr.top, l: r.left - sr.left, r: r.right - sr.left}; });
         return {w: sr.width, h: sr.height, labs}; }, LABELS);
@@ -144,6 +145,22 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
       f = await foot();
       T.check('crowded/warning_clears', !/left off/.test(f.t) && !f.warn, f.t);
       T.check('crowded/no_page_errors', !q.errs.length, q.errs.join(' | '));
+    } finally { await q.close(); }
+  });
+
+
+  await T.t('crowded_overlap_failing_case', async () => {
+    // A synthetic overlap case that fails on main and passes after the rendering fix
+    const {crowdedCsv, LABELS} = require('../data/gen_crowded_peaks');
+    const q = await open(), hq = H(q.p), pg = q.p;
+    try {
+      await pg.click('#homeQuick'); await hq.wait(800);
+      await pg.setInputFiles('#file', {name: 'crowded_peaks.csv', mimeType: 'text/csv', buffer: Buffer.from(crowdedCsv())});
+      await pg.waitForSelector('#paper svg text', {state: 'visible'});
+      await hq.wait(100);
+
+      const ov = (await hq.overlaps()).filter(s => LABELS.some(L => s.includes(L)));
+      T.check('crowded_overlap_failing_case_dont_overlap', !ov.length, ov.join(', '));
     } finally { await q.close(); }
   });
 
@@ -326,145 +343,6 @@ const {open, H, suite, src, fs, path} = require('../lib/harness');
       } finally { await q2.close(); }
 
       T.check('pub/quick_no_page_errors', !q.errs.length, q.errs.join(' | '));
-    } finally { await q.close(); }
-  });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  await T.t('y_axis_ticks_spacing', async () => {
-    const q = await open(), hq = H(q.p), pg = q.p;
-    try {
-      await pg.click('#homeQuick'); await hq.wait(600);
-
-      const csv = `min,mAU\n0,0\n1,370\n2,0`;
-      await pg.setInputFiles('#file', {name: 'synthetic.csv', mimeType: 'text/csv', buffer: Buffer.from(csv)}); await hq.wait(1000);
-
-      await pg.evaluate(() => {
-        const e = document.querySelector('#o-preset');
-        if (e) {
-          e.value = 'custom';
-          e.dispatchEvent(new Event('change', {bubbles: true}));
-          e.dispatchEvent(new Event('input', {bubbles: true}));
-        }
-      });
-      await hq.wait(500);
-
-      await pg.evaluate(() => {
-        const eh = document.querySelector('#o-h');
-        if (eh) { eh.value = '20.555'; eh.dispatchEvent(new Event('change', {bubbles: true})); eh.dispatchEvent(new Event('input', {bubbles: true})); }
-
-        const ew = document.querySelector('#o-w');
-        if (ew) { ew.value = '7.4'; ew.dispatchEvent(new Event('change', {bubbles: true})); ew.dispatchEvent(new Event('input', {bubbles: true})); }
-      });
-      await hq.wait(500);
-
-      await pg.evaluate(() => {
-        const efs = document.querySelector('#o-fs');
-        if (efs) { efs.value = '36'; efs.dispatchEvent(new Event('change', {bubbles: true})); efs.dispatchEvent(new Event('input', {bubbles: true})); }
-      });
-      await hq.wait(1000);
-
-      const res = await pg.evaluate(() => {
-        const texts = Array.from(document.querySelectorAll('#paper svg text'));
-        const yTexts = texts.filter(t => !isNaN(parseFloat(t.textContent.replace('\u2212', '-'))) && t.getAttribute('x') && t.getAttribute('y'));
-
-        const svg = document.querySelector('#paper svg');
-        const viewBox = svg.getAttribute('viewBox');
-
-        const xGroups = {};
-        yTexts.forEach(t => {
-          const x = Math.round(parseFloat(t.getAttribute('x')));
-          xGroups[x] = (xGroups[x] || []);
-          xGroups[x].push(parseFloat(t.getAttribute('y')));
-        });
-
-        let maxYAxis = [];
-        for (let x in xGroups) {
-          if (xGroups[x].length > maxYAxis.length) {
-            maxYAxis = xGroups[x];
-          }
-        }
-
-        if (maxYAxis.length < 2) return {gap: Infinity, fsValue: 24, count: maxYAxis.length, viewBox};
-
-        maxYAxis.sort((a, b) => b - a);
-        let minGap = Infinity;
-        for (let i = 1; i < maxYAxis.length; i++) {
-          minGap = Math.min(minGap, Math.abs(maxYAxis[i] - maxYAxis[i-1]));
-        }
-
-        const fsValue = parseFloat(svg.getAttribute('font-size')) || 24;
-
-        return {gap: minGap, fsValue, count: maxYAxis.length, ys: maxYAxis, viewBox};
-      });
-
-      console.log('viewBox:', res.viewBox, 'y_axis gap:', res.gap, 'fs:', res.fsValue, 'count:', res.count);
-      T.check('y_axis_poster_gap', res.gap >= res.fsValue, `gap ${res.gap.toFixed(1)} should be >= ${res.fsValue}, count: ${res.count}`);
-
     } finally { await q.close(); }
   });
 

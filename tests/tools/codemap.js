@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * codemap.js - Scan hplc-figure-bench(WF1.13).html for section markers and print line ranges.
- * 
+ *
  * Usage:
  *   node tests/tools/codemap.js [--table] [path/to/app.html]
  */
@@ -61,7 +61,7 @@ for (let i = 0; i < sections.length; i++) {
   }
 }
 
-const isTable = !process.argv.includes('--plain'); // default to table format unless --plain is passed
+const isTable = process.argv.includes('--table') || true; // default to table format
 
 if (isTable) {
   console.log('| Lines | Section | Purpose |');
