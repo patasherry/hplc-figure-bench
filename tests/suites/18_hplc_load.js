@@ -104,6 +104,12 @@ const IMAC = require('../data/gen_imac_missing');
     t = await load('absent_value_hplc.csv', hdr + '0,\n1,\n2,\n3,\n');
     T.check('matrix/absent/hplc-rejected', t.some(x => /absent_value_hplc\.csv/.test(x) && /no data points/i.test(x)) && !t.some(x => /Loaded/.test(x)), `toasts: ${t.join(' | ')}`);
 
+    // Issue #617 (rebuild of #442): a Time/Signal header with no rows is an empty chromatogram, while the same header over zero readings loads every zero
+    t = await load('617_signal_empty.txt', 'Time\tSignal\n');
+    T.check('matrix/617_signal_empty/diagnosed', t.some(x => /617_signal_empty\.txt/.test(x) && /chromatogram file, but has no data points/i.test(x)) && !t.some(x => /no columns of numbers found|Loaded/i.test(x)), `toasts: ${t.join(' | ')}`);
+    t = await load('617_signal_zeros.txt', 'Time\tSignal\n0.0\t0.0\n1.0\t0.0\n2.0\t0.0\n3.0\t0.0\n');
+    T.check('matrix/617_signal_zeros/loads', t.some(x => /Loaded 1 trace/.test(x)) && !t.some(x => /left out|Could not read/i.test(x)), `toasts: ${t.join(' | ')}`);
+
     // 2. ÄKTA specific parses (UNICORN exports with specific headers)
     const akta = 'UV 1_280\tCond\nml\tmAU\tml\tmS/cm\n';
 
@@ -131,6 +137,8 @@ const IMAC = require('../data/gen_imac_missing');
     T.check('matrix/442_valid_zero/values', !!z && z.rows.length === 4 && z.rows.every(r => r[1] === 0), JSON.stringify(z && z.rows));
     /* existing behaviour: the longest contiguous block is kept; the bad value never becomes a number */
     T.check('matrix/454_mixed/keeps-longest-block', !!m && JSON.stringify(m.rows) === '[[2,0],[3,0]]', JSON.stringify(m && m.rows));
+    const sz = (d.traces || []).find(x => x.name === '617_signal_zeros');
+    T.check('matrix/617_signal_zeros/values', !!sz && JSON.stringify(sz.rows) === '[[0,0],[1,0],[2,0],[3,0]]' && sz.cols[1] === 'Signal', JSON.stringify(sz && {cols: sz.cols, rows: sz.rows}));
   });
 
   await T.t('imac_missing_fields', async () => {

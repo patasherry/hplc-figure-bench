@@ -1522,7 +1522,7 @@ function parseText(text){
     /* the column header of an export with no points can sit under a long metadata block (LabSolutions ASCII: [Header], [Sample Information], ...) */
     const isChrom = lines.slice(0, 200).some(L => { const s = L.trim(); if (!s) return false;
       for (const d of ['\t', ',', ';']) { const fs = splitLine(s, d).map(clean);
-        if (fs.length >= 2 && fs.some(f => /\b(time|min|sec|vol|ml|retention)\b/i.test(f)) && fs.some(f => /\b(uv|absorb|sig|mau|au|od|fluor|intensity|resp|\d{3}\s*nm)\b/i.test(f))) return true; }
+        if (fs.length >= 2 && fs.some(f => /\b(time|min|sec|vol(?:ume)?|ml|retention)\b/i.test(f)) && fs.some(f => /\b(uv|absorb(?:ance)?|sig(?:nal)?|mau|au|od|fluor(?:escence)?|intensity|resp(?:onse)?|\d{3}\s*nm)\b/i.test(f))) return true; }
       return false; });
     if (isChrom) throw new Error('has no data points');
     throw new Error('No numeric columns found');
