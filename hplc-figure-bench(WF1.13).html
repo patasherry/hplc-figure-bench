@@ -2919,7 +2919,7 @@ function processGel(g){
   const img = x2.getImageData(0, 0, ow, oh), d = img.data, hist = new Uint32Array(256), dk = new Float32Array(ow*oh), dq = new Float32Array(ow*oh);
   const bl = +g.black, wh = Math.max(bl + 1, +g.white), k = 255/(wh - bl);
   for (let i=0;i<d.length;i+=4){
-    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++; dk[i/4] = g.invert ? gray : 255 - gray; dq[i/4] = g.invert ? gray : -Math.log10(Math.max(gray, 1)/255)*255;
+    const gray = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2]; hist[gray|0]++; dk[i/4] = g.invert ? gray : 255 - gray; dq[i/4] = g.invert ? -Math.log10(Math.max(255 - gray, 1)/255)*255 : -Math.log10(Math.max(gray, 1)/255)*255;
     if (g.color) for (let j=0;j<3;j++){ let v = (d[i+j] - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; d[i+j] = g.invert ? 255 - v : v; }
     else { let v = (gray - bl)*k; v = v < 0 ? 0 : v > 255 ? 255 : v; if (g.invert) v = 255 - v; d[i] = d[i+1] = d[i+2] = v; }
   }
