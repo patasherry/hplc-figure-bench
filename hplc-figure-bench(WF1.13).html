@@ -6714,8 +6714,8 @@ async function renderHome(){
   const el = $('#projList'); el.innerHTML = '<p class="empty-p">Loading projects…</p>';
   await storeInit();
   $('#homeWhere').textContent = STORE.mode === 'cloud' ? 'Projects are saved with this page, so they open wherever you are signed in. Run data and gel images are uploaded with them, and only people you share the page with can open it.'
-    : STORE.mode === 'local' ? 'Projects are saved in this browser. Use Export project to move one to another computer or keep a copy.'
-    : 'This view cannot keep projects. Use Export project to save your work.';
+    : STORE.mode === 'local' ? 'Projects are saved in this browser. Open a project, then choose Export project to move one to another computer or keep a copy.'
+    : 'This view cannot keep projects. Open a project, then choose Export project to save your work.';
   let list = []; try { list = await storeList(); } catch (e) { el.innerHTML = '<p class="empty-p">Could not load your projects. Reload the page to try again.</p>'; return; }
   if (!list.length) { el.innerHTML = '<p class="empty-p">No projects yet. Start one above when you transform your construct.</p>'; return; }
   el.innerHTML = list.map(p => `<div class="pcard has-del" role="button" tabindex="0" data-pid="${esc(p.id)}"><span class="pn">${esc(p.name || 'Untitled project')}</span>
