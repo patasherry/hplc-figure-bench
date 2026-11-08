@@ -169,6 +169,25 @@ await T.t('integration-tail-cutoff', async () => {
 });
 
 
+// Guards #842: a band added by hand is integrated over its whole tails, like a detected one, not cut at 5% of its height or 4% of the lane.
+// The broad lower band (sigma 8 rows) is removed and added back at the same place: its area relative to the upper band must not change.
+await T.t('manual-band-tails', async () => {
+  const a = await start(), p = a.p;
+  try {
+    const im = await image(p), y = 230.5/360;
+    await load(p, project(gel(im, {tags: []})));
+    const P = lane(await csv(p));
+    await load(p, project(gel(im, {tags: [], edits: {added: [{lane: 1, y}], removed: [{lane: 1, y}]}})));
+    const M = lane(await csv(p));
+    T.check('manual-band-tails.exercised', P.length === 2 && M.length === 2, JSON.stringify({P, M}));
+    if (P.length === 2 && M.length === 2) {
+      const rp = +P[1][6]/+P[0][6], rm = +M[1][6]/+M[0][6];
+      T.check('manual-band-tails.same-area-as-detected', Math.abs(rm/rp - 1) <= 0.015, `lower/upper band area: detected ${rp.toFixed(4)}, added by hand ${rm.toFixed(4)}`);
+    }
+    T.check('manual-band-tails.no-errors', !a.errs.length, a.errs.join('|'));
+  } finally { await a.close(); }
+});
+
 await T.t('ui-clipping-fix', async () => {
   const a = await start();
   const p = a.p;

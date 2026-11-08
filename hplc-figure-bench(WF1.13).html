@@ -3203,7 +3203,8 @@ function bandAt(g, sig, yRot){
   const h = sig.length, c = g.crop, r0 = Math.round((yRot - c.t)/(c.b - c.t)*h - 0.5), w = Math.max(2, Math.round(h*0.008));
   let y = Math.min(h - 1, Math.max(0, r0)); for (let j=Math.max(0, r0 - w); j<=Math.min(h - 1, r0 + w); j++) if (sig[j] > sig[y]) y = j;
   const v = sig[y]; let l = y, r = y, area = 0;
-  if (v > 0) { while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > v*0.05 && y - l < h*0.04) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > v*0.05 && r - y < h*0.04) r++; }
+  /* follow each flank while it still falls and stays above the lane's noise floor, as detected bands do, not to a fixed 5% of the peak */
+  if (v > 0) { const fl = Math.min(v*0.5, profNoise(sig)); while (l > 0 && sig[l-1] <= sig[l] && sig[l-1] > fl) l--; while (r < h-1 && sig[r+1] <= sig[r] && sig[r+1] > fl) r++; }
   else { l = Math.max(0, y - 2); r = Math.min(h - 1, y + 2); }
   for (let j=l;j<=r;j++) area += sig[j];
   let hl = y, hr = y; while (hl > l && sig[hl-1] > v/2) hl--; while (hr < r && sig[hr+1] > v/2) hr++;
