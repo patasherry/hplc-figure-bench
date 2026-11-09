@@ -117,10 +117,13 @@ const F = {gb: src('gb'), imac: src('his'), q: src('q'), sec: path.join(DATA, 's
     await hn.newProject('Methods progress'); await hn.addRun(F.imac); await hn.pool('T1-T6');
     const text = () => narrow.locator('#tl [data-step="figure"] .ts').textContent();
     T.check('methods_progress_plural', await text() === '4 details still needed for Methods text', await text());
+    const names = () => narrow.locator('#tl [data-step="figure"] .ts2').textContent();
+    T.check('methods_progress_names_listed', /^Missing: .+/.test(await names()), await names());
     await hn.step('transform'); await set('#pr-trMethod', 'heat shock');
     await hn.step('expr'); await set('#pr-medium', 'LB');
     const run = (await hn.timeline()).find(x => x.k.startsWith('run:')); await hn.step(run.k); await set('.trace.run.sel [data-k=mFlow]', '1');
     T.check('methods_progress_singular', await text() === '1 detail still needed for Methods text', await text());
+    T.check('methods_progress_names_single', /^Missing: [^,]+$/.test(await names()), await names());
     const clipped = await narrow.locator('#tl [data-step="figure"] .ts').evaluate(e => { const r = e.getBoundingClientRect(), p = e.closest('button').getBoundingClientRect(); return e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1 || r.bottom > p.bottom + 1; });
     T.check('methods_progress_narrow_unclipped', !clipped, 'Methods progress is clipped at 390 px');
     await closeNarrow();

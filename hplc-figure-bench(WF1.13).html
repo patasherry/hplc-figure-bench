@@ -83,6 +83,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .tl li.cur .tt{color:var(--accent)}
 .tl .ts{grid-column:2 / span 2;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tl [data-step="figure"] .ts{white-space:normal;overflow:visible;text-overflow:clip}
+.tl .ts2{grid-column:2 / span 2;color:var(--muted);font-size:12px;white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .tl .td{color:var(--muted);font-size:11.5px;white-space:nowrap}
 .tl-add{display:flex;flex-wrap:wrap;gap:6px;padding-left:36px}
 .stepsheet .ss-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -6821,8 +6822,9 @@ function bufMismatch(r, c){ if (!c.mBufA || !c.mBufB || isSec(r)) return '';
   const bad = Object.keys(a).filter(k => k in b && !elu.includes(k) && Math.abs(a[k] - b[k]) > 1e-9 && k !== 'glycerol');
   return bad.length ? bad.map(k => `${k === 'nacl' ? 'NaCl' : k === 'kcl' ? 'KCl' : k} (A ${a[k]}, B ${b[k]} mM)`).join(', ') : ''; }
 function runNeeds(r){ const c = runCond(r), n = [], pr = poolRows(r); if (!hasTxt(r.path) && !(pr && pr.measured)) n.push('UV path for mg'); if (!c.mCol) n.push('column'); if (!c.mBufA) n.push('buffer'); if (!c.mFlow) n.push('flow rate'); if (!isSec(r) && !c.mGrad && !c.mBufB) n.push('elution'); { const bm = bufMismatch(r, c); if (bm) n.push(`buffer B check: ${bm}`); } return n; }
-let gapMemo = {k: '', n: 0};
-function methodGaps(){ const t = methodsText(); if (gapMemo.k !== t) gapMemo = {k: t, n: (t.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).length}; return gapMemo.n; }
+let gapMemo = {k: '', n: 0, names: []};
+function methodGapInfo(){ const t = methodsText(); if (gapMemo.k !== t) gapMemo = {k: t, n: (t.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).length, names: [...new Set(t.split(/\n\n/).flatMap(par => (par.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).map(g => { const w = g.slice(1, -1).replace(/\s*not entered\s*/i, '').trim(); return w || (par.match(/^([^:(]+)/) || ['', 'a step'])[1].trim(); })))]}; return gapMemo; }
+function methodGaps(){ return methodGapInfo().n; }
 function stepList(){
   const v = k => hasTxt(prep[k]), m = k => stepMeta(k), L = [];
   const cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
@@ -6848,8 +6850,8 @@ function stepList(){
   const ys = finalYields(), y = ys[0] || finalYield(), fin = FIN_KEYS.some(v) || ndSamples.some(n => n.stage === 'final') || !!m('final').date;
   const fw = !fin || !y ? '' : y.meas && y.loaded && y.mg != null && y.mg > y.loaded.mg*1.05 ? `${sig2(y.mg)} mg is more than was loaded, check` : y.purTyped ? 'Purity typed, add a gel of the last pool' : '';
   L.push({k: 'final', g: 'Results', t: 'Final sample', done: fin, warn: fw, s: fw ? fw : fin && y ? `${y.mg !== null ? sig2(y.mg) + ' mg' : 'unknown yield'}${y.perL != null ? `, ${sig2(y.perL)} mg per L` : ''}${y.meas ? '' : ', from the last pool'}` : ys.length > 1 ? `Latest pools: ${ys.map(q => `${q.poolMg != null ? sig2(q.poolMg) + ' mg' : 'unknown yield'} (${stepTitle(q.fin.r)})`).join(', ')}` : y ? `Latest pool: ${y.poolMg != null ? sig2(y.poolMg) + ' mg' : 'unknown yield'} after ${stepTitle(y.fin.r)}` : 'Concentration, storage, quality checks'});
-  const hasWf = figures().some(f => f.kind === 'workflow'), gaps = hasWf ? methodGaps() : 0;
-  L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, s: gaps ? `${gaps} detail${gaps === 1 ? '' : 's'} still needed for Methods text` : hasWf ? 'Workflow figure, summary, methods text' : 'Builds once a column is added'});
+  const hasWf = figures().some(f => f.kind === 'workflow'), gaps = hasWf ? methodGaps() : 0, gapNames = gaps ? methodGapInfo().names : [];
+  L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, s2: gapNames.length ? `Missing: ${gapNames.join(', ')}` : '', s: gaps ? `${gaps} detail${gaps === 1 ? '' : 's'} still needed for Methods text` : hasWf ? 'Workflow figure, summary, methods text' : 'Builds once a column is added'});
   L.forEach(x => { if (['transform', 'expr', 'lysis'].includes(x.k) && skipped(x.k)) Object.assign(x, {done: false, warn: '', skip: true, s: 'Skipped, left out of the figure and methods'}); });
   return L;
 }
@@ -6879,7 +6881,7 @@ function addMan(kind){ const L = wfList(), last = L[L.length - 1], n = Math.max(
 function renderSteps(){
   if (!PROJ) return; const L = stepList(), key = curStep;
   const h = L.map(s => (s.g ? `<li class="tl-head"><p class="tl-h">${esc(s.g)}</p></li>` : '') + (s.add ? `<li class="tl-addrow">${addRowHtml()}</li>` : `<li class="${s.done ? 'done' : ''}${s.warn ? ' warn' : ''}${s.sub ? ' sub' : ''}${s.k === key ? ' cur' : ''}"><button type="button" class="tl-i" data-step="${esc(s.k)}"${s.k === key ? ' aria-current="step"' : ''}>
-    <span class="mk" aria-hidden="true">${s.warn ? '!' : s.done ? '✓' : ''}</span><span class="tt">${esc(s.t)}</span><span class="td">${esc(stepMeta(s.k).date ? fmtWhen(new Date(stepMeta(s.k).date + 'T12:00').getTime()) : '')}</span><span class="ts">${esc(s.s || '')}</span></button></li>`)).join('');
+    <span class="mk" aria-hidden="true">${s.warn ? '!' : s.done ? '✓' : ''}</span><span class="tt">${esc(s.t)}</span><span class="td">${esc(stepMeta(s.k).date ? fmtWhen(new Date(stepMeta(s.k).date + 'T12:00').getTime()) : '')}</span><span class="ts">${esc(s.s || '')}</span>${s.s2 ? `<span class="ts2">${esc(s.s2)}</span>` : ''}</button></li>`)).join('');
   if (h !== tlHtml) { tlHtml = h; $('#tl').innerHTML = h; }
   renderStepSheet(L);
 }
