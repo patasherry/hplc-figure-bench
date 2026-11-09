@@ -1,0 +1,116 @@
+Baseline: hplc-figure-bench(WF1.13).html at origin/main
+== baseline
+00_preflight.js                    pass   0  fail   0  CRASHED  0s
+00_smoke.js                        pass   0  fail   0  CRASHED  0s
+01_name.js                         pass   0  fail   0  CRASHED  0s
+05_quick.js                        pass   0  fail   0  CRASHED  0s
+1007_untagged_default.js           pass   0  fail   0  CRASHED  0s
+1060_sidebar_trace_wrap.js         pass   0  fail   0  CRASHED  0s
+1089_actionable_methods_gaps.js    pass   0  fail   0  CRASHED  0s
+1090_construct_sequence_link.js    pass   0  fail   0  CRASHED  0s
+10_data_truth.js                   pass   0  fail   0  CRASHED  0s
+1187_svg_group.js                  pass   0  fail   0  CRASHED  0s
+1197_quoted_csv.js                 pass   0  fail   0  CRASHED  0s
+11_unicorn_zip.js                  pass   0  fail   0  CRASHED  0s
+12_genbank.js                      pass   0  fail   0  CRASHED  0s
+14_peaks.js                        pass   0  fail   0  CRASHED  0s
+15_import_sec.js                   pass   0  fail   0  CRASHED  0s
+16_nanodrop.js                     pass   0  fail   0  CRASHED  0s
+17_cross_format.js                 pass   0  fail   0  CRASHED  0s
+18_hplc_load.js                    pass   0  fail   0  CRASHED  0s
+20_science.js                      pass   0  fail   0  CRASHED  0s
+21_methods.js                      pass   0  fail   0  CRASHED  0s
+221_iso.js                         pass   0  fail   0  CRASHED  0s
+22_protein.js                      pass   0  fail   0  CRASHED  0s
+23_provenance.js                   pass   0  fail   0  CRASHED  0s
+24_workflow_branches.js            pass   0  fail   0  CRASHED  0s
+25_gels.js                         pass   0  fail   0  CRASHED  0s
+26_sec_calibration.js              pass   0  fail   0  CRASHED  0s
+27_sec_mass_calculation.js         pass   0  fail   0  CRASHED  0s
+28_sec_figure.js                   pass   0  fail   0  CRASHED  0s
+30_robust.js                       pass   0  fail   0  CRASHED  0s
+31_wf_full.js                      pass   0  fail   0  CRASHED  0s
+40_visual.js                       pass   0  fail   0  CRASHED  0s
+411_workflow_condition_placeholder.js pass   0  fail   0  CRASHED  0s
+41_workflow_drag_hint.js           pass   0  fail   0  CRASHED  0s
+42_figures.js                      pass   0  fail   0  CRASHED  0s
+431_ios_look.js                    pass   0  fail   0  CRASHED  0s
+43_zoom_inset.js                   pass   0  fail   0  CRASHED  0s
+44_panel_more.js                   pass   0  fail   0  CRASHED  0s
+45_yield_semantic.js               pass   0  fail   0  CRASHED  0s
+46_run_status_overlap.js           pass   0  fail   0  CRASHED  0s
+47_export_project.js               pass   0  fail   0  CRASHED  0s
+48_empty_start.js                  pass   0  fail   0  CRASHED  0s
+50_export.js                       pass   0  fail   0  CRASHED  0s
+60_perf.js                         pass   0  fail   0  CRASHED  0s
+669_persistence_roundtrip.js       pass   0  fail   0  CRASHED  0s
+769_workflow_refit.js              pass   0  fail   0  CRASHED  0s
+770_pool_area.js                   pass   0  fail   0  CRASHED  0s
+796_tag_mass.js                    pass   0  fail   0  CRASHED  0s
+99_band_overlap.js                 pass   0  fail   0  CRASHED  0s
+test_nanodrop_units.js             pass   0  fail   0  CRASHED  0s
+test_sec_calibration_units.js      pass   0  fail   0  CRASHED  0s
+
+TOTAL pass 0  fail 0  crashed suites 50  (APP=/app/tests/results/base.html)
+== new
+00_preflight.js                    pass   0  fail   0  CRASHED  0s
+00_smoke.js                        pass   0  fail   0  CRASHED  0s
+01_name.js                         pass   0  fail   0  CRASHED  0s
+05_quick.js                        pass   0  fail   0  CRASHED  0s
+1007_untagged_default.js           pass   0  fail   0  CRASHED  0s
+1060_sidebar_trace_wrap.js         pass   0  fail   0  CRASHED  0s
+1089_actionable_methods_gaps.js    pass   0  fail   0  CRASHED  0s
+1090_construct_sequence_link.js    pass   0  fail   0  CRASHED  0s
+10_data_truth.js                   pass   0  fail   0  CRASHED  0s
+1187_svg_group.js                  pass   0  fail   0  CRASHED  0s
+1197_quoted_csv.js                 pass   0  fail   0  CRASHED  0s
+11_unicorn_zip.js                  pass   0  fail   0  CRASHED  0s
+12_genbank.js                      pass   0  fail   0  CRASHED  0s
+14_peaks.js                        pass   0  fail   0  CRASHED  0s
+15_import_sec.js                   pass   0  fail   0  CRASHED  0s
+16_nanodrop.js                     pass   0  fail   0  CRASHED  0s
+17_cross_format.js                 pass   0  fail   0  CRASHED  0s
+18_hplc_load.js                    pass   0  fail   0  CRASHED  0s
+20_science.js                      pass   0  fail   0  CRASHED  0s
+21_methods.js                      pass   0  fail   0  CRASHED  0s
+221_iso.js                         pass   0  fail   0  CRASHED  0s
+22_protein.js                      pass   0  fail   0  CRASHED  0s
+23_provenance.js                   pass   0  fail   0  CRASHED  0s
+24_workflow_branches.js            pass   0  fail   0  CRASHED  0s
+25_gels.js                         pass   0  fail   0  CRASHED  0s
+26_sec_calibration.js              pass   0  fail   0  CRASHED  0s
+27_sec_mass_calculation.js         pass   0  fail   0  CRASHED  0s
+28_sec_figure.js                   pass   0  fail   0  CRASHED  0s
+30_robust.js                       pass   0  fail   0  CRASHED  0s
+31_wf_full.js                      pass   0  fail   0  CRASHED  0s
+40_visual.js                       pass   0  fail   0  CRASHED  0s
+411_workflow_condition_placeholder.js pass   0  fail   0  CRASHED  0s
+41_workflow_drag_hint.js           pass   0  fail   0  CRASHED  0s
+42_figures.js                      pass   0  fail   0  CRASHED  0s
+431_ios_look.js                    pass   0  fail   0  CRASHED  0s
+43_zoom_inset.js                   pass   0  fail   0  CRASHED  0s
+44_panel_more.js                   pass   0  fail   0  CRASHED  0s
+45_yield_semantic.js               pass   0  fail   0  CRASHED  0s
+46_run_status_overlap.js           pass   0  fail   0  CRASHED  0s
+47_export_project.js               pass   0  fail   0  CRASHED  0s
+48_empty_start.js                  pass   0  fail   0  CRASHED  0s
+50_export.js                       pass   0  fail   0  CRASHED  0s
+60_perf.js                         pass   0  fail   0  CRASHED  0s
+669_persistence_roundtrip.js       pass   0  fail   0  CRASHED  0s
+769_workflow_refit.js              pass   0  fail   0  CRASHED  0s
+770_pool_area.js                   pass   0  fail   0  CRASHED  0s
+796_tag_mass.js                    pass   0  fail   0  CRASHED  0s
+99_band_overlap.js                 pass   0  fail   0  CRASHED  0s
+test_nanodrop_units.js             pass   0  fail   0  CRASHED  0s
+test_sec_calibration_units.js      pass   0  fail   0  CRASHED  0s
+
+TOTAL pass 0  fail 0  crashed suites 50  (APP=/app/hplc-figure-bench(WF1.13).html)
+
+## Selectors the suite uses that the new build lacks (0)
+## Regressions: pass on baseline, fail on new (0)
+## Fixed by the new build (0)
+## Failing on both (0)
+## Checks only on baseline, e.g. a suite crashed on new (0)
+## Checks only on new (0)
+
+Full report: results/compare.md
