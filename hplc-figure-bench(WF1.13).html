@@ -3809,7 +3809,7 @@ function composeRuns(list, cfg){
   if (widened) Wt = row ? pw.reduce((a, b) => a + b, 0) + (n-1)*gap : grid ? 2*Math.max(...pw) + gap : Math.max(...pw);
   if (widened && !row) pw.fill(grid ? (Wt - gap)/2 : Wt);
   /* the upstream band is as tall as its tallest panel's text at the width that panel really gets */
-  if (cfg.bandH) cfg = Object.assign({}, cfg, {bandH: Math.max(cfg.bandH, ...list.map((r, i) => { const c = buildRunSVG(r, {wPt: pw[i], hPt: chromH, nest: true}); return c.geo && c.geo.used ? c.geo.used + (numOr(opt.min_safety_margin, 0) || fs*0.8) : 0; }))});
+  if (cfg.bandH) cfg = Object.assign({}, cfg, {bandH: Math.max(cfg.bandH, ...list.map((r, i) => { const c = buildRunSVG(r, {wPt: pw[i], hPt: chromH, nest: true}); return c.geo && c.geo.used ? c.geo.used + (opt.min_safety_margin !== undefined && opt.min_safety_margin !== '' ? numOr(opt.min_safety_margin, 0) : fs*0.8) : 0; }))});
   /* panel titles wrap onto a second line instead of being cut off */
   /* if any title has to drop its shared prefix, all of them do, so the panels read alike */
   const roomOf = i => Math.max(4, Math.floor((pw[i] - (cfg.letters ? fs*1.6 : 0))/(fs*0.55))), anyShort = list.some((r, i) => stepTitle(r) === r.name && r.name.length > roomOf(i) && shortRunName(r) !== r.name);
@@ -4067,7 +4067,7 @@ function buildWorkflow(){
   /* side by side, the upstream steps stay in the same row when it still fits the width */
   if (opt.wfLayout === 'row') { const one = composeRuns(pre.concat(list), cfg); if (one.geo && (one.geo.W0 || one.geo.W) <= cfg.W*1.08) return yieldLine(one); }
   /* otherwise construct, expression and lysis form a band across the top, with an elbow arrow down into the first column */
-  const fs = fontSize(); const min_safety_margin = numOr(opt.min_safety_margin, 0) || fs*0.8; let bandH = fs*5; const tmp = composeRuns(pre, Object.assign({}, cfg, {layout: 'row', raw: true})); if (tmp.geo && tmp.geo.pos) { const hs = tmp.geo.pos.map((p, i) => { const c = buildRunPlainSVG(pre[i], {wPt: p.w, hPt: cfg.chromH, nest: true}); return c.geo && c.geo.used ? c.geo.used : 0; }); bandH = Math.max(...hs) + min_safety_margin; }
+  const fs = fontSize(); const min_safety_margin = opt.min_safety_margin !== undefined && opt.min_safety_margin !== '' ? numOr(opt.min_safety_margin, 0) : fs*0.8; let bandH = fs*5; const tmp = composeRuns(pre, Object.assign({}, cfg, {layout: 'row', raw: true})); if (tmp.geo && tmp.geo.pos) { const hs = tmp.geo.pos.map((p, i) => { const c = buildRunPlainSVG(pre[i], {wPt: p.w, hPt: cfg.chromH, nest: true}); return c.geo && c.geo.used ? c.geo.used : 0; }); bandH = Math.max(...hs) + min_safety_margin; }
   const top = composeRuns(pre, Object.assign({}, cfg, {layout: 'row', raw: true, bandH}));
   if (!list.length) return composeRuns(pre, Object.assign({}, cfg, {layout: 'row', bandH}));
   const vgap = fs*3.4, bot = fit(list, Object.assign({}, cfg, {raw: true, letterOff: pre.length}), PAGE - top.geo.H - vgap);
@@ -6320,7 +6320,7 @@ $('#ndManual').addEventListener('click', () => { const r = curRun(); ndSamples.p
 /* the Concentrated step's figure: its NanoDrop spectra with the concentration, volume and mg; with no spectra, its panel */
 function buildConcFig(r){ const sp = ndFinalOf(r).filter(x => x.spec), info = ncLines(r).map(x => typeof x === 'string' ? x : x.t);
   if (sp.length) return buildNDSVG(sp, info);
-  const fs = fontSize(); const min_safety_margin = numOr(opt.min_safety_margin, 0) || fs*0.8; const W = Math.max(numOr(opt.w, 3.5), 3.4)*72; const o = ncObj(r); let bandH = fs*5; const c = buildRunPlainSVG(o, {wPt: W, hPt: numOr(opt.wfH, 2.2)*72, nest: true}); if (c.geo && c.geo.used) bandH = c.geo.used + min_safety_margin; return composeRuns([o], {layout: 'row', W, chromH: numOr(opt.wfH, 2.2)*72, titles: true, letters: false, showGels: false, connectors: false, arrows: false, gelMaxH: 0, bandH}); }
+  const fs = fontSize(); const min_safety_margin = opt.min_safety_margin !== undefined && opt.min_safety_margin !== '' ? numOr(opt.min_safety_margin, 0) : fs*0.8; const W = Math.max(numOr(opt.w, 3.5), 3.4)*72; const o = ncObj(r); let bandH = fs*5; const c = buildRunPlainSVG(o, {wPt: W, hPt: numOr(opt.wfH, 2.2)*72, nest: true}); if (c.geo && c.geo.used) bandH = c.geo.used + min_safety_margin; return composeRuns([o], {layout: 'row', W, chromH: numOr(opt.wfH, 2.2)*72, titles: true, letters: false, showGels: false, connectors: false, arrows: false, gelMaxH: 0, bandH}); }
 function buildNDSVG(only, info){
   const sp = (only || ndSamples.filter(s => s.stage !== 'conc')).filter(s => s.spec && !s.hide); if (!sp.length) return {svg: null, geo: null}; info = info || [];
   const S = style({}), {W, H, fs, lw, aw, cw, tl, tOut} = S, o = opt, pal = PAL.okabe, norm = o.ndNorm === 'a280';
@@ -7132,7 +7132,7 @@ function selectStep(k){
 }
 /* a step's own figure: its panel and gel, or the upstream band so far for the transformation */
 function buildStepFig(k){
-  const fs = fontSize(); const min_safety_margin = numOr(opt.min_safety_margin, 0) || fs*0.8; const W = Math.max(numOr(opt.w, 3.5), 3.4)*72; let bandH = fs*5; const o = k === 'transform' ? prepObjFor('construct') : isManId(k) ? manObj(manSteps().find(x => x.id === k)) : prepObjFor(k); const c = buildRunPlainSVG(o, {wPt: W, hPt: numOr(opt.wfH, 2.2)*72, nest: true}); if (c.geo && c.geo.used) bandH = c.geo.used + min_safety_margin; const base = {layout: 'row', W, chromH: numOr(opt.wfH, 2.2)*72, titles: true, letters: false, showGels: true, connectors: opt.connectors, arrows: true, gelMaxH: numOr(opt.wfGelH, 1.8)*72, bandH};
+  const fs = fontSize(); const min_safety_margin = opt.min_safety_margin !== undefined && opt.min_safety_margin !== '' ? numOr(opt.min_safety_margin, 0) : fs*0.8; const W = Math.max(numOr(opt.w, 3.5), 3.4)*72; let bandH = fs*5; const o = k === 'transform' ? prepObjFor('construct') : isManId(k) ? manObj(manSteps().find(x => x.id === k)) : prepObjFor(k); const c = buildRunPlainSVG(o, {wPt: W, hPt: numOr(opt.wfH, 2.2)*72, nest: true}); if (c.geo && c.geo.used) bandH = c.geo.used + min_safety_margin; const base = {layout: 'row', W, chromH: numOr(opt.wfH, 2.2)*72, titles: true, letters: false, showGels: true, connectors: opt.connectors, arrows: true, gelMaxH: numOr(opt.wfGelH, 1.8)*72, bandH};
   if (k === 'transform') { const c = prepObjFor('construct'), list = [c]; c.note = 'Transform'; if (prepSteps().some(o => o.id === 'expr')) list.push(prepObjFor('expr')); return composeRuns(list, Object.assign(base, {W: W*list.length})); }
   if (isManId(k)) { const m = manSteps().find(x => x.id === k); return composeRuns([manObj(m)], base); }
   return composeRuns([prepObjFor(k)], base);

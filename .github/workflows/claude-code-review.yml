@@ -24,6 +24,12 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.1.33
+
+      - name: Run Claude Code Review
+        id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

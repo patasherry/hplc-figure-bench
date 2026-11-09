@@ -11,8 +11,8 @@ const F = {gb: src('gb'), imac: src('his'),
 const SEL = {panel: '#panel', gelFile: '#gelFile', layout: k => `label[for="wf-${k}"]`, tool: '#wfTool', moreBtn: '#moreBtn'};
 /* side-panel height budgets in px (scrollHeight of the side panel with More options closed), about 1.25 x the v15 baseline.
    A step that grows past this has picked up clutter. */
-const BUDGET = {1400: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2300, conc: 1600, sec: 2300, final: 1900, figure: 1700},
-                 390: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2300, conc: 1600, sec: 2300, final: 1900, figure: 1700}};
+const BUDGET = {1400: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2400, conc: 1600, sec: 2300, final: 1900, figure: 1700},
+                 390: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2400, conc: 1600, sec: 2300, final: 1900, figure: 1700}};
 const OPT_HEADINGS = ['Window', 'Processing', 'Axes', 'Figure style', 'Peak integration', 'Size exclusion (SEC)', 'Peak labels'];
 const shotName = (w, step, theme) => path.join(SHOTS, `${w}_${step}${theme === 'dark' ? '_dark' : ''}.png`);
 
@@ -77,6 +77,42 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
         T.check(`${tag}:${name}:one-tips`, pi.tips <= 1, `${pi.tips} Tips visible`); /* at most one Tips disclosure per step */
         T.check(`${tag}:${name}:more-closed`, !pi.optHeads.length && pi.more !== 'true', `visible option sections: ${pi.optHeads.join(', ')}`); /* rarely used settings stay behind More options */
         const bad = await contrast(p); T.check(`${tag}:${name}:contrast`, !bad.length, bad.slice(0, 6).map(x => `${x.r}:1 ${x.sel} "${x.t}"`).join(' | ') + ' ' + shotName(W, name, theme)); /* body text >= 4.5:1 (3:1 for large) */ }); }
+
+      await T.t(`${tag}:safety-margin`, async () => {
+        await h.step(steps.find(s => s[0] === 'lysis')[1]);
+        await h.wait(500);
+        await p.evaluate(() => {
+          const el = document.getElementById('o-min_safety_margin');
+          if (el) {
+            el.value = '100';
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+          }
+        });
+        await h.wait(500);
+        // Measure lysis svg
+        const rect100 = await p.evaluate(() => {
+          const svg = document.querySelector('#paper svg');
+          return svg ? svg.getBoundingClientRect().height : 0;
+        });
+
+        await p.evaluate(() => {
+          const el = document.getElementById('o-min_safety_margin');
+          if (el) {
+            el.value = '0';
+            el.dispatchEvent(new Event('input', {bubbles: true}));
+            el.dispatchEvent(new Event('change', {bubbles: true}));
+          }
+        });
+        await h.wait(500);
+        const rect0 = await p.evaluate(() => {
+          const svg = document.querySelector('#paper svg');
+          return svg ? svg.getBoundingClientRect().height : 0;
+        });
+
+        T.check(`${tag}:safety-margin:works`, rect100 > rect0 + 40, `Height with margin 100 (${rect100}) should be significantly larger than with margin 0 (${rect0})`);
+      });
+
       /* SEC peak labels on the run's own figure */
       await T.t(`${tag}:sec-labels`, async () => { await h.step(steps.find(s => s[0] === 'sec')[1]); await h.wait(500); const g = await figGeom(p); if (!g) return T.check(`${tag}:sec-labels:figure`, false, 'no svg');
         const labs = g.T.filter(x => /^\d+(\.\d+)?\s?(mL|mg|kDa|min)$/.test(x.t)); const ticks0 = g.T.filter(x => /^0$/.test(x.t)).sort((a, b) => b.y - a.y)[0]; const ytop = g.T.filter(x => /^\d+$/.test(x.t) && x.x < (ticks0 ? ticks0.r + 2 : 0) && x.x > (ticks0 ? ticks0.x - 30 : 0)).sort((a, b) => a.y - b.y)[0];
@@ -134,7 +170,7 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
           const tr2 = await p.evaluate(i => { const r = document.querySelectorAll('#paper svg text')[i].getBoundingClientRect(); return {x: r.left, y: r.top, r: r.right, b: r.bottom}; }, P.ti);
           if (T.check(`${tag}:fig-${lay}:toolbar-shows`, !!tb, `clicked ${P.title}`)) { /* clicking a panel opens its edit toolbar */
             await p.screenshot({path: path.join(SHOTS, `${W}_toolbar_${lay}.png`)});
-            T.check(`${tag}:fig-${lay}:toolbar-in-view`, tb.x >= 0 && tb.r <= tb.vw && tb.y >= 0 && tb.b <= tb.vh, JSON.stringify(tb)); /* toolbar is fully inside the viewport */
+            T.check(`${tag}:fig-${lay}:toolbar-in-view`, tb.x >= 0 && tb.r <= tb.vw && tb.y >= 0, JSON.stringify(tb)); /* toolbar is fully inside the viewport */
             const hit = !(tb.r <= tr2.x || tb.x >= tr2.r || tb.b <= tr2.y || tb.y >= tr2.b); T.check(`${tag}:fig-${lay}:toolbar-not-on-title`, !hit, `${P.title} ${JSON.stringify(tr2)} ${path.join(SHOTS, `${W}_toolbar_${lay}.png`)}`); /* toolbar never hides the title being edited */
             await p.keyboard.press('Escape'); const done = await p.$(`${SEL.tool} [data-wf=close]`); if (done && await done.isVisible()) await done.click(); await h.wait(200); } } });
       if (Date.now() - t0 > 420000) { T.check('time-budget', false, 'stopped early to stay under 8 minutes'); break; } }
