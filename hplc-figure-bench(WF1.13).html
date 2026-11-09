@@ -153,6 +153,7 @@ header.top p{margin:0;color:var(--muted);font-size:13px}
 .grp h2{margin:0;font-size:15px;font-weight:600;letter-spacing:-.005em;color:var(--ink)}
 .grp h2 + .hint, .grp h2 + * + .hint, .grp h2 + .savestate, .grp h2 + * + .savestate { margin-top: 6px; }
 .row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 10px}
+@media (max-width:420px){#prNames{grid-template-columns:minmax(0,1fr)}}
 .row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px 10px}
 label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);min-width:0;align-content:space-between;line-height:1.35}
 input[type=text],input[type=number],select,textarea{font:inherit;font-size:13px;color:var(--ink);background:var(--field);border:1px solid var(--line2);border-radius:var(--r-s);padding:6px 8px;width:100%;min-width:0;min-height:32px;transition:border-color .12s,box-shadow .12s}
@@ -658,7 +659,7 @@ button,input,select,textarea{font-family:inherit}
           <input type="file" id="gbFile" accept=".gb,.gbk,.genbank,.ape,.dna,.txt" hidden></div>
         <div id="gbPasteBox" hidden><textarea id="gbText" rows="6" spellcheck="false" placeholder="Paste GenBank text here (LOCUS … ORIGIN … //)" style="width:100%"></textarea><div class="btns"><button type="button" class="btn" id="gbPasteGo">Use pasted text</button></div></div>
         <p class="hint" id="gbStatus"></p>
-        <div class="row">
+        <div class="row" id="prNames">
           <label class="f">Plasmid name<input type="text" id="pr-name" data-prep="name" placeholder="e.g. pET28-SUMO-NADK" spellcheck="false"></label>
           <label class="f">Vector<input type="text" id="pr-backbone" data-prep="backbone" placeholder="e.g. pET-28a(+)" spellcheck="false"></label>
         </div>
