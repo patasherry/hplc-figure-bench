@@ -27,6 +27,64 @@ T.check('area.three-band-exercised',L3.length>=3,JSON.stringify(L3));T.check('ar
 await load(p,project(gel(im)));const keep=lane(await csv(p));await load(p,project(gel(im,{edits:{added:[],removed:[{lane:1,y:230.5/360}]}})));const kept=lane(await csv(p));
 T.check('area.removed-band-leaves-total',kept.length===keep.length-1&&+kept[0][6]>+keep[0][6]+5&&+kept[0][10]>+keep[0][10]+5,JSON.stringify({before:keep.map(r=>[r[6],r[10]]),after:kept.map(r=>[r[6],r[10]])}));
 T.check('area.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
+await T.t('densitometry-independent-evidence', async () => {
+    const a = await start(), p = a.p;
+    try {
+        const im = await p.evaluate(() => {
+            const c = document.createElement('canvas');
+            c.width = 300; c.height = 360;
+            const x = c.getContext('2d'), imd = x.createImageData(300, 360);
+            for(let y=0;y<360;y++){
+                for(let a=0;a<300;a++){
+                    const j = 4*(300*y+a);
+                    let v = 255;
+
+                    if (a >= 140 && a < 160) v = 254;
+                    if (a >= 120 && a < 180 && y >= 120 && y < 130) v = 155;
+                    if (a >= 40 && a < 60 && y > 100 && y < 200) v = 150;
+                    if (a >= 240 && a < 260 && y > 100 && y < 200) v = 150;
+
+                    imd.data[j]=imd.data[j+1]=imd.data[j+2]=v;
+                    imd.data[j+3]=255;
+                }
+            }
+            x.putImageData(imd, 0, 0);
+            return c.toDataURL('image/png');
+        });
+
+        await load(p, project(gel(im, {
+            black: 0,
+            white: 255,
+            autoLv: false,
+            marks: [{kda: 100, y: .2}, {kda: 10, y: .8}, {kda: 50, y: .3}, {kda: 40, y: .4}, {kda: 30, y: .5}, {kda: 20, y: .6}],
+            tags: [{kind: 'target', lane: 2, y: 125/360}],
+            edits: {added: [{lane:2, y: 125/360}], removed: []}
+        })));
+
+        await p.waitForSelector('#bandCsv');
+
+        const C = await csv(p);
+        const L = lane(C, 2);
+
+        T.check('densitometry-independent-evidence.has-band', L.length > 0, 'Lane 2 data missing: ' + JSON.stringify(C));
+        if (L.length > 0) {
+            const purityText = await p.evaluate(() => {
+                const tr = Array.from(document.querySelectorAll('#bandTable tbody tr')).find(r => r.cells[1] && r.cells[1].textContent.trim() === 'A');
+                if (!tr) return null;
+
+                // Parse the percentage out of the band string e.g. "46.0 (100%, saturated)×" -> 100
+                const bandText = tr.cells[tr.cells.length - 1].textContent.trim();
+                const match = bandText.match(/\(([\d.]+)%/);
+                if (match) {
+                   return parseFloat(match[1]);
+                }
+                return null;
+            });
+            T.check('densitometry-independent-evidence.correct-volume', purityText !== null && Math.abs(purityText - 100) < 0.1, `Expected ~100% of lane, got ${purityText || 'unknown'} in UI.`);
+        }
+    } finally { await a.close(); }
+});
+
 await T.t('ladder',async()=>{const a=await start(),p=a.p;try{const im=await image(p);await load(p,project(gel(im)));let L=lane(await csv(p));const y=+L[0][13],want=100*Math.pow(.1,(y-.2)/.6);T.check('ladder.log-interpolation',Math.abs(+L[0][5]-want)<.2,JSON.stringify(L));
 for(const [key,marks]of [['duplicate',[{kda:100,y:.2},{kda:10,y:.2}]],['reversed',[{kda:10,y:.2},{kda:100,y:.8}]],['same-mass',[{kda:100,y:.2},{kda:100,y:.8}]]]){await load(p,project(gel(im,{marks})));L=lane(await csv(p));T.check('ladder.'+key+'-no-sizes',L.every(r=>r[5]===''),JSON.stringify(L));T.check('ladder.'+key+'-explanation',/Check the ladder/.test(await p.locator('#bandTable').textContent()));{const tx=await p.locator('#bandTable').textContent();/* Guards: the message names the marks to fix, not only that something is wrong. */T.check('ladder.'+key+'-names-marks',/marks (10|100) and (10|100) kDa/.test(tx),tx.slice(0,200));}}
 T.check('ladder.no-errors',!a.errs.length,a.errs.join('|'));}finally{await a.close();}});
