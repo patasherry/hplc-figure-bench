@@ -10,6 +10,9 @@ const path = require('path');
     await h.newProject('Methods Gaps Test');
     await h.wait(500);
 
+    const figEmptySummary = (await p.locator('#tl [data-step="figure"] .ts').textContent())?.trim();
+    T.check('figure-empty-summary', figEmptySummary === 'Builds after you add a purification step.', `summary: ${figEmptySummary}`);
+
     // Add a run and pool fractions so purification summary is visible
     await h.addRun(path.join(__dirname, '..', 'data', 'standins', 'imac_histrap_1ml_step.csv'));
     await h.pool('T1-T6');
