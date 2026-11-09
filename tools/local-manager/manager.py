@@ -1086,9 +1086,18 @@ def gate(s):
             gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
             post(n, 'This pull request changes no files, so it cannot fix anything. Closed without merging, because merging it would close its issue while the bug stays.' + SIGN.format(rv.MODEL))
             if iss:
-                label(iss, add=['jules-queue'], remove=list(ALL_RUNNING | ALL_DONE))
-                post(iss, f'PR #{n} for this issue changed no files, so it was closed without merging and the issue is queued again. The fix still has to be made in the app, with a check that fails on main and passes on the branch.' + SIGN.format(rv.MODEL))
-            log(f'PR #{n}: empty, closed and #{iss} requeued')
+                sb_prev = s['sentback'].get(str(iss), 0)
+                if sb_prev < MAX_SENDBACKS:
+                    s['sentback'][str(iss)] = sb_prev + 1
+                    label(iss, add=['jules-queue'], remove=list(ALL_RUNNING | ALL_DONE))
+                    post(iss, f'PR #{n} for this issue changed no files, so it was closed without merging and the issue is queued again (attempt {sb_prev + 1}/{MAX_SENDBACKS}). The fix still has to be made in the app, with a check that fails on main and passes on the branch.' + SIGN.format(rv.MODEL))
+                    log(f'PR #{n}: empty, closed and #{iss} requeued')
+                else:
+                    label(iss, add=['for-coordinator'], remove=list(ALL_RUNNING | ALL_DONE | {'jules-queue'}))
+                    post(iss, f'**For the lead:** PR #{n} for this issue changed no files, and the issue has produced empty PRs {sb_prev + 1} times. Flagged for lead review.' + SIGN.format(rv.MODEL))
+                    log(f'PR #{n}: empty, closed and #{iss} flagged for lead')
+            else:
+                log(f'PR #{n}: empty, closed (no linked issue)')
             continue
         runs = gh(f'repos/{REPO}/actions/runs?head_sha={sha}').get('workflow_runs', [])
         t = next((r for r in runs if r['name'] == 'Test suite'), None)
@@ -2327,18 +2336,25 @@ def ux_scope(s):
     # A timeout costs a whole UX_LOOK_S of the pass, and everything behind this duty waits it out. The local model
     # either reads screenshots today or it does not, so after UX_GIVE_UP in a row stop asking for the rest of the walk
     # rather than paying that again per step: on 2026-11-05 three timeouts in one walk held the pass for 30 minutes.
-    vision, misses = True, 0
+    has_vision_model = any(k in str(rv.MODEL).lower() for k in ('vision', 'llava', 'vl', 'multimodal', 'gemini'))
+    vision_cfg = cfg.get('ux_vision')
+    vision_cooling = time.time() < u.get('no_vision_until', 0)
+    vision = (vision_cfg is True or (vision_cfg is not False and has_vision_model)) and not vision_cooling
+    misses = 0
     for st in rep_['steps']:
         st['notes'] = []
         if vision and st.get('shot') and Path(st['shot']).exists():
             n = look(UX_NOTES.format(goal=rep_['goal'], step=st['name'], err=f"\nThat step did not work: {st['error']}" if st['error'] else ''), st['shot'])
             if n is None:
                 vision = False
+                u['no_vision_until'] = time.time() + 24 * 3600
+                log('ux: model does not take images, vision backed off for 24 h')
             elif n is False:  # the call failed, which is the expensive case; [] is a clean screenshot and must not count
                 misses += 1
                 if misses >= UX_GIVE_UP:
                     vision = False
-                    log(f'ux: the local model failed on {misses} screenshots in a row, so the rest of this walk is plain checks only')
+                    u['no_vision_until'] = time.time() + 6 * 3600
+                    log(f'ux: the local model failed on {misses} screenshots in a row, vision backed off for 6 h')
             else:
                 st['notes'], misses = n, 0
     failed = [st for st in rep_['steps'] if not st['ok']]
@@ -2739,6 +2755,29 @@ def stuck(s):
                 post(pr['number'], '**For the lead:** the Test suite has failed on this PR for over an hour. See the test report comment for the regressions.' + SIGN.format(rv.MODEL))
                 s['flagged'][k] = 1
                 log(f'PR #{pr["number"]} flagged: failing tests')
+    # auto-reconcile open 'Bug found by' issues whose suite now passes on main
+    node = shutil.which('node')
+    if node and not DRY and not CLOUD:
+        reconciled = s.setdefault('reconciled_bugs', {})
+        for i in issues('jules-queue') + issues('needs-triage'):
+            n = str(i['number'])
+            title = i.get('title', '')
+            if not title.startswith('Bug found by ') or n in reconciled:
+                continue
+            check_id = title[len('Bug found by '):].strip(' `')
+            suite = check_id.split('/')[0]
+            suite_file = ROOT / 'tests' / 'suites' / f'{suite}.js'
+            if not suite_file.exists():
+                continue
+            try:
+                r = subprocess.run([node, 'tests/run.js', suite], cwd=ROOT, capture_output=True, text=True, timeout=90)
+                if (r.returncode == 0 and 'fail 0' in r.stdout) or (f'PASS {check_id}' in r.stdout and f'FAIL {check_id}' not in r.stdout):
+                    post(i['number'], f'**Resolved on main:** `{suite}.js` passes on main. Closing issue directly per AGENTS.md rules.' + SIGN.format(rv.MODEL))
+                    gh(f'repos/{REPO}/issues/{i["number"]}', 'PATCH', {'state': 'closed'})
+                    reconciled[n] = 1
+                    log(f'reconciled fixed issue #{i["number"]} ({title})')
+            except Exception:
+                pass
 
 
 ADVISE = """You are advising the lead coordinator of the Protein Purification Bench repository (read AGENTS.md and docs/GOALS.md first, and weigh your advice by the priorities in GOALS.md).
