@@ -120,7 +120,7 @@ body.proj #dataPanel > h2, body.proj #dataPanel .paste, body.proj #exNote{displa
 body.proj #dataPanel .drop{display:none}
 body.proj #prOnWrap{display:none}
 body.proj #prepPanel > h2, body.proj #prepPanel details.sub > summary{display:none}
-body.proj #prepPanel details.sub{border:0;padding-top:0;margin-top:0}
+body.proj #prepPanel details.sub{border:0;padding-top:0;margin-top:0} body.proj #prepPanel{padding:10px 16px 12px} body.proj #prepPanel details.sub[data-sub="pbtw"] > *:not(summary){margin-top:3px}
 .tl{max-height:min(54vh,600px);overflow:auto;overscroll-behavior:contain;padding-right:2px}
 .tl li.warn .mk{background:var(--panel);border-color:var(--warn);color:var(--warn)}
 .tl li.warn .ts{color:var(--warn)}
@@ -211,7 +211,7 @@ body.proj .noproj, body.proj label:has(#o-runCond2){display:none!important}
 body.proj #panel[data-sec="1"] > #secPanel{order:0}
 .moreopts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
 .moreopts .muted{font-size:12px}
-.btwnd{display:grid;gap:8px;padding:10px 0 12px}
+.btwnd{display:grid;gap:5px;padding:2px 0 4px} #btwSplitBox{padding-top:2px} #btwSplitBox > summary{padding:1px 0}
 .btwnd-r{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-variant-numeric:tabular-nums}
 .btwnd-r .muted{font-size:12px}
 .btwnd-x{border:0;background:none;color:inherit;opacity:.6;cursor:pointer;padding:0 4px;font:inherit}
@@ -766,6 +766,14 @@ button,input,select,textarea{font-family:inherit}
           <div class="btns"><button type="button" class="btn primary" id="btwNdAdd">Load NanoDrop export</button><input type="file" id="btwNdFile" hidden></div>
           <div id="btwNdList"></div>
           <label class="f" title="The volume left in the concentrator, the one your NanoDrop readings were taken in">Volume after concentrating (mL)<input type="number" id="btw-vOut" data-btw="vOut" min="0" step="any" placeholder="e.g. 0.25"></label>
+          <details class="cardtext" id="btwSplitBox"><summary>Only part went on to the next step (optional)</summary>
+          <div class="row">
+            <label class="f" title="How much of it went onto the next step. Left empty, all of it did. The next step's yield counts from this share of the mg">Loaded on the next step (mL)<input type="number" id="btw-vLoad" data-btw="vLoad" min="0" step="any" placeholder="all"></label>
+            <label class="f" title="The rest, kept and not loaded">Kept back (mL)<input type="number" id="btw-vKeep" data-btw="vKeep" min="0" step="any"></label>
+          </div>
+          <label class="f" title="What was done with the volume kept back">Kept as<input type="text" id="btw-keepAs" data-btw="keepAs" placeholder="e.g. flash-frozen, −80 °C"></label>
+          <p class="hint warnc" id="btwSplit" hidden></p>
+          </details>
           <p class="hint" id="btwCarry"></p>
         </div>
         <details class="cardtext" id="btwMore"><summary>Details for the methods (optional)</summary>
@@ -4244,8 +4252,8 @@ function manLines(m){ const t = x => String(x == null ? '' : x).trim(), out = []
   if (t(m.resin)) out.push(t(m.resin)); if (t(m.buffer)) out.push(t(m.buffer)); if (t(m.wash) && (m.kind === 'column' || m.kind === 'batch')) out.push('Wash: ' + t(m.wash)); if (t(m.elution)) out.push(t(m.elution));
   if (v != null || c != null) out.push([v != null ? `${fmtAuto(v)} mL` : '', c != null ? `${fmtAuto(c)} mg/mL` : '', c != null && v != null ? `${sig2(c*v)} mg` : ''].filter(Boolean).join(', '));
   if (t(m.note)) out.push({t: t(m.note), c: '#555555'}); return out; }
-/* the amount loaded on the next column: the last measured amount after this step and before the next column */
-function loadedAfter(r){ const wf = wfList(), i = wf.indexOf(r); let mg = r && r.id ? (btwMg(r) || {}).mg || null : null;
+/* the amount loaded on the next column: the last measured amount after this step and before the next column, the share loaded when only part of it was */
+function loadedAfter(r){ const wf = wfList(), i = wf.indexOf(r); let mg = r && r.id ? (btwMg(r) || {}).mg || null : null; if (mg) mg *= btwSplit((prep.btw || {})[r.id]).f;
   for (let j = i + 1; i >= 0 && j < wf.length && wf[j].prep; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a !== null) mg = a; }
   return mg; }
 /* cleavage gel lanes: before and after the protease */
@@ -4552,6 +4560,11 @@ const BTW_T = {conc: 'Concentrated', dil: 'Diluted', exch: 'Buffer exchanged', f
 const btwOf = r => { if (!r || !prep.btw || !prep.btw[r.id]) return null; const p = r.fracs ? poolRows(r) : null; return Object.assign({how: 'conc', _poolVol: p && xUnit(r) === 'mL' && p.vol > 0 ? +fmt(p.vol, 1) : 0}, prep.btw[r.id]); };
 const btwShort = b => { const vo = numOr(b.vOut, 0); return b.how === 'dil' ? (vo > 0 ? `Diluted to ${fmtAuto(vo)} mL` : 'Diluted') : b.how === 'exch' ? 'Buffer exchanged' : b.how === 'filt' ? 'Filtered' : b.how === 'hold' ? 'Held overnight' : vo > 0 ? `Conc. to ${fmtAuto(vo)} mL` : 'Concentrated'; };
 const arrowNote = r => String(r.note || '').trim();
+/* the share of a measured output loaded on the next step, for a well-mixed sample: loaded / output. Neither volume (older projects) means all of it, only the kept volume means the rest;
+   loaded plus kept above the output is not a split, and counts as all until fixed */
+function btwSplit(b){ const vo = numOr(b && b.vOut, null), vk = numOr(b && b.vKeep, null); let vl = numOr(b && b.vLoad, null);
+  if (vl == null && vk == null) return {f: 1, set: false}; const bad = !(vo > 0) ? 'novol' : vl != null && vl < 0 || vk != null && vk < 0 ? 'neg' : vl === 0 ? 'zero' : (vl || 0) + (vk || 0) > vo*(1 + 1e-9) ? 'over' : '';
+  if (bad) return {f: 1, set: false, bad, vo, vl, vk}; if (vl == null) vl = vo - vk; return {f: vl/vo, set: true, vo, vl, vk}; }
 function btwMg(r){ const b = btwOf(r); if (!b) return null; const ms = poolMeas(r), c = ms.src === 'btw' ? ms.c : null, vo = numOr(b.vOut, null); if (c == null || vo == null) return null; const p = poolRows(r), mg = c*vo; return {mg, pct: p && p.mgArea > 0 ? 100*mg/p.mgArea : null}; }
 function btwSentence(b){
   const dv = String(b.device || '').trim(), mw = String(b.mwco || '').trim(), nt = String(b.note || '').trim().replace(/\.$/, ''), vi = numOr(b.vIn, 0) || numOr(b._poolVol, 0), vo = numOr(b.vOut, 0);
@@ -7179,7 +7192,14 @@ function btwCarry(){ const el = $('#btwCarry'), rid = curStep.startsWith('btw:')
   el.textContent = !r ? '' : card ? `${stepTitle(r)} has a reading typed on its run card, which is used instead.`
     : !p ? `Pool the fractions on ${stepTitle(r)} first.`
     : p.measured && p.src === 'btw' ? `${sig2(p.mg)} mg (${fmt(p.conc, 2)} mg/mL × ${fmtAuto(p.measVol)} mL)${p.mgArea > 0 ? `. The UV area of ${stepTitle(r)} estimated ${sig2(p.mgArea)} mg` : ''}.`
-    : ms.c > 0 ? `Enter the volume after concentrating to get the mg (the pool was ${fmt(p.vol, 1)} ${xUnit(r)}).` : `After ${stepTitle(r)}.`; }
+    : ms.c > 0 ? `Enter the volume after concentrating to get the mg (the pool was ${fmt(p.vol, 1)} ${xUnit(r)}).` : `After ${stepTitle(r)}.`;
+  /* the split between the next step and what was kept back */
+  const sp = btwSplit(b), se = $('#btwSplit'), sm = r ? (btwMg(r) || {}).mg : null;
+  se.textContent = sp.bad === 'over' ? `Loaded plus kept back is ${fmtAuto((sp.vl || 0) + (sp.vk || 0))} mL, more than the ${fmtAuto(sp.vo)} mL after concentrating. Until that is fixed, all of it counts as loaded on the next step.`
+    : sp.bad === 'novol' ? 'Enter the volume after concentrating too. Until then, all of it counts as loaded on the next step.' : sp.bad === 'zero' ? 'A load of 0 mL leaves no amount to count the next step’s yield from. Until that is fixed, all of it counts as loaded on the next step.' : sp.bad === 'neg' ? 'A volume can’t be below 0. Until that is fixed, all of it counts as loaded on the next step.'
+    : sp.set && sm > 0 ? `${sig2(sm*sp.f)} mg (${fmtAuto(sp.vl)} of ${fmtAuto(sp.vo)} mL) went on to the next step${sp.vk > 0 ? `, ${fmtAuto(sp.vk)} mL kept back` : ''}.` : '';
+  if (numOr(b.vLoad, null) != null || numOr(b.vKeep, null) != null || String(b.keepAs || '').trim()) $('#btwSplitBox').open = true;
+  se.hidden = !se.textContent; se.classList.toggle('warnc', !!sp.bad); }
 /* a NanoDrop export loaded on the Concentrated step: every protein reading in it is the concentrated sample of the column before */
 $('#btwNdAdd').addEventListener('click', () => $('#btwNdFile').click());
 $('#btwNdFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f || !curStep.startsWith('btw:')) return; const rid = curStep.slice(4), r = runs.find(x => x.id === rid);
@@ -7193,7 +7213,7 @@ const btwEdit = e => { const el = e.target.closest('[data-btw]'); if (!el || !cu
   prep.btw[rid] = Object.assign({how: 'conc'}, prep.btw[rid], {[el.dataset.btw]: el.value}); const r = runs.find(x => x.id === rid);
   /* one reading per pool: a value typed here replaces one left on the run card */
   if (r && ['conc', 'vOut'].includes(el.dataset.btw) && (r.poolConc != null || r.poolFinalVol != null)) { if (r.poolConc != null && prep.btw[rid].conc === '' && el.dataset.btw !== 'conc') prep.btw[rid].conc = r.poolConc; delete r.poolConc; delete r.poolFinalVol; }
-  btwCarry(); render(); if (e.type === 'change' && ['conc', 'vOut'].includes(el.dataset.btw)) setTimeout(() => { renderList(); render(); }, 0); };
+  btwCarry(); render(); if (e.type === 'change' && ['conc', 'vOut', 'vLoad', 'vKeep'].includes(el.dataset.btw)) setTimeout(() => { renderList(); render(); }, 0); };
 $('#prepPanel').addEventListener('input', btwEdit); $('#prepPanel').addEventListener('change', btwEdit);
 const metaSet = (k, f, v) => { const all = prep.stepMeta = prep.stepMeta || {}; all[k] = Object.assign({}, all[k], {[f]: v}); };
 $('#ssDate').addEventListener('change', e => { metaSet(curStep, 'date', e.target.value); render(); });
