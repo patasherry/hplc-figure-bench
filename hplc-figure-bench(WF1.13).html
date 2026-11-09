@@ -673,6 +673,19 @@ button,input,select,textarea{font-family:inherit}
           <label class="f">Parent construct<input type="text" id="pr-parentConstructId" data-prep="parentConstructId" placeholder="e.g. c1 (empty if root)" spellcheck="false"></label>
           <label class="f">Derived constructs<input type="text" id="pr-derivedConstructIds" data-prep="derivedConstructIds" placeholder="e.g. c2, c3" spellcheck="false"></label>
         </div>
+        <div class="row" style="margin-top:6px">
+          <label class="f">Cloning method record template<select id="pr-cMethod" data-prep="cMethod" title="Construct provenance record template (not scientific validation)"><option value="plasmid">Plasmid / Custom (Record)</option><option value="digest">Restriction digest (Record)</option><option value="overlap">Overlap extension / Gibson (Record)</option><option value="recomb">Recombination (Gateway, etc.) (Record)</option></select></label>
+        </div>
+        <p class="hint" id="pr-cTemplateNotice" style="margin-top:2px; margin-bottom:6px">Construct method templates are design and provenance records rather than scientific validation.</p>
+        <div data-cmethod="digest" style="display:none; margin-top:6px" class="row">
+          <label class="f">Digest enzymes<input type="text" id="pr-cEnz" data-prep="cEnz" placeholder="e.g. NdeI, XhoI" spellcheck="false"></label>
+        </div>
+        <div data-cmethod="overlap" style="display:none; margin-top:6px" class="row">
+          <label class="f">Overlap length (bp)<input type="number" id="pr-cOverlap" data-prep="cOverlap" min="1"></label>
+        </div>
+        <div data-cmethod="recomb" style="display:none; margin-top:6px" class="row">
+          <label class="f">Recombination sites<input type="text" id="pr-cRecomb" data-prep="cRecomb" placeholder="e.g. attB1/B2" spellcheck="false"></label>
+        </div>
         <label class="check"><input type="checkbox" id="pr-construct" data-prep="construct">Construct panel</label>
       </details>
       <details class="sub" data-sub="ptr" open hidden><summary>Transformation</summary>
@@ -4133,7 +4146,8 @@ const CONSTRUCT_SCHEMA = {
   insertSeq: '', vectorName: '', backbone: '', vectorSeq: '', promoter: 'T7', tag: '', cleavageSite: '',
   fusionPartner: '', resist: '', ori: '', method: '', expectedLength: null, orientation: 'fwd',
   readingFrame: 1, sequenceMap: null, notes: '', parentConstructId: null, derivedConstructIds: [],
-  primers: [], clones: [], selectedCloneId: null
+  primers: [], clones: [], selectedCloneId: null,
+  cMethod: 'plasmid', cEnz: '', cOverlap: '', cRecomb: '', cDetails: { digest: {}, overlap: {}, recomb: {} }
 };
 function makeConstruct(p){
   return Object.assign({}, CONSTRUCT_SCHEMA, {
@@ -4156,7 +4170,8 @@ function makePrimer(p){
 const PREP_DEF = {on: true, construct: true, expr: true, lysis: true, name: '', backbone: '', promoter: 'T7', resist: '', strain: '', medium: '', cultureL: '', od: '', inducer: '', temp: '', time: '', pellet: '', lysMethod: '', lysBuffer: '', clarify: '', lysVol: '', lysLanes: false, indKind: 'IPTG', gb: null,
   cleave: false, cleaveAfter: '', protease: '', ratio: '', clvTemp: '', clvTime: '', dialBuffer: '', mwco: '', dialVol: '', dialChanges: '', store: '',
   trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {},
-  constructs: [], primers: [], parentConstructId: null, derivedConstructIds: []};
+  constructs: [], primers: [], parentConstructId: null, derivedConstructIds: [],
+  cMethod: 'plasmid', cEnz: '', cOverlap: '', cRecomb: '', cDetails: { digest: {}, overlap: {}, recomb: {} }};
 let prep = JSON.parse(JSON.stringify(PREP_DEF));
 const PREP_LANE = ['expr', 'lysis', 'cleave'], PREP_NAME = {construct: 'Construct', expr: 'Expression', lysis: 'Lysis', cleave: 'Dialysis and cleavage'}, prepObj = {};
 const hasTxt = v => String(v == null ? '' : v).trim() !== '';
@@ -6110,6 +6125,10 @@ function renderPrep(){
   const pn = $('#prepPanel'); if (!pn) return;
   pn.querySelectorAll('[data-prep]').forEach(el => { if (el === document.activeElement) return; const k = el.dataset.prep; let v = prep[k]; if (el.type === 'checkbox') el.checked = !!v; else { if (Array.isArray(v)) v = v.join(', '); const s = v == null ? '' : String(v); if (el.value !== s) el.value = s; } });
   pn.querySelectorAll('details.sub').forEach(el => el.classList.toggle('off', el.dataset.sub === 'pclv' ? !prep.cleave : !prep.on));
+  { const sel = $('#pr-cMethod'); if (sel) {
+      if (sel !== document.activeElement) sel.value = prep.cMethod || 'plasmid';
+      pn.querySelectorAll('[data-cmethod]').forEach(el => { el.hidden = el.dataset.cmethod !== (prep.cMethod || 'plasmid'); el.style.display = el.hidden ? 'none' : 'flex'; });
+  } }
   { const t = $('#pr-trPlasmid'); if (t) t.placeholder = String(prep.name || '').trim() || (prep.gb && prep.gb.name) || 'e.g. pET28-SUMO-NADK'; }
   $('#prSeqOnly').hidden = !!prep.gb; $('#prIndAmt').hidden = prep.indKind === 'auto';
   { const sel = $('#pr-cleaveAfter'), wf = runs.filter(r => r.inWf), cid = cleaveRunId(), h = wf.map((r, k) => `<option value="${r.id}"${r.id === cid ? ' selected' : ''}>${k + 1}. ${esc(stepTitle(r))}</option>`).join('') || '<option value="">No runs yet</option>';
@@ -6136,6 +6155,10 @@ function onPrepInput(e){ const el = e.target, k = el.dataset.prep; if (!k) retur
   if (k === 'derivedConstructIds') prep[k] = el.value.split(',').map(s => s.trim()).filter(Boolean);
   else if (k === 'parentConstructId') prep[k] = el.value.trim() || null;
   else prep[k] = el.type === 'checkbox' ? el.checked : el.value;
+  prep.cDetails = prep.cDetails || { digest: {}, overlap: {}, recomb: {} };
+  if (k === 'cEnz') { prep.cDetails.digest = prep.cDetails.digest || {}; prep.cDetails.digest.enzymes = el.value; }
+  else if (k === 'cOverlap') { prep.cDetails.overlap = prep.cDetails.overlap || {}; prep.cDetails.overlap.overlapBp = el.value; }
+  else if (k === 'cRecomb') { prep.cDetails.recomb = prep.cDetails.recomb || {}; prep.cDetails.recomb.sites = el.value; }
   /* typing in a text field redraws once the typing pauses */
   if (el.type === 'text') { clearTimeout(prepT); prepT = setTimeout(render, 260); return; } if (['on', 'lysLanes', 'lysis', 'cleave'].includes(k)) gels.forEach(g => { g._prepA = null; }); render(); }
 $('#prepPanel').addEventListener('input', onPrepInput);
@@ -6633,6 +6656,8 @@ function cleanProject(d){
     if (!Array.isArray(d.prep.primers)) d.prep.primers = [];
     if (!('parentConstructId' in d.prep)) d.prep.parentConstructId = null;
     if (!Array.isArray(d.prep.derivedConstructIds)) d.prep.derivedConstructIds = [];
+    if (!d.prep.cMethod) d.prep.cMethod = 'plasmid';
+    if (!d.prep.cDetails || typeof d.prep.cDetails !== 'object') d.prep.cDetails = { digest: {}, overlap: {}, recomb: {} };
   }
   return skipped; }
 async function openProject(data, name, noUndo){
@@ -6644,7 +6669,7 @@ async function openProject(data, name, noUndo){
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
       Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
-  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (!Array.isArray(prep.constructs)) prep.constructs = []; if (!Array.isArray(prep.primers)) prep.primers = []; if (!('parentConstructId' in prep)) prep.parentConstructId = null; if (!Array.isArray(prep.derivedConstructIds)) prep.derivedConstructIds = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
+  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (!Array.isArray(prep.constructs)) prep.constructs = []; if (!Array.isArray(prep.primers)) prep.primers = []; if (!('parentConstructId' in prep)) prep.parentConstructId = null; if (!Array.isArray(prep.derivedConstructIds)) prep.derivedConstructIds = []; if (!prep.cMethod) prep.cMethod = 'plasmid'; if (!prep.cDetails || typeof prep.cDetails !== 'object') prep.cDetails = { digest: {}, overlap: {}, recomb: {} }; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
   srcDiag = (data.srcDiag && typeof data.srcDiag === 'object' && !Array.isArray(data.srcDiag)) ? Object.assign({}, data.srcDiag) : {};
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
@@ -6657,7 +6682,7 @@ async function openProject(data, name, noUndo){
   toast(`Opened ${name || 'project'}: ${runs.length} run${runs.length === 1 ? '' : 's'}, ${traces.length} trace${traces.length === 1 ? '' : 's'}, ${gels.length} gel${gels.length === 1 ? '' : 's'}${skipped ? `. Skipped ${skipped} damaged or incomplete item${skipped === 1 ? '' : 's'} in the file` : ''}`);
   nextHidden.delete('undoOpen'); renderNext();
 }
-$('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex) && !prep.gb && !cleanSeq(opt.protSeq) && !prep.name && !prep.parentConstructId && !(prep.constructs && prep.constructs.length)) { toast('Load some data first'); return; }
+$('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex) && !prep.gb && !cleanSeq(opt.protSeq) && !prep.name && !prep.parentConstructId && !(prep.constructs && prep.constructs.length) && !prep.cEnz && !prep.cOverlap && !prep.cRecomb) { toast('Load some data first'); return; }
   const nm = (runs[0] && runs[0].name) || (gels[0] && gels[0].name) || (traces.find(t => !t.ex) || {}).name || 'figures'; const d = projectData(); if (MODE === 'quick') d.quick = true; saveFile(`${safe(nm)}_project.json`, JSON.stringify(d)); });
 $('#projOpen').addEventListener('click', () => $('#projFile').click());
 $('#projFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; let data;
@@ -6934,7 +6959,7 @@ function stepList(){
   return L;
 }
 const STEP_LANE = k => k === 'expr' || k === 'lysis' || k === 'cleave' ? k : k.startsWith('run:') || k.startsWith('man:') ? k.slice(4) : null;
-const STEP_WHAT = {construct: 'Paste the protein sequence, or load the plasmid\'s GenBank file to draw the construct.',
+const STEP_WHAT = {construct: 'Construct records (design and provenance records rather than scientific validation). Paste the protein sequence, or load the plasmid\'s GenBank file to draw the construct.',
   transform: 'Plasmid, strain and selection, or the glycerol stock you started from.',
   expr: 'Starter culture, induction and harvest. An expression gel (U, I, S, P) is optional.',
   lysis: 'Lysis method, buffer, additives and clarification.',
@@ -7066,8 +7091,8 @@ function quickTarget(kind){
   if (kind === 'run') return runs.find(r => r.id === id) || null;
   if (kind === 'man') return (prep.manual || []).find(m => m.id === id) || null;
   if (kind === 'btw') { prep.btw = prep.btw || {}; return prep.btw[id] || (prep.btw[id] = {how: 'conc'}); }
-  return ['transform', 'expr', 'lysis', 'cleave', 'final'].includes(kind) ? prep : null; }
-const QUICK_KEYS = {transform: ['strain', 'trMethod', 'trSel', 'trPlasmid', 'trStock'], expr: ['strain', 'medium', 'cultureL', 'indKind', 'inducer', 'od', 'temp', 'time', 'exStarter', 'exHarvest', 'exStore'], lysis: ['lysMethod', 'lysBuffer', 'lysAdd', 'lysSet', 'clarify'],
+  return ['construct', 'transform', 'expr', 'lysis', 'cleave', 'final'].includes(kind) ? prep : null; }
+const QUICK_KEYS = {construct: ['name', 'backbone', 'promoter', 'resist', 'cMethod', 'cEnz', 'cOverlap', 'cRecomb'], transform: ['strain', 'trMethod', 'trSel', 'trPlasmid', 'trStock'], expr: ['strain', 'medium', 'cultureL', 'indKind', 'inducer', 'od', 'temp', 'time', 'exStarter', 'exHarvest', 'exStore'], lysis: ['lysMethod', 'lysBuffer', 'lysAdd', 'lysSet', 'clarify'],
   cleave: ['protease', 'ratio', 'dialBuffer', 'clvTemp', 'clvTime', 'mwco'], run: ['mCol', 'mCV', 'mFlow', 'mTemp', 'mBufA', 'mBufB', 'mWash', 'mGrad', 'mLoad', 'mFrac', 'mInst', 'mOther'],
   man: ['kind', 'name', 'resin', 'buffer', 'wash', 'elution', 'note'], btw: ['how', 'device', 'mwco', 'note'], final: ['finBuffer', 'store', 'qcPurity']};
 /* your own quick fills, kept with the settings in this browser and in the project */
@@ -7103,7 +7128,7 @@ $('#ssQuick').addEventListener('click', e => { const b = e.target.closest('butto
   if (b.dataset.qdel) { opt.myQuick = (opt.myQuick || []).filter(x => x.id !== b.dataset.qdel); opt.myQuickDel = (Array.isArray(opt.myQuickDel) ? opt.myQuickDel : []).concat([b.dataset.qdel]); saveOpt(); if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1; render(); return; }
   if (b.dataset.qsave) { const tgt = quickTarget(kind); if (!tgt) return; const set = {}; (QUICK_KEYS[kind] || []).forEach(k => { if (String(tgt[k] ?? '').trim()) set[k] = tgt[k]; });
     if (!Object.keys(set).length) { toast('Fill in some fields first, then save them as a quick fill'); return; }
-    const nm = (kind === 'expr' ? [set.medium, set.temp ? set.temp + ' °C' : ''] : kind === 'run' ? [set.mCol, set.mFlow ? set.mFlow + ' mL/min' : ''] : kind === 'man' ? [set.name || MAN_NAME[set.kind]] : kind === 'lysis' ? [set.lysMethod, set.lysBuffer] : [Object.values(set)[0]])
+    const nm = (kind === 'construct' ? [set.cMethod ? set.cMethod + ' record' : 'Construct record'] : kind === 'expr' ? [set.medium, set.temp ? set.temp + ' °C' : ''] : kind === 'run' ? [set.mCol, set.mFlow ? set.mFlow + ' mL/min' : ''] : kind === 'man' ? [set.name || MAN_NAME[set.kind]] : kind === 'lysis' ? [set.lysMethod, set.lysBuffer] : [Object.values(set)[0]])
       .filter(Boolean).join(', ').slice(0, 48) || 'My quick fill';
     opt.myQuick = (Array.isArray(opt.myQuick) ? opt.myQuick : []).concat([{id: 'q' + Date.now().toString(36), k: kind, n: nm, set}]); saveOpt(); render(); toast(`Saved "${nm}" as a quick fill`); } });
 /* a step that others follow hands them on to the step before it */
