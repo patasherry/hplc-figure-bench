@@ -38,6 +38,38 @@ const IMAC = require('../data/gen_imac_missing');
     }
   });
 
+
+  await T.t('leading_id_csv_axis_selection', async () => {
+    await p.reload();
+    await h.wait(500);
+    await h.newProject('leading id axis selection');
+    const content = 'Sample ID,Time (min),UV 280 (mAU)\n' +
+      'A1,0.0,10.0\n' +
+      'A1,0.1,12.0\n' +
+      'A1,0.2,15.0\n' +
+      'A1,0.3,9.0\n' +
+      'A1,0.4,11.0\n' +
+      'A1,0.5,10.0\n' +
+      'A1,0.6,12.0\n' +
+      'A1,0.7,15.0\n' +
+      'A1,0.8,9.0\n' +
+      'A1,0.9,11.0\n';
+    await p.setInputFiles('#file', {name: 'generic_with_id.csv', mimeType: 'text/csv', buffer: Buffer.from(content)});
+    await p.waitForTimeout(600);
+
+    // A generic trace may not be in timeline by default, but is accessible via DOM.
+    // Let's create a timeline step to display it if needed.
+    await h.wait(500);
+    await p.locator('#add-step-btn, #addBtn, .add-btn').first().click().catch(()=>{});
+    await h.wait(200);
+    await p.locator('text="Generic trace"').click().catch(()=>{});
+    await h.wait(500);
+
+    const xSel = await p.locator('select[data-k="xc"]').first().inputValue().catch(()=>'err');
+    const ySel = await p.locator('select[data-k="yc"]').first().inputValue().catch(()=>'err');
+    T.check('axis_sel/correct_axes', xSel === '1' && ySel === '2', 'Axes are X=1 Y=2: ' + xSel + ', ' + ySel);
+
+  });
   await T.t('zero_measurement_diagnostics', async () => {
     await p.reload();
     await h.wait(500);
