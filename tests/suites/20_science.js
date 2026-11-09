@@ -300,6 +300,22 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     T.check('p6.a280_coefficient', /by NanoDrop A280 \(A280 of \d+\.\d\d for 1 mg\/mL of the (tagged|untagged) form\)/.test(s), s);
     T.check('p6.a280_no_junk', !!s && !/\(, |\(\)/.test(s), s); });
 
+  await T.t('p6_a205_explicit_coefficient', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('A205 instrument concentration');
+    await p.evaluate(() => { const e = document.getElementById('o-eps'); e.value = '1'; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); });
+    await h.addRun(F.imac); await h.pool('T1-T6');
+    await p.setInputFiles('#ndFile', path.join(DATA, 'nd/nd_a205_provenance.csv')); await h.wait(600); await h.step('final');
+    await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true));
+    await p.locator('#ndList select[data-ndk="runId"]').first().selectOption({index: 1}); await h.wait(200);
+    await setField('#ndList [data-ndr="ndVol"]', '1');
+    const t = await table(), m = await methods(), s = (m.match(/The final pool held .*?\.(?=\s[A-Z]|\s*$)/s) || [''])[0];
+    T.check('p6.a205_explicit_mass', t.rows.length === 1 && num(t.rows[0][col(t, /^Protein \(mg\)/)]) === 4, JSON.stringify(t.rows));
+    T.check('p6.a205_explicit_amount', /held 4\.00 mg in 1\.0 mL \(4\.00 mg\/mL\)/.test(s), s);
+    T.check('p6.a205_explicit_method', /by NanoDrop A205\b/.test(s), s);
+    T.check('p6.a205_explicit_no_coefficient', !!s && !/A280|coefficient/.test(s), s);
+  });
+
   /* ================= P7: Micromole yield balance with manual start and transfer amounts (#125) ================= */
   const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, String(v)]);
   await T.t('p7_umol_yield_balance', async () => {

@@ -37,6 +37,9 @@ def rec(fn, fmt, readings, note='', nucleic=0, warn_high_ratio=False):
 def w(fn, text, enc='utf-8'):
     with open(os.path.join(OUT, fn), 'wb') as f: f.write(b'\xff\xfe' + text.encode('utf-16-le') if enc == 'utf-16-le' else text.encode('utf-8'))
 
+# A205 concentration provenance: the instrument reports 4 mg/mL despite A280 = 0.8.
+w('nd_a205_provenance.csv', 'Sample Name,A205 Conc. (mg/mL),A205 (Abs),A280 (Abs),Sample Type\r\nPool T1-T6,4.000,124.000,0.800,Protein A205\r\n')
+
 ONE_HEAD = ['Date', 'Sample Name', 'Protein (mg/mL)', 'A280', 'A260/A280', 'Sample Type', 'MW', 'E / 1000', 'Extinction coefficient', 'Baseline Correction (nm)', 'Baseline Absorbance']
 
 # 1. NanoDrop One protein A280, tab separated, UTF-16 LE with BOM (as the instrument writes .csv), no spectra

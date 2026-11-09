@@ -138,6 +138,40 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
             const hit = !(tb.r <= tr2.x || tb.x >= tr2.r || tb.b <= tr2.y || tb.y >= tr2.b); T.check(`${tag}:fig-${lay}:toolbar-not-on-title`, !hit, `${P.title} ${JSON.stringify(tr2)} ${path.join(SHOTS, `${W}_toolbar_${lay}.png`)}`); /* toolbar never hides the title being edited */
             await p.keyboard.press('Escape'); const done = await p.$(`${SEL.tool} [data-wf=close]`); if (done && await done.isVisible()) await done.click(); await h.wait(200); } } });
       if (Date.now() - t0 > 420000) { T.check('time-budget', false, 'stopped early to stay under 8 minutes'); break; } }
+    await T.t(`${W}:light:fig-padding:safety`, async () => {
+      const files = ['chrom/sec_Sup6_basic_unicorn7.zip'];
+      await h.addRun(files.map(f => path.join(__dirname, '../data', f)));
+      await h.wait(500);
+      await h.step('figure');
+      await h.wait(500);
+
+      const layoutRow = await p.$('label[for="wf-row"]');
+      if (layoutRow) await layoutRow.click();
+      await h.wait(500);
+
+      const panelWidthOpt = await p.$('input[data-opt="wfW"]');
+      if (panelWidthOpt) {
+          await panelWidthOpt.click();
+          await panelWidthOpt.fill('');
+          await panelWidthOpt.type('0.1');
+          await panelWidthOpt.dispatchEvent('change');
+          await h.wait(500);
+      }
+
+      let width1 = await p.$eval('#paper svg', el => parseFloat(el.getAttribute('width')));
+
+      const inp = await p.$('#o-minSafetyMargin');
+      if (inp) {
+        await inp.fill(''); await inp.type('2.0'); await inp.dispatchEvent('change');
+        await h.wait(1000);
+      }
+
+      let width2 = await p.$eval('#paper svg', el => parseFloat(el.getAttribute('width')));
+
+      T.check(`${W}:light:fig-padding:safety`, width2 < width1, `Changed safety margin from 9.5 to 2.0 should reduce width (${width2} < ${width1})`);
+    });
+
+
     T.check(`${W}:no-page-errors`, !errs.length, errs.join(' | ')); /* nothing above threw in the page */
     await close(); }
   /* hard chromatograms from the biochemist, if present: each alone, run figure must have no overlaps, no stacked labels */

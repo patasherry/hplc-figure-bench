@@ -260,4 +260,27 @@ const {open, H, suite, src, DATA, path} = require('../lib/harness');
     T.check('split-discard: methods text contains split', meth.includes('The IMAC pool was split: fractions B5-B8 were applied to a Superdex 200 Increase 10/300 GL column (step 2, panel C) and fractions B9-B12 were set aside.'), meth);
     T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
 
+  /* #618: a branch end's yield against the amount where its branch splits off (here step 2), not only against step 1 */
+  await T.t('branch-yield-from-split', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    await h.newProject('Branch yield'); await h.gb(src('gb'));
+    await h.addRun(src('his')); await h.pool('T1-T6');
+    await h.addRun(src('q')); await h.suggest();
+    await h.addRun(path.join(DATA, 'science/sec_inject2.csv')); await h.suggest();
+    await h.addRun(src('ortho')); await h.suggest();
+    const tl = (await h.timeline()).filter(x => x.k.startsWith('run:')), ids = tl.map(x => x.k.slice(4));
+    await setFrom(p, h, tl[3].k, ids[1]);   // the fourth run comes from the second, beside the third
+    await openWf(p);
+    const tb = await h.sumTable(), hd = tb[0] || [], yc = hd.indexOf('Yield (%)'), body = tb.slice(1).filter(r => /^\d+\./.test(r[0] || ''));
+    const yl = body.map(r => parseFloat(r[yc]));
+    T.check('branch yield: four run rows, the shared steps with yields', body.length === 4 && yl[0] > 0 && yl[1] > 0, JSON.stringify(tb));
+    const notes = await p.$$eval('#sumNotes li', ls => ls.map(l => l.textContent)), ends = [3, 4].filter(k => yl[k - 1] > 0);
+    T.check('branch yield: at least one branch end has a yield', ends.length > 0, 'yields ' + yl.join(', '));
+    for (const k of ends) { const n = notes.find(t => t.startsWith(`Step ${k} `) && /branch yield/.test(t)), m = n && n.match(/: (\d+)% of step 2 /);
+      /* the table's yields are whole percents: the branch yield must lie within what their rounding allows */
+      const lo = 100*(yl[k - 1] - 0.5)/(yl[1] + 0.5) - 0.5, hi = 100*(yl[k - 1] + 0.5)/(yl[1] - 0.5) + 0.5;
+      T.check(`branch yield: step ${k} is stated against step 2, where the branch splits (${Math.round(lo)}-${Math.round(hi)}%)`, !!m && +m[1] >= lo && +m[1] <= hi, (n || 'no note') + ' | yields ' + yl.join(', ')); }
+    T.check('branch yield: no note for steps on the shared path', !notes.some(t => /^Step [12] /.test(t) && /branch yield/.test(t)), notes.join(' | '));
+    T.check('no page errors', !errs.length, errs.join(' | ')); await close(); });
+
   T.done(); })();

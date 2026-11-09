@@ -331,7 +331,7 @@ ORIGIN
 
     const tf = 'tests/data/22_protein/7_transl.table11_partial';
     try {
-      await h.addRun(path.join(DATA, 'chrom', '261022_PS_KPP_polish_001_001.zip'));
+      await h.addRun(path.join(DATA, 'chrom', 'sec_Sup6_basic_unicorn7.zip'));
       await h.wait(1500);
       await p.evaluate(() => { const b = document.getElementById('intAuto'); if (b) b.click(); });
       await h.wait(900);
@@ -591,134 +591,156 @@ ORIGIN
     /* ================= 10. Cleavage consistency ================= */
   await T.t('10_cleavage_consistency', async () => {
     // 1. New project; add the synthetic gel stand-in and select the gel step so the gel figure is shown.
-    await p.evaluate(() => { window.location.hash = ''; });
-    await p.reload();
-    await h.wait(500);
-    await h.newProject('Test10');
-    await h.addRun([path.join(DATA, 'gels/formats/gel_8bit.png')]);
+    const { p: p10, close: close10 } = await open();
+    try {
+      await p10.evaluate(() => { document.querySelector('#pickGel').click(); });
+      await p10.setInputFiles('#gelFile', [path.join(DATA, 'standins', 'gel_photo.jpg')]);
+      await p10.waitForTimeout(400);
 
-    // select gel step
-    await h.step('gel');
-    await p.waitForSelector('#gelWrap svg', { state: 'visible' });
+      // 2. Paste the 100-residue sequence into `#protSeq`; leave `#o-tagPreset` at `sumo`.
+      const seq = 'ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY';
 
-    // Now go to protein step because setProtSeq needs #protSeq
-    await h.step('construct');
-    await h.wait(500);
+      await p10.evaluate(() => {
+        const e = document.querySelector('#o-tagPreset');
+        e.value = 'sumo';
+        e.dispatchEvent(new Event('input', {bubbles: true}));
+        e.dispatchEvent(new Event('change', {bubbles: true}));
+      });
+      await p10.waitForTimeout(200);
 
-    // 2. Paste the 100-residue sequence into `#protSeq`; leave `#o-tagPreset` at `sumo`.
-    const seq = 'ACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWYACDEFGHIKLMNPQRSTVWY';
+      // Paste sequence
+      await p10.evaluate(t => {
+        const e = document.querySelector('#protSeq');
+        e.value = t;
+        e.dispatchEvent(new Event('input', {bubbles: true}));
+        e.dispatchEvent(new Event('change', {bubbles: true}));
+      }, seq);
+      await p10.waitForTimeout(500);
 
-    // Paste sequence
-    await setProtSeq(seq);
-    await h.wait(500);
-
-    // 3. Read the kDa cell of the `Tag only` row of `#protTable`.
-    const tagOnlyKDa = await p.evaluate(() => {
-        const rows = document.querySelectorAll('#protTable tr');
-        for (const row of rows) {
-            if (row.textContent.includes('Tag only')) {
-                return parseFloat(row.cells[2].textContent);
-            }
+      // 3. Read the kDa cell of the `Tag only` row of `#protTable`.
+      const tagOnlyKDa = await p10.evaluate(() => {
+        const tbl = document.querySelector('#protTable');
+        if (!tbl) return null;
+        for (const r of Array.from(tbl.querySelectorAll('tr')).slice(1)) {
+          const cells = r.querySelectorAll('td');
+          if (cells.length > 2 && cells[0].textContent.includes('Tag only')) return parseFloat(cells[2].textContent);
         }
         return null;
-    });
+      });
 
-    const untaggedKDa = await p.evaluate(() => {
-        const rows = document.querySelectorAll('#protTable tr');
-        for (const row of rows) {
-            if (row.textContent.includes('Untagged')) {
-                return parseFloat(row.cells[2].textContent);
-            }
+      const untaggedKDa = await p10.evaluate(() => {
+        const tbl = document.querySelector('#protTable');
+        if (!tbl) return null;
+        for (const r of Array.from(tbl.querySelectorAll('tr')).slice(1)) {
+          const cells = r.querySelectorAll('td');
+          if (cells.length > 2 && cells[0].textContent.includes('Untagged')) return parseFloat(cells[2].textContent);
         }
         return null;
-    });
+      });
 
     T.check('10_cleavage_consistency.tag_only_kda_not_null', tagOnlyKDa !== null, 'Tag only kDa is null');
     T.check('10_cleavage_consistency.untagged_kda_not_null', untaggedKDa !== null, 'Untagged kDa is null');
 
-    await h.step('gel');
-    await h.wait(500);
+      // 4. Tick `#o-cleaveDetect`; type the `Untagged` kDa into `#o-protKda`.
+      await p10.evaluate(() => {
+        const e = document.querySelector('#o-cleaveDetect');
+        if (e && !e.checked) e.click();
+      });
+      await p10.waitForTimeout(200);
 
-    // 4. Tick `#o-cleaveDetect`; type the `Untagged` kDa into `#o-protKda`.
-    const setOptLocal = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; if(el.type === 'checkbox') { el.checked = v; } else { el.value = v; } el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, v]);
+      await p10.evaluate(t => {
+        const e = document.querySelector('#o-protKda');
+        if (!e) return;
+        e.value = t;
+        e.dispatchEvent(new Event('input', {bubbles: true}));
+        e.dispatchEvent(new Event('change', {bubbles: true}));
+      }, untaggedKDa);
+      await p10.waitForTimeout(500);
 
-    await setOptLocal(p, 'o-cleaveDetect', true);
-    await h.wait(500);
+      // 5. Parse the kDa after "free His-SUMO" out of `#cleaveInfo`.
+      const cleaveInfoText = await p10.evaluate(() => {
+        const e = document.querySelector('#cleaveInfo');
+        return e ? e.textContent : null;
+      });
 
-    await setOptLocal(p, 'o-protKda', untaggedKDa);
-    await h.wait(500);
-
-    // 5. Parse the kDa after "free His-SUMO" out of `#cleaveInfo`.
-    const cleaveInfoText = await p.textContent('#cleaveInfo');
-
-    const match = cleaveInfoText.match(/free His-SUMO (\d+(?:\.\d+)?) kDa/);
-    const freeSumoKDa = match ? parseFloat(match[1]) : null;
+      let freeSumoKDa = null;
+      if (cleaveInfoText) {
+        const mm = cleaveInfoText.match(/free His-SUMO\s+([0-9.]+)\s+kDa/);
+        if (mm) freeSumoKDa = parseFloat(mm[1]);
+      }
 
     T.check('10_cleavage_consistency.free_sumo_kda_not_null', freeSumoKDa !== null, `Could not parse free His-SUMO kDa from: ${cleaveInfoText}`);
 
-    // 6. Assert the two agree within 0.15 kDa.
-    if (tagOnlyKDa !== null && freeSumoKDa !== null) {
+      // 6. Assert the two agree within 0.15 kDa.
+      if (tagOnlyKDa !== null && freeSumoKDa !== null) {
         const diff = Math.abs(tagOnlyKDa - freeSumoKDa);
         T.check('10_cleavage_consistency.consistency', diff <= 0.15, `Tag only kDa (${tagOnlyKDa}) and free His-SUMO kDa (${freeSumoKDa}) disagree by ${diff}`);
+      }
+    } finally {
+      await close10();
     }
   });
 
   /* ================= 11. Extinction coefficient selector ================= */
   await T.t('11_eps_selector', async () => {
-    // Re-initialize for test 11
-    await p.evaluate(() => { window.location.hash = ''; });
-    await p.reload();
-    await h.wait(500);
-    await h.newProject('Test11');
-    await h.dropFiles([path.join(DATA, 'chrom', 'imac_HisTrap_FF_1mL_step_u7.csv')]);
-    await h.wait(500);
+    // Drop file to create project
+    const { p: p11, close: close11 } = await open();
+    try {
+      const h11 = H(p11);
+      await h11.newProject('Test11');
+      await h11.addRun([path.join(DATA, 'chrom', 'imac_HisTrap_FF_1mL_step_u7.csv')]);
+      await h11.wait(500);
 
-    // Go to Protein tab
-    await h.step('construct');
-    await h.wait(200);
+      // Go to Protein tab
+      await h11.step('construct');
+      await h11.wait(200);
 
-    const protSeq = 'M' + 'AWY'.repeat(5);
-    const tagSeq = 'M' + 'AWY'.repeat(2);
+      const protSeq = 'M' + 'AWY'.repeat(5);
+      const tagSeq = 'M' + 'AWY'.repeat(2);
 
-    // Set up sequences
-    await p.evaluate(t => { const e = document.querySelector('#protSeq'); e.value = t; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); }, protSeq);
-    await h.wait(200);
-    await p.evaluate(t => { const e = document.querySelector('#tagSeq'); e.value = t; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); }, tagSeq);
-    await h.wait(500);
+      // Set up sequences
+      await p11.evaluate(t => { const e = document.querySelector('#protSeq'); e.value = t; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); }, protSeq);
+      await h11.wait(200);
+      await p11.evaluate(t => { const e = document.querySelector('#tagSeq'); e.value = t; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); }, tagSeq);
+      await h11.wait(500);
 
-    const optText = await p.evaluate(() => {
-      const sel = document.getElementById('o-epsMode');
-      return sel ? Array.from(sel.options).map(o => o.textContent).join(' | ') : null;
-    });
+      const optText = await p11.evaluate(() => {
+        const sel = document.getElementById('o-epsMode');
+        return sel ? Array.from(sel.options).map(o => o.textContent).join(' | ') : null;
+      });
 
     T.check('11_eps_selector.options_display_values', optText && optText.includes('Untagged (') && optText.includes('Tagged ('), `Expected selector to display values, got: ${optText}`);
 
-    // Go to Run tab and pool
-    await h.step('run');
-    await h.wait(200);
-    await h.pool('T1-T3');
-    await h.wait(500);
+      // Go to Run tab and pool
+      const runStep = (await h11.timeline()).find(x => x.k.startsWith('run:'));
+      if (runStep) await h11.step(runStep.k);
+      await h11.wait(200);
+      await h11.pool('T1-T3');
+      await h11.wait(500);
 
-    // Read the mass from the summary table
-    await h.step('figure');
-    await h.wait(500);
-    const getMass = async () => { const rows = await h.sumTable(); const row = rows.find(r => r[0].includes('imac_HisTrap')); return row ? row[5] : null; };
+      // Read the mass from the summary table
+      await h11.step('figure');
+      await h11.wait(500);
+      const getMass = async () => { const rows = await h11.sumTable(); const row = rows.slice(1).find(r => r.length > 5); return row ? row[4] : null; };
 
-    const massAuto = await getMass();
+      const massAuto = await getMass();
     T.check('11_eps_selector.mass_auto', !!massAuto, 'Auto mass should be calculated');
 
-    // Force Untagged
-    await h.step('construct');
-    await h.wait(200);
-    await p.selectOption('#o-epsMode', 'untagged');
-    await h.wait(500);
+      // Force Untagged
+      await h11.step('construct');
+      await h11.wait(200);
+      await p11.selectOption('#o-epsMode', 'untagged');
+      await h11.wait(500);
 
-    // Read mass again
-    await h.step('figure');
-    await h.wait(500);
-    const massUntagged = await getMass();
+      // Read mass again
+      await h11.step('figure');
+      await h11.wait(500);
+      const massUntagged = await getMass();
 
     T.check('11_eps_selector.mass_changes', massAuto !== massUntagged, `Expected mass to change when forcing Untagged, but it stayed ${massAuto}`);
+    } finally {
+      await close11();
+    }
   });
 
   T.check('no page errors', !errs.length, errs.join(' | '));

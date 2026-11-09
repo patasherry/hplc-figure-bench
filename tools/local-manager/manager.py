@@ -32,10 +32,11 @@ import routing as rt  # noqa: E402  (which queued issues go to Antigravity: pure
 
 cfg, REPO, gh = rv.cfg, rv.REPO, rv.gh
 BOARD = cfg.get('board_issue', 222)
-BOARD_EVERY = cfg.get('board_every_merges', 5)  # a round after this many merged PRs
-BOARD_HOURS = cfg.get('board_every_hours', 4)  # and at least this often while the PC is on
-BOARD_LOW_QUEUE = cfg.get('board_low_queue', 15)  # and (at most hourly) when fewer jobs than this wait for Jules: keeps Jules' 100 tasks a day supplied
-AUTO_MAX, AUTO_QUEUE, AUTO_AVG = cfg.get('board_adopt_max', 5), cfg.get('board_queue_cap', 25), 3.5  # adopt at most 5 a round, while fewer than 25 jobs wait, with an average of 3.5+ and nobody below 3
+BOARD_EVERY = cfg.get('board_every_merges', 8)  # a round after this many merged PRs
+BOARD_HOURS = cfg.get('board_every_hours', 12)  # and at least this often while the PC is on (twice a day)
+BOARD_LOW_QUEUE = cfg.get('board_low_queue', 10)  # when fewer jobs than this wait for workers
+BOARD_LOW_HOURS = cfg.get('board_low_cooldown_hours', 4)  # cooldown between low-queue board meetings
+AUTO_MAX, AUTO_QUEUE, AUTO_AVG = cfg.get('board_adopt_max', 2), cfg.get('board_queue_cap', 20), 3.5  # adopt at most 2 high-conviction issues a round, while fewer than 20 jobs wait
 BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
 COPILOT_MODE = cfg.get('copilot_mode', 'off')  # off (Patrick has no Copilot credits): no Copilot jobs at all, and its turn goes to Claude Code. auto: the cloud agent, and the Copilot CLI while it is paused. cloud or cli: only that one
@@ -2463,7 +2464,7 @@ def board_context():
         '\nBoard memory: everything already done, queued or declined in the last 3 weeks. Do NOT propose any of this again; build on it or propose something new.',
         *[f'- done: {t}' for _, t in mem['merged'][:60]],
         *[f'- earlier idea {k} ({f}): {t}' for k, t, f in mem['ideas'][:60]],
-        '\nOther open issues:', *[row(i) for i in open_i if 'pull_request' not in i and not lab(i) & {'jules-running', 'claude-code-running'}][:40],
+        '\nOther open issues:', *[row(i) for i in open_i if 'pull_request' not in i and not lab(i) & {'jules-running', 'claude-code-running'}][:100],
         '\nReported by Patrick himself:', *([f'- #{i["number"]} {i["title"]}: {(i.get("body") or "")[:300]}' for i in pick('from-patrick')] or ['- none yet'])])
 
 
@@ -2498,11 +2499,10 @@ def board_round(s, topic=''):
     if not props:
         return log(f'board: no proposals ({"; ".join(notes)})')
     head = f'### Team meeting, {dt.datetime.now():%Y-%m-%d %H:%M}' + (f': {topic.splitlines()[0][:120]}' if topic else '')  # a long request keeps a short heading
-    post(BOARD, '\n'.join([BOARD_MARK + '-open', head + ', opening', '', '**How the work is going**', ''] + [f'**{n}:** {t}' + '\n' for n, t in reviews] +
-                          ['**Proposals**', ''] + [f'- **{p["id"]}** ({p["by"]}): {p["title"]}. {p["why"]}' for p in props]) + SIGN.format(rv.MODEL))
     talk.extend(f'Opening review, {n}: {t}' for n, t in reviews)
     listing = lambda: '\n'.join(f'{p["id"]} ({p["by"]}): {p["title"]}. Why: {p["why"]} Evidence: {p["evidence"]} Risk: {p["risk"]} Change: {p["change"]}' for p in props if not p['out'])
     talk_text = lambda: '\n'.join(talk)[-12000:]
+    jules_questions(s)
     # open debate: every adviser answers the whole discussion, for DEBATE_ROUNDS rounds
     for k in range(1, DEBATE_ROUNDS + 1):
         for name, f, cap in who:
@@ -2521,9 +2521,10 @@ def board_round(s, topic=''):
                 p = next((x for x in props if x['id'] == pid and x['by'] == name), None)
                 if p:
                     p['out'] = True; talk.append(f'Round {k}, {name} withdrew {pid}')
+        jules_questions(s)
         said = [t for t in talk if t.startswith(f'Round {k},')]
         if said:
-            post(BOARD, '\n'.join([BOARD_MARK + '-round', f'{head}, debate round {k}', ''] + [f'- {t[len(f"Round {k}, "):]}' for t in said]) + SIGN.format(rv.MODEL))
+            pass  # consolidated post at decision
     # final vote
     live = [p for p in props if not p['out']]
     scores = {p['id']: [] for p in live}
@@ -2576,7 +2577,7 @@ def board_round(s, topic=''):
                   f'. Ones every adviser scored {BOARD_GO} or more go straight to the work queue, and the lead checks the science of any that change a reported number before merging. The rest go through triage. Patrick can reply **No 2** to drop one.', '']
     elif agreed:
         lines += [f'Proposals {", ".join(map(str, agreed))} had full support, but {queued} jobs already wait, so none were adopted this round.', '']
-    lines += ['Patrick: reply **OK** with any other numbers you want, for example **OK 4**.', '', '<details><summary>The full debate</summary>', '']
+    lines += ['Patrick: reply **OK** with any other numbers you want, for example **OK 4**.', '', '<details><summary>The full debate & review</summary>', '', '### Opening Reviews', ''] + [f'**{n}:** {t}\n' for n, t in reviews] + ['', '### Proposals & Debate', '']
     for r, p in enumerate(ranked, 1):
         lines += [f'**{r}. {p["title"]}** ({p["by"]})', f'- Change: {p["change"]}', f'- Evidence: {p["evidence"]}', f'- Risk: {p["risk"]}'] + \
                  [f'- {t}' for t in debate_of(p)] + [f'- Vote, {n}: {sc}/5, {why}' for n, sc, why in scores[p['id']]] + ['']
@@ -2630,8 +2631,8 @@ def board(s):
     if ask and str(ask['id']) != b.get('asked'):
         b['asked'] = str(ask['id']); b['at'] = time.time()
         board_round(s, re.sub(r'^\W*discuss\s*:\s*', '', ask['body'], flags=re.I).strip()[:4000])  # Patrick's whole request, which may be a plan of several paragraphs
-    elif b.get('ux_topic'):  # a usability scope report waits for the advisers' fixes
-        topic = b.pop('ux_topic'); b['at'] = time.time()
+    elif b.get('ux_topic') and (time.time() - b.get('last_ux', 0) > 86400):  # at most once a day on a usability report
+        topic = b.pop('ux_topic'); b['at'] = time.time(); b['last_ux'] = time.time()
         log('board: meeting on a usability report')
         board_round(s, topic)
     else:
@@ -2639,8 +2640,8 @@ def board(s):
         merged = [p for p in gh(f'repos/{REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=50') if p.get('merged_at') and p['merged_at'] > since]
         weekly = now.weekday() == 6 and now.hour >= DIGEST_HOUR and b.get('week') != now.strftime('%Y-%W')
         due = time.time() - b.get('at', 0) > BOARD_HOURS * 3600
-        low = (len(issues('jules-queue')) + len(issues('for-antigravity'))) < BOARD_LOW_QUEUE and time.time() - b.get('at', 0) > 3600
-        why = 'weekly' if weekly else f'{len(merged)} merged PRs' if len(merged) >= BOARD_EVERY else f'{BOARD_HOURS} h since the last meeting' if due else 'the Jules queue is low' if low else ''
+        low = (len(issues('jules-queue')) + len(issues('for-antigravity'))) < BOARD_LOW_QUEUE and time.time() - b.get('at', 0) > BOARD_LOW_HOURS * 3600
+        why = 'weekly' if weekly else f'{len(merged)} merged PRs' if len(merged) >= BOARD_EVERY else f'{BOARD_HOURS} h since the last meeting' if due else 'the work queue is low' if low else ''
         if why:
             b['week'] = now.strftime('%Y-%W'); b['since'] = dt.datetime.now(dt.timezone.utc).isoformat(); b['at'] = time.time()
             log(f'board: meeting ({why})')
@@ -2975,7 +2976,7 @@ def one_pass():
     # Behind 'questions' they used to wait out the whole question ladder, which routinely holds a pass for 20 to 45
     # minutes: #1060 sat on relay-from-board with no request posted because of that, and it reads as a stall.
     for name, duty in (('relay', relay), ('owner', owner_replies), ('owner merge', owner_merge_replies), ('science inbox', science_inbox),
-                       ('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('claude jobs', claude_jobs), ('codex jobs', codex_jobs), ('agy jobs', lambda s: bg_worker(s, 'agy')), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('ux', ux_scope), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
+                       ('questions', jules_questions), ('review', lambda s: None if DRY else rv.one_pass()), ('gate', gate), ('lead review', lead_review), ('jules failed', jules_failed), ('claude jobs', claude_jobs), ('codex jobs', codex_jobs), ('agy jobs', lambda s: bg_worker(s, 'agy')), ('copilot', copilot), ('antigravity', antigravity), ('antigravity app', antigravity_app), ('antigravity stall', antigravity_stall), ('openclaw', openclaw), ('questions mid', jules_questions), ('ux', ux_scope), ('questions post-ux', jules_questions), ('board', board), ('triage', triage), ('stuck', stuck), ('advise', advise), ('digest', digest), ('update', self_update)):
         if CLOUD and name in PC_ONLY:
             continue
         if not CLOUD and LOCAL_ROLE == 'coder' and name == 'review':
