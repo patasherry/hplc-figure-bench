@@ -669,6 +669,10 @@ button,input,select,textarea{font-family:inherit}
           <label class="f">Promoter<select id="pr-promoter" data-prep="promoter"><option value="T7">T7</option><option value="T7lac">T7lac</option><option value="tac">tac</option><option value="trc">trc</option><option value="araBAD">araBAD</option><option value="rhaBAD">rhaBAD</option></select></label>
           <label class="f">Resistance<select id="pr-resist" data-prep="resist"><option value="">Not shown</option><option value="Kan">Kanamycin</option><option value="Amp">Ampicillin</option><option value="Cm">Chloramphenicol</option><option value="Spec">Spectinomycin</option><option value="Tet">Tetracycline</option></select></label>
         </div>
+        <div class="row" id="prLineage">
+          <label class="f">Parent construct<input type="text" id="pr-parentConstructId" data-prep="parentConstructId" placeholder="e.g. c1 (empty if root)" spellcheck="false"></label>
+          <label class="f">Derived constructs<input type="text" id="pr-derivedConstructIds" data-prep="derivedConstructIds" placeholder="e.g. c2, c3" spellcheck="false"></label>
+        </div>
         <label class="check"><input type="checkbox" id="pr-construct" data-prep="construct">Construct panel</label>
       </details>
       <details class="sub" data-sub="ptr" open hidden><summary>Transformation</summary>
@@ -4123,9 +4127,36 @@ function buildWorkflow(){
 }
 
 /* ---------- upstream steps: construct, expression and lysis, drawn before the first column ---------- */
+/* Construct and Primer schemas scaffolded for cloning lineage and downstream purification linking (Issue #1304) */
+const CONSTRUCT_SCHEMA = {
+  id: '', name: '', target: '', insertName: '', sourceOrganism: '', templateType: '', templateId: '',
+  insertSeq: '', vectorName: '', backbone: '', vectorSeq: '', promoter: 'T7', tag: '', cleavageSite: '',
+  fusionPartner: '', resist: '', ori: '', method: '', expectedLength: null, orientation: 'fwd',
+  readingFrame: 1, sequenceMap: null, notes: '', parentConstructId: null, derivedConstructIds: [],
+  primers: [], clones: [], selectedCloneId: null
+};
+function makeConstruct(p){
+  return Object.assign({}, CONSTRUCT_SCHEMA, {
+    id: 'c' + (uid++),
+    derivedConstructIds: [],
+    primers: [],
+    clones: []
+  }, p && typeof p === 'object' ? p : {});
+}
+const PRIMER_SCHEMA = {
+  id: '', name: '', orientation: 'fwd', seq: '', bindingSeq: '', addedSeq5: '', feature: '',
+  tm: null, gc: null, expectedAmplicon: null, constructId: '', vendor: '', grade: 'desalt',
+  stockConc: '', workingConc: '', notes: ''
+};
+function makePrimer(p){
+  return Object.assign({}, PRIMER_SCHEMA, {
+    id: 'pr' + (uid++)
+  }, p && typeof p === 'object' ? p : {});
+}
 const PREP_DEF = {on: true, construct: true, expr: true, lysis: true, name: '', backbone: '', promoter: 'T7', resist: '', strain: '', medium: '', cultureL: '', od: '', inducer: '', temp: '', time: '', pellet: '', lysMethod: '', lysBuffer: '', clarify: '', lysVol: '', lysLanes: false, indKind: 'IPTG', gb: null,
   cleave: false, cleaveAfter: '', protease: '', ratio: '', clvTemp: '', clvTime: '', dialBuffer: '', mwco: '', dialVol: '', dialChanges: '', store: '',
-  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {}};
+  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {},
+  constructs: [], primers: [], parentConstructId: null, derivedConstructIds: []};
 let prep = JSON.parse(JSON.stringify(PREP_DEF));
 const PREP_LANE = ['expr', 'lysis', 'cleave'], PREP_NAME = {construct: 'Construct', expr: 'Expression', lysis: 'Lysis', cleave: 'Dialysis and cleavage'}, prepObj = {};
 const hasTxt = v => String(v == null ? '' : v).trim() !== '';
@@ -4360,7 +4391,8 @@ function constructModel(){
   return {src, tx, segs: sp.segs, cut: sp.cut, cterm: sp.cterm, tagSeq: sp.tag, protSeq: sp.prot, pn, tn, tagParts,
     name: String(prep.name || '').trim() || (gb ? gb.name : ''), len: gb ? gb.len : null, circ: gb ? gb.circ : true, backbone: String(prep.backbone || '').trim(),
     prom: src === 'gb' ? (cas.prom || '') : (prep.promoter || 'T7'), lacO: src === 'gb' ? cas.lacO : /lac/i.test(prep.promoter || ''), rbs: src === 'gb' ? cas.rbs || !!cas.prom : true, term: src === 'gb' ? cas.term : /T7/i.test(prep.promoter || 'T7'),
-    res, ori: src === 'gb' ? cas.ori : [], mTag: seqMass(tx)/1000, mProt: sp.tag ? seqMass(sp.prot)/1000 : null, mFree: sp.tag ? seqMass(sp.tag)/1000 : null, match, pi: seqPI(sp.prot) /* model incorporates remnant */};
+    res, ori: src === 'gb' ? cas.ori : [], mTag: seqMass(tx)/1000, mProt: sp.tag ? seqMass(sp.prot)/1000 : null, mFree: sp.tag ? seqMass(sp.tag)/1000 : null, match, pi: seqPI(sp.prot) /* model incorporates remnant */,
+    parentConstructId: prep.parentConstructId || null, derivedConstructIds: Array.isArray(prep.derivedConstructIds) ? prep.derivedConstructIds.slice() : []};
 }
 /* rich text in figure lines: E. coli in italics, OD600 with a subscript, × g with an italic g */
 function richLine(t, fsz){ const d = r2(fsz*0.28), sz = r2(fsz*0.7);
@@ -6076,7 +6108,7 @@ function loadGenBankText(text, fname){
 }
 function renderPrep(){
   const pn = $('#prepPanel'); if (!pn) return;
-  pn.querySelectorAll('[data-prep]').forEach(el => { if (el === document.activeElement) return; const v = prep[el.dataset.prep]; if (el.type === 'checkbox') el.checked = !!v; else if (el.value !== String(v == null ? '' : v)) el.value = v == null ? '' : v; });
+  pn.querySelectorAll('[data-prep]').forEach(el => { if (el === document.activeElement) return; const k = el.dataset.prep; let v = prep[k]; if (el.type === 'checkbox') el.checked = !!v; else { if (Array.isArray(v)) v = v.join(', '); const s = v == null ? '' : String(v); if (el.value !== s) el.value = s; } });
   pn.querySelectorAll('details.sub').forEach(el => el.classList.toggle('off', el.dataset.sub === 'pclv' ? !prep.cleave : !prep.on));
   { const t = $('#pr-trPlasmid'); if (t) t.placeholder = String(prep.name || '').trim() || (prep.gb && prep.gb.name) || 'e.g. pET28-SUMO-NADK'; }
   $('#prSeqOnly').hidden = !!prep.gb; $('#prIndAmt').hidden = prep.indKind === 'auto';
@@ -6099,11 +6131,15 @@ function renderPrep(){
   if (st._h !== h) { st._h = h; st.innerHTML = h; }
 }
 let prepT = 0;
-$('#prepPanel').addEventListener('input', e => { const el = e.target, k = el.dataset.prep; if (!k) return;
+function onPrepInput(e){ const el = e.target, k = el.dataset.prep; if (!k) return;
   if (el.type === 'number' && el.value !== '') { const v = +el.value; if (!isFinite(v) || v < 0 || v > 1e5) { el.setCustomValidity('Enter a positive number'); return; } el.setCustomValidity(''); }
-  prep[k] = el.type === 'checkbox' ? el.checked : el.value;
+  if (k === 'derivedConstructIds') prep[k] = el.value.split(',').map(s => s.trim()).filter(Boolean);
+  else if (k === 'parentConstructId') prep[k] = el.value.trim() || null;
+  else prep[k] = el.type === 'checkbox' ? el.checked : el.value;
   /* typing in a text field redraws once the typing pauses */
-  if (el.type === 'text') { clearTimeout(prepT); prepT = setTimeout(render, 260); return; } if (['on', 'lysLanes', 'lysis', 'cleave'].includes(k)) gels.forEach(g => { g._prepA = null; }); render(); });
+  if (el.type === 'text') { clearTimeout(prepT); prepT = setTimeout(render, 260); return; } if (['on', 'lysLanes', 'lysis', 'cleave'].includes(k)) gels.forEach(g => { g._prepA = null; }); render(); }
+$('#prepPanel').addEventListener('input', onPrepInput);
+$('#prepPanel').addEventListener('change', onPrepInput);
 $('#gbPick').addEventListener('click', () => $('#gbFile').click());
 $('#gbFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) loadGenBank(f); });
 $('#gbPaste').addEventListener('click', () => { const b = $('#gbPasteBox'); b.hidden = !b.hidden; if (!b.hidden) $('#gbText').focus(); });
@@ -6592,6 +6628,12 @@ function cleanProject(d){
     if (!('secStds' in d.opt) && (d.runs.some(r => r.secMode === 'on') || (Array.isArray(d.opt.secCals) && d.opt.secCals.length > 0))) d.opt.secStds = true;
   }
   if (!d.srcDiag || typeof d.srcDiag !== 'object' || Array.isArray(d.srcDiag)) d.srcDiag = {};
+  if (d.prep && typeof d.prep === 'object' && !Array.isArray(d.prep)) {
+    if (!Array.isArray(d.prep.constructs)) d.prep.constructs = [];
+    if (!Array.isArray(d.prep.primers)) d.prep.primers = [];
+    if (!('parentConstructId' in d.prep)) d.prep.parentConstructId = null;
+    if (!Array.isArray(d.prep.derivedConstructIds)) d.prep.derivedConstructIds = [];
+  }
   return skipped; }
 async function openProject(data, name, noUndo){
   if (!data || data.app !== 'HPLC Figure Bench' || !Array.isArray(data.runs)) { toast(`${name || 'That file'} is not a project saved by this tool`); return; }
@@ -6602,7 +6644,7 @@ async function openProject(data, name, noUndo){
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
       Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
-  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
+  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (!Array.isArray(prep.constructs)) prep.constructs = []; if (!Array.isArray(prep.primers)) prep.primers = []; if (!('parentConstructId' in prep)) prep.parentConstructId = null; if (!Array.isArray(prep.derivedConstructIds)) prep.derivedConstructIds = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
   srcDiag = (data.srcDiag && typeof data.srcDiag === 'object' && !Array.isArray(data.srcDiag)) ? Object.assign({}, data.srcDiag) : {};
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
@@ -6615,7 +6657,7 @@ async function openProject(data, name, noUndo){
   toast(`Opened ${name || 'project'}: ${runs.length} run${runs.length === 1 ? '' : 's'}, ${traces.length} trace${traces.length === 1 ? '' : 's'}, ${gels.length} gel${gels.length === 1 ? '' : 's'}${skipped ? `. Skipped ${skipped} damaged or incomplete item${skipped === 1 ? '' : 's'} in the file` : ''}`);
   nextHidden.delete('undoOpen'); renderNext();
 }
-$('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex)) { toast('Load some data first'); return; }
+$('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex) && !prep.gb && !cleanSeq(opt.protSeq) && !prep.name && !prep.parentConstructId && !(prep.constructs && prep.constructs.length)) { toast('Load some data first'); return; }
   const nm = (runs[0] && runs[0].name) || (gels[0] && gels[0].name) || (traces.find(t => !t.ex) || {}).name || 'figures'; const d = projectData(); if (MODE === 'quick') d.quick = true; saveFile(`${safe(nm)}_project.json`, JSON.stringify(d)); });
 $('#projOpen').addEventListener('click', () => $('#projFile').click());
 $('#projFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; let data;
