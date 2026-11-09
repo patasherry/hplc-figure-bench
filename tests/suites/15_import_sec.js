@@ -61,7 +61,7 @@ async function fresh(id, fn){
 
     const peakTable = await h.peakTable();
     const head = peakTable[0];
-    const mwCol = head.findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
+    const mwCol = head.findIndex(c => /^Est\. Mass|Apparent MW/i.test(c));
 
     // With fix 280, the missing unit is defaulted to "mL". Thus the run matches the calibration, and "Apparent mass (kDa)" is added to the peak table.
     // So the column index must be >= 0 and the header must include "kDa".
