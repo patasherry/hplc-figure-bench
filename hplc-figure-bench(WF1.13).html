@@ -684,9 +684,23 @@ button,input,select,textarea{font-family:inherit}
           <label class="f">Colonies<input type="text" id="pr-trCol" data-prep="trCol" placeholder="e.g. about 200"></label>
           <label class="f">Glycerol stock<input type="text" id="pr-trStock" data-prep="trStock" placeholder="e.g. box 3, A4"></label>
         </div>
+        <div id="prCloneSection" style="margin-top:8px">
+          <div class="row">
+            <label class="f" style="grid-column:1/-1">Selected clone for expression
+              <select id="pr-selectedCloneId" data-prep="selectedCloneId" aria-label="Selected clone for expression">
+                <option value="">None (use transformation scalars)</option>
+              </select>
+            </label>
+          </div>
+          <div id="prCloneList" class="clone-list" style="margin-top:6px"></div>
+          <div class="btns" style="margin-top:6px">
+            <button type="button" class="btn quiet" id="prAddClone">+ Add colony / clone</button>
+          </div>
+        </div>
         <datalist id="dl-trmethod"><option value="heat shock"><option value="electroporation"><option value="KCM transformation"><option value="from a glycerol stock"></datalist>
       </details>
       <details class="sub" data-sub="pexp" open><summary>Expression</summary>
+        <p class="hint" id="prExprCloneNotice" hidden style="margin-top:2px;margin-bottom:6px"></p>
         <div class="row">
           <label class="f">Strain<input type="text" id="pr-strain" data-prep="strain" list="dl-strain" placeholder="e.g. BL21(DE3)" spellcheck="false"></label>
           <label class="f">Medium<input type="text" id="pr-medium" data-prep="medium" list="dl-medium" placeholder="e.g. TB" spellcheck="false"></label>
@@ -4123,9 +4137,12 @@ function buildWorkflow(){
 }
 
 /* ---------- upstream steps: construct, expression and lysis, drawn before the first column ---------- */
+const CLONE_SCHEMA = {id: '', name: '', status: 'unselected', notes: '', stock: ''};
+function makeClone(p){ return Object.assign({}, CLONE_SCHEMA, {id: 'cl' + (uid++), status: 'unselected'}, p && typeof p === 'object' ? p : {}); }
 const PREP_DEF = {on: true, construct: true, expr: true, lysis: true, name: '', backbone: '', promoter: 'T7', resist: '', strain: '', medium: '', cultureL: '', od: '', inducer: '', temp: '', time: '', pellet: '', lysMethod: '', lysBuffer: '', clarify: '', lysVol: '', lysLanes: false, indKind: 'IPTG', gb: null,
   cleave: false, cleaveAfter: '', protease: '', ratio: '', clvTemp: '', clvTime: '', dialBuffer: '', mwco: '', dialVol: '', dialChanges: '', store: '',
-  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {}};
+  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {},
+  selectedCloneId: null, clones: []};
 let prep = JSON.parse(JSON.stringify(PREP_DEF));
 const PREP_LANE = ['expr', 'lysis', 'cleave'], PREP_NAME = {construct: 'Construct', expr: 'Expression', lysis: 'Lysis', cleave: 'Dialysis and cleavage'}, prepObj = {};
 const hasTxt = v => String(v == null ? '' : v).trim() !== '';
@@ -4138,7 +4155,7 @@ function prepSteps(){
   if (!prep.on) return [];
   const lanes = id => gels.some(g => lanesFor(g, id).length), ks = [];
   /* with only a protein sequence, nothing is added until the user enters a plasmid, conditions, or expression lanes */
-  const engaged = !!prep.gb || hasTxt(prep.name) || hasTxt(prep.backbone) || EXPR_KEYS.concat(LYS_KEYS).some(k => hasTxt(prep[k])) || lanes('expr') || lanes('lysis');
+  const engaged = !!prep.gb || hasTxt(prep.name) || hasTxt(prep.backbone) || hasTxt(prep.selectedCloneId) || (prep.clones && prep.clones.length > 0) || EXPR_KEYS.concat(LYS_KEYS).some(k => hasTxt(prep[k])) || lanes('expr') || lanes('lysis');
   if (prep.construct && engaged && (prep.gb || cleanSeq(opt.protSeq))) ks.push('construct');
   if (prep.expr && !skipped('expr') && (EXPR_KEYS.some(k => hasTxt(prep[k])) || lanes('expr'))) ks.push('expr');
   if (prep.lysis && !skipped('lysis') && (LYS_KEYS.some(k => hasTxt(prep[k])) || lanes('lysis'))) ks.push('lysis');
@@ -4628,12 +4645,24 @@ function methodsText(){
   const art = t => /^[aeiouäÄ]/i.test(t) || /^[FHLMNRSX][A-Z0-9]/.test(t) ? 'an' : 'a', deg = t => unitIf(t, '°C'), hrs = t => unitIf(t, 'h');
   const steps = runs.filter(r => r.inWf), pre = prepSteps(), letterOf = r => opt.wfLetters ? String.fromCharCode(65 + pre.concat(wfFigList()).indexOf(r)) : '';
   if (cm && prep.on && (prep.gb || hasTxt(prep.name) || EXPR_KEYS.some(k => hasTxt(prep[k])))) P.push(`${cm.tn} (${fmt(cm.mTag, 1)} kDa)${cm.name ? ` was encoded in ${cm.name}${cm.backbone ? `, a ${cm.backbone} derivative` : ''}${cm.res.length ? ` carrying ${cm.res.join(' and ')} resistance` : ''}` : ''}.${cm.cut ? ` A ${cm.cut.name} site separates the tag from ${cm.pn} (${fmt(cm.mProt, 1)} kDa, ${cm.protSeq.length} residues after cleavage).` : ''}`);
-  if (PROJ && prep.on && !skipped('transform') && !['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(k => hasTxt(prep[k]))) P.push('Transformation: [not entered].');
+  if (PROJ && prep.on && !skipped('transform') && !['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(k => hasTxt(prep[k])) && !prep.selectedCloneId && !(prep.clones && prep.clones.length)) P.push('Transformation: [not entered].');
   if (PROJ && prep.on && !skipped('expr') && !EXPR_KEYS.some(k => hasTxt(prep[k]))) P.push('Expression: [not entered].');
   let trSaid = false;
-  if (prep.on && !skipped('transform') && ['trPlasmid', 'trMethod', 'trSel'].some(k => hasTxt(prep[k]))) { const pl = v(prep.trPlasmid) || (cm && cm.name) || 'The plasmid', st = v(prep.strain), me = v(prep.trMethod), se = v(prep.trSel);
-    const ec = st ? `E. coli ${st.replace(/^e\.? ?coli\s*/i, '')}` : 'E. coli', gs = v(prep.trStock);
-    P.push(/glycerol/i.test(me) ? `Cells of ${ec} carrying ${pl === 'The plasmid' ? 'the plasmid' : pl} were taken from a glycerol stock${gs ? ` (${gs})` : ''}${se ? ` and grown on ${se}` : ''}.` : `${pl} was transformed into ${ec}${me ? ` by ${lc(me)}` : ''}${se ? `, selecting on ${se}` : ''}.`); trSaid = true; }
+  const selClone = prep.selectedCloneId ? (prep.clones || []).find(c => c.id === prep.selectedCloneId) : null;
+  if (prep.on && !skipped('transform') && (['trPlasmid', 'trMethod', 'trSel'].some(k => hasTxt(prep[k])) || selClone || (prep.clones && prep.clones.length))) {
+    const pl = (selClone && hasTxt(selClone.plasmid)) ? selClone.plasmid : v(prep.trPlasmid) || (cm && cm.name) || 'The plasmid', st = (selClone && hasTxt(selClone.strain)) ? selClone.strain : v(prep.strain), me = v(prep.trMethod), se = (selClone && hasTxt(selClone.selection)) ? selClone.selection : v(prep.trSel);
+    const ec = st ? `E. coli ${st.replace(/^e\.? ?coli\s*/i, '')}` : 'E. coli', gs = (selClone && hasTxt(selClone.stock)) ? selClone.stock : v(prep.trStock);
+    let s = '';
+    if (['trPlasmid', 'trMethod', 'trSel'].some(k => hasTxt(prep[k])) || !selClone) {
+      s = /glycerol/i.test(me) ? `Cells of ${ec} carrying ${pl === 'The plasmid' ? 'the plasmid' : pl} were taken from a glycerol stock${gs ? ` (${gs})` : ''}${se ? ` and grown on ${se}` : ''}.` : `${pl} was transformed into ${ec}${me ? ` by ${lc(me)}` : ''}${se ? `, selecting on ${se}` : ''}.`;
+    }
+    if (selClone) {
+      const numTotal = (prep.clones || []).length, failed = (prep.clones || []).filter(c => c.status === 'failed').length;
+      const prov = numTotal > 1 ? ` (${numTotal} colonies screened${failed ? `, ${failed} failed` : ''})` : '';
+      const cloneDesc = `${selClone.status === 'verified' ? 'Verified clone' : 'Clone'} ${selClone.name}${prov} was selected for expression.`;
+      s = s ? `${s} ${cloneDesc}` : cloneDesc;
+    }
+    P.push(s); trSaid = true; }
   if (prep.on && !skipped('expr') && EXPR_KEYS.some(k => hasTxt(prep[k]))) { const st = v(prep.strain), md = v(prep.medium), L = numOr(prep.cultureL, 0), od = v(prep.od), amt = v(prep.inducer), kind = prep.indKind || 'IPTG', T = v(prep.temp), h = v(prep.time), g = numOr(prep.pellet, 0);
     const ind = kind === 'auto' || (/auto|5052/i.test(md) && !amt) ? 'by autoinduction' : amt ? `with ${/^\d+(\.\d+)?$/.test(amt) ? (kind === 'IPTG' ? `${amt} mM IPTG` : `${amt}% L-${kind}`) : amt}${od ? ` at an OD600 of ${od}` : ''}` : od ? `at an OD600 of ${od}` : '';
     if (hasTxt(prep.exStarter)) P.push(`A starter culture (${v(prep.exStarter).replace(/\.$/, '')}) was used to inoculate the expression culture.`);
@@ -6074,6 +6103,45 @@ function loadGenBankText(text, fname){
     render(); toast((m && m.src === 'gb' ? `Loaded ${gb.name}: ORF of ${m.tx.length} residues${m.cut ? `, cut by ${m.cut.name}` : ''}.${prep.prevProt ? ' The Protein section now uses this ORF.' : ''}` : `Loaded ${gb.name}, but found no ORF to draw.`) + (gb.recs > 1 ? ` Only the first of ${gb.recs} records was read.` : '') + (gb.lenBad ? ` Warning: the sequence has ${gb.seq.length} bases but LOCUS says ${gb.len}.` : '')); }
   catch (e) { toast(e.message === 'protein record' ? `${fname} is a protein GenBank record. The Construct section needs a DNA record (plasmid).` : `Could not read ${fname} as GenBank. Export it from SnapGene or Benchling as GenBank (.gb).`); }
 }
+function renderPrepClones(){
+  const sel = $('#pr-selectedCloneId');
+  if (sel) {
+    const list = Array.isArray(prep.clones) ? prep.clones : (prep.clones = []);
+    const opts = ['<option value="">None (use transformation scalars)</option>'].concat(list.map(c => {
+      const isFailed = c.status === 'failed';
+      const isSelected = prep.selectedCloneId === c.id;
+      return `<option value="${c.id}"${isFailed ? ' disabled' : ''}${isSelected ? ' selected' : ''}>${esc(c.name || c.id)} (${esc(c.status)})${isFailed ? ' - blocked' : ''}</option>`;
+    })).join('');
+    if (sel._opts !== opts) { sel._opts = opts; sel.innerHTML = opts; }
+    if (sel !== document.activeElement) sel.value = prep.selectedCloneId || '';
+  }
+  const box = $('#prCloneList');
+  if (box) {
+    const list = Array.isArray(prep.clones) ? prep.clones : (prep.clones = []);
+    if (!list.length) {
+      box.innerHTML = '<p class="hint" style="margin:4px 0">No colonies recorded. Legacy transformation scalars are used.</p>';
+    } else {
+      box.innerHTML = list.map((c, i) => `
+        <div class="row clone-row" data-cid="${c.id}" style="grid-template-columns:2fr 1.5fr 1.5fr auto;gap:6px;align-items:end;margin-bottom:6px">
+          <label class="f">Colony / Clone<input type="text" class="clone-name" data-cid="${c.id}" value="${esc(c.name || '')}" placeholder="e.g. Clone ${i + 1}"></label>
+          <label class="f">Status<select class="clone-status" data-cid="${c.id}">
+            <option value="unselected"${c.status === 'unselected' ? ' selected' : ''}>Unselected</option>
+            <option value="verified"${c.status === 'verified' ? ' selected' : ''}>Verified</option>
+            <option value="failed"${c.status === 'failed' ? ' selected' : ''}>Failed</option>
+          </select></label>
+          <label class="f">Stock / note<input type="text" class="clone-stock" data-cid="${c.id}" value="${esc(c.stock || '')}" placeholder="e.g. box 3, A4"></label>
+          <button type="button" class="btn quiet clone-del" data-cid="${c.id}" title="Remove clone" style="padding:4px 8px;height:32px">✕</button>
+        </div>
+      `).join('');
+    }
+  }
+  const exprNotice = $('#prExprCloneNotice');
+  if (exprNotice) {
+    const sc = prep.selectedCloneId ? (prep.clones || []).find(c => c.id === prep.selectedCloneId) : null;
+    exprNotice.textContent = sc ? `Selected clone for expression: ${sc.name} (${sc.status})` : '';
+    exprNotice.hidden = !sc;
+  }
+}
 function renderPrep(){
   const pn = $('#prepPanel'); if (!pn) return;
   pn.querySelectorAll('[data-prep]').forEach(el => { if (el === document.activeElement) return; const v = prep[el.dataset.prep]; if (el.type === 'checkbox') el.checked = !!v; else if (el.value !== String(v == null ? '' : v)) el.value = v == null ? '' : v; });
@@ -6082,6 +6150,7 @@ function renderPrep(){
   $('#prSeqOnly').hidden = !!prep.gb; $('#prIndAmt').hidden = prep.indKind === 'auto';
   { const sel = $('#pr-cleaveAfter'), wf = runs.filter(r => r.inWf), cid = cleaveRunId(), h = wf.map((r, k) => `<option value="${r.id}"${r.id === cid ? ' selected' : ''}>${k + 1}. ${esc(stepTitle(r))}</option>`).join('') || '<option value="">No runs yet</option>';
     if (sel._h !== h) { sel._h = h; sel.innerHTML = h; } if (sel !== document.activeElement) sel.value = cid; $('#pr-protease').placeholder = !String(prep.protease || '').trim() && cleaveProtease() ? `${cleaveProtease()} (construct)` : 'e.g. Ulp1'; } $('#gbClear').hidden = !prep.gb; $('#gbPick').textContent = prep.gb ? 'Load another GenBank file' : 'Load GenBank file';
+  renderPrepClones();
   const m = prep.gb || cleanSeq(opt.protSeq) ? constructModel() : null, st = $('#gbStatus'); let h = '';
   if (prep.gb) { if (!m || m.src !== 'gb') h = `No ORF found in ${esc(prep.gb.name)}.`;
     else { h = `${esc(prep.gb.name)}, ${prep.gb.len.toLocaleString('en-US')} bp. ORF ${m.tx.length} residues, ${fmt(m.mTag, 1)} kDa${m.cut ? `, ${esc(m.cut.name)} site after residue ${m.cterm ? m.segs.find(x => x.kind === 'prot').b : m.segs.find(x => x.kind === 'prot').a - 1}` : ''}${m.prom ? `, ${esc(m.prom)} promoter` : ''}.`;
@@ -6099,11 +6168,77 @@ function renderPrep(){
   if (st._h !== h) { st._h = h; st.innerHTML = h; }
 }
 let prepT = 0;
-$('#prepPanel').addEventListener('input', e => { const el = e.target, k = el.dataset.prep; if (!k) return;
+const onPrepInput = e => { const el = e.target, k = el.dataset.prep; if (!k) return;
   if (el.type === 'number' && el.value !== '') { const v = +el.value; if (!isFinite(v) || v < 0 || v > 1e5) { el.setCustomValidity('Enter a positive number'); return; } el.setCustomValidity(''); }
+  if (k === 'selectedCloneId') {
+    const chosen = el.value || null;
+    if (chosen) {
+      const target = (prep.clones || []).find(c => c.id === chosen);
+      if (target && target.status === 'failed') {
+        toast('Cannot select a failed clone for expression. Change status first.');
+        el.value = prep.selectedCloneId || '';
+        return;
+      }
+      prep.selectedCloneId = chosen;
+      if (target && target.stock) prep.trStock = target.stock;
+    } else {
+      prep.selectedCloneId = null;
+    }
+    renderPrep(); render(); return;
+  }
   prep[k] = el.type === 'checkbox' ? el.checked : el.value;
   /* typing in a text field redraws once the typing pauses */
-  if (el.type === 'text') { clearTimeout(prepT); prepT = setTimeout(render, 260); return; } if (['on', 'lysLanes', 'lysis', 'cleave'].includes(k)) gels.forEach(g => { g._prepA = null; }); render(); });
+  if (el.type === 'text') { clearTimeout(prepT); prepT = setTimeout(render, 260); return; } if (['on', 'lysLanes', 'lysis', 'cleave'].includes(k)) gels.forEach(g => { g._prepA = null; }); render(); };
+$('#prepPanel').addEventListener('input', onPrepInput);
+$('#prepPanel').addEventListener('change', onPrepInput);
+const cloneBox = $('#prCloneSection');
+if (cloneBox) {
+  cloneBox.addEventListener('click', e => {
+    const b = e.target.closest('#prAddClone');
+    if (b) {
+      prep.clones = Array.isArray(prep.clones) ? prep.clones : [];
+      const cid = 'cl' + (uid++);
+      prep.clones.push({id: cid, name: 'Clone ' + (prep.clones.length + 1), status: 'unselected', notes: '', stock: ''});
+      renderPrep(); render(); queueSave(); return;
+    }
+    const del = e.target.closest('.clone-del');
+    if (del) {
+      const cid = del.dataset.cid;
+      prep.clones = (prep.clones || []).filter(c => c.id !== cid);
+      if (prep.selectedCloneId === cid) prep.selectedCloneId = null;
+      renderPrep(); render(); queueSave(); return;
+    }
+  });
+  cloneBox.addEventListener('input', e => {
+    const el = e.target, cid = el.dataset.cid; if (!cid) return;
+    const c = (prep.clones || []).find(x => x.id === cid); if (!c) return;
+    if (el.classList.contains('clone-name')) {
+      c.name = el.value;
+      const sel = $('#pr-selectedCloneId');
+      if (sel) {
+        const opt = sel.querySelector(`option[value="${cid}"]`);
+        if (opt) opt.textContent = `${c.name || c.id} (${c.status})${c.status === 'failed' ? ' - blocked' : ''}`;
+      }
+      clearTimeout(prepT); prepT = setTimeout(render, 260); queueSave();
+    } else if (el.classList.contains('clone-stock')) {
+      c.stock = el.value;
+      if (prep.selectedCloneId === cid && c.stock) prep.trStock = c.stock;
+      clearTimeout(prepT); prepT = setTimeout(render, 260); queueSave();
+    }
+  });
+  cloneBox.addEventListener('change', e => {
+    const el = e.target, cid = el.dataset.cid; if (!cid) return;
+    const c = (prep.clones || []).find(x => x.id === cid); if (!c) return;
+    if (el.classList.contains('clone-status')) {
+      c.status = el.value;
+      if (c.status === 'failed' && prep.selectedCloneId === cid) {
+        prep.selectedCloneId = null;
+        toast('Deselected failed clone from expression');
+      }
+      renderPrep(); render(); queueSave();
+    }
+  });
+}
 $('#gbPick').addEventListener('click', () => $('#gbFile').click());
 $('#gbFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) loadGenBank(f); });
 $('#gbPaste').addEventListener('click', () => { const b = $('#gbPasteBox'); b.hidden = !b.hidden; if (!b.hidden) $('#gbText').focus(); });
@@ -6602,20 +6737,20 @@ async function openProject(data, name, noUndo){
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
       Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
-  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
+  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (!Array.isArray(prep.clones)) prep.clones = []; if (!('selectedCloneId' in prep)) prep.selectedCloneId = null; if (prep.selectedCloneId) { const sc = prep.clones.find(c => c.id === prep.selectedCloneId); if (!sc || sc.status === 'failed') prep.selectedCloneId = null; } if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
   srcDiag = (data.srcDiag && typeof data.srcDiag === 'object' && !Array.isArray(data.srcDiag)) ? Object.assign({}, data.srcDiag) : {};
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
     { const pq = Array.isArray(opt.myQuick) ? opt.myQuick : [], del = new Set([...(myQDel || []), ...(Array.isArray(opt.myQuickDel) ? opt.myQuickDel : [])]); opt.myQuickDel = [...del]; opt.myQuick = myQ.concat(pq.filter(q => !myQ.some(m => m.id === q.id))).filter(q => !del.has(q.id)); }
     const pc = secCals(); opt.secCals = pc.concat(myCals.filter(c => !pc.some(x => x.id === c.id)));
     if (myKnown) { const pk = tidyKnown(dopt.known); opt.known = myKnown.concat(pk.filter(k => !myKnown.some(m => m.name === k.name && +m.kda === +k.kda))); } tidyLists(); tidyOpt(dopt); }
-  let mx = 0; [...runs, ...gels].forEach(x => { const m = String(x.id).match(/\d+/); if (m) mx = Math.max(mx, +m[0]); }); traces.forEach(t => { mx = Math.max(mx, +t.id || 0); }); uid = Math.max(mx + 1, numOr(prep.nextUid, 0));
+  let mx = 0; [...runs, ...gels, ...(prep.clones || [])].forEach(x => { const m = String(x.id).match(/\d+/); if (m) mx = Math.max(mx, +m[0]); }); traces.forEach(t => { mx = Math.max(mx, +t.id || 0); }); uid = Math.max(mx + 1, numOr(prep.nextUid, 0));
   cur = data.cur || 'overlay'; marking = null; tagMode = '';
   renderList(); syncControls(); render(); saveOpt();
   toast(`Opened ${name || 'project'}: ${runs.length} run${runs.length === 1 ? '' : 's'}, ${traces.length} trace${traces.length === 1 ? '' : 's'}, ${gels.length} gel${gels.length === 1 ? '' : 's'}${skipped ? `. Skipped ${skipped} damaged or incomplete item${skipped === 1 ? '' : 's'} in the file` : ''}`);
   nextHidden.delete('undoOpen'); renderNext();
 }
-$('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex)) { toast('Load some data first'); return; }
+$('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex) && !prep.gb && !cleanSeq(opt.protSeq) && !prep.name && !prep.selectedCloneId && !(prep.clones && prep.clones.length)) { toast('Load some data first'); return; }
   const nm = (runs[0] && runs[0].name) || (gels[0] && gels[0].name) || (traces.find(t => !t.ex) || {}).name || 'figures'; const d = projectData(); if (MODE === 'quick') d.quick = true; saveFile(`${safe(nm)}_project.json`, JSON.stringify(d)); });
 $('#projOpen').addEventListener('click', () => $('#projFile').click());
 $('#projFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; let data;
@@ -6865,7 +7000,7 @@ function stepList(){
   const v = k => hasTxt(prep[k]), m = k => stepMeta(k), L = [];
   const cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
   L.push({k: 'construct', g: 'Upstream', t: 'Construct', done: !!cm, s: cm ? `${cm.tn}, ${fmt(cm.mTag, 1)} kDa` : 'Protein sequence or GenBank file'});
-  const trDone = ['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(v) || !!m('transform').date;
+  const trDone = ['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(v) || !!prep.selectedCloneId || !!(prep.clones && prep.clones.length) || !!m('transform').date;
   L.push({k: 'transform', t: /glycerol/i.test(prep.trMethod || '') ? 'Glycerol stock' : 'Transformation', done: trDone, s: [prep.strain, prep.trSel].map(x => String(x || '').trim()).filter(Boolean).join(', ') || 'Strain and selection, or a glycerol stock'});
   const ex = EXPR_KEYS.some(v) || gels.some(g => lanesFor(g, 'expr').length), el = prepLines('expr').map(x => typeof x === 'string' ? x : x.t);
   L.push({k: 'expr', t: 'Expression', done: ex, s: ex ? el.slice(0, 2).join(', ').replace(/ /g, ' ') : 'Starter, induction, harvest, expression gel'});

@@ -195,6 +195,141 @@ const F = {gb: src('gb'), imac: src('his'), grad: path.join(DATA, 'chrom/imac_Hi
     T.check('metadata_table_no_false_warning', (await metaTrace.locator('.source-diag').count()) === 0, 'harmless metadata table does not trigger discarded block warning');
   });
 
+  /* #1305: selected-clone handoff with status safeguards and legacy scalar retention */
+  await T.t('clone_handoff_and_safeguards', async () => {
+    await p.click('text=All projects').catch(() => {}); await h.wait(600);
+    await h.newProject('Clone Provenance');
+    await h.gb(F.gb);
+    await h.addRun(F.imac);
+    await h.pool('T1-T6');
+
+    // 1. Legacy transformation scalars when no clone is selected
+    await h.step('transform');
+    await p.locator('#pr-trPlasmid').fill('pET28-SUMO-TEST');
+    await p.locator('#pr-trMethod').fill('heat shock');
+    await p.locator('#pr-trSel').fill('50 µg/mL kanamycin');
+    await p.locator('#pr-trCol').fill('about 150');
+    await p.locator('#pr-trStock').fill('box 1, B2');
+    await p.locator('#pr-trStock').dispatchEvent('change');
+    await h.wait(300);
+
+    const mLegacy = await methods();
+    T.check('legacy_scalars_retained_when_no_clone_selected',
+      mLegacy.includes('pET28-SUMO-TEST was transformed into') && !mLegacy.includes('selected for expression'),
+      `legacy transformation scalars retained: ${mLegacy}`);
+
+    // 2. Add colonies: Colony 1 (unselected), Colony 2 (failed), Colony 3 (verified)
+    await h.step('transform');
+    await p.click('#prAddClone'); await h.wait(200);
+    await p.click('#prAddClone'); await h.wait(200);
+    await p.click('#prAddClone'); await h.wait(200);
+
+    const nameInputs = p.locator('.clone-name');
+    const statusSelects = p.locator('.clone-status');
+    const stockInputs = p.locator('.clone-stock');
+
+    await nameInputs.nth(0).fill('Colony 1');
+    await nameInputs.nth(0).dispatchEvent('input');
+    await statusSelects.nth(0).selectOption('unselected');
+    await statusSelects.nth(0).dispatchEvent('change');
+
+    await nameInputs.nth(1).fill('Colony 2');
+    await nameInputs.nth(1).dispatchEvent('input');
+    await statusSelects.nth(1).selectOption('failed');
+    await statusSelects.nth(1).dispatchEvent('change');
+
+    await nameInputs.nth(2).fill('Colony 3');
+    await nameInputs.nth(2).dispatchEvent('input');
+    await statusSelects.nth(2).selectOption('verified');
+    await statusSelects.nth(2).dispatchEvent('change');
+    await stockInputs.nth(2).fill('box 4, C3');
+    await stockInputs.nth(2).dispatchEvent('input');
+    await h.wait(300);
+
+    // 3. Block selection of failed clone Colony 2
+    const selDropdown = p.locator('#pr-selectedCloneId');
+    const failedOptDisabled = await selDropdown.locator('option:has-text("Colony 2")').getAttribute('disabled');
+    T.check('failed_clone_option_disabled', failedOptDisabled !== null, 'failed clone option has disabled attribute');
+
+    // Attempt to select failed clone
+    const failedVal = await selDropdown.locator('option:has-text("Colony 2")').getAttribute('value');
+    await p.evaluate(val => {
+      const el = document.getElementById('pr-selectedCloneId');
+      if (el) { el.value = val; el.dispatchEvent(new Event('change', {bubbles: true})); }
+    }, failedVal);
+    await h.wait(300);
+
+    const selValAfterFailedAttempt = await selDropdown.inputValue();
+    T.check('failed_clone_selection_blocked', selValAfterFailedAttempt !== failedVal, 'selection of failed clone was blocked');
+
+    // 4. Select verified clone Colony 3
+    const verifiedVal = await selDropdown.locator('option:has-text("Colony 3")').getAttribute('value');
+    await p.evaluate(val => {
+      const el = document.getElementById('pr-selectedCloneId');
+      if (el) { el.value = val; el.dispatchEvent(new Event('change', {bubbles: true})); }
+    }, verifiedVal);
+    await h.wait(300);
+
+    const selValVerified = await selDropdown.inputValue();
+    T.check('verified_clone_selected', selValVerified === verifiedVal, 'verified clone can be selected');
+
+    // Check Methods text includes verified clone handoff and provenance retaining failed colonies
+    const mVerified = await methods();
+    T.check('verified_clone_methods_handoff',
+      mVerified.includes('Verified clone Colony 3') && mVerified.includes('selected for expression') && mVerified.includes('3 colonies screened, 1 failed'),
+      `methods text records verified clone and retain provenance: ${mVerified}`);
+
+    // Check legacy scalar fields are still in DOM
+    const trColVal = await p.locator('#pr-trCol').inputValue();
+    T.check('legacy_scalar_colonies_retained_in_dom', trColVal === 'about 150', `Colonies scalar is ${trColVal}`);
+
+    // 5. If Colony 3 is later changed to failed, selection safeguard auto-deselects it
+    await h.step('transform');
+    await statusSelects.nth(2).selectOption('failed');
+    await statusSelects.nth(2).dispatchEvent('change');
+    await h.wait(300);
+
+    const selValAfterStatusChange = await selDropdown.inputValue();
+    T.check('deselected_when_status_becomes_failed', selValAfterStatusChange === '', 'selected clone cleared when status changed to failed');
+
+    // 6. Change Colony 2 from failed to verified, now it can be selected
+    await statusSelects.nth(1).selectOption('verified');
+    await statusSelects.nth(1).dispatchEvent('change');
+    await h.wait(300);
+
+    const colony2OptDisabled = await selDropdown.locator('option:has-text("Colony 2")').getAttribute('disabled');
+    T.check('previously_failed_now_selectable', colony2OptDisabled === null, 'option is no longer disabled after status changed from failed to verified');
+
+    await p.evaluate(val => {
+      const el = document.getElementById('pr-selectedCloneId');
+      if (el) { el.value = val; el.dispatchEvent(new Event('change', {bubbles: true})); }
+    }, failedVal);
+    await h.wait(300);
+
+    const selValColony2 = await selDropdown.inputValue();
+    T.check('newly_verified_clone_selected', selValColony2 === failedVal, 'previously failed clone can now be selected after status change');
+
+    // 7. Project persistence round-trip
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
+    const savePath = path.join(__dirname, '..', 'results', 'clone_provenance_proj.json');
+    await dl.saveAs(savePath);
+
+    await p.click('#homeBtn').catch(() => {});
+    await h.wait(500);
+    await p.click('#homeQuick');
+    await h.wait(1000);
+
+    await p.setInputFiles('#projFile', savePath);
+    await h.wait(2000);
+
+    await h.step('transform');
+    const roundtripSelVal = await p.locator('#pr-selectedCloneId').inputValue();
+    T.check('roundtrip_selected_clone_persists', roundtripSelVal === failedVal, 'selected clone persisted across export/import');
+    const roundtripCount = await p.locator('.clone-row').count();
+    T.check('roundtrip_clones_count_persists', roundtripCount === 3, `clones count persisted: ${roundtripCount}`);
+    try { fs.unlinkSync(savePath); } catch (e) {}
+  });
+
   await close();
   T.done();
 })();
