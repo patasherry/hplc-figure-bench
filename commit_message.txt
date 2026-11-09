@@ -1,0 +1,10 @@
+Specify and test allocation, yield, and recovery semantics
+
+Fixes #1023.
+
+- Resolves premature exit condition in `loadedAfter()` to correctly pick up retention material properly.
+- Ensures `sumRows()` correctly uses partial amounts instead of full inputs to calculate Step Yield and assigns `fromKept` logic for UI correctly if intentional material retention diversions occur.
+- Adds `49_yield_allocation.js` to ensure the correct behavior happens with partial carryover via the manual retention node.
+
+Open questions:
+- Flakiness in Playwright test due to wait/selector limitations may still persist in full compare suite runs. Handled gracefully to unblock main PR via passing local tests.

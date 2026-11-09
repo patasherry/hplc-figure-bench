@@ -4178,7 +4178,7 @@ function manLines(m){ const t = x => String(x == null ? '' : x).trim(), out = []
   if (t(m.note)) out.push({t: t(m.note), c: '#555555'}); return out; }
 /* the amount loaded on the next column: the last measured amount after this step and before the next column */
 function loadedAfter(r){ const wf = wfList(), i = wf.indexOf(r); let mg = r && r.id ? (btwMg(r) || {}).mg || null : null;
-  for (let j = i + 1; i >= 0 && j < wf.length && wf[j].prep; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a !== null) mg = a; }
+  for (let j = i + 1; i >= 0 && j < wf.length; j++) { if (wf[j].wfFrom) break; if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a !== null) mg = a; break; } else if (wf[j].prep) break; }
   return mg; }
 /* cleavage gel lanes: before and after the protease */
 const CLV_PRE = /^([-−–]\s?(ulp1?|sumo( protease)?|tev|3c|thrombin|protease|enz(yme)?)\b.*|uncut|uncleaved|before( \w+)?|pre[\s-]?(cleavage|dialysis)|t ?0|0 ?h)$/i,
@@ -5505,7 +5505,19 @@ function sumRows(){
   const kept = x => { const k = prep.on ? loadedAfter(x.r) : null; if (!(k > 0)) return null; return ['mg', 'nd'].includes(basis) ? k : (basis === 'umol' || ['mgmol', 'ndmol'].includes(basis)) && kd(x) ? k/kd(x) : null; };
   const wf = prep.on ? wfList() : runs.filter(r => r.inWf), hasBranches = wf.some(x => x.wfFrom);
   if (!hasBranches) {
-    out.forEach(x => { const a = amt(x); x.yld = base > 0 && a > 0 ? 100*a/base : null; x.stepY = prev > 0 && a > 0 ? 100*a/prev : null; x.fromKept = !!x.stepY && prevKept; x.loadedAmt = prevKept ? prev : null; if (a > 0) { const k = kept(x); prev = k > 0 ? k : a; prevKept = k > 0; } });
+    out.forEach(x => { const a = amt(x); x.yld = base > 0 && a > 0 ? 100*a/base : null; x.stepY = prev > 0 && a > 0 ? 100*a/prev : null;
+      let pk = prevKept;
+      const j = wf.indexOf(x.r);
+      let myLoadedAmt = prev;
+      if (j > 0 && wf[j-1].prep === 'manual') {
+        const mv = out.toAmt(manMg(wf[j-1].man), x);
+        if (mv !== null && Math.abs(mv - prev) > 1e-4) {
+            pk = true;
+            myLoadedAmt = mv;
+        }
+      }
+      x.stepY = myLoadedAmt > 0 && a > 0 ? 100*a/myLoadedAmt : null;
+      x.fromKept = !!x.stepY && pk; x.loadedAmt = pk ? myLoadedAmt : null; if (a > 0) { const k = kept(x); prev = k > 0 ? k : a; prevKept = k > 0 || (pk && k !== a); } });
   } else {
     const par = wfParents(wf), prevMap = new Map();
     if (prev > 0) prevMap.set('start', {amt: prev, kept: prevKept});
@@ -5516,7 +5528,13 @@ function sumRows(){
       if (pi >= 0) { let cur = pi; while (cur >= 0 && !prevMap.has(wf[cur])) cur = par[cur]; if (cur >= 0) pInfo = prevMap.get(wf[cur]); }
       if (!pInfo && prevMap.has('start')) pInfo = prevMap.get('start');
       const pAmt = pInfo ? pInfo.amt : null, pKept = pInfo ? pInfo.kept : false;
-      x.stepY = pAmt > 0 && a > 0 ? 100*a/pAmt : null; x.fromKept = !!x.stepY && pKept;
+      let calcPAmt = pAmt; let pk = pKept;
+      if (wi > 0 && wf[wi-1].prep === 'manual') {
+        const mv = out.toAmt(manMg(wf[wi-1].man), x);
+        if (mv !== null && Math.abs(mv - calcPAmt) > 1e-4) { pk = true; calcPAmt = mv; }
+      }
+      x.stepY = calcPAmt > 0 && a > 0 ? 100*a/calcPAmt : null; x.fromKept = !!x.stepY && pk;
+      x.loadedAmt = pk ? calcPAmt : null;
       x.loadedAmt = pKept ? pAmt : null;
       if (a > 0) { const k = kept(x); prevMap.set(x.r, {amt: k > 0 ? k : a, kept: k > 0}); }
     });
