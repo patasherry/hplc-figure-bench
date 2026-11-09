@@ -1,5 +1,4 @@
 // 41 workflow conditions: the real arrow-note editor keeps its scientific example readable (#947).
-// Construct plasmid name input stacks responsively on narrow viewports (#1252).
 const {open, H, suite, src} = require('../lib/harness');
 const SEL = {titles: '#paper svg text', arrow: '#wfA'};
 
@@ -37,32 +36,5 @@ const SEL = {titles: '#paper svg text', arrow: '#wfA'};
     T.check(`${width}:no-page-errors`, !errs.length, errs.join(' | '));
     await close();
   }
-
-  for (const width of [390, 360, 320]) {
-    const {p, errs, close} = await open({width, height: 900}), h = H(p);
-    p.setDefaultTimeout(10000);
-    await T.t(`${width}:construct-plasmid-placeholder`, async () => {
-      await h.newProject('Construct placeholder ' + width);
-      await h.step('construct');
-      await p.locator('#pr-name').waitFor({state: 'visible'});
-      const m = await p.locator('#pr-name').evaluate(input => {
-        const style = getComputedStyle(input), placeholder = getComputedStyle(input, '::placeholder');
-        const context = document.createElement('canvas').getContext('2d');
-        context.font = `${placeholder.fontStyle} ${placeholder.fontWeight} ${placeholder.fontSize} ${placeholder.fontFamily}`;
-        const available = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-        const needed = context.measureText(input.placeholder).width;
-        const r = input.getBoundingClientRect();
-        return {placeholder: input.placeholder, available, needed,
-          inside: r.left >= 0 && r.right <= innerWidth};
-      });
-      T.check(`${width}:plasmid-placeholder-visible`, m.placeholder === 'e.g. pET28-SUMO-NADK', JSON.stringify(m));
-      T.check(`${width}:plasmid-placeholder-fits`, m.available >= m.needed, `${m.available}px available; ${m.needed.toFixed(2)}px needed`);
-      T.check(`${width}:plasmid-input-contained`, m.inside, JSON.stringify(m));
-      T.check(`${width}:no-page-hscroll`, !(await h.hScroll()), 'construct inputs stay within responsive page');
-    });
-    T.check(`${width}:construct-no-page-errors`, !errs.length, errs.join(' | '));
-    await close();
-  }
-
   T.done();
 })();

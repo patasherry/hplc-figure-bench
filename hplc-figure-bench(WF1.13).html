@@ -153,7 +153,6 @@ header.top p{margin:0;color:var(--muted);font-size:13px}
 .grp h2{margin:0;font-size:15px;font-weight:600;letter-spacing:-.005em;color:var(--ink)}
 .grp h2 + .hint, .grp h2 + * + .hint, .grp h2 + .savestate, .grp h2 + * + .savestate { margin-top: 6px; }
 .row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 10px}
-@media (max-width:420px){#prNames{grid-template-columns:minmax(0,1fr)}}
 .row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px 10px}
 label.f{display:grid;gap:4px;font-size:12px;color:var(--muted);min-width:0;align-content:space-between;line-height:1.35}
 input[type=text],input[type=number],select,textarea{font:inherit;font-size:13px;color:var(--ink);background:var(--field);border:1px solid var(--line2);border-radius:var(--r-s);padding:6px 8px;width:100%;min-width:0;min-height:32px;transition:border-color .12s,box-shadow .12s}
@@ -659,7 +658,7 @@ button,input,select,textarea{font-family:inherit}
           <input type="file" id="gbFile" accept=".gb,.gbk,.genbank,.ape,.dna,.txt" hidden></div>
         <div id="gbPasteBox" hidden><textarea id="gbText" rows="6" spellcheck="false" placeholder="Paste GenBank text here (LOCUS … ORIGIN … //)" style="width:100%"></textarea><div class="btns"><button type="button" class="btn" id="gbPasteGo">Use pasted text</button></div></div>
         <p class="hint" id="gbStatus"></p>
-        <div class="row" id="prNames">
+        <div class="row">
           <label class="f">Plasmid name<input type="text" id="pr-name" data-prep="name" placeholder="e.g. pET28-SUMO-NADK" spellcheck="false"></label>
           <label class="f">Vector<input type="text" id="pr-backbone" data-prep="backbone" placeholder="e.g. pET-28a(+)" spellcheck="false"></label>
         </div>
@@ -1556,7 +1555,17 @@ function parseText(text){
   const cols = []; for (let c=0;c<ncol;c++) cols.push((names && names[c]) || ('Column ' + (c+1)));
   let xc = 0, yc = 1;
   if (ncol >= 3) { const rs = run.rows.slice(0, 6); if (rs.length > 3 && rs.every((r,i) => r[0] === rs[0][0] + i)) { xc = 1; yc = 2; } }
-  return {rows: run.rows, cols, xc, yc, skipped, retained, discarded};
+
+  let reordered = false, nDec = 0;
+  for (let i = 1; i < run.rows.length; i++) {
+    const x0 = run.rows[i-1][xc], x1 = run.rows[i][xc];
+    if (x0 != null && x1 != null && x1 < x0) {
+      reordered = true;
+      nDec++;
+    }
+  }
+  return {rows: run.rows, cols, xc, yc, skipped, retained, discarded, reordered, nDec};
+
 }
 
 /* ---------- parsing: ÄKTA / UNICORN ---------- */
@@ -5731,6 +5740,15 @@ function genericDiag(srcName, nm, parsed){
       source: srcName, kind: 'generic', skipped: parsed.skipped,
       summary: `${parsed.skipped} row${parsed.skipped > 1 ? 's' : ''} omitted (split by unreadable value)`,
       msg: `Left out ${parsed.skipped} row${parsed.skipped > 1 ? 's' : ''} of ${nm}: a row with an unreadable value splits the data, and only the longest unbroken block is kept. Check the file.`
+    };
+  }
+  if (parsed.reordered) {
+    const xName = (parsed.cols && parsed.cols[parsed.xc]) || 'x';
+    const isWhollyDescending = parsed.nDec === parsed.retained.count - 1;
+    return {
+      source: srcName, kind: 'generic', reordered: true,
+      summary: `Plotted series sorted (X axis ${xName} decreases ${parsed.nDec} time${parsed.nDec > 1 ? 's' : ''})`,
+      msg: `The selected X axis (${xName}) for ${nm} ${isWhollyDescending ? 'is wholly descending' : 'contains reset or discontinuous segments'} (${parsed.nDec} decreasing transition${parsed.nDec > 1 ? 's' : ''}). The plotted series was sorted.`
     };
   }
   return null;

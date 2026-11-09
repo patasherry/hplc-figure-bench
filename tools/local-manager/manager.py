@@ -1086,21 +1086,16 @@ def gate(s):
             gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
             post(n, 'This pull request changes no files, so it cannot fix anything. Closed without merging, because merging it would close its issue while the bug stays.' + SIGN.format(rv.MODEL))
             if iss:
-                istate = gh(f'repos/{REPO}/issues/{iss}').get('state')
-                if istate == 'open':
-                    sb_prev = s['sentback'].get(str(iss), 0)
-                    if sb_prev < MAX_SENDBACKS:
-                        s['sentback'][str(iss)] = sb_prev + 1
-                        label(iss, add=['jules-queue'], remove=list(ALL_RUNNING | ALL_DONE))
-                        post(iss, f'PR #{n} for this issue changed no files, so it was closed without merging and the issue is queued again (attempt {sb_prev + 1}/{MAX_SENDBACKS}). The fix still has to be made in the app, with a check that fails on main and passes on the branch.' + SIGN.format(rv.MODEL))
-                        log(f'PR #{n}: empty, closed and #{iss} requeued')
-                    else:
-                        label(iss, add=['for-coordinator'], remove=list(ALL_RUNNING | ALL_DONE | {'jules-queue'}))
-                        post(iss, f'**For the lead:** PR #{n} for this issue changed no files, and the issue has produced empty PRs {sb_prev + 1} times. Flagged for lead review.' + SIGN.format(rv.MODEL))
-                        log(f'PR #{n}: empty, closed and #{iss} flagged for lead')
+                sb_prev = s['sentback'].get(str(iss), 0)
+                if sb_prev < MAX_SENDBACKS:
+                    s['sentback'][str(iss)] = sb_prev + 1
+                    label(iss, add=['jules-queue'], remove=list(ALL_RUNNING | ALL_DONE))
+                    post(iss, f'PR #{n} for this issue changed no files, so it was closed without merging and the issue is queued again (attempt {sb_prev + 1}/{MAX_SENDBACKS}). The fix still has to be made in the app, with a check that fails on main and passes on the branch.' + SIGN.format(rv.MODEL))
+                    log(f'PR #{n}: empty, closed and #{iss} requeued')
                 else:
-                    label(iss, remove=list(ALL_QUEUES | ALL_RUNNING))
-                    log(f'PR #{n}: empty, closed and #{iss} is closed (cleared queue labels)')
+                    label(iss, add=['for-coordinator'], remove=list(ALL_RUNNING | ALL_DONE | {'jules-queue'}))
+                    post(iss, f'**For the lead:** PR #{n} for this issue changed no files, and the issue has produced empty PRs {sb_prev + 1} times. Flagged for lead review.' + SIGN.format(rv.MODEL))
+                    log(f'PR #{n}: empty, closed and #{iss} flagged for lead')
             else:
                 log(f'PR #{n}: empty, closed (no linked issue)')
             continue
@@ -2779,7 +2774,6 @@ def stuck(s):
                 if (r.returncode == 0 and 'fail 0' in r.stdout) or (f'PASS {check_id}' in r.stdout and f'FAIL {check_id}' not in r.stdout):
                     post(i['number'], f'**Resolved on main:** `{suite}.js` passes on main. Closing issue directly per AGENTS.md rules.' + SIGN.format(rv.MODEL))
                     gh(f'repos/{REPO}/issues/{i["number"]}', 'PATCH', {'state': 'closed'})
-                    label(i['number'], remove=list(ALL_QUEUES | ALL_RUNNING))
                     reconciled[n] = 1
                     log(f'reconciled fixed issue #{i["number"]} ({title})')
             except Exception:
