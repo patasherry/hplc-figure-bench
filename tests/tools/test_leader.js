@@ -100,6 +100,7 @@ assert(!isPlanAsk, 'Multi-paragraph question with scientific context must NOT tr
 // Test 6: Verify timeouts
 assert(leaderSrc.includes('LOCAL_FIRST = 10'), 'LOCAL_FIRST should be 10 minutes matching AGENTS.md');
 assert(leaderSrc.includes('Date.now() - at > 5 * 60e3'), 'Re-nudge timeout should be 5 minutes');
+assert(leaderSrc.includes('is:issue is:open in:title'), 'Follow-up bug search query must check is:open to allow re-filing resolved regressions');
 
 // Test 7: Verify prefix grouping for related check failures to prevent duplicate issue filing
 const sampleChecks = [

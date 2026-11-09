@@ -234,7 +234,7 @@ module.exports = async ({github, context, core}) => {
           const parts = id.split('/');
           const prefix = parts.length > 2 ? `${parts[0]}/${parts[1]}` : id;
           if (filedPrefixes.has(prefix)) continue; // group related failures for the same test/fixture
-          const exists = (await github.rest.search.issuesAndPullRequests({q: `repo:${owner}/${repo} is:issue in:title "${prefix}"`})).data.total_count;
+          const exists = (await github.rest.search.issuesAndPullRequests({q: `repo:${owner}/${repo} is:issue is:open in:title "${prefix}"`})).data.total_count;
           if (!exists) {
             filedPrefixes.add(prefix);
             const suite = parts[0];
