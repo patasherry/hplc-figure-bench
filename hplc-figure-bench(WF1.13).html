@@ -6823,7 +6823,7 @@ function bufMismatch(r, c){ if (!c.mBufA || !c.mBufB || isSec(r)) return '';
   return bad.length ? bad.map(k => `${k === 'nacl' ? 'NaCl' : k === 'kcl' ? 'KCl' : k} (A ${a[k]}, B ${b[k]} mM)`).join(', ') : ''; }
 function runNeeds(r){ const c = runCond(r), n = [], pr = poolRows(r); if (!hasTxt(r.path) && !(pr && pr.measured)) n.push('UV path for mg'); if (!c.mCol) n.push('column'); if (!c.mBufA) n.push('buffer'); if (!c.mFlow) n.push('flow rate'); if (!isSec(r) && !c.mGrad && !c.mBufB) n.push('elution'); { const bm = bufMismatch(r, c); if (bm) n.push(`buffer B check: ${bm}`); } return n; }
 let gapMemo = {k: '', n: 0};
-function methodGaps(){ const t = methodsText(); if (gapMemo.k !== t) gapMemo = {k: t, n: (t.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).length}; return gapMemo.n; }
+function methodGaps(){ const t = methodsText(); if (gapMemo.k !== t) { const m = (t.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []); gapMemo = {k: t, n: m.length, arr: [...new Set(t.split(/\n\n/).flatMap(par => (par.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).map(g => { const w = g.slice(1, -1).replace(/\s*not entered\s*/i, '').trim(); return w || (par.match(/^([^:(]+)/) || ['', 'a step'])[1].trim(); })))], rawArr: m}; } return gapMemo.arr || []; }
 function stepList(){
   const v = k => hasTxt(prep[k]), m = k => stepMeta(k), L = [];
   const cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
@@ -6849,8 +6849,8 @@ function stepList(){
   const ys = finalYields(), y = ys[0] || finalYield(), fin = FIN_KEYS.some(v) || ndSamples.some(n => n.stage === 'final') || !!m('final').date;
   const fw = !fin || !y ? '' : y.meas && y.loaded && y.mg != null && y.mg > y.loaded.mg*1.05 ? `${sig2(y.mg)} mg is more than was loaded, check` : y.purTyped ? 'Purity typed, add a gel of the last pool' : '';
   L.push({k: 'final', g: 'Results', t: 'Final sample', done: fin, warn: fw, s: fw ? fw : fin && y ? `${y.mg !== null ? sig2(y.mg) + ' mg' : 'unknown yield'}${y.perL != null ? `, ${sig2(y.perL)} mg per L` : ''}${y.meas ? '' : ', from the last pool'}` : ys.length > 1 ? `Latest pools: ${ys.map(q => `${q.poolMg != null ? sig2(q.poolMg) + ' mg' : 'unknown yield'} (${stepTitle(q.fin.r)})`).join(', ')}` : y ? `Latest pool: ${y.poolMg != null ? sig2(y.poolMg) + ' mg' : 'unknown yield'} after ${stepTitle(y.fin.r)}` : 'Concentration, storage, quality checks'});
-  const hasWf = figures().some(f => f.kind === 'workflow'), gaps = hasWf ? methodGaps() : 0;
-  L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, s: gaps ? `${gaps} detail${gaps === 1 ? '' : 's'} still needed for Methods text` : hasWf ? 'Workflow figure, summary, methods text' : 'Builds once a column is added'});
+  const hasWf = figures().some(f => f.kind === 'workflow'), gapArr = hasWf ? methodGaps() : [], gaps = gapArr.length;
+  L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, s: gaps ? (gapArr.length > 0 ? `Still needed for Methods text: ${gapArr.join(', ')}` : `${gaps} detail${gaps === 1 ? '' : 's'} still needed for Methods text`) : hasWf ? 'Workflow figure, summary, methods text' : 'Builds once a column is added'});
   L.forEach(x => { if (['transform', 'expr', 'lysis'].includes(x.k) && skipped(x.k)) Object.assign(x, {done: false, warn: '', skip: true, s: 'Skipped, left out of the figure and methods'}); });
   return L;
 }
