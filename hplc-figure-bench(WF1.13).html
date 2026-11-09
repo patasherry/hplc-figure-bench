@@ -4123,7 +4123,8 @@ function buildWorkflow(){
 }
 
 /* ---------- upstream steps: construct, expression and lysis, drawn before the first column ---------- */
-const PREP_DEF = {on: true, construct: true, expr: true, lysis: true, name: '', backbone: '', promoter: 'T7', resist: '', strain: '', medium: '', cultureL: '', od: '', inducer: '', temp: '', time: '', pellet: '', lysMethod: '', lysBuffer: '', clarify: '', lysVol: '', lysLanes: false, indKind: 'IPTG', gb: null,
+const PRIMER_DEF = {id: '', name: '', seq: '', fwd: true};
+const PREP_DEF = {on: true, construct: true, expr: true, lysis: true, parentConstructId: '', derivedConstructIds: [], primers: [], name: '', backbone: '', promoter: 'T7', resist: '', strain: '', medium: '', cultureL: '', od: '', inducer: '', temp: '', time: '', pellet: '', lysMethod: '', lysBuffer: '', clarify: '', lysVol: '', lysLanes: false, indKind: 'IPTG', gb: null,
   cleave: false, cleaveAfter: '', protease: '', ratio: '', clvTemp: '', clvTime: '', dialBuffer: '', mwco: '', dialVol: '', dialChanges: '', store: '',
   trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {}};
 let prep = JSON.parse(JSON.stringify(PREP_DEF));
