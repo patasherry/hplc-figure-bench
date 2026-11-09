@@ -1554,7 +1554,42 @@ function parseText(text){
   if (above) { let carry = ''; names = names.map((n,c) => { if (above[c]) carry = above[c]; return carry && carry !== n ? carry + ' ' + n : n; }); }
   const cols = []; for (let c=0;c<ncol;c++) cols.push((names && names[c]) || ('Column ' + (c+1)));
   let xc = 0, yc = 1;
-  if (ncol >= 3) { const rs = run.rows.slice(0, 6); if (rs.length > 3 && rs.every((r,i) => r[0] === rs[0][0] + i)) { xc = 1; yc = 2; } }
+  let bestScore = -1, bestX = -1, bestY = -1;
+  const isTime = s => /\b(time|min|sec|vol(?:ume)?|ml|retention)\b/i.test(s);
+  const isSig = s => /\b(uv|absorb(?:ance)?|sig(?:nal)?|mau|au|od|fluor(?:escence)?|intensity|resp(?:onse)?|\d{3}\s*nm)\b/i.test(s);
+  for (let i = 0; i < ncol - 1; i++) {
+    for (let j = i + 1; j < ncol; j++) {
+      let finiteCount = 0;
+      for (const r of run.rows) {
+        if (r[i] != null && r[j] != null && !isNaN(r[i]) && !isNaN(r[j])) finiteCount++;
+      }
+      if (finiteCount >= 2) {
+        let score = 0;
+        if (cols[i] && isTime(cols[i])) score += 10;
+        if (cols[j] && isSig(cols[j])) score += 10;
+        if (score > bestScore) {
+          bestScore = score;
+          bestX = i;
+          bestY = j;
+        }
+      }
+    }
+  }
+
+  if (bestScore > 0) {
+    xc = bestX;
+    yc = bestY;
+  } else if (ncol >= 3) {
+    const rs = run.rows.slice(0, 6);
+    if (rs.length > 3 && rs.every((r,idx) => r[0] != null && !isNaN(r[0]) && r[0] === rs[0][0] + idx)) {
+      xc = 1; yc = 2;
+    } else if (bestX >= 0 && bestY >= 0) {
+      xc = bestX; yc = bestY;
+    }
+  } else if (bestX >= 0 && bestY >= 0) {
+    xc = bestX;
+    yc = bestY;
+  }
   return {rows: run.rows, cols, xc, yc, skipped, retained, discarded};
 }
 
