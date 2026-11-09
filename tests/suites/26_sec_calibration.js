@@ -134,7 +134,7 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
       const head = pt[0];
       const veCol = head.findIndex(c => /^Ve|Center|Elution/i.test(c));
       const kavCol = head.findIndex(c => /^Kav/i.test(c));
-      const mwCol = head.findIndex(c => /^Est. Mass|Apparent MW/i.test(c));
+      const mwCol = head.findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
 
       T.check('kav_column_present', kavCol >= 0, `Headers: ${head.join(', ')}`);
       T.check('mw_column_present', mwCol >= 0, `Headers: ${head.join(', ')}`);
@@ -181,7 +181,7 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
       T.check(`${tag}.fit_from_2`, /Fit from 2 standards/i.test(fh), fh);
       await q.click('#intAuto'); await hq.wait(600);
       /* peak table: the outside peak has ~, the inside one does not */
-      const pt = await hq.peakTable(), head = pt[0] || [], veC = head.findIndex(c => /^Ve|Center|Elution/i.test(c)), mwC = head.findIndex(c => /^Est. Mass|Apparent MW/i.test(c));
+      const pt = await hq.peakTable(), head = pt[0] || [], veC = head.findIndex(c => /^Ve|Center|Elution/i.test(c)), mwC = head.findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
       const rowAt = v => pt.slice(1).find(r => T.near(num(r[veC]), v, 0.05)), rO = rowAt(12), rI = rowAt(15);
       T.check(`${tag}.table_outside_marked`, rO && /^~/.test(rO[mwC]) && T.near(num(rO[mwC]), outMw, 1), `12 mL row: ${JSON.stringify(rO)}; expected ~${outMw.toFixed(2)} kDa`);
       T.check(`${tag}.table_inside_unmarked`, rI && !/~/.test(rI[mwC]) && T.near(num(rI[mwC]), inMw, 1), `15 mL row: ${JSON.stringify(rI)}; expected ${inMw.toFixed(2)} kDa`);
@@ -246,7 +246,7 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     const head1 = pt1[0] || [];
     const veC1 = head1.findIndex(c => /^Ve|Center|Elution/i.test(c));
     const kavC1 = head1.findIndex(c => /^Kav/i.test(c));
-    const mwC1 = head1.findIndex(c => /^Est. Mass|Apparent MW/i.test(c));
+    const mwC1 = head1.findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
     const row0p5 = pt1.slice(1).find(r => T.near(num(r[veC1]), 0.5, 0.1));
     const row1p5 = pt1.slice(1).find(r => T.near(num(r[veC1]), 1.5, 0.1));
     T.check('s200i3_kav_column_present', kavC1 >= 0, `Kav header: ${head1.join(', ')}`);
@@ -295,7 +295,7 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     const head2 = pt2[0] || [];
     const veC2 = head2.findIndex(c => /^Ve|Center|Elution/i.test(c));
     const kavC2 = head2.findIndex(c => /^Kav/i.test(c));
-    const mwC2 = head2.findIndex(c => /^Est. Mass|Apparent MW/i.test(c));
+    const mwC2 = head2.findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
     const row80 = pt2.slice(1).find(r => T.near(num(r[veC2]), 80, 5));
     const row200 = pt2.slice(1).find(r => T.near(num(r[veC2]), 200, 10));
     T.check('hl26s75_kav_column_present', kavC2 >= 0, `Kav header: ${head2.join(', ')}`);

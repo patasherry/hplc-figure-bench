@@ -40,7 +40,7 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     await h.wait(500);
 
     const pt = await h.peakTable();
-    const mwCol = pt[0].findIndex(c => /^Est. Mass|Apparent MW/i.test(c));
+    const mwCol = pt[0].findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
     const veCol = pt[0].findIndex(c => /^Ve|Center|Elution/i.test(c));
     const sampleRows = pt.slice(1);
     let found = false;

@@ -81,7 +81,7 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
     if (pt.length >= 2) {
       const head = pt[0];
       const veCol = head.findIndex(c => /^Ve|Center|Elution/i.test(c));
-      const mwCol = head.findIndex(c => /^Est. Mass|Apparent MW/i.test(c));
+      const mwCol = head.findIndex(c => /^Apparent mass|Apparent MW/i.test(c));
       const sampleRows = pt.slice(1);
       for (let i = 0; i < sampleRows.length; i++) {
         const row = sampleRows[i], veVal = num(row[veCol]), mwVal = num(row[mwCol]);
