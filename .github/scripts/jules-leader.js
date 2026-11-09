@@ -174,7 +174,9 @@ module.exports = async ({github, context, core}) => {
      happens here because this is what races: the leader checks every 3 minutes and would otherwise start the job first.
      An issue the manager has handed back (ag-returned) stays with Jules, so a job can never bounce between the two. */
   let routedAg = false, agAvailable = AG_TAKES_APP;
-  if (key && AG_TAKES_APP) {
+  /* Not `key && ...`: Jules shuts down on 2026-12-31 and goes read-only on 11-11, and the key is removed then. Routing
+     must keep working without it, or every job would pile up on the queue label with nobody designated to take it. */
+  if (AG_TAKES_APP) {
     try {
       const tcs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: 17, per_page: 100});
       const hb = [...tcs].reverse().find(c => c.body.startsWith('<!-- pc-heartbeat '));
@@ -184,15 +186,18 @@ module.exports = async ({github, context, core}) => {
       const csMatch = cs && cs.body.match(/<!-- cloud-state (\{.*?\}) -->/);
       const cloudSt = csMatch ? JSON.parse(csMatch[1]) : {};
       const agApiPaused = Boolean(cloudSt.ag_off_until && cloudSt.ag_off_until > Date.now() / 1000);
-      if (!pcUp && agApiPaused) { agAvailable = false; say('PC is off and Antigravity API is paused: keeping app-changing jobs with Jules'); }
+      if (!pcUp && agApiPaused) { agAvailable = false; say(`PC is off and Antigravity API is paused: leaving app-changing jobs ${key ? 'with Jules' : 'in the queue'}`); }
     } catch (e) { say(`could not check #17 status: ${e.message}`); }
   }
-  if (key && agAvailable) {
+  if (agAvailable) {
     for (const i of await issues(L.queue)) {
-      if (LIGHT(i) || labels(i).some(l => l === 'ag-returned' || l === L.run || l === 'for-antigravity')) continue;
+      /* The LIGHT exemption exists only so Jules could keep the test and docs jobs. With no key there is no Jules, so
+         those have no owner either and go the same way: the agy CLI and the Antigravity API both serve this label. */
+      if ((key && LIGHT(i)) || labels(i).some(l => l === 'ag-returned' || l === L.run || l === 'for-antigravity')) continue;
       await setLabels(i.number, ['for-antigravity'], [L.queue]);
       await github.rest.issues.createComment({owner, repo, issue_number: i.number,
-        body: 'Routed to the Google Antigravity agent, which takes the jobs that change the app while Jules keeps the light ones. If Antigravity cannot take it, the local manager hands it back here.'});
+        body: key ? 'Routed to the Google Antigravity agent, which takes the jobs that change the app while Jules keeps the light ones. If Antigravity cannot take it, the local manager hands it back here.'
+                  : 'Routed to the Google Antigravity agent, which takes the coding work. If it cannot take this one, the local manager hands it back to the queue, where the Antigravity CLI and Codex pick jobs up on the owner\'s PC.'});
       say(`#${i.number}: routed to Antigravity (app-changing)`);
       routedAg = true;
     }
