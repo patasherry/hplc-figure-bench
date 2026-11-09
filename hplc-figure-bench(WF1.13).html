@@ -5535,7 +5535,6 @@ function sumRows(){
       }
       x.stepY = calcPAmt > 0 && a > 0 ? 100*a/calcPAmt : null; x.fromKept = !!x.stepY && pk;
       x.loadedAmt = pk ? calcPAmt : null;
-      x.loadedAmt = pKept ? pAmt : null;
       if (a > 0) { const k = kept(x); prevMap.set(x.r, {amt: k > 0 ? k : a, kept: k > 0}); }
     });
     /* each branch end against the amount where its branch split off (what was kept there, as for the step yield), not only against step 1 */
