@@ -310,7 +310,8 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
     await p.locator('#ndList select[data-ndk="runId"]').first().selectOption({index: 1}); await h.wait(200);
     await setField('#ndList [data-ndr="ndVol"]', '1');
     const t = await table(), m = await methods(), s = (m.match(/The final pool held .*?\.(?=\s[A-Z]|\s*$)/s) || [''])[0];
-    T.check('p6.a205_explicit_mass', t.rows.length === 1 && num(t.rows[0][col(t, /^Protein \(mg\)/)]) === 4, JSON.stringify(t.rows));
+    T.check('p6.a205_explicit_mass', t.rows.length === 1 && num(t.rows[0][col(t, /^NanoDrop mg$/)]) === 4 && Math.abs(num(t.rows[0][col(t, /^Protein \(mg\)/)]) - 7.4) < 0.05, JSON.stringify(t.rows));
+    /* the Protein (mg) column is the UV-area estimate when the reading is of a concentrated step (1.479 AU*mL / (1 x 0.2 cm) = 7.40 mg at the default 2 mm path); the instrument's 4 mg is the NanoDrop mg column, as the Methods text also says */
     T.check('p6.a205_explicit_amount', /held 4\.00 mg in 1\.0 mL \(4\.00 mg\/mL\)/.test(s), s);
     T.check('p6.a205_explicit_method', /by NanoDrop A205\b/.test(s), s);
     T.check('p6.a205_explicit_no_coefficient', !!s && !/A280|coefficient/.test(s), s);
