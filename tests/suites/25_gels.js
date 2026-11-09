@@ -402,4 +402,32 @@ await T.t('faint-band-optical-density', async () => {
   }
 });
 
+
+await T.t('lane-labels-instruction', async () => {
+  const a = await open(), p = a.p;
+  const { H } = require('../lib/harness');
+  const h = H(p);
+  try {
+    await h.newProject('Test Project');
+    await p.setInputFiles('#gelFile', src('gel'));
+    await p.waitForTimeout(2500);
+    const text = await p.innerText('#ssWhat');
+    T.check('lane-labels-instruction.text', text.includes('Select lane labels in the sidebar'), 'instruction text: ' + text);
+  } finally { await a.close(); }
+});
+
+
+await T.t('lane-labels-instruction', async () => {
+  const a = await open(), p = a.p;
+  const { H } = require('../lib/harness');
+  const h = H(p);
+  try {
+    await h.newProject('Test Project');
+    await p.setInputFiles('#gelFile', src('gel'));
+    await p.waitForTimeout(2500);
+    const text = await p.innerText('#ssWhat');
+    T.check('lane-labels-instruction.text', text.includes('Select lane labels in the sidebar'), 'instruction text: ' + text);
+  } finally { await a.close(); }
+});
+
 T.done();})();
