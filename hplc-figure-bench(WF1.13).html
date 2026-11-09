@@ -659,6 +659,18 @@ button,input,select,textarea{font-family:inherit}
       <details class="sub" data-sub="pcon" open><summary>Construct</summary>
         <div class="btns"><button type="button" class="btn" id="gbPick">Load GenBank file</button><button type="button" class="btn" id="gbPaste">Paste GenBank text</button><button type="button" class="btn quiet" id="gbClear" hidden>Draw from the Protein section</button>
           <input type="file" id="gbFile" accept=".gb,.gbk,.genbank,.ape,.dna,.txt" hidden></div>
+        <div class="row" style="margin-top:6px">
+          <label class="f">Cloning method<select id="pr-cMethod" data-prep="cMethod"><option value="plasmid">Plasmid / Custom</option><option value="digest">Restriction digest</option><option value="overlap">Overlap extension / Gibson</option><option value="recomb">Recombination (Gateway, etc.)</option></select></label>
+        </div>
+        <div data-cmethod="digest" style="display:none; margin-top:6px" class="row">
+          <label class="f">Digest enzymes<input type="text" id="pr-cEnz" data-prep="cEnz" placeholder="e.g. NdeI, XhoI" spellcheck="false"></label>
+        </div>
+        <div data-cmethod="overlap" style="display:none; margin-top:6px" class="row">
+          <label class="f">Overlap length (bp)<input type="number" id="pr-cOverlap" data-prep="cOverlap" min="1"></label>
+        </div>
+        <div data-cmethod="recomb" style="display:none; margin-top:6px" class="row">
+          <label class="f">Recombination sites<input type="text" id="pr-cRecomb" data-prep="cRecomb" placeholder="e.g. attB1/B2" spellcheck="false"></label>
+        </div>
         <div id="gbPasteBox" hidden><textarea id="gbText" rows="6" spellcheck="false" placeholder="Paste GenBank text here (LOCUS … ORIGIN … //)" style="width:100%"></textarea><div class="btns"><button type="button" class="btn" id="gbPasteGo">Use pasted text</button></div></div>
         <p class="hint" id="gbStatus"></p>
         <div class="row" id="prNames">
@@ -6078,6 +6090,10 @@ function renderPrep(){
   const pn = $('#prepPanel'); if (!pn) return;
   pn.querySelectorAll('[data-prep]').forEach(el => { if (el === document.activeElement) return; const v = prep[el.dataset.prep]; if (el.type === 'checkbox') el.checked = !!v; else if (el.value !== String(v == null ? '' : v)) el.value = v == null ? '' : v; });
   pn.querySelectorAll('details.sub').forEach(el => el.classList.toggle('off', el.dataset.sub === 'pclv' ? !prep.cleave : !prep.on));
+  { const sel = $('#pr-cMethod'); if (sel) {
+      if (sel !== document.activeElement) sel.value = prep.cMethod || 'plasmid';
+      pn.querySelectorAll('[data-cmethod]').forEach(el => { el.hidden = el.dataset.cmethod !== (prep.cMethod || 'plasmid'); el.style.display = el.hidden ? 'none' : 'flex'; });
+  } }
   { const t = $('#pr-trPlasmid'); if (t) t.placeholder = String(prep.name || '').trim() || (prep.gb && prep.gb.name) || 'e.g. pET28-SUMO-NADK'; }
   $('#prSeqOnly').hidden = !!prep.gb; $('#prIndAmt').hidden = prep.indKind === 'auto';
   { const sel = $('#pr-cleaveAfter'), wf = runs.filter(r => r.inWf), cid = cleaveRunId(), h = wf.map((r, k) => `<option value="${r.id}"${r.id === cid ? ' selected' : ''}>${k + 1}. ${esc(stepTitle(r))}</option>`).join('') || '<option value="">No runs yet</option>';
@@ -6892,7 +6908,7 @@ function stepList(){
   return L;
 }
 const STEP_LANE = k => k === 'expr' || k === 'lysis' || k === 'cleave' ? k : k.startsWith('run:') || k.startsWith('man:') ? k.slice(4) : null;
-const STEP_WHAT = {construct: 'Paste the protein sequence, or load the plasmid\'s GenBank file to draw the construct.',
+const STEP_WHAT = {construct: 'Construct records. Paste the protein sequence, or load the plasmid\'s GenBank file to draw the construct.',
   transform: 'Plasmid, strain and selection, or the glycerol stock you started from.',
   expr: 'Starter culture, induction and harvest. An expression gel (U, I, S, P) is optional.',
   lysis: 'Lysis method, buffer, additives and clarification.',
@@ -6977,7 +6993,7 @@ const NI_A_AK = '50 mM HEPES pH 7.6, 350 mM NaCl, 0.5 mM TCEP, 10 mM imidazole',
 const NI_A_U = '50 mM HEPES pH 8.0, 350 mM NaCl, 0.5 mM TCEP, 10 mM imidazole', NI_B_U = '50 mM HEPES pH 8.0, 350 mM NaCl, 0.5 mM TCEP, 300 mM imidazole';
 const NI_A_GS = '60 mM HEPES pH 7.6, 300 mM NaCl, 50 mM KCl, 10 mM MgCl2, 25 mM imidazole, 0.1 mM TCEP', NI_B_GS = '60 mM HEPES pH 7.6, 50 mM NaCl, 50 mM KCl, 10 mM MgCl2, 250 mM imidazole';
 const LABQ = {
-  transform: [
+transform: [
     {n: 'Heat shock, BL21(DE3), kanamycin', src: 'glnA/glnE, HsGS', set: {strain: 'BL21(DE3)', trMethod: 'heat shock (33 µL cells + 1 µL plasmid, 20 min on ice, 42 °C for 30 to 60 s, 2 min on ice, 350 µL SOC, 1 h at 37 °C)', trSel: 'kanamycin (1X from 1000X stock)'}},
     {n: 'Heat shock, BL21(DE3), carbenicillin', src: 'glnA/glnE', set: {strain: 'BL21(DE3)', trMethod: 'heat shock (33 µL cells + 1 µL plasmid, 20 min on ice, 42 °C for 30 to 60 s, 2 min on ice, 350 µL SOC, 1 h at 37 °C)', trSel: 'carbenicillin (1X from 1000X stock)'}},
     {n: 'From a glycerol stock', src: 'AK/PPase, ArgH, HsGS', set: {strain: 'BL21(DE3)', trMethod: 'from a glycerol stock'}}],
@@ -7024,8 +7040,8 @@ function quickTarget(kind){
   if (kind === 'run') return runs.find(r => r.id === id) || null;
   if (kind === 'man') return (prep.manual || []).find(m => m.id === id) || null;
   if (kind === 'btw') { prep.btw = prep.btw || {}; return prep.btw[id] || (prep.btw[id] = {how: 'conc'}); }
-  return ['transform', 'expr', 'lysis', 'cleave', 'final'].includes(kind) ? prep : null; }
-const QUICK_KEYS = {transform: ['strain', 'trMethod', 'trSel', 'trPlasmid', 'trStock'], expr: ['strain', 'medium', 'cultureL', 'indKind', 'inducer', 'od', 'temp', 'time', 'exStarter', 'exHarvest', 'exStore'], lysis: ['lysMethod', 'lysBuffer', 'lysAdd', 'lysSet', 'clarify'],
+  return ['construct', 'transform', 'expr', 'lysis', 'cleave', 'final'].includes(kind) ? prep : null; }
+const QUICK_KEYS = {construct: ['name', 'gb', 'cMethod', 'cEnz', 'cOverlap', 'cRecomb'], transform: ['strain', 'trMethod', 'trSel', 'trPlasmid', 'trStock'], expr: ['strain', 'medium', 'cultureL', 'indKind', 'inducer', 'od', 'temp', 'time', 'exStarter', 'exHarvest', 'exStore'], lysis: ['lysMethod', 'lysBuffer', 'lysAdd', 'lysSet', 'clarify'],
   cleave: ['protease', 'ratio', 'dialBuffer', 'clvTemp', 'clvTime', 'mwco'], run: ['mCol', 'mCV', 'mFlow', 'mTemp', 'mBufA', 'mBufB', 'mWash', 'mGrad', 'mLoad', 'mFrac', 'mInst', 'mOther'],
   man: ['kind', 'name', 'resin', 'buffer', 'wash', 'elution', 'note'], btw: ['how', 'device', 'mwco', 'note'], final: ['finBuffer', 'store', 'qcPurity']};
 /* your own quick fills, kept with the settings in this browser and in the project */
@@ -7061,7 +7077,7 @@ $('#ssQuick').addEventListener('click', e => { const b = e.target.closest('butto
   if (b.dataset.qdel) { opt.myQuick = (opt.myQuick || []).filter(x => x.id !== b.dataset.qdel); opt.myQuickDel = (Array.isArray(opt.myQuickDel) ? opt.myQuickDel : []).concat([b.dataset.qdel]); saveOpt(); if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1; render(); return; }
   if (b.dataset.qsave) { const tgt = quickTarget(kind); if (!tgt) return; const set = {}; (QUICK_KEYS[kind] || []).forEach(k => { if (String(tgt[k] ?? '').trim()) set[k] = tgt[k]; });
     if (!Object.keys(set).length) { toast('Fill in some fields first, then save them as a quick fill'); return; }
-    const nm = (kind === 'expr' ? [set.medium, set.temp ? set.temp + ' °C' : ''] : kind === 'run' ? [set.mCol, set.mFlow ? set.mFlow + ' mL/min' : ''] : kind === 'man' ? [set.name || MAN_NAME[set.kind]] : kind === 'lysis' ? [set.lysMethod, set.lysBuffer] : [Object.values(set)[0]])
+    const nm = (kind === 'construct' ? [set.cMethod || 'Construct'] : kind === 'expr' ? [set.medium, set.temp ? set.temp + ' °C' : ''] : kind === 'run' ? [set.mCol, set.mFlow ? set.mFlow + ' mL/min' : ''] : kind === 'man' ? [set.name || MAN_NAME[set.kind]] : kind === 'lysis' ? [set.lysMethod, set.lysBuffer] : [Object.values(set)[0]])
       .filter(Boolean).join(', ').slice(0, 48) || 'My quick fill';
     opt.myQuick = (Array.isArray(opt.myQuick) ? opt.myQuick : []).concat([{id: 'q' + Date.now().toString(36), k: kind, n: nm, set}]); saveOpt(); render(); toast(`Saved "${nm}" as a quick fill`); } });
 /* a step that others follow hands them on to the step before it */
