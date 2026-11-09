@@ -468,8 +468,10 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
 .spec span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(60ch,100%)}
 .spec #spec2.warn{color:var(--warn);white-space:normal}
 .note{font-size:12.5px;color:var(--muted);border:1px solid var(--line);background:var(--well);border-radius:var(--r);padding:8px 11px;line-height:1.45}
-.toast{pointer-events:none;position:fixed;top:16px;bottom:auto;left:50%;transform:translateX(-50%);display:grid;justify-items:center;gap:6px;z-index:10;width:max-content;max-width:min(560px,calc(100% - 32px))}
-.toast .pill{background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;box-shadow:var(--shadow);line-height:1.4;text-align:center}
+.toast{pointer-events:none;position:fixed;top:var(--tt,56px);bottom:auto;left:50%;transform:translateX(-50%);display:grid;justify-items:center;gap:6px;z-index:10;width:max-content;max-width:min(560px,calc(100% - 32px))}
+.toast .pill{background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;box-shadow:var(--shadow);line-height:1.4;text-align:center;pointer-events:auto;cursor:pointer}
+.toast .pill::after{content:"\00d7";margin-left:10px;font-size:16px;line-height:1;opacity:.75}
+.toast .pill:focus-visible{outline:2px solid var(--bg);outline-offset:2px}
 @media (max-width:880px){
   .app{grid-template-columns:minmax(0,1fr);gap:16px}
   .panel{position:static;max-height:none;overflow:visible;background:var(--panel)}
@@ -477,7 +479,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
   .stage > *{order:-1;min-width:0}
   .stage > .intp{order:1}
   .toast .pill{border-radius:12px}
-  .toast.overlap{top:72px}
+  .toast.overlap{top:max(72px,var(--tt,72px))}
   /* on a phone the figure keeps its printed size and scrolls sideways, instead of shrinking past legibility */
   .paper{padding:10px;min-height:0;overflow-x:auto;justify-content:flex-start}
   .canvas-body{padding:10px}
@@ -7276,9 +7278,11 @@ $('#copySvg').addEventListener('click', () => {
 });
 /* each message is its own pill at the bottom of the window, newest last, gone after a few seconds */
 function toast(msg){ const box = $('#toast'); if ([...box.children].some(c => c.textContent === msg)) return;
-  const pill = document.createElement('div'); pill.className = 'pill'; pill.textContent = msg; box.appendChild(pill); box.hidden = false;
+  const pill = document.createElement('div'); pill.className = 'pill'; pill.textContent = msg; pill.tabIndex = 0; pill.setAttribute('role', 'button'); pill.title = 'Dismiss';
+  const gone = () => { pill.remove(); if (!box.children.length) { box.hidden = true; box.classList.remove('overlap'); } }; pill.addEventListener('click', gone); pill.addEventListener('keydown', e => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); gone(); } });
+  const hd = document.querySelector('header.top'); box.style.setProperty('--tt', Math.max(16, hd ? Math.round(hd.getBoundingClientRect().bottom) + 8 : 0) + 'px'); box.appendChild(pill); box.hidden = false;
   while (box.children.length > 3) box.firstChild.remove();
-  setTimeout(() => { pill.remove(); if (!box.children.length) { box.hidden = true; box.classList.remove('overlap'); } }, Math.min(6000, 2600 + msg.length*25)); }
+  setTimeout(gone, Math.min(6000, 2600 + msg.length*25)); }
 
 /* ---------- example data ---------- */
 function exampleTraces(){
