@@ -2005,7 +2005,7 @@ function secCalFor(r){
 }
 /* log10(MW) against Kav (or against elution volume when V0 and Vt are not set), least squares over the standards with a volume */
 function secFit(cal){
-  if (!cal) return null; const v0 = numOr(cal.v0, NaN), vt = numOr(cal.vt, NaN); if (!opt.secStds) return {cal, n: 0, useKav: false, v0, vt, off: true}; const useKav = v0 > 0 && vt > v0;
+  if (!cal) return null; const v0 = numOr(cal.v0, NaN), vt = numOr(cal.vt, NaN); if (!opt.secStds && !arguments[1]) return {cal, n: 0, useKav: false, v0, vt, off: true}; const useKav = v0 > 0 && vt > v0;
   const st = (cal.stds || []).filter(q => !q.off && +q.kda > 0 && q.ve !== '' && isFinite(+q.ve));
   const pts = st.map(q => ({name: q.name, kda: +q.kda, ve: +q.ve, x: useKav ? (+q.ve - v0)/(vt - v0) : +q.ve}));
   if (st.length < 2) return {cal, n: st.length, useKav, v0, vt, pts};
@@ -2802,9 +2802,9 @@ function buildRunPlainSVG(run, ov){
     /* largest peaks are labelled first; a small peak or one whose label would collide with a bigger one's stays unlabelled */
     iRows.slice().sort((p, q) => (q.area || 0) - (p.area || 0)).forEach(rw => { if (rw.apex < xlo || rw.apex > xhi) return; if (aTop > 0 && !((rw.area || 0) >= 0.03*aTop)) return;
       /* the V₀ line already names the void: no second label on the peak */
-      if (showVoid && rw.sec && rw.sec.void && (labMode === 'mw' || labMode === 'olig')) return;
+      if (showVoid && rw.sec && rw.sec.void && (labMode === 'mw' || labMode === 'olig' || o.secLabel === 'mw' || o.secLabel === 'olig')) return;
       if (labMode === 'mg') { const top = Math.max(...iRows.map(q => q.mg || 0)); if (!(rw.mg > 0) || rw.mg < 0.05*top) return; }
-      const t = labMode === 'mg' ? (rw.mg > 0 ? (isSec(run) ? `${fmt(rw.apex, 2)} ${xUnit(run)}, ${sig2(rw.mg)} mg` : `${sig2(rw.mg)} mg`) : rw.name) : labMode === 'area' ? `${fmtAuto(rw.area)} mAU·${xUnit(run)}` : labMode === 've' ? `${fmt(rw.apex, 2)} ${xUnit(run)}` : (labMode === 'mw' || labMode === 'olig') ? (secLabel(rw.sec, labMode) || `${fmt(rw.apex, 2)} ${xUnit(run)}`) : rw.name, X = px(rw.apex), w = t.length*fs*0.45;
+      const oSecLabel = o.secLabel || 'mw'; const labForce = isSec(run) && ['mw', 'olig'].includes(oSecLabel) ? oSecLabel : labMode; const tmpCal = secCals().find(c => c.id === (run.secCal || 'default')) || secCalFor(run); const useForce = tmpCal && Array.isArray(tmpCal.stds) && tmpCal.stds.filter(q => !q.off && +q.kda > 0 && q.ve !== '' && isFinite(+q.ve)).length >= 2; const infoForce = labForce !== labMode ? secInfo(useForce ? secFit(tmpCal, true) : null, rw.apex) : rw.sec; const lblForce = secLabel(infoForce, labForce); const t = labForce === 'mg' ? (rw.mg > 0 ? (isSec(run) ? `${fmt(rw.apex, 2)} ${xUnit(run)}, ${sig2(rw.mg)} mg` : `${sig2(rw.mg)} mg`) : rw.name) : labForce === 'area' ? `${fmtAuto(rw.area)} mAU·${xUnit(run)}` : labForce === 've' ? `${fmt(rw.apex, 2)} ${xUnit(run)}` : (labForce === 'mw' || labForce === 'olig') ? (lblForce || `${fmt(rw.apex, 2)} ${xUnit(run)}`) : rw.name, X = px(rw.apex), w = t.length*fs*0.45;
       /* centered over the apex, or beside it when a neighbouring peak's flank would run through the text */
       const k = (xhi - xlo)/(R - L), hiIn = (a, b) => { let m = -Infinity; for (let i = Math.max(0, lowerBound(uv.xs, a)); i < uv.xs.length && uv.xs[i] <= b; i++) m = Math.max(m, uv.ys[i]); return m; };
       const yTr = uv.ys[nearestIdx(uv.xs, rw.apex)], base = Math.max(rw.apexY, yTr);

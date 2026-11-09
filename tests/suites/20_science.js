@@ -287,6 +287,73 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
       for (let i = 0; i < n; i++) { await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true)); await p.locator('#ndList select[data-ndk="runId"]').nth(i).selectOption({index: 1}); await h.wait(200); } }
     await p.locator('#ndList [data-ndr="ndVol"]').first().fill('2'); await p.locator('#ndList [data-ndr="ndVol"]').first().dispatchEvent('change'); await h.wait(300);
     const m = await methods(); return (m.match(/The final pool held .*?\.(?=\s[A-Z]|\s*$)/s) || [''])[0]; };
+  await T.t('sec.peak_label_respects_mw', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Respects MW');
+    await h.addRun(path.join(DATA, 'chrom', 'sec_Sup6_basic_unicorn7.zip'));
+    await h.step(((await h.timeline()).find(x => /Size exclusion/.test(x.t)) || {}).k);
+
+    // Auto-detect peaks
+    await p.click('#intAuto');
+    await h.wait(400);
+
+    // We must interact strictly through the UI/DOM without __HFB to satisfy Evidence Rule
+    await p.evaluate(() => {
+        const pan = document.getElementById('secPanel');
+        if (pan) pan.classList.remove('collapsed');
+    });
+    await h.wait(200);
+
+    // Explicitly toggle Standard curve checkbox ON
+    await p.evaluate(() => {
+        const checkbox = document.querySelector('#o-secStds');
+        if (checkbox && !checkbox.checked) {
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    await h.wait(200);
+
+    // Create a generic test standard calibration points to have a formula
+    await p.evaluate(() => {
+        const v0 = document.getElementById('sV0');
+        if (v0) { v0.value = '7'; v0.dispatchEvent(new Event('input', {bubbles: true})); }
+
+        const vt = document.getElementById('sVt');
+        if (vt) { vt.value = '24'; vt.dispatchEvent(new Event('input', {bubbles: true})); }
+
+        const kdaInp = document.querySelector('#secStds [data-k="kda"]');
+        if (kdaInp) { kdaInp.value = '66'; kdaInp.dispatchEvent(new Event('input', {bubbles: true})); }
+
+        const veInp = document.querySelector('#secStds [data-k="ve"]');
+        if (veInp) { veInp.value = '15.3'; veInp.dispatchEvent(new Event('input', {bubbles: true})); }
+    });
+    await h.wait(400);
+
+    // Ensure secLabel is set to Apparent Size while standards are ON
+    await p.evaluate(() => {
+        const sl = document.getElementById('o-secLabel');
+        if (sl) {
+           sl.value = 'mw';
+           sl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    await h.wait(400);
+
+    // Toggle standards OFF but keep MW setting on
+    await p.evaluate(() => {
+        const checkbox = document.querySelector('#o-secStds');
+        if (checkbox && checkbox.checked) {
+            checkbox.checked = false;
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    });
+    await h.wait(400);
+
+    const svgTexts = await h.svgTexts();
+    const mwLabels = svgTexts.filter(t => t.t.includes('kDa') || t.t.includes('~'));
+    T.check('sec.peak_label_mw_rendered', mwLabels.length > 0, `Expected peak labels to contain kDa or ~, found: ${svgTexts.map(t=>t.t).join(', ')}`);
+  });
   await T.t('p6_a205', async () => { const s = await poolNd('A205 provenance', F.a205, false), c = TRUTH['nd_a205.csv'].mean, want = `held ${(c*2).toFixed(2)} mg in 2.0 mL (${c.toFixed(2)} mg/mL)`;
     /* guards: the amount is the mean of the instrument's A205 concentrations times the pool volume (1.22 mg/mL × 2 mL = 2.44 mg) */
     T.check('p6.a205_amount', s.includes(want), `expected "${want}": ${s}`);
