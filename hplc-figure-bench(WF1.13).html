@@ -5711,7 +5711,24 @@ async function addGelFiles(files){
   if (last) { cur = last.id; renderList(); syncControls(); render(); toast(last.autoCropped ? `Gel added and cropped to ${last.nLanes} lanes. Type your lane labels to set the count, then detect the ladder.` : 'Gel added. Trim it to the lanes, then mark the ladder.'); }
   if (bad.length) toast(`Could not open ${bad.join(', ')}. Try exporting the gel as PNG or JPEG.`);
 }
+/* processTrace sorts a trace whose X axis goes down; say so, and tell a wholly reversed export from one that resets, without changing the source rows */
+function axisOrderDiag(parsed){
+  const xc = parsed.xc ?? 0, yc = parsed.yc ?? 1, axis = parsed.cols[xc] || 'X axis', lines = []; let n = 0, desc = 0, prev = null;
+  parsed.rows.forEach((r, i) => { const x = r[xc], y = r[yc]; if (x == null || y == null || !isFinite(x) || !isFinite(y)) return; n++; if (prev != null && x < prev) { desc++; if (parsed.retained && lines.length < 3) lines.push(parsed.retained.start + i); } prev = x; });
+  if (!desc) return null;
+  const all = desc === n - 1, tr = `${desc} descending transition${desc > 1 ? 's' : ''}`, at = lines.length ? ` (at line${lines.length > 1 ? 's' : ''} ${lines.join(', ')}${desc > lines.length ? ', …' : ''})` : '';
+  return {axis, transitions: desc, points: n, descending: all, lines,
+    summary: all ? `${axis} runs entirely in descending order; plotted series was sorted` : `${axis} has ${tr} (reset or discontinuous segments); plotted series was sorted`,
+    msg: all ? `The selected X axis, ${axis}, decreases from each of its ${n} points to the next (${tr}): the export runs from high to low. The plotted series was sorted by ${axis} in ascending order; the source rows are kept as imported.`
+      : `The selected X axis, ${axis}, goes down ${desc === 1 ? 'once' : desc + ' times'}${at} (${tr}), so the export has reset or discontinuous segments. The plotted series was sorted by ${axis} in ascending order, which joins the segments into one curve; the source rows are kept as imported. Check that the file holds a single acquisition before integrating or labelling peaks.`};
+}
 function genericDiag(srcName, nm, parsed){
+  const d = genericBlockDiag(srcName, nm, parsed), o = axisOrderDiag(parsed);
+  if (!o) return d;
+  if (!d) return {source: srcName, kind: 'generic', reordered: o, summary: o.summary, msg: o.msg};
+  return Object.assign(d, {reordered: o, summary: `${d.summary}; ${o.summary}`, msg: `${d.msg} ${o.msg}`});
+}
+function genericBlockDiag(srcName, nm, parsed){
   if (parsed.discarded && parsed.discarded.length) {
     const dsc = parsed.discarded, oCount = dsc.reduce((s, b) => s + b.count, 0);
     const oRanges = dsc.map(b => b.start === b.end ? `line ${b.start}` : `lines ${b.start}–${b.end}`).join(', ');
