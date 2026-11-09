@@ -1556,6 +1556,28 @@ function parseText(text){
   const cols = []; for (let c=0;c<ncol;c++) cols.push((names && names[c]) || ('Column ' + (c+1)));
   let xc = 0, yc = 1;
   if (ncol >= 3) { const rs = run.rows.slice(0, 6); if (rs.length > 3 && rs.every((r,i) => r[0] === rs[0][0] + i)) { xc = 1; yc = 2; } }
+  if (names && cols.length >= 2) {
+    let bestX = -1, bestY = -1, maxScore = -1;
+    for (let x = 0; x < cols.length; x++) {
+      const isX = /\b(time|min|sec|vol(?:ume)?|ml|retention)\b/i.test(cols[x]);
+      for (let y = 0; y < cols.length; y++) {
+        if (x === y) continue;
+        const isY = /\b(uv|absorb(?:ance)?|sig(?:nal)?|mau|au|od|fluor(?:escence)?|intensity|resp(?:onse)?|\d{3}\s*nm)\b/i.test(cols[y]);
+        let finitePairs = 0;
+        for (const r of run.rows) {
+          if (!isNaN(r[x]) && !isNaN(r[y])) finitePairs++;
+          if (finitePairs >= 3) break;
+        }
+        if (finitePairs < 3) continue;
+        let score = (isX ? 2 : 0) + (isY ? 2 : 0);
+        if (score > maxScore) { maxScore = score; bestX = x; bestY = y; }
+        else if (score === maxScore && score > 0) {
+          if (bestX === -1 || x < bestX || (x === bestX && y < bestY)) { bestX = x; bestY = y; }
+        }
+      }
+    }
+    if (bestX !== -1 && bestY !== -1 && maxScore > 0) { xc = bestX; yc = bestY; }
+  }
   return {rows: run.rows, cols, xc, yc, skipped, retained, discarded};
 }
 

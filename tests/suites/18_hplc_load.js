@@ -38,6 +38,29 @@ const IMAC = require('../data/gen_imac_missing');
     }
   });
 
+    await T.t('hplc_export_leading_id', async () => {
+    await p.reload();
+    await h.wait(500);
+    await h.newProject('leading id');
+    const content = "Sample ID,Time (min),UV 280 (mAU)\n" +
+      "blank,0.0,0.0\nblank,1.0,0.5\nblank,2.0,1.0\n";
+    await p.setInputFiles('#file', {name: 'leading_id.csv', mimeType: 'text/csv', buffer: Buffer.from(content)});
+    await h.wait(1000);
+
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#projSave')]);
+    const fPath = path.join(__dirname, '..', 'results', 'leading_id_proj.json');
+    await dl.saveAs(fPath);
+    const d = JSON.parse(fs.readFileSync(fPath, 'utf8'));
+
+    const r = (d.traces || []).find(x => x.name === 'leading_id');
+    T.check('leading_id/has-trace', !!r, 'Project has the trace');
+    if (r) {
+      T.check('leading_id/cols', r.cols[r.xc] === 'Time (min)' && r.cols[r.yc] === 'UV 280 (mAU)', 'Headers parsed correctly: x=' + r.cols[r.xc] + ', y=' + r.cols[r.yc]);
+      T.check('leading_id/points', r.rows.length === 3, 'Correct number of points loaded: ' + r.rows.length);
+      T.check('leading_id/values', Math.abs(r.rows[0][r.xc]) < 0.001 && Math.abs(r.rows[2][r.yc] - 1.0) < 0.001, 'Correct first x and last y value: ' + r.rows[0][r.xc] + ', ' + r.rows[2][r.yc]);
+    }
+  });
+
   await T.t('zero_measurement_diagnostics', async () => {
     await p.reload();
     await h.wait(500);
