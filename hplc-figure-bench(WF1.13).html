@@ -1555,7 +1555,17 @@ function parseText(text){
   const cols = []; for (let c=0;c<ncol;c++) cols.push((names && names[c]) || ('Column ' + (c+1)));
   let xc = 0, yc = 1;
   if (ncol >= 3) { const rs = run.rows.slice(0, 6); if (rs.length > 3 && rs.every((r,i) => r[0] === rs[0][0] + i)) { xc = 1; yc = 2; } }
-  return {rows: run.rows, cols, xc, yc, skipped, retained, discarded};
+
+  let reordered = false, nDec = 0;
+  for (let i = 1; i < run.rows.length; i++) {
+    const x0 = run.rows[i-1][xc], x1 = run.rows[i][xc];
+    if (x0 != null && x1 != null && x1 < x0) {
+      reordered = true;
+      nDec++;
+    }
+  }
+  return {rows: run.rows, cols, xc, yc, skipped, retained, discarded, reordered, nDec};
+
 }
 
 /* ---------- parsing: ÄKTA / UNICORN ---------- */
@@ -5730,6 +5740,15 @@ function genericDiag(srcName, nm, parsed){
       source: srcName, kind: 'generic', skipped: parsed.skipped,
       summary: `${parsed.skipped} row${parsed.skipped > 1 ? 's' : ''} omitted (split by unreadable value)`,
       msg: `Left out ${parsed.skipped} row${parsed.skipped > 1 ? 's' : ''} of ${nm}: a row with an unreadable value splits the data, and only the longest unbroken block is kept. Check the file.`
+    };
+  }
+  if (parsed.reordered) {
+    const xName = (parsed.cols && parsed.cols[parsed.xc]) || 'x';
+    const isWhollyDescending = parsed.nDec === parsed.retained.count - 1;
+    return {
+      source: srcName, kind: 'generic', reordered: true,
+      summary: `Plotted series sorted (X axis ${xName} decreases ${parsed.nDec} time${parsed.nDec > 1 ? 's' : ''})`,
+      msg: `The selected X axis (${xName}) for ${nm} ${isWhollyDescending ? 'is wholly descending' : 'contains reset or discontinuous segments'} (${parsed.nDec} decreasing transition${parsed.nDec > 1 ? 's' : ''}). The plotted series was sorted.`
     };
   }
   return null;
