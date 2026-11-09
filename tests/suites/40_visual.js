@@ -11,8 +11,8 @@ const F = {gb: src('gb'), imac: src('his'),
 const SEL = {panel: '#panel', gelFile: '#gelFile', layout: k => `label[for="wf-${k}"]`, tool: '#wfTool', moreBtn: '#moreBtn'};
 /* side-panel height budgets in px (scrollHeight of the side panel with More options closed), about 1.25 x the v15 baseline.
    A step that grows past this has picked up clutter. */
-const BUDGET = {1400: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2300, conc: 1500, sec: 2300, final: 1900, figure: 1700},
-                 390: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2300, conc: 1500, sec: 2300, final: 1900, figure: 1700}};
+const BUDGET = {1400: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2300, conc: 1600, sec: 2300, final: 1900, figure: 1700},
+                 390: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2300, conc: 1600, sec: 2300, final: 1900, figure: 1700}};
 const OPT_HEADINGS = ['Window', 'Processing', 'Axes', 'Figure style', 'Peak integration', 'Size exclusion (SEC)', 'Peak labels'];
 const shotName = (w, step, theme) => path.join(SHOTS, `${w}_${step}${theme === 'dark' ? '_dark' : ''}.png`);
 

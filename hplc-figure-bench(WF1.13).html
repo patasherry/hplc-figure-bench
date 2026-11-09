@@ -822,6 +822,7 @@ button,input,select,textarea{font-family:inherit}
       <details class="sub" data-sub="rwin" open><summary>Window and fractions</summary>
       <div class="row">
         <label class="f">Margin around fractions (%)<input type="number" id="o-runPad" data-opt="runPad" min="0" step="5"></label>
+        <label class="f" title="Extra room to prevent labels from clipping">Safety margin (pt)<input type="number" id="o-min_safety_margin" data-opt="min_safety_margin" min="0" step="1"></label>
         <label class="f">Right axis
           <select id="o-sec" data-opt="sec">
             <option value="grad">Buffer B (%)</option>
@@ -1353,7 +1354,7 @@ button,input,select,textarea{font-family:inherit}
 (function(){
 "use strict";
 const $ = s => document.querySelector(s);
-const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'overlay', stack:60, flip:false, xmin:'', xmax:'', ymin:'', ymax:'',
+const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'overlay', stack:60, flip:false, xmin:'', xmax:'', ymin:'', ymax:'', min_safety_margin: 0,
   baseline:'none', smooth:0, normalize:false,
   showPeaks:true, peakRot:false, peakDec:2, prom:5, peakColor:'trace', peakMax:8,
   xlabel:'Retention time (min)', ylabel:'Absorbance (mAU)', showY:true, frame:false, ticksOut:true,
@@ -3808,7 +3809,7 @@ function composeRuns(list, cfg){
   if (widened) Wt = row ? pw.reduce((a, b) => a + b, 0) + (n-1)*gap : grid ? 2*Math.max(...pw) + gap : Math.max(...pw);
   if (widened && !row) pw.fill(grid ? (Wt - gap)/2 : Wt);
   /* the upstream band is as tall as its tallest panel's text at the width that panel really gets */
-  if (cfg.bandH) cfg = Object.assign({}, cfg, {bandH: Math.max(cfg.bandH, ...list.map((r, i) => { const c = buildRunSVG(r, {wPt: pw[i], hPt: chromH, nest: true}); return c.geo && c.geo.used ? c.geo.used + fs*0.8 : 0; }))});
+  if (cfg.bandH) cfg = Object.assign({}, cfg, {bandH: Math.max(cfg.bandH, ...list.map((r, i) => { const c = buildRunSVG(r, {wPt: pw[i], hPt: chromH, nest: true}); return c.geo && c.geo.used ? c.geo.used + (numOr(opt.min_safety_margin, 0) || fs*0.8) : 0; }))});
   /* panel titles wrap onto a second line instead of being cut off */
   /* if any title has to drop its shared prefix, all of them do, so the panels read alike */
   const roomOf = i => Math.max(4, Math.floor((pw[i] - (cfg.letters ? fs*1.6 : 0))/(fs*0.55))), anyShort = list.some((r, i) => stepTitle(r) === r.name && r.name.length > roomOf(i) && shortRunName(r) !== r.name);
@@ -4066,7 +4067,7 @@ function buildWorkflow(){
   /* side by side, the upstream steps stay in the same row when it still fits the width */
   if (opt.wfLayout === 'row') { const one = composeRuns(pre.concat(list), cfg); if (one.geo && (one.geo.W0 || one.geo.W) <= cfg.W*1.08) return yieldLine(one); }
   /* otherwise construct, expression and lysis form a band across the top, with an elbow arrow down into the first column */
-  const fs = fontSize(), bandH = fs*5;
+  const fs = fontSize(); const min_safety_margin = numOr(opt.min_safety_margin, 0) || fs*0.8; let bandH = fs*5; const tmp = composeRuns(pre, Object.assign({}, cfg, {layout: 'row', raw: true})); if (tmp.geo && tmp.geo.pos) { const hs = tmp.geo.pos.map((p, i) => { const c = buildRunPlainSVG(pre[i], {wPt: p.w, hPt: cfg.chromH, nest: true}); return c.geo && c.geo.used ? c.geo.used : 0; }); bandH = Math.max(...hs) + min_safety_margin; }
   const top = composeRuns(pre, Object.assign({}, cfg, {layout: 'row', raw: true, bandH}));
   if (!list.length) return composeRuns(pre, Object.assign({}, cfg, {layout: 'row', bandH}));
   const vgap = fs*3.4, bot = fit(list, Object.assign({}, cfg, {raw: true, letterOff: pre.length}), PAGE - top.geo.H - vgap);
@@ -5039,7 +5040,7 @@ function onGel(el){
   } else render();
 }
 /* numbers typed into a field are held to its min and max, and to a sensible ceiling, so a stray 1e6 cannot freeze the page */
-const SANE_MAX = {w: 40, h: 40, wfW: 40, wfH: 20, wfGelH: 20, fs: 72, lw: 10, stack: 1000, runPad: 500, gelGap: 400, peakMax: 200, peakDec: 4, prom: 100, intProm: 100, path: 100, eps: 100, tagTol: 10, knownTol: 25, knownMin: 50, bandSens: 60, gelSide: 90, tagKda: 500, protKda: 2000, sbValue: 1e6, nLanes: 30};
+const SANE_MAX = {w: 40, h: 40, wfW: 40, wfH: 20, wfGelH: 20, fs: 72, lw: 10, stack: 1000, runPad: 500, gelGap: 400, peakMax: 200, peakDec: 4, prom: 100, intProm: 100, path: 100, eps: 100, tagTol: 10, knownTol: 25, knownMin: 50, bandSens: 60, gelSide: 90, tagKda: 500, protKda: 2000, sbValue: 1e6, nLanes: 30, min_safety_margin: 500};
 function saneNum(el, v, key){
   if (v === '' || !isFinite(v)) return v === '' ? '' : null;
   const lo = el.min !== '' ? +el.min : -Infinity, hi = Math.min(el.max !== '' ? +el.max : Infinity, SANE_MAX[key] != null ? SANE_MAX[key] : Infinity);
@@ -6319,7 +6320,7 @@ $('#ndManual').addEventListener('click', () => { const r = curRun(); ndSamples.p
 /* the Concentrated step's figure: its NanoDrop spectra with the concentration, volume and mg; with no spectra, its panel */
 function buildConcFig(r){ const sp = ndFinalOf(r).filter(x => x.spec), info = ncLines(r).map(x => typeof x === 'string' ? x : x.t);
   if (sp.length) return buildNDSVG(sp, info);
-  const fs = fontSize(), W = Math.max(numOr(opt.w, 3.5), 3.4)*72; return composeRuns([ncObj(r)], {layout: 'row', W, chromH: numOr(opt.wfH, 2.2)*72, titles: true, letters: false, showGels: false, connectors: false, arrows: false, gelMaxH: 0, bandH: fs*5}); }
+  const fs = fontSize(); const min_safety_margin = numOr(opt.min_safety_margin, 0) || fs*0.8; const W = Math.max(numOr(opt.w, 3.5), 3.4)*72; const o = ncObj(r); let bandH = fs*5; const c = buildRunPlainSVG(o, {wPt: W, hPt: numOr(opt.wfH, 2.2)*72, nest: true}); if (c.geo && c.geo.used) bandH = c.geo.used + min_safety_margin; return composeRuns([o], {layout: 'row', W, chromH: numOr(opt.wfH, 2.2)*72, titles: true, letters: false, showGels: false, connectors: false, arrows: false, gelMaxH: 0, bandH}); }
 function buildNDSVG(only, info){
   const sp = (only || ndSamples.filter(s => s.stage !== 'conc')).filter(s => s.spec && !s.hide); if (!sp.length) return {svg: null, geo: null}; info = info || [];
   const S = style({}), {W, H, fs, lw, aw, cw, tl, tOut} = S, o = opt, pal = PAL.okabe, norm = o.ndNorm === 'a280';
@@ -7131,7 +7132,7 @@ function selectStep(k){
 }
 /* a step's own figure: its panel and gel, or the upstream band so far for the transformation */
 function buildStepFig(k){
-  const fs = fontSize(), W = Math.max(numOr(opt.w, 3.5), 3.4)*72, base = {layout: 'row', W, chromH: numOr(opt.wfH, 2.2)*72, titles: true, letters: false, showGels: true, connectors: opt.connectors, arrows: true, gelMaxH: numOr(opt.wfGelH, 1.8)*72, bandH: fs*5};
+  const fs = fontSize(); const min_safety_margin = numOr(opt.min_safety_margin, 0) || fs*0.8; const W = Math.max(numOr(opt.w, 3.5), 3.4)*72; let bandH = fs*5; const o = k === 'transform' ? prepObjFor('construct') : isManId(k) ? manObj(manSteps().find(x => x.id === k)) : prepObjFor(k); const c = buildRunPlainSVG(o, {wPt: W, hPt: numOr(opt.wfH, 2.2)*72, nest: true}); if (c.geo && c.geo.used) bandH = c.geo.used + min_safety_margin; const base = {layout: 'row', W, chromH: numOr(opt.wfH, 2.2)*72, titles: true, letters: false, showGels: true, connectors: opt.connectors, arrows: true, gelMaxH: numOr(opt.wfGelH, 1.8)*72, bandH};
   if (k === 'transform') { const c = prepObjFor('construct'), list = [c]; c.note = 'Transform'; if (prepSteps().some(o => o.id === 'expr')) list.push(prepObjFor('expr')); return composeRuns(list, Object.assign(base, {W: W*list.length})); }
   if (isManId(k)) { const m = manSteps().find(x => x.id === k); return composeRuns([manObj(m)], base); }
   return composeRuns([prepObjFor(k)], base);
