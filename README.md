@@ -111,7 +111,7 @@ Status messages and hints explain missing inputs or unverified numbers. For exam
 
 *   **Browser Storage:** Saves figure preferences, SEC calibrations, and custom contaminant lists in `localStorage` (`hplc-fig-opt`), and saves projects automatically in `IndexedDB` (`hfb-projects`).
 *   **Host Integration:** Uses cloud database and asset storage when hosted in an environment providing `window.claude`.
-*   **Project Backups:** Export and import complete projects as `.json` files via **"Export file"** and **"Open file"**.
+*   **Project Backups:** Export and import complete projects as `.json` files via **"Export project"** and **"Open file"** (both in the header).
 
 ## External Libraries and Network Dependencies
 
