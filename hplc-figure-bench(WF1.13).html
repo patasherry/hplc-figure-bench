@@ -3949,6 +3949,8 @@ function composeRuns(list, cfg){
     const off = r.gelOff || {};
     /* a text or construct panel outside the side-by-side layout is only as tall as its content plus the margin, so its gel or the next step follows it closely */
     const ch = cfg.bandH ? cfg.bandH : r.prep && !row && chart.geo && chart.geo.used ? Math.min(chromH, chart.geo.used + textPad(fs)) : chromH;
+    /* and the panel's own frame ends there too (its drawing is never clipped, overflow is visible), so in a grid row beside a chromatogram it is not a whole chart tall */
+    if (!cfg.bandH && r.prep && ch < chromH && chart.svg) chart.svg = chart.svg.replace(`height="${r2(chromH)}" viewBox="0 0 ${r2(chartW)} ${r2(chromH)}"`, `height="${r2(ch)}" viewBox="0 0 ${r2(chartW)} ${r2(ch)}"`);
     let gy = sideHere ? titleH + (chart.geo ? chart.geo.T : 0) : titleH + ch + connH, bottom = titleH + (chart.svg ? ch : 0);
     const gi = gl.map(g => {
       const idx = lanesFor(g, 'marker').concat(lanesFor(g, r.id)).sort((a,b) => a - b);
