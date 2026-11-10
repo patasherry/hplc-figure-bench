@@ -3849,7 +3849,7 @@ function composeRuns(list, cfg){
   const fs = fontSize(), cw = fs*0.56, n = list.length; if (!n) return {svg: null, geo: null};
   let Wt = cfg.W, chromH = cfg.chromH;
   /* grid: two panels per row, read left to right then down (for 3 or more steps) */
-  const grid = cfg.layout === 'grid' && n > 2, row = (cfg.layout === 'row' || (cfg.layout === 'grid' && n === 2)) && n > 1, side = opt.gelPos === 'right', vgap = fs*2.8;
+  const grid = cfg.layout === 'grid' && n >= 2, row = (cfg.layout === 'row' || (cfg.layout === 'grid' && n === 2)) && n > 1, side = opt.gelPos === 'right', vgap = fs*2.8;
   let gap = fs*1.4;
   /* branches: par[i] is the panel panel i comes from; a panel that does not follow its predecessor skips ahead */
   const par = wfParents(list), fromN = i => wfFromNoteOf(list[i]), edgeNote = i => fromN(i + 1) || arrowNote(list[i]);
@@ -3943,7 +3943,7 @@ function composeRuns(list, cfg){
     const connH = gl.length && !sideHere ? (cfg.connectors ? fs*1.9 + (!row && chart.geo ? Math.min(fs*2.2, 0.06*(chart.geo.R - chart.geo.L)) : 0) : fs*0.8) + extraGap : 0;
     const off = r.gelOff || {};
     /* a text or construct panel outside the side-by-side layout is only as tall as its content plus the margin, so its gel or the next step follows it closely */
-    const ch = cfg.bandH ? cfg.bandH : r.prep && !row && chart.geo && chart.geo.used ? Math.min(chromH, chart.geo.used + textPad(fs)) : chromH;
+    const ch = (cfg.bandH && (!grid || chart.svg)) ? cfg.bandH : r.prep && (!row || grid) && chart.geo && chart.geo.used ? Math.min(chromH, chart.geo.used + textPad(fs)) : chromH;
     let gy = sideHere ? titleH + (chart.geo ? chart.geo.T : 0) : titleH + ch + connH, bottom = titleH + (chart.svg ? ch : 0);
     const gi = gl.map(g => {
       const idx = lanesFor(g, 'marker').concat(lanesFor(g, r.id)).sort((a,b) => a - b);
