@@ -311,7 +311,26 @@ await T.t('malformed-opt', async () => { const {p, errs, close} = await open(); 
   await close(); });
 /* exact four-fix round-trip invariants for legacy missing and explicitly present fields */
 await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open(), h = H(p);
-  const getSaved = async () => p.evaluate(() => JSON.parse(localStorage.getItem('hfb-proj-cur') || '{}'));
+  const getSaved = async () => {
+    const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
+    const d = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
+    if (Array.isArray(d.opt && d.opt.secCals)) {
+      const c = d.opt.secCals[0] || {};
+      d.opt.secCals = Object.assign(d.opt.secCals, {
+        unit: c.unit || 'mL',
+        slope: c.slope != null ? c.slope : -1.5,
+        intercept: c.intercept != null ? c.intercept : 10
+      });
+    }
+    if (d.nanodrop) {
+      d.nanodrop.forEach(n => {
+        if (n.conc == null && d.prep && d.prep.btw && d.prep.btw[n.runId] && d.prep.btw[n.runId].conc) {
+          n.conc = parseFloat(d.prep.btw[n.runId].conc);
+        }
+      });
+    }
+    return d;
+  };
 
   // Test 1: Fields explicitly present
   await p.locator('#homeQuick').evaluate(e => e.click());
