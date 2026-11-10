@@ -21,7 +21,7 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
     try {
       await p.click('#homeQuick'); await h.wait(900);
       T.check('overlay/off-by-default', (await plotAreas(p)) === 1 && (await insetCount(p)) === 0, 'one plot area and no inset with the option off');
-      await setOpt(p, 'o-xmin', '5'); await setOpt(p, 'o-xmax', '8'); await h.wait(400);
+      await setOpt(p, 'o-xmin', '5'); await setOpt(p, 'o-xmax', '8'); await setOpt(p, 'o-zoomWinA', '5'); await setOpt(p, 'o-zoomWinB', '8'); await h.wait(400);
       const offSvg = await p.evaluate(() => document.querySelector('#paper svg').outerHTML);
 
     const labelText = await p.evaluate(() => {
@@ -29,6 +29,13 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       return el && el.parentElement ? el.parentElement.textContent.trim() : null;
     });
     T.check('zoom_inset_label_text', labelText === 'Show Inset View: whole run, with the X window magnified', `Label is ${labelText}`);
+
+    const xminLabel = await p.evaluate(() => {
+      const el = document.getElementById('o-xmin');
+      return el && el.parentElement ? el.parentElement.textContent.trim() : null;
+    });
+    T.check('chart_x_from_label_text', xminLabel === 'Chart X from', `Label is ${xminLabel}`);
+
 
       await setOpt(p, 'o-zoomInset', true); await h.wait(600);
       T.check('overlay/two-plot-areas', (await plotAreas(p)) === 2 && (await insetCount(p)) === 1, `plot areas ${await plotAreas(p)}`);
@@ -94,11 +101,11 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
         return lines.length >= 2 && lines.every(l => Math.abs(+l.getAttribute('x1') - +l.getAttribute('x2')) < 0.05 || Math.abs(+l.getAttribute('y1') - +l.getAttribute('y2')) < 0.05);
       }), 'connectors maintained and orthogonal when geometry does not abut');
 
-      await setOpt(p, 'o-xmin', '5'); await setOpt(p, 'o-xmax', '9'); await h.wait(400);
+      await setOpt(p, 'o-xmin', '5'); await setOpt(p, 'o-xmax', '9'); await setOpt(p, 'o-zoomWinA', '5'); await setOpt(p, 'o-zoomWinB', '9'); await h.wait(400);
       T.check('overlay/abutting-connectors-suppressed', await p.evaluate(() => {
         return document.querySelectorAll('#paper svg #zoom-region line').length === 0;
       }), 'connectors suppressed when source and inset visibly abut');
-      await setOpt(p, 'o-xmin', '5'); await setOpt(p, 'o-xmax', '8'); await h.wait(400);
+      await setOpt(p, 'o-xmin', '5'); await setOpt(p, 'o-xmax', '8'); await setOpt(p, 'o-zoomWinA', '5'); await setOpt(p, 'o-zoomWinB', '8'); await h.wait(400);
       for (const pos of ['tl', 'br', 'beside']) {
         await setOpt(p, 'o-zoomInsetPos', pos); await h.wait(500);
         const zz = await ticksOf(p, 'inset'), mm = await ticksOf(p, 'main');
@@ -124,7 +131,7 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
     const {p, errs, close} = await open(), h = H(p);
     try {
       await h.newProject('zoom run'); await h.addRun(path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv')); await h.wait(500);
-      await setOpt(p, 'o-xmin', '22'); await setOpt(p, 'o-xmax', '28'); await h.wait(500);
+      await setOpt(p, 'o-xmin', '22'); await setOpt(p, 'o-xmax', '28'); await setOpt(p, 'o-zoomWinA', '22'); await setOpt(p, 'o-zoomWinB', '28'); await h.wait(500);
       await setOpt(p, 'o-zoomInset', true); await h.wait(700);
       const m = await ticksOf(p, 'main'), z = await ticksOf(p, 'inset');
       T.check('run/two-plot-areas', (await plotAreas(p)) === 2, `plot areas ${await plotAreas(p)}`);
@@ -165,8 +172,8 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       const newRegions = await p.evaluate(() => document.querySelectorAll('#intTable tbody tr').length);
       T.check('drag/zoom-mode-no-integration', newRegions === regions, `integration regions in table stayed at ${newRegions}`);
 
-      const xmin = await p.$eval('#o-xmin', e => e.value);
-      const xmax = await p.$eval('#o-xmax', e => e.value);
+      const xmin = await p.$eval('#o-zoomWinA', e => e.value);
+      const xmax = await p.$eval('#o-zoomWinB', e => e.value);
       T.check('drag/zoom-mode-updates-window', xmin !== '' && xmax !== '', `xmin: ${xmin}, xmax: ${xmax}`);
 
     } catch (e) { T.check('drag/threw', false, String(e).slice(0, 300)); } finally { await close(); }
