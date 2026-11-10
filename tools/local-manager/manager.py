@@ -2796,7 +2796,7 @@ Item text:
 
 
 def advise(s):
-    items = gh(f'repos/{REPO}/issues?state=open&labels=for-coordinator&per_page=50')
+    items = issues('for-coordinator')  # issues() drops pull requests: the issues API returns them too, and a PR is not a job
     for i in items:
         n = str(i['number'])
         if n in s['advised']:
@@ -2836,7 +2836,7 @@ def digest(s):
     since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).isoformat()
     merged = [p for p in gh(f'repos/{REPO}/pulls?state=closed&sort=updated&direction=desc&per_page=50') if p.get('merged_at') and p['merged_at'] > since]
     owner = issues('needs-owner')
-    lead = gh(f'repos/{REPO}/issues?state=open&labels=for-coordinator&per_page=50')
+    lead = issues('for-coordinator')
     lines = [f'### Daily digest, {s["day"]}', '',
              f'- **Merged in the last 24 h:** {len(merged)}' + (': ' + ', '.join(f'#{p["number"]}' for p in merged[:15]) if merged else ''),
              f'- **Open PRs:** {len(prs)}',
