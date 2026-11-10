@@ -323,5 +323,50 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       T.check('layout/no-errors', errs.length === 0, errs.join(' | '));
     } catch (e) { T.check('layout/threw', false, String(e).slice(0, 300)); } finally { await close(); }
   }
+
+  /* Zoom inset event scoping (Issue #1332) */
+  {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await h.newProject('Zoom Test');
+      await h.addRun(path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv'));
+
+      await setOpt(p, 'o-zoomMode', true);
+      await setOpt(p, 'o-zoomInset', true);
+      await h.wait(500);
+
+      const initialXMin = await p.evaluate(() => {
+        const minInput = document.querySelector('#o-xmin');
+        return minInput ? minInput.value : '';
+      });
+
+      const boundingBox = await p.evaluate(() => {
+        const el = document.querySelector('#zoomInsetContainer');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return {x: r.left, y: r.top, w: r.width, h: r.height};
+      });
+
+      if (boundingBox) {
+        const startX = boundingBox.x + boundingBox.w / 2;
+        const startY = boundingBox.y + boundingBox.h / 2;
+
+        await p.mouse.move(startX, startY);
+        await p.mouse.down();
+        await p.mouse.move(startX + 50, startY + 50, {steps: 5});
+        await p.mouse.up();
+      }
+
+      await h.wait(500);
+
+      const currentXMin = await p.evaluate(() => {
+        const minInput = document.querySelector('#o-xmin');
+        return minInput ? minInput.value : '';
+      });
+
+      T.check('scoping/no-xmin-change', currentXMin === initialXMin, 'Main chart xmin should not change when dragging inset: ' + currentXMin);
+      T.check('scoping/no-errors', errs.length === 0, errs.join(' | '));
+    } catch (e) { T.check('scoping/threw', false, String(e).slice(0, 300)); } finally { await close(); }
+  }
   T.done();
 })();
