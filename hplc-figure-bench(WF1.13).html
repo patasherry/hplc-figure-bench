@@ -6775,8 +6775,8 @@ async function upJSON(obj){
 async function upPNG(canvas){
   if (STORE.mode === 'local') {
     const id = 'img-' + newBlobId();
-    let img = ''; try { img = canvas.toDataURL('image/png'); if (img.length > 12e6) img = canvas.toDataURL('image/jpeg', 0.95); } catch (e) {}
-    await putLocalBlob(id, img); return id;
+    const b = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    await putLocalBlob(id, b); return id;
   }
   const b = await new Promise(res => canvas.toBlob(res, 'image/png')); return (await STORE.assets.upload(b, {type: 'image/png'})).id;
 }
@@ -6824,7 +6824,9 @@ async function unpackLocal(st){
     if (!o.imageId) return o;
     const img = await getLocalBlob(o.imageId);
     if (!img) throw new Error('missing gel image');
-    return Object.assign({}, o, {image: img, imageId: o.imageId});
+    /* older records hold a data URL string (some JPEG); newer ones hold the PNG Blob itself */
+    const url = typeof img === 'string' ? img : await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error); fr.readAsDataURL(img); });
+    return Object.assign({}, o, {image: url, imageId: o.imageId});
   })))).filter(Boolean);
   const s2 = st.struct && st.struct.blobId ? await one(st.struct, 'struct', async () => {
     const b = await getLocalBlob(st.struct.blobId);
