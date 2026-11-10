@@ -703,6 +703,8 @@ button,input,select,textarea{font-family:inherit}
           <label class="f">Colonies<input type="text" id="pr-trCol" data-prep="trCol" placeholder="e.g. about 200"></label>
           <label class="f">Glycerol stock<input type="text" id="pr-trStock" data-prep="trStock" placeholder="e.g. box 3, A4"></label>
         </div>
+        <div id="prClones" aria-label="Clones"></div>
+        <div class="row"><button type="button" class="linkbtn" id="prCloneAdd">Add clone</button></div>
         <datalist id="dl-trmethod"><option value="heat shock"><option value="electroporation"><option value="KCM transformation"><option value="from a glycerol stock"></datalist>
       </details>
       <details class="sub" data-sub="pexp" open><summary>Expression</summary>
@@ -4186,9 +4188,19 @@ function makePrimer(p){
     id: 'pr' + (uid++)
   }, p && typeof p === 'object' ? p : {});
 }
+/* screened colonies (Issue #1305): failed and unused clones stay as provenance; selectedCloneId names the one that entered expression, or null */
+const CLONE_STATUS = {pending: 'Not checked', verified: 'Verified', failed: 'Failed', unselected: 'Not used'}, cloneSt = s => Object.prototype.hasOwnProperty.call(CLONE_STATUS, s) ? s : 'pending';
+function canonClones(pr){
+  const seen = new Set();
+  pr.clones = (Array.isArray(pr.clones) ? pr.clones : []).filter(c => c && typeof c === 'object' && !Array.isArray(c)).map(c => ({id: String(c.id == null ? '' : c.id), name: String(c.name == null ? '' : c.name), status: cloneSt(c.status), stock: String(c.stock == null ? '' : c.stock)})).filter(c => c.id && !seen.has(c.id) && seen.add(c.id));
+  const s = pr.clones.find(c => c.id === String(pr.selectedCloneId));
+  pr.selectedCloneId = pr.selectedCloneId != null && s && s.status !== 'failed' ? s.id : null;
+  return pr;
+}
+const selClone = () => (prep.clones || []).find(c => c.id === prep.selectedCloneId && c.status !== 'failed') || null;
 const PREP_DEF = {on: true, construct: true, expr: true, lysis: true, name: '', backbone: '', promoter: 'T7', resist: '', strain: '', medium: '', cultureL: '', od: '', inducer: '', temp: '', time: '', pellet: '', lysMethod: '', lysBuffer: '', clarify: '', lysVol: '', lysLanes: false, indKind: 'IPTG', gb: null,
   cleave: false, cleaveAfter: '', protease: '', ratio: '', clvTemp: '', clvTime: '', dialBuffer: '', mwco: '', dialVol: '', dialChanges: '', store: '',
-  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {},
+  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', clones: [], selectedCloneId: null, exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {},
   constructs: [], primers: [], parentConstructId: null, derivedConstructIds: [],
   cMethod: 'plasmid', cEnz: '', cOverlap: '', cRecomb: '', cDetails: { digest: {}, overlap: {}, recomb: {} }};
 let prep = JSON.parse(JSON.stringify(PREP_DEF));
@@ -4705,6 +4717,8 @@ function methodsText(){
   if (prep.on && !skipped('transform') && ['trPlasmid', 'trMethod', 'trSel'].some(k => hasTxt(prep[k]))) { const pl = v(prep.trPlasmid) || (cm && cm.name) || 'The plasmid', st = v(prep.strain), me = v(prep.trMethod), se = v(prep.trSel);
     const ec = st ? `E. coli ${st.replace(/^e\.? ?coli\s*/i, '')}` : 'E. coli', gs = v(prep.trStock);
     P.push(/glycerol/i.test(me) ? `Cells of ${ec} carrying ${pl === 'The plasmid' ? 'the plasmid' : pl} were taken from a glycerol stock${gs ? ` (${gs})` : ''}${se ? ` and grown on ${se}` : ''}.` : `${pl} was transformed into ${ec}${me ? ` by ${lc(me)}` : ''}${se ? `, selecting on ${se}` : ''}.`); trSaid = true; }
+  /* the clone handed to expression is named only when the user selected one */
+  { const sc = prep.on ? selClone() : null; if (sc) P.push(`${v(sc.name) ? `Clone ${v(sc.name)}` : 'The selected clone'}${sc.status === 'verified' ? ', verified,' : ''} was used for expression${v(sc.stock) ? ` (glycerol stock ${v(sc.stock)})` : ''}.`); }
   if (prep.on && !skipped('expr') && EXPR_KEYS.some(k => hasTxt(prep[k]))) { const st = v(prep.strain), md = v(prep.medium), L = numOr(prep.cultureL, 0), od = v(prep.od), amt = v(prep.inducer), kind = prep.indKind || 'IPTG', T = v(prep.temp), h = v(prep.time), g = numOr(prep.pellet, 0);
     const ind = kind === 'auto' || (/auto|5052/i.test(md) && !amt) ? 'by autoinduction' : amt ? `with ${/^\d+(\.\d+)?$/.test(amt) ? (kind === 'IPTG' ? `${amt} mM IPTG` : `${amt}% L-${kind}`) : amt}${od ? ` at an OD600 of ${od}` : ''}` : od ? `at an OD600 of ${od}` : '';
     if (hasTxt(prep.exStarter)) P.push(`A starter culture (${v(prep.exStarter).replace(/\.$/, '')}) was used to inoculate the expression culture.`);
@@ -6176,6 +6190,11 @@ function renderPrep(){
       pn.querySelectorAll('[data-cmethod]').forEach(el => { el.hidden = el.dataset.cmethod !== (prep.cMethod || 'plasmid'); el.style.display = el.hidden ? 'none' : 'flex'; });
   } }
   { const t = $('#pr-trPlasmid'); if (t) t.placeholder = String(prep.name || '').trim() || (prep.gb && prep.gb.name) || 'e.g. pET28-SUMO-NADK'; }
+  { const box = $('#prClones'), L = prep.clones || [], sid = (selClone() || {}).id || null;
+    const h = (L.length ? `<label class="check"><input type="radio" name="prCloneSel" data-cl="none"${sid ? '' : ' checked'}>No clone selected for expression</label>` : '') + L.map(c => `<div class="row" data-clone="${esc(c.id)}"><label class="f">Clone<input type="text" data-cl="name" placeholder="e.g. colony 3" spellcheck="false"></label><label class="f">Status<select data-cl="status">${Object.entries(CLONE_STATUS).map(([k, t]) => `<option value="${k}"${k === c.status ? ' selected' : ''}>${t}</option>`).join('')}</select></label><label class="f">Glycerol stock<input type="text" data-cl="stock" placeholder="e.g. box 3, A4"></label><label class="check"${c.status === 'failed' ? ' title="A failed clone cannot be selected. Change its status first."' : ''}><input type="radio" name="prCloneSel" data-cl="sel"${c.id === sid ? ' checked' : ''}${c.status === 'failed' ? ' disabled' : ''}>Used for expression</label><button type="button" class="linkbtn" data-cl="rm">Remove</button></div>`).join('');
+    if (box._h !== h) { box._h = h; box.innerHTML = h; }
+    box.querySelectorAll('[data-clone]').forEach(row => { const c = L.find(x => x.id === row.dataset.clone); if (!c) return; row.querySelectorAll('input[type=text]').forEach(el => { if (el !== document.activeElement && el.value !== c[el.dataset.cl]) el.value = c[el.dataset.cl]; }); });
+    box.querySelectorAll('input[type=radio]').forEach(el => { el.checked = el.dataset.cl === 'none' ? !sid : el.closest('[data-clone]').dataset.clone === sid; }); }
   $('#prSeqOnly').hidden = !!prep.gb; $('#prIndAmt').hidden = prep.indKind === 'auto';
   { const sel = $('#pr-cleaveAfter'), wf = runs.filter(r => r.inWf), cid = cleaveRunId(), h = wf.map((r, k) => `<option value="${r.id}"${r.id === cid ? ' selected' : ''}>${k + 1}. ${esc(stepTitle(r))}</option>`).join('') || '<option value="">No runs yet</option>';
     if (sel._h !== h) { sel._h = h; sel.innerHTML = h; } if (sel !== document.activeElement) sel.value = cid; $('#pr-protease').placeholder = !String(prep.protease || '').trim() && cleaveProtease() ? `${cleaveProtease()} (construct)` : 'e.g. Ulp1'; } $('#gbClear').hidden = !prep.gb; $('#gbPick').textContent = prep.gb ? 'Load another GenBank file' : 'Load GenBank file';
@@ -6209,6 +6228,20 @@ function onPrepInput(e){ const el = e.target, k = el.dataset.prep; if (!k) retur
   if (el.type === 'text') { clearTimeout(prepT); prepT = setTimeout(render, 260); return; } if (['on', 'lysLanes', 'lysis', 'cleave'].includes(k)) gels.forEach(g => { g._prepA = null; }); render(); }
 $('#prepPanel').addEventListener('input', onPrepInput);
 $('#prepPanel').addEventListener('change', onPrepInput);
+/* clones: selecting one is explicit, a failed clone cannot be selected, and only a selection fills the glycerol stock field */
+function onCloneInput(e){ const el = e.target.closest('[data-cl]'); if (!el || !el.closest('#prClones')) return; const k = el.dataset.cl, row = el.closest('[data-clone]'), c = row && (prep.clones || []).find(x => x.id === row.dataset.clone);
+  if (k === 'none') { if (e.type === 'change' && el.checked) { prep.selectedCloneId = null; render(); } return; }
+  if (!c) return;
+  if (k === 'name' || k === 'stock') { c[k] = el.value; clearTimeout(prepT); prepT = setTimeout(render, 260); return; }
+  if (e.type !== 'change') return;
+  if (k === 'status') { c.status = cloneSt(el.value); if (c.status === 'failed' && prep.selectedCloneId === c.id) { prep.selectedCloneId = null; toast(`${c.name.trim() || 'That clone'} failed, so no clone is selected for expression now.`); } render(); return; }
+  if (k === 'sel' && el.checked) { if (c.status === 'failed') { toast('A failed clone cannot be selected. Change its status first.'); render(); return; }
+    prep.selectedCloneId = c.id; if (c.stock.trim()) prep.trStock = c.stock; render(); } }
+$('#prepPanel').addEventListener('input', onCloneInput);
+$('#prepPanel').addEventListener('change', onCloneInput);
+$('#prepPanel').addEventListener('click', e => { const b = e.target.closest('#prCloneAdd, #prClones [data-cl=rm]'); if (!b) return;
+  if (b.id === 'prCloneAdd') { const n = Math.max(0, ...(prep.clones || []).map(c => { const m = /^cl(\d+)$/.exec(c.id); return m ? +m[1] : 0; })) + 1; prep.clones = (prep.clones || []).concat({id: 'cl' + n, name: '', status: 'pending', stock: ''}); render(); const L = $('#prClones').querySelectorAll('[data-cl=name]'); if (L.length) L[L.length - 1].focus(); return; }
+  const id = b.closest('[data-clone]').dataset.clone; prep.clones = (prep.clones || []).filter(c => c.id !== id); if (prep.selectedCloneId === id) prep.selectedCloneId = null; render(); });
 $('#gbPick').addEventListener('click', () => $('#gbFile').click());
 $('#gbFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) loadGenBank(f); });
 $('#gbPaste').addEventListener('click', () => { const b = $('#gbPasteBox'); b.hidden = !b.hidden; if (!b.hidden) $('#gbText').focus(); });
@@ -6704,6 +6737,7 @@ function cleanProject(d){
     if (!Array.isArray(d.prep.derivedConstructIds)) d.prep.derivedConstructIds = [];
     if (!d.prep.cMethod) d.prep.cMethod = 'plasmid';
     if (!d.prep.cDetails || typeof d.prep.cDetails !== 'object') d.prep.cDetails = { digest: {}, overlap: {}, recomb: {} };
+    canonClones(d.prep);
   }
   return skipped; }
 async function openProject(data, name, noUndo){
@@ -6715,7 +6749,7 @@ async function openProject(data, name, noUndo){
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
       Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
-  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (!Array.isArray(prep.constructs)) prep.constructs = []; if (!Array.isArray(prep.primers)) prep.primers = []; if (!('parentConstructId' in prep)) prep.parentConstructId = null; if (!Array.isArray(prep.derivedConstructIds)) prep.derivedConstructIds = []; if (!prep.cMethod) prep.cMethod = 'plasmid'; if (!prep.cDetails || typeof prep.cDetails !== 'object') prep.cDetails = { digest: {}, overlap: {}, recomb: {} }; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
+  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (!Array.isArray(prep.constructs)) prep.constructs = []; if (!Array.isArray(prep.primers)) prep.primers = []; if (!('parentConstructId' in prep)) prep.parentConstructId = null; if (!Array.isArray(prep.derivedConstructIds)) prep.derivedConstructIds = []; if (!prep.cMethod) prep.cMethod = 'plasmid'; if (!prep.cDetails || typeof prep.cDetails !== 'object') prep.cDetails = { digest: {}, overlap: {}, recomb: {} }; canonClones(prep); if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
   srcDiag = (data.srcDiag && typeof data.srcDiag === 'object' && !Array.isArray(data.srcDiag)) ? Object.assign({}, data.srcDiag) : {};
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
@@ -6871,7 +6905,7 @@ function writePending(){ if (!PROJ || !isDirty(PROJ) || PROJ.blocked) return; co
   try { localStorage.setItem(PEND(PROJ.id), JSON.stringify({t: Date.now(), rev: PROJ.rev, name: PROJ.name, prep, o: Object.fromEntries(QKEYS.concat(['tagPreset', 'tagPos']).map(k => [k, opt[k]])), runIds: runs.map(r => r.id), gelIds: gels.map(g => g.id), runNames: runs.map(r => r.name), runs: runs.map(light), gels: gels.map(g => { const o = plain(g); ['src', 'thumb', 'out', 'pix', 'hist', 'crop', 'cropPrev', 'bandHist', 'image'].forEach(k => delete o[k]); return o; })})); } catch (e) {} }
 function applyPending(P, meta){ let pd = null; try { pd = JSON.parse(localStorage.getItem(PEND(P.id)) || 'null'); } catch (e) {} if (!pd) return false;
   if ((pd.rev || 0) < (P.rev || 0) || pd.t < (meta.updated || 0)) { try { localStorage.removeItem(PEND(P.id)); } catch (e) {} return false; }
-  P.name = pd.name || P.name; if (pd.prep && typeof pd.prep === 'object') prep = Object.assign(prep, pd.prep);
+  P.name = pd.name || P.name; if (pd.prep && typeof pd.prep === 'object') { prep = Object.assign(prep, pd.prep); canonClones(prep); }
   if (pd.o && typeof pd.o === 'object') Object.keys(pd.o).forEach(k => { if (QKEYS.includes(k) || k === 'tagPreset' || k === 'tagPos') opt[k] = pd.o[k]; });
   /* runs and gels removed just before closing stay removed; runs loaded in those seconds were never uploaded and are named so they can be loaded again */
   if (Array.isArray(pd.runIds)) { runs = runs.filter(r => pd.runIds.includes(r.id)); const miss = pd.runIds.map((id, i) => runs.some(r => r.id === id) ? '' : (pd.runNames || [])[i] || id).filter(Boolean); if (miss.length) setTimeout(() => toast(`Load ${miss.join(', ')} again: ${miss.length === 1 ? 'it was' : 'they were'} added just before the page closed`), 400); }
