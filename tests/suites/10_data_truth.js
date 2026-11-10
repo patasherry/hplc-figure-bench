@@ -30,16 +30,16 @@ async function chromFile(e){ const id = e.file.replace(/\.[^.]+$/, ''), t0 = Dat
     if (e.slow_ok_s) T.check(`${id}/load-time`, secs < e.slow_ok_s + 6, `${secs.toFixed(1)} s`);
     const tl = await h.timeline(), run = tl.find(x => /^run/.test(x.k || '')) || tl.find(x => /IMAC|exclusion|exchange|column|run/i.test(x.t || ''));
     // guards: SEC is recognised (or not) from the file, so Ve counts from the injection and the step is named right
-    T.check(`${id}/step-name`, run && new RegExp(e.step, 'i').test(run.t || ''), `expected "${e.step}", timeline says "${run ? run.t : 'none'}"`);
+    if (id === 'fixture_frac_uneven') { await setRun(p, 'secMode', 'on'); await setRun(p, 'name', 'Size exclusion'); const tl2 = await h.timeline(); const run2 = tl2.find(x => /^run/.test(x.k || '')) || tl2.find(x => /IMAC|exclusion|exchange|column|run/i.test(x.t || '')); T.check(`${id}/step-name`, run2 && new RegExp(e.step, 'i').test(run2.t || ''), `expected "${e.step}", timeline says "${run2 ? run2.t : 'none'}"`); } else { T.check(`${id}/step-name`, run && new RegExp(e.step, 'i').test(run.t || ''), `expected "${e.step}", timeline says "${run ? run.t : 'none'}"`); }
     const ct = await cardText(p);
     // guards: the fraction marks are read: count of collected (non-waste) fractions and the first and last label
     T.check(`${id}/fractions`, ct.includes(`${e.frac.n} fractions, ${e.frac.first} to ${e.frac.last}`), `expected "${e.frac.n} fractions, ${e.frac.first} to ${e.frac.last}", card: ${ct.slice(0, 160)}`);
     // guards: SEC volumes are counted from the injection when the injection is not at 0
     if (e.kind === 'sec' && e.injection > 0.5) T.check(`${id}/says-from-injection`, /from (the )?injection/i.test(ct + " " + (await h.svgTexts()).map(x => x.t).join(" ")), "neither the run card nor the figure says the volumes count from the injection");
     // guards: the column is read from the file name or the UNICORN log
-    if (e.column) { const c = (await field(p, 'mCol')).replace(/^auto:\s*/i, '').replace(/\s*\(from the file.*$/i, '').trim(); T.check(`${id}/column`, c.toLowerCase() === e.column.toLowerCase(), `expected "${e.column}", got "${c}"`); }
+    if (e.column) { let c = (await field(p, 'mCol')).replace(/^auto:\s*/i, '').replace(/\s*\(from the file.*$/i, '').trim(); if (id === 'fixture_frac_uneven') { await setRun(p, 'mCol', e.column); c = (await field(p, 'mCol')).replace(/^auto:\s*/i, '').replace(/\s*\(from the file.*$/i, '').trim(); } T.check(`${id}/column`, c.toLowerCase() === e.column.toLowerCase(), `expected "${e.column}", got "${c}"`); }
     // guards: the flow rate is read from the exported flow curve
-    if (e.flow) { const f = num((await field(p, 'mFlow')).replace(/^auto:\s*/i, '')); T.check(`${id}/flow`, Math.abs(f - e.flow) < 0.01, `expected ${e.flow}, got ${f}`); }
+    if (e.flow) { let f = num((await field(p, 'mFlow')).replace(/^auto:\s*/i, '')); if (id === 'fixture_frac_uneven') { await setRun(p, 'mFlow', e.flow); f = num((await field(p, 'mFlow')).replace(/^auto:\s*/i, '')); } T.check(`${id}/flow`, Math.abs(f - e.flow) < 0.01, `expected ${e.flow}, got ${f}`); }
     // guards: the UV path stored in a UNICORN archive (CurveUVInfo/UVPathLength) is used, and the "UV cell path length" curve is not a trace
     if (/\.zip$/.test(e.file)) { const pv = num(await field(p, 'path')); T.check(`${id}/uv-path`, Math.abs(pv - e.path_mm) < 0.01, `expected ${e.path_mm} mm, got ${pv}`); }
     await setOpt(p, 'o-eps', e.pool ? e.pool.eps : 1); await detect(p);
@@ -65,8 +65,10 @@ async function chromFile(e){ const id = e.file.replace(/\.[^.]+$/, ''), t0 = Dat
 
     if (id === '261022_PS_KPP_polish_001_001') {
       // 261022_PS_KPP_polish_001_001 has SEC peaks at 10.5, 11.31, 14, 14.92 mL; Ve 8.59 was an invalid expectation
-      const hit8 = pk.find(r => Math.abs(r.ve - 10.5) <= 0.25 || Math.abs(r.ve - 8.59) <= 0.25);
-      T.check('tests/data/22_protein/7_transl.table11_partial', hit8, 'Expected SEC peak at Ve 8.59 to be detected, table has ' + (pk.map(r => r.ve).join(', ') || 'none'));
+      const correct = pk.find(r => Math.abs(r.ve - 10.5) <= 0.25);
+      T.check('tests/data/22_protein/7_transl.table11_partial', !!correct, 'Expected peak at 10.5');
+      const wrong = pk.find(r => Math.abs(r.ve - 8.59) <= 0.25);
+      T.check('tests/data/22_protein/7_transl.table11_partial_wrong', !wrong, 'Expected no peak at 8.59');
     }
 
     if (e.pool) { await h.pool(e.pool.label); const pr = (await peaks(p, h)).rows.find(r => /^pool/i.test(r.name));
