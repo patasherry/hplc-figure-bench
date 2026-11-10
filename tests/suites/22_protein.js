@@ -340,8 +340,10 @@ ORIGIN
       const iv = head.findIndex(c => /^(Ve|Center|Apex|Elution time)\b/.test(c));
       const rows = t.slice(1).filter(r => r.length > 3).map(r => ({name: r[0], ve: iv >= 0 ? Number(String(r[iv]).replace(/,/g, '').match(/-?\d+(\.\d+)?/)?.[0]) : NaN}));
       const pk = rows.filter(r => !/^pool/i.test(r.name));
-      const hit8 = pk.find(r => Math.abs(r.ve - 8.59) <= 0.25);
-      T.check(tf, hit8, 'Expected SEC peak at Ve 8.59 to be detected, table has ' + (pk.map(r => r.ve).join(', ') || 'none'));
+      const correct = pk.find(r => Math.abs(r.ve - 10.5) <= 0.25);
+      T.check(tf, !!correct, 'Expected peak at 10.5');
+      const wrong = pk.find(r => Math.abs(r.ve - 8.59) <= 0.25);
+      T.check(tf + '_wrong', !wrong, 'Expected no peak at 8.59');
     } catch (e) { T.check(tf, false, e.message); }
 
 
