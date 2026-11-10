@@ -83,6 +83,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .tl li.cur .tt{color:var(--accent)}
 .tl .ts{grid-column:2 / span 2;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tl [data-step="figure"] .ts{white-space:normal;overflow:visible;text-overflow:clip}
+.tl .tg{grid-column:2 / span 2;color:var(--muted);font-size:11.5px;white-space:normal;overflow-wrap:anywhere}
 .tl .td{color:var(--muted);font-size:11.5px;white-space:nowrap}
 .tl-add{display:flex;flex-wrap:wrap;gap:6px;padding-left:36px}
 .stepsheet .ss-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -5663,8 +5664,7 @@ function renderSumTable(){
   { const nog = rows.filter(x => x.pur == null && !x.satL.length).map(x => stepTitle(x.r) !== x.r.name ? stepTitle(x.r) : shortRunName(x.r)); if (nog.length) notes.push(`No purity gel for ${nog.length > 1 ? nog.slice(0, -1).join(', ') + ' or ' + nog[nog.length - 1] : nog[0]}.`); }
   if (rows.some(x => x.purEst && x.pur != null)) notes.push('≈ Purity is estimated from bands within 8% of the expected size (the tagged form counts only before the tag is removed), weighted over the pool\'s lanes; "unclear" means too little signal at that size. Mark the target band on a gel to measure it.');
   { const mt = $('#methodsText'); if (mt && $('#methodsBox').open) { const t = methodsText(); if (mt.value !== t) mt.value = t;
-    /* each gap named by what is missing, or by its paragraph when the bracket only says "not entered" */
-    const gp = [...new Set(t.split(/\n\n/).flatMap(par => (par.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).map(g => { const w = g.slice(1, -1).replace(/\s*not entered\s*/i, '').trim(); return w || (par.match(/^([^:(]+)/) || ['', 'a step'])[1].trim(); })))], ge = $('#methodsGaps'); ge.hidden = !gp.length; ge.innerHTML = gp.length ? `Still to fill in: ${gp.map(w => `<button type="button" class="linkbtn gap-btn" data-gap="${esc(w)}">${esc(w)}</button>`).join(', ')}. Each is marked in [brackets] below.` : ''; } }
+    const gp = methodGapNames(t), ge = $('#methodsGaps'); ge.hidden = !gp.length; ge.innerHTML = gp.length ? `Still to fill in: ${gp.map(w => `<button type="button" class="linkbtn gap-btn" data-gap="${esc(w)}">${esc(w)}</button>`).join(', ')}. Each is marked in [brackets] below.` : ''; } }
   /* the core columns show; the rest wait behind More columns (the CSV keeps them all) */
   { const tb = $('#sumTable'), hd = [...(tb.rows[0] || {cells: []}).cells].map(c => c.textContent), allNd = rows.every(x => x.pur == null);
     const extra = hd.map(t => /A₂₈₀ area|NanoDrop|^Form|nmol|mg per|^Purity/.test(t) && !(/^Purity/.test(t) && !allNd));
@@ -6941,6 +6941,8 @@ function bufMismatch(r, c){ if (!c.mBufA || !c.mBufB || isSec(r)) return '';
 function runNeeds(r){ const c = runCond(r), n = [], pr = poolRows(r); if (!hasTxt(r.path) && !(pr && pr.measured)) n.push('UV path for mg'); if (!c.mCol) n.push('column'); if (!c.mBufA) n.push('buffer'); if (!c.mFlow) n.push('flow rate'); if (!isSec(r) && !c.mGrad && !c.mBufB) n.push('elution'); { const bm = bufMismatch(r, c); if (bm) n.push(`buffer B check: ${bm}`); } return n; }
 let gapMemo = {k: '', n: 0};
 function methodGaps(){ const t = methodsText(); if (gapMemo.k !== t) gapMemo = {k: t, n: (t.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).length}; return gapMemo.n; }
+/* each gap named by what is missing, or by its paragraph when the bracket only says "not entered" */
+function methodGapNames(t){ return [...new Set(t.split(/\n\n/).flatMap(par => (par.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).map(g => { const w = g.slice(1, -1).replace(/\s*not entered\s*/i, '').trim(); return w || (par.match(/^([^:(]+)/) || ['', 'a step'])[1].trim(); })))]; }
 function stepList(){
   const v = k => hasTxt(prep[k]), m = k => stepMeta(k), L = [];
   const cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
@@ -6966,8 +6968,9 @@ function stepList(){
   const ys = finalYields(), y = ys[0] || finalYield(), fin = FIN_KEYS.some(v) || ndSamples.some(n => n.stage === 'final') || !!m('final').date;
   const fw = !fin || !y ? '' : y.meas && y.loaded && y.mg != null && y.mg > y.loaded.mg*1.05 ? `${sig2(y.mg)} mg is more than was loaded, check` : y.purTyped ? 'Purity typed, add a gel of the last pool' : '';
   L.push({k: 'final', g: 'Results', t: 'Final sample', done: fin, warn: fw, s: fw ? fw : fin && y ? `${y.mg !== null ? sig2(y.mg) + ' mg' : 'unknown yield'}${y.perL != null ? `, ${sig2(y.perL)} mg per L` : ''}${y.meas ? '' : ', from the last pool'}` : ys.length > 1 ? `Latest pools: ${ys.map(q => `${q.poolMg != null ? sig2(q.poolMg) + ' mg' : 'unknown yield'} (${stepTitle(q.fin.r)})`).join(', ')}` : y ? `Latest pool: ${y.poolMg != null ? sig2(y.poolMg) + ' mg' : 'unknown yield'} after ${stepTitle(y.fin.r)}` : 'Concentration, storage, quality checks'});
-  const hasWf = figures().some(f => f.kind === 'workflow'), gaps = hasWf ? methodGaps() : 0;
-  L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, s: gaps ? `${gaps} detail${gaps === 1 ? '' : 's'} still needed for Methods text` : hasWf ? 'Workflow figure, summary, methods text' : 'Builds after you add a purification step.'});
+  const hasWf = figures().some(f => f.kind === 'workflow'), gaps = hasWf ? methodGaps() : 0, gn = gaps ? methodGapNames(gapMemo.k) : [];
+  /* name what is missing, at most four on the row so it stays short; the full list is in the tooltip */
+  L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, gn: gn.length ? `Missing: ${gn.length > 4 ? `${gn.slice(0, 3).join(', ')} and ${gn.length - 3} more` : gn.join(', ')}` : '', gt: gn.length ? `Still to fill in: ${gn.join(', ')}` : '', s: gaps ?`${gaps} detail${gaps === 1 ? '' : 's'} still needed for Methods text` : hasWf ? 'Workflow figure, summary, methods text' : 'Builds after you add a purification step.'});
   L.forEach(x => { if (['transform', 'expr', 'lysis'].includes(x.k) && skipped(x.k)) Object.assign(x, {done: false, warn: '', skip: true, s: 'Skipped, left out of the figure and methods'}); });
   return L;
 }
@@ -6996,8 +6999,8 @@ function addMan(kind){ const L = wfList(), last = L[L.length - 1], n = Math.max(
   prep.manual = (prep.manual || []).concat([{id: 'm' + n, kind, name: '', after: last ? last.id : ''}]); gels.forEach(g => { g._prepA = null; }); selectStep('man:m' + n); }
 function renderSteps(){
   if (!PROJ) return; const L = stepList(), key = curStep;
-  const h = L.map(s => (s.g ? `<li class="tl-head"><p class="tl-h">${esc(s.g)}</p></li>` : '') + (s.add ? `<li class="tl-addrow">${addRowHtml()}</li>` : `<li class="${s.done ? 'done' : ''}${s.warn ? ' warn' : ''}${s.sub ? ' sub' : ''}${s.k === key ? ' cur' : ''}"><button type="button" class="tl-i" data-step="${esc(s.k)}"${s.k === key ? ' aria-current="step"' : ''}>
-    <span class="mk" aria-hidden="true">${s.warn ? '!' : s.done ? '✓' : ''}</span><span class="tt">${esc(s.t)}</span><span class="td">${esc(stepMeta(s.k).date ? fmtWhen(new Date(stepMeta(s.k).date + 'T12:00').getTime()) : '')}</span><span class="ts">${esc(s.s || '')}</span></button></li>`)).join('');
+  const h = L.map(s => (s.g ? `<li class="tl-head"><p class="tl-h">${esc(s.g)}</p></li>` : '') + (s.add ? `<li class="tl-addrow">${addRowHtml()}</li>` : `<li class="${s.done ? 'done' : ''}${s.warn ? ' warn' : ''}${s.sub ? ' sub' : ''}${s.k === key ? ' cur' : ''}"><button type="button" class="tl-i" data-step="${esc(s.k)}"${s.k === key ? ' aria-current="step"' : ''}${s.gt ? ` title="${esc(s.gt)}"` : ''}>
+    <span class="mk" aria-hidden="true">${s.warn ? '!' : s.done ? '✓' : ''}</span><span class="tt">${esc(s.t)}</span><span class="td">${esc(stepMeta(s.k).date ? fmtWhen(new Date(stepMeta(s.k).date + 'T12:00').getTime()) : '')}</span><span class="ts">${esc(s.s || '')}</span>${s.gn ? `<span class="tg">${esc(s.gn)}</span>` : ''}</button></li>`)).join('');
   if (h !== tlHtml) { tlHtml = h; $('#tl').innerHTML = h; }
   renderStepSheet(L);
 }
