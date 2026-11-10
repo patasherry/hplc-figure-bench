@@ -438,4 +438,58 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
 
   if (EXP) T.check('expected_json_seen', true, Object.keys(EXP).slice(0, 10).join(','));
  /* the biochemist's fixtures exist: extend P1 with them once their schema settles */
-  T.check('no page errors', !errs.length, errs.join(' | ')); await close(); T.done(); })();
+  T.check('no page errors', !errs.length, errs.join(' | ')); await close();
+await T.t('p9_staged_consistency', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+
+  const d = {
+    app: "HPLC Figure Bench", version: 1, cur: "figure",
+    runs: [
+      {id: "r1", name: "IMAC", fractions: [{id: "F1", v: 2, m: 0.1}], pool: ["F1"], pk: [{v0: 1, v1: 2, t: "pool"}], inWf: true, p: {mg: 20}},
+      {id: "r2", name: "SEC", fractions: [{id: "F2", v: 1, m: 0.5}], pool: ["F2"], pk: [{v0: 1, v1: 2, t: "pool"}], inWf: true, p: {mg: 5}}
+    ],
+    traces: [],
+    gels: [{
+      id: "g1", name: "Gel", lanes: [1, 2, 3], assign: ["marker", "r1", "r2"],
+      marks: [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}],
+      tags: [{kind: "target", lane: 1, y: 0.4}, {kind: "target", lane: 2, y: 0.5}],
+      img: "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
+      autoCrop: false
+    }],
+    nanodrop: [{id: "nd1", runId: "r1", a280: 2, mg: 2, umol: 0.04}],
+    prep: {
+      on: true, manual: [],
+      btw: [{id: "conc", wfFrom: "r1", wfTo: "r2", vOut: 1, conc: 10}]
+    },
+    opt: {
+      protKda: 50, purBase: 'lane', wfLayout: 'row'
+    },
+    step: "figure"
+  };
+
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.waitForTimeout(600);
+  await p.setInputFiles('#projFile', {name: 'staged_fixture.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(d))});
+  await p.waitForTimeout(2000);
+
+  // Switch yield basis to micromoles
+  await p.evaluate(() => {
+        const b = document.querySelector('.trace.run.sel [data-k=basis]') || document.querySelector('#o-basis');
+        if (b) { b.value = 'umol'; b.dispatchEvent(new Event('input', {bubbles: true})); b.dispatchEvent(new Event('change', {bubbles: true})); }
+  });
+  await p.waitForTimeout(500);
+
+  // Assert summary table values
+  await p.waitForSelector('#sumTable tr:nth-child(2)', { timeout: 10000 });
+  const rows = await h.sumTable();
+  T.check('staged_consistency.imac_purity_mapped', rows.some(r => /\d+%/.test(r[r.length - 1] || '')), `summary rows: ${JSON.stringify(rows)}`);
+  T.check('staged_consistency.umol_yield_calculated', rows.some(r => {
+    const yld = r.find(c => /\d+%/.test(c));
+    return yld && !/NaN/.test(yld);
+  }), `yields present: ${JSON.stringify(rows)}`);
+
+  T.check('staged-consistency.no-errors', !errs.length, errs.join(' | '));
+  await close();
+});
+
+T.done(); })();
