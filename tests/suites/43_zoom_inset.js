@@ -330,5 +330,71 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       T.check('layout/no-errors', errs.length === 0, errs.join(' | '));
     } catch (e) { T.check('layout/threw', false, String(e).slice(0, 300)); } finally { await close(); }
   }
+
+  await T.t('zoom_inset_scope', async () => {
+    const {p, close} = await open();
+    const h = H(p);
+    try {
+      await h.newProject('ZoomScope');
+      await h.addRun(path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv'));
+      await h.wait(500);
+
+      // Expand section for controls
+      await p.evaluate(() => {
+        const det = document.querySelector('section[data-for="overlay run"] details');
+        if (det) det.open = true;
+      });
+
+      // Set custom bounds
+      await p.evaluate(() => {
+        const xmin = document.querySelector('#o-xmin');
+        if (xmin) {
+          xmin.value = '10';
+          xmin.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+        const xmax = document.querySelector('#o-xmax');
+        if (xmax) {
+          xmax.value = '20';
+          xmax.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+      });
+      await h.wait(500);
+
+      // Activate zoom mode and zoom inset
+      await p.evaluate(() => {
+        const zi = document.querySelector('#o-zoomInset');
+        if (zi && !zi.checked) zi.click();
+        const zm = document.querySelector('#o-zoomMode');
+        if (zm && !zm.checked) zm.click();
+      });
+      await h.wait(500);
+
+      // Get initial main chart xmin/xmax
+      const xminBefore = await p.$eval('#o-xmin', el => el.value);
+      const xmaxBefore = await p.$eval('#o-xmax', el => el.value);
+
+      // Perform a drag gesture inside the zoom inset bounding box
+      const insetBox = await p.$eval('#zoomInsetContainer', el => {
+        const rect = el.getBoundingClientRect();
+        return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+      });
+
+      await p.mouse.move(insetBox.x, insetBox.y);
+      await p.mouse.down();
+      await p.mouse.move(insetBox.x + 20, insetBox.y + 20);
+      await p.mouse.up();
+
+      await h.wait(500);
+
+      const xminAfter = await p.$eval('#o-xmin', el => el.value);
+      const xmaxAfter = await p.$eval('#o-xmax', el => el.value);
+
+      T.check('range_unchanged', xminBefore === xminAfter && xmaxBefore === xmaxAfter, `Main chart range changed from [${xminBefore}, ${xmaxBefore}] to [${xminAfter}, ${xmaxAfter}]`);
+    } finally {
+      await close();
+    }
+  });
+
   T.done();
+
 })();

@@ -5545,6 +5545,7 @@ window.addEventListener('pointermove', e => {
 ['pointerup', 'pointercancel'].forEach(ev => window.addEventListener(ev, e => { if (wfDrag && wfDrag.on) gelMovedAt = Date.now(); wfDrag = null; wfDragCursor(e); }));
 $('#gelOffReset').addEventListener('click', () => { runs.forEach(r => { r.gelOff = {}; }); prep.offs = {}; render(); });
 paper.addEventListener('pointerdown', e => {
+  if (e.target.closest && e.target.closest('#zoomInsetContainer')) return;
   const c = chartAt(); if (!c || (!c.run && !opt.zoomMode && !e.shiftKey) || e.button !== 0) return;
   const p = svgPoint(e); if (!p) return; const lx = p.x - c.ox, ly = p.y - c.oy, g = c.g;
   if (lx < g.L || lx > g.R || ly < g.T || ly > g.B) return;
