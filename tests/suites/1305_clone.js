@@ -9,12 +9,24 @@ const {open, H, suite, src} = require('../lib/harness');
     await h.newProject('TestClone');
 
     // Add clones
+    await h.step('construct');
+
+    await p.evaluate(() => {
+        let cb = document.querySelector('#pr-on');
+        if (cb && !cb.checked) {
+            cb.checked = true;
+            cb.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    });
+
     await h.step('transform');
 
-    // Ensure the section is open
     await p.evaluate(() => {
         let ptr = document.querySelector('.sub[data-sub="ptr"]');
-        if (ptr) ptr.open = true;
+        if (ptr) {
+            ptr.hidden = false;
+            ptr.open = true;
+        }
     });
 
     await p.waitForSelector('#trAddClone', {state: 'attached'});

@@ -109,6 +109,10 @@
   - `on`: Boolean workflow mode switch
   - `construct`, `expr`, `lysis`: Booleans enabling upstream panel steps
   - `name`, `backbone`, `promoter`, `resist`: Plasmid and genetic construct parameters
+  - `parentConstructId`: ID of parent construct for lineage tracking (nullable string)
+  - `derivedConstructIds`: Array of derived construct IDs for branching cloning conditions
+  - `constructs`: Array of construct records scaffolded for cloning lineage (`CONSTRUCT_SCHEMA`)
+  - `primers`: Array of primer records scaffolded for cloning design (`PRIMER_SCHEMA`)
   - `strain`, `medium`, `cultureL`, `od`, `inducer`, `temp`, `time`, `pellet`, `indKind`: Expression host and induction conditions
   - `exStarter`, `exHarvest`, `exStore`: Extended culture and harvest notes
   - `lysMethod`, `lysBuffer`, `clarify`, `lysVol`, `lysAdd`, `lysSet`, `lysLanes`: Lysis and clarification conditions
@@ -159,6 +163,42 @@
   - Zoom inset: `zoomInset` (enable magnified sub-window plot), `zoomInsetPos` (`'tr'`, `'tl'`, `'br'`, `'beside'`), `zoomInsetSize` (fraction of plot size)
 - `ndSamples`: Array of NanoDrop spectrum/concentration readings:
   - `[{ id, name, conc, a280, a260, r280_260, runId, pool, spec: { wl: [...], abs: [...] }, specId }]`
+
+### `construct` and `primer` (Cloning Lineage & Design Schemas)
+- `CONSTRUCT_SCHEMA` / `makeConstruct(props)`:
+  - `id`: Unique construct string ID (e.g. `'c1'`)
+  - `name`: Construct name string (e.g. `"pET28-SUMO-NADK"`)
+  - `target`: Target protein or project name
+  - `insertName`: Gene or insert identifier
+  - `sourceOrganism`: Source organism string
+  - `templateType`: Template type (`'genomic'`, `'cDNA'`, `'plasmid'`, `'synthetic'`)
+  - `templateId`: Template identifier / accession
+  - `insertSeq`: Insert sequence string
+  - `vectorName`, `backbone`: Vector model and backbone string
+  - `vectorSeq`: Vector nucleotide sequence
+  - `promoter`: Promoter string (`'T7'`, `'tac'`, etc.)
+  - `tag`, `cleavageSite`, `fusionPartner`: Affinity tag, protease site, fusion partner
+  - `resist`, `ori`: Selection marker and replication origin
+  - `method`: Cloning methodology (`'restriction'`, `'gibson'`, `'golden_gate'`, `'custom'`, etc.)
+  - `expectedLength`, `orientation`, `readingFrame`: Structural design metrics
+  - `notes`: Design notes string
+  - `parentConstructId`: ID of parent construct for lineage tracking (nullable string)
+  - `derivedConstructIds`: Array of derived construct IDs for branching conditions
+  - `primers`: Array of primer IDs used in construct assembly
+  - `clones`, `selectedCloneId`: Colony clone records and selected clone ID for expression handoff
+- `PRIMER_SCHEMA` / `makePrimer(props)`:
+  - `id`: Unique primer string ID (e.g. `'pr1'`)
+  - `name`: Primer designation string
+  - `orientation`: Forward or reverse orientation (`'fwd'`, `'rev'`)
+  - `seq`: Full nucleotide sequence string (5' to 3')
+  - `bindingSeq`: Template-hybridizing nucleotide sequence
+  - `addedSeq5`: Added 5' sequence (restriction site, homology overlap, etc.)
+  - `feature`: Annotation for restriction site, overlap, or mutation
+  - `tm`: Calculated melting temperature (°C)
+  - `gc`: GC content percentage
+  - `expectedAmplicon`: Expected amplicon length (bp)
+  - `constructId`: Intended target construct ID
+  - `vendor`, `grade`, `stockConc`, `workingConc`, `notes`: Synthesis metadata and stock parameters
 
 ### Project JSON Format
 Saved `.json` files or IndexedDB records:

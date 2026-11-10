@@ -83,6 +83,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .tl li.cur .tt{color:var(--accent)}
 .tl .ts{grid-column:2 / span 2;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tl [data-step="figure"] .ts{white-space:normal;overflow:visible;text-overflow:clip}
+.tl .tg{grid-column:2 / span 2;color:var(--muted);font-size:11.5px;white-space:normal;overflow-wrap:anywhere}
 .tl .td{color:var(--muted);font-size:11.5px;white-space:nowrap}
 .tl-add{display:flex;flex-wrap:wrap;gap:6px;padding-left:36px}
 .stepsheet .ss-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -120,7 +121,7 @@ body.proj #dataPanel > h2, body.proj #dataPanel .paste, body.proj #exNote{displa
 body.proj #dataPanel .drop{display:none}
 body.proj #prOnWrap{display:none}
 body.proj #prepPanel > h2, body.proj #prepPanel details.sub > summary{display:none}
-body.proj #prepPanel details.sub{border:0;padding-top:0;margin-top:0}
+body.proj #prepPanel details.sub{border:0;padding-top:0;margin-top:0} body.proj #prepPanel{padding:10px 16px 12px} body.proj #prepPanel details.sub[data-sub="pbtw"] > *:not(summary){margin-top:3px}
 .tl{max-height:min(54vh,600px);overflow:auto;overscroll-behavior:contain;padding-right:2px}
 .tl li.warn .mk{background:var(--panel);border-color:var(--warn);color:var(--warn)}
 .tl li.warn .ts{color:var(--warn)}
@@ -211,7 +212,7 @@ body.proj .noproj, body.proj label:has(#o-runCond2){display:none!important}
 body.proj #panel[data-sec="1"] > #secPanel{order:0}
 .moreopts{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
 .moreopts .muted{font-size:12px}
-.btwnd{display:grid;gap:8px;padding:10px 0 12px}
+.btwnd{display:grid;gap:5px;padding:2px 0 4px} #btwSplitBox{padding-top:2px} #btwSplitBox > summary{padding:1px 0}
 .btwnd-r{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-variant-numeric:tabular-nums}
 .btwnd-r .muted{font-size:12px}
 .btwnd-x{border:0;background:none;color:inherit;opacity:.6;cursor:pointer;padding:0 4px;font:inherit}
@@ -638,6 +639,7 @@ button,input,select,textarea{font-family:inherit}
         <label class="f">Chromatogram height (in)<input type="number" step="0.1" min="1" id="o-wfH" data-opt="wfH"></label>
         <label class="f">Panel titles<select id="o-wfTitle" data-opt="wfTitle"><option value="step">Step type</option><option value="name">File names</option></select></label>
       </div>
+      <label class="f" title="Text panels (expression, lysis, cleavage, steps without a chromatogram) are as tall as their text plus this margin. Empty: 0.8 × the font size">Margin under text panels (pt)<input type="number" step="0.5" min="1" id="o-wfPad" data-opt="wfPad" placeholder="auto"></label>
       <label class="f" title="Each run's conditions, from its card's Run conditions, printed under its chromatogram">Run conditions under each trace<select id="o-runCond" data-opt="runCond"><option value="none">None</option><option value="short">Column, flow and temperature</option><option value="full">Also buffers, gradient and load</option></select></label>
       <div class="checks">
         <label class="check"><input type="checkbox" id="o-wfLetters" data-opt="wfLetters">Panel letters</label>
@@ -668,6 +670,23 @@ button,input,select,textarea{font-family:inherit}
         <div class="row" id="prSeqOnly">
           <label class="f">Promoter<select id="pr-promoter" data-prep="promoter"><option value="T7">T7</option><option value="T7lac">T7lac</option><option value="tac">tac</option><option value="trc">trc</option><option value="araBAD">araBAD</option><option value="rhaBAD">rhaBAD</option></select></label>
           <label class="f">Resistance<select id="pr-resist" data-prep="resist"><option value="">Not shown</option><option value="Kan">Kanamycin</option><option value="Amp">Ampicillin</option><option value="Cm">Chloramphenicol</option><option value="Spec">Spectinomycin</option><option value="Tet">Tetracycline</option></select></label>
+        </div>
+        <div class="row" id="prLineage">
+          <label class="f">Parent construct<input type="text" id="pr-parentConstructId" data-prep="parentConstructId" placeholder="e.g. c1 (empty if root)" spellcheck="false"></label>
+          <label class="f">Derived constructs<input type="text" id="pr-derivedConstructIds" data-prep="derivedConstructIds" placeholder="e.g. c2, c3" spellcheck="false"></label>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <label class="f">Cloning method record template<select id="pr-cMethod" data-prep="cMethod" title="Construct provenance record template (not scientific validation)"><option value="plasmid">Plasmid / Custom (Record)</option><option value="digest">Restriction digest (Record)</option><option value="overlap">Overlap extension / Gibson (Record)</option><option value="recomb">Recombination (Gateway, etc.) (Record)</option></select></label>
+        </div>
+        <p class="hint" id="pr-cTemplateNotice" style="margin-top:2px; margin-bottom:6px">Construct method templates are design and provenance records rather than scientific validation.</p>
+        <div data-cmethod="digest" style="display:none; margin-top:6px" class="row">
+          <label class="f">Digest enzymes<input type="text" id="pr-cEnz" data-prep="cEnz" placeholder="e.g. NdeI, XhoI" spellcheck="false"></label>
+        </div>
+        <div data-cmethod="overlap" style="display:none; margin-top:6px" class="row">
+          <label class="f">Overlap length (bp)<input type="number" id="pr-cOverlap" data-prep="cOverlap" min="1"></label>
+        </div>
+        <div data-cmethod="recomb" style="display:none; margin-top:6px" class="row">
+          <label class="f">Recombination sites<input type="text" id="pr-cRecomb" data-prep="cRecomb" placeholder="e.g. attB1/B2" spellcheck="false"></label>
         </div>
         <label class="check"><input type="checkbox" id="pr-construct" data-prep="construct">Construct panel</label>
       </details>
@@ -769,6 +788,14 @@ button,input,select,textarea{font-family:inherit}
           <div class="btns"><button type="button" class="btn primary" id="btwNdAdd">Load NanoDrop export</button><input type="file" id="btwNdFile" hidden></div>
           <div id="btwNdList"></div>
           <label class="f" title="The volume left in the concentrator, the one your NanoDrop readings were taken in">Volume after concentrating (mL)<input type="number" id="btw-vOut" data-btw="vOut" min="0" step="any" placeholder="e.g. 0.25"></label>
+          <details class="cardtext" id="btwSplitBox"><summary>Only part went on to the next step (optional)</summary>
+          <div class="row">
+            <label class="f" title="How much of it went onto the next step. Left empty, all of it did. The next step's yield counts from this share of the mg">Loaded on the next step (mL)<input type="number" id="btw-vLoad" data-btw="vLoad" min="0" step="any" placeholder="all"></label>
+            <label class="f" title="The rest, kept and not loaded">Kept back (mL)<input type="number" id="btw-vKeep" data-btw="vKeep" min="0" step="any"></label>
+          </div>
+          <label class="f" title="What was done with the volume kept back">Kept as<input type="text" id="btw-keepAs" data-btw="keepAs" placeholder="e.g. flash-frozen, −80 °C"></label>
+          <p class="hint warnc" id="btwSplit" hidden></p>
+          </details>
           <p class="hint" id="btwCarry"></p>
         </div>
         <details class="cardtext" id="btwMore"><summary>Details for the methods (optional)</summary>
@@ -1373,7 +1400,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   rxlabel:'Volume (mL)', rylabel:'Absorbance (mAU)', y2grad:'Buffer B (%)', y2cond:'Conductivity (mS/cm)',
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
   intMethod:'gauss', poolStyle:'band', poolColor:'#E69F00', poolAlpha:0.3, intBase:'line', intLabel:'num', intProm:5, intFill:true, eps:'', path:2,
-  wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfFull:false, wfArrows:true, gelFrame:true, ladder:'biorad',
+  wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfPad:'', wfGelH:1.3, wfLetters:true, wfGels:true, wfFull:false, wfArrows:true, gelFrame:true, ladder:'biorad',
   zoomMode:false, zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4, zoomInsetW:0, zoomInsetH:0, zoomInsetX:null, zoomInsetY:null,
   preset:'single', w:3.5, h:2.6, fs:8, lw:0.75, font:'Arial', palette:'okabe', bg:true, dpi:600};
 const RANGE = ['xmin','xmax','ymin','ymax'];
@@ -3823,6 +3850,8 @@ function laneLinks(){
   return map;
 }
 function gelsFor(r){ return gels.filter(g => g.out && lanesFor(g, r.id).length); }
+/* the margin kept under a text panel's content (Margin under text panels, pt), never so small that descenders touch the next item */
+const textPad = fs => Math.max(fs*0.35, numOr(opt.wfPad, fs*0.8));
 function composeRuns(list, cfg){
   const fs = fontSize(), cw = fs*0.56, n = list.length; if (!n) return {svg: null, geo: null};
   let Wt = cfg.W, chromH = cfg.chromH;
@@ -3853,7 +3882,7 @@ function composeRuns(list, cfg){
   if (widened) Wt = row ? pw.reduce((a, b) => a + b, 0) + (n-1)*gap : grid ? 2*Math.max(...pw) + gap : Math.max(...pw);
   if (widened && !row) pw.fill(grid ? (Wt - gap)/2 : Wt);
   /* the upstream band is as tall as its tallest panel's text at the width that panel really gets */
-  if (cfg.bandH) cfg = Object.assign({}, cfg, {bandH: Math.max(cfg.bandH, ...list.map((r, i) => { const c = buildRunSVG(r, {wPt: pw[i], hPt: chromH, nest: true}); return c.geo && c.geo.used ? c.geo.used + fs*0.8 : 0; }))});
+  if (cfg.bandH) cfg = Object.assign({}, cfg, {bandH: Math.max(cfg.bandH, ...list.map((r, i) => { const c = buildRunSVG(r, {wPt: pw[i], hPt: chromH, nest: true}); return c.geo && c.geo.used ? c.geo.used + textPad(fs) : 0; }))});
   /* panel titles wrap onto a second line instead of being cut off */
   /* if any title has to drop its shared prefix, all of them do, so the panels read alike */
   const roomOf = i => Math.max(4, Math.floor((pw[i] - (cfg.letters ? fs*1.6 : 0))/(fs*0.55))), anyShort = list.some((r, i) => stepTitle(r) === r.name && r.name.length > roomOf(i) && shortRunName(r) !== r.name);
@@ -3920,8 +3949,8 @@ function composeRuns(list, cfg){
     /* a wide stacked panel spreads its connectors far sideways: give them a little more drop so they don't run flat */
     const connH = gl.length && !sideHere ? (cfg.connectors ? fs*1.9 + (!row && chart.geo ? Math.min(fs*2.2, 0.06*(chart.geo.R - chart.geo.L)) : 0) : fs*0.8) + extraGap : 0;
     const off = r.gelOff || {};
-    /* a text or construct panel outside the side-by-side layout is only as tall as its content, so its gel follows it closely */
-    const ch = cfg.bandH ? cfg.bandH : r.prep && !row && list.every(x => x.prep) && chart.geo && chart.geo.used ? Math.min(chromH, chart.geo.used + fs*0.8) : chromH;
+    /* a text or construct panel outside the side-by-side layout is only as tall as its content plus the margin, so its gel or the next step follows it closely */
+    const ch = cfg.bandH ? cfg.bandH : r.prep && !row && chart.geo && chart.geo.used ? Math.min(chromH, chart.geo.used + textPad(fs)) : chromH;
     let gy = sideHere ? titleH + (chart.geo ? chart.geo.T : 0) : titleH + ch + connH, bottom = titleH + (chart.svg ? ch : 0);
     const gi = gl.map(g => {
       const idx = lanesFor(g, 'marker').concat(lanesFor(g, r.id)).sort((a,b) => a - b);
@@ -4130,9 +4159,38 @@ function buildWorkflow(){
 }
 
 /* ---------- upstream steps: construct, expression and lysis, drawn before the first column ---------- */
+/* Construct and Primer schemas scaffolded for cloning lineage and downstream purification linking (Issue #1304) */
+const CONSTRUCT_SCHEMA = {
+  id: '', name: '', target: '', insertName: '', sourceOrganism: '', templateType: '', templateId: '',
+  insertSeq: '', vectorName: '', backbone: '', vectorSeq: '', promoter: 'T7', tag: '', cleavageSite: '',
+  fusionPartner: '', resist: '', ori: '', method: '', expectedLength: null, orientation: 'fwd',
+  readingFrame: 1, sequenceMap: null, notes: '', parentConstructId: null, derivedConstructIds: [],
+  primers: [], clones: [], selectedCloneId: null,
+  cMethod: 'plasmid', cEnz: '', cOverlap: '', cRecomb: '', cDetails: { digest: {}, overlap: {}, recomb: {} }
+};
+function makeConstruct(p){
+  return Object.assign({}, CONSTRUCT_SCHEMA, {
+    id: 'c' + (uid++),
+    derivedConstructIds: [],
+    primers: [],
+    clones: []
+  }, p && typeof p === 'object' ? p : {});
+}
+const PRIMER_SCHEMA = {
+  id: '', name: '', orientation: 'fwd', seq: '', bindingSeq: '', addedSeq5: '', feature: '',
+  tm: null, gc: null, expectedAmplicon: null, constructId: '', vendor: '', grade: 'desalt',
+  stockConc: '', workingConc: '', notes: ''
+};
+function makePrimer(p){
+  return Object.assign({}, PRIMER_SCHEMA, {
+    id: 'pr' + (uid++)
+  }, p && typeof p === 'object' ? p : {});
+}
 const PREP_DEF = {on: true, construct: true, expr: true, lysis: true, name: '', backbone: '', promoter: 'T7', resist: '', strain: '', medium: '', cultureL: '', od: '', inducer: '', temp: '', time: '', pellet: '', lysMethod: '', lysBuffer: '', clarify: '', lysVol: '', lysLanes: false, indKind: 'IPTG', gb: null,
   cleave: false, cleaveAfter: '', protease: '', ratio: '', clvTemp: '', clvTime: '', dialBuffer: '', mwco: '', dialVol: '', dialChanges: '', store: '',
-  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {}};
+  trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', clones: [], selectedCloneId: null, exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {},
+  constructs: [], primers: [], parentConstructId: null, derivedConstructIds: [],
+  cMethod: 'plasmid', cEnz: '', cOverlap: '', cRecomb: '', cDetails: { digest: {}, overlap: {}, recomb: {} }};
 let prep = JSON.parse(JSON.stringify(PREP_DEF));
 const PREP_LANE = ['expr', 'lysis', 'cleave'], PREP_NAME = {construct: 'Construct', expr: 'Expression', lysis: 'Lysis', cleave: 'Dialysis and cleavage'}, prepObj = {};
 const hasTxt = v => String(v == null ? '' : v).trim() !== '';
@@ -4220,8 +4278,8 @@ function manLines(m){ const t = x => String(x == null ? '' : x).trim(), out = []
   if (t(m.resin)) out.push(t(m.resin)); if (t(m.buffer)) out.push(t(m.buffer)); if (t(m.wash) && (m.kind === 'column' || m.kind === 'batch')) out.push('Wash: ' + t(m.wash)); if (t(m.elution)) out.push(t(m.elution));
   if (v != null || c != null) out.push([v != null ? `${fmtAuto(v)} mL` : '', c != null ? `${fmtAuto(c)} mg/mL` : '', c != null && v != null ? `${sig2(c*v)} mg` : ''].filter(Boolean).join(', '));
   if (t(m.note)) out.push({t: t(m.note), c: '#555555'}); return out; }
-/* the amount loaded on the next column: the last measured amount after this step and before the next column */
-function loadedAfter(r){ const wf = wfList(), i = wf.indexOf(r); let mg = r && r.id ? (btwMg(r) || {}).mg || null : null;
+/* the amount loaded on the next column: the last measured amount after this step and before the next column, the share loaded when only part of it was */
+function loadedAfter(r){ const wf = wfList(), i = wf.indexOf(r); let mg = r && r.id ? (btwMg(r) || {}).mg || null : null; if (mg) mg *= btwSplit((prep.btw || {})[r.id]).f;
   for (let j = i + 1; i >= 0 && j < wf.length && wf[j].prep; j++) if (wf[j].prep === 'manual') { const a = manMg(wf[j].man); if (a !== null) mg = a; }
   return mg; }
 /* cleavage gel lanes: before and after the protease */
@@ -4367,7 +4425,8 @@ function constructModel(){
   return {src, tx, segs: sp.segs, cut: sp.cut, cterm: sp.cterm, tagSeq: sp.tag, protSeq: sp.prot, pn, tn, tagParts,
     name: String(prep.name || '').trim() || (gb ? gb.name : ''), len: gb ? gb.len : null, circ: gb ? gb.circ : true, backbone: String(prep.backbone || '').trim(),
     prom: src === 'gb' ? (cas.prom || '') : (prep.promoter || 'T7'), lacO: src === 'gb' ? cas.lacO : /lac/i.test(prep.promoter || ''), rbs: src === 'gb' ? cas.rbs || !!cas.prom : true, term: src === 'gb' ? cas.term : /T7/i.test(prep.promoter || 'T7'),
-    res, ori: src === 'gb' ? cas.ori : [], mTag: seqMass(tx)/1000, mProt: sp.tag ? seqMass(sp.prot)/1000 : null, mFree: sp.tag ? seqMass(sp.tag)/1000 : null, match, pi: seqPI(sp.prot) /* model incorporates remnant */};
+    res, ori: src === 'gb' ? cas.ori : [], mTag: seqMass(tx)/1000, mProt: sp.tag ? seqMass(sp.prot)/1000 : null, mFree: sp.tag ? seqMass(sp.tag)/1000 : null, match, pi: seqPI(sp.prot) /* model incorporates remnant */,
+    parentConstructId: prep.parentConstructId || null, derivedConstructIds: Array.isArray(prep.derivedConstructIds) ? prep.derivedConstructIds.slice() : []};
 }
 /* rich text in figure lines: E. coli in italics, OD600 with a subscript, × g with an italic g */
 function richLine(t, fsz){ const d = r2(fsz*0.28), sz = r2(fsz*0.7);
@@ -4527,6 +4586,11 @@ const BTW_T = {conc: 'Concentrated', dil: 'Diluted', exch: 'Buffer exchanged', f
 const btwOf = r => { if (!r || !prep.btw || !prep.btw[r.id]) return null; const p = r.fracs ? poolRows(r) : null; return Object.assign({how: 'conc', _poolVol: p && xUnit(r) === 'mL' && p.vol > 0 ? +fmt(p.vol, 1) : 0}, prep.btw[r.id]); };
 const btwShort = b => { const vo = numOr(b.vOut, 0); return b.how === 'dil' ? (vo > 0 ? `Diluted to ${fmtAuto(vo)} mL` : 'Diluted') : b.how === 'exch' ? 'Buffer exchanged' : b.how === 'filt' ? 'Filtered' : b.how === 'hold' ? 'Held overnight' : vo > 0 ? `Conc. to ${fmtAuto(vo)} mL` : 'Concentrated'; };
 const arrowNote = r => String(r.note || '').trim();
+/* the share of a measured output loaded on the next step, for a well-mixed sample: loaded / output. Neither volume (older projects) means all of it, only the kept volume means the rest;
+   loaded plus kept above the output is not a split, and counts as all until fixed */
+function btwSplit(b){ const vo = numOr(b && b.vOut, null), vk = numOr(b && b.vKeep, null); let vl = numOr(b && b.vLoad, null);
+  if (vl == null && vk == null) return {f: 1, set: false}; const bad = !(vo > 0) ? 'novol' : vl != null && vl < 0 || vk != null && vk < 0 ? 'neg' : vl === 0 ? 'zero' : (vl || 0) + (vk || 0) > vo*(1 + 1e-9) ? 'over' : '';
+  if (bad) return {f: 1, set: false, bad, vo, vl, vk}; if (vl == null) vl = vo - vk; return {f: vl/vo, set: true, vo, vl, vk}; }
 function btwMg(r){ const b = btwOf(r); if (!b) return null; const ms = poolMeas(r), c = ms.src === 'btw' ? ms.c : null, vo = numOr(b.vOut, null); if (c == null || vo == null) return null; const p = poolRows(r), mg = c*vo; return {mg, pct: p && p.mgArea > 0 ? 100*mg/p.mgArea : null}; }
 function btwSentence(b){
   const dv = String(b.device || '').trim(), mw = String(b.mwco || '').trim(), nt = String(b.note || '').trim().replace(/\.$/, ''), vi = numOr(b.vIn, 0) || numOr(b._poolVol, 0), vo = numOr(b.vOut, 0);
@@ -4635,7 +4699,7 @@ function methodsText(){
   const art = t => /^[aeiouäÄ]/i.test(t) || /^[FHLMNRSX][A-Z0-9]/.test(t) ? 'an' : 'a', deg = t => unitIf(t, '°C'), hrs = t => unitIf(t, 'h');
   const steps = runs.filter(r => r.inWf), pre = prepSteps(), letterOf = r => opt.wfLetters ? String.fromCharCode(65 + pre.concat(wfFigList()).indexOf(r)) : '';
   if (cm && prep.on && (prep.gb || hasTxt(prep.name) || EXPR_KEYS.some(k => hasTxt(prep[k])))) P.push(`${cm.tn} (${fmt(cm.mTag, 1)} kDa)${cm.name ? ` was encoded in ${cm.name}${cm.backbone ? `, a ${cm.backbone} derivative` : ''}${cm.res.length ? ` carrying ${cm.res.join(' and ')} resistance` : ''}` : ''}.${cm.cut ? ` A ${cm.cut.name} site separates the tag from ${cm.pn} (${fmt(cm.mProt, 1)} kDa, ${cm.protSeq.length} residues after cleavage).` : ''}`);
-  if (PROJ && prep.on && !skipped('transform') && !['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(k => hasTxt(prep[k]))) P.push('Transformation: [not entered].');
+  if (PROJ && prep.on && !skipped('transform') && !['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(k => hasTxt(prep[k])) && !prep.selectedCloneId) { P.push('Transformation: [not entered].'); }
   if (PROJ && prep.on && !skipped('expr') && !EXPR_KEYS.some(k => hasTxt(prep[k]))) P.push('Expression: [not entered].');
   let trSaid = false;
   if (prep.on && !skipped('transform') && (['trPlasmid', 'trMethod', 'trSel'].some(k => hasTxt(prep[k])) || prep.selectedCloneId)) {
@@ -5090,7 +5154,7 @@ function onGel(el){
   } else render();
 }
 /* numbers typed into a field are held to its min and max, and to a sensible ceiling, so a stray 1e6 cannot freeze the page */
-const SANE_MAX = {w: 40, h: 40, wfW: 40, wfH: 20, wfGelH: 20, fs: 72, lw: 10, stack: 1000, runPad: 500, gelGap: 400, peakMax: 200, peakDec: 4, prom: 100, intProm: 100, path: 100, eps: 100, tagTol: 10, knownTol: 25, knownMin: 50, bandSens: 60, gelSide: 90, tagKda: 500, protKda: 2000, sbValue: 1e6, nLanes: 30};
+const SANE_MAX = {w: 40, h: 40, wfW: 40, wfH: 20, wfPad: 72, wfGelH: 20, fs: 72, lw: 10, stack: 1000, runPad: 500, gelGap: 400, peakMax: 200, peakDec: 4, prom: 100, intProm: 100, path: 100, eps: 100, tagTol: 10, knownTol: 25, knownMin: 50, bandSens: 60, gelSide: 90, tagKda: 500, protKda: 2000, sbValue: 1e6, nLanes: 30};
 function saneNum(el, v, key){
   if (v === '' || !isFinite(v)) return v === '' ? '' : null;
   const lo = el.min !== '' ? +el.min : -Infinity, hi = Math.min(el.max !== '' ? +el.max : Infinity, SANE_MAX[key] != null ? SANE_MAX[key] : Infinity);
@@ -5616,8 +5680,7 @@ function renderSumTable(){
   { const nog = rows.filter(x => x.pur == null && !x.satL.length).map(x => stepTitle(x.r) !== x.r.name ? stepTitle(x.r) : shortRunName(x.r)); if (nog.length) notes.push(`No purity gel for ${nog.length > 1 ? nog.slice(0, -1).join(', ') + ' or ' + nog[nog.length - 1] : nog[0]}.`); }
   if (rows.some(x => x.purEst && x.pur != null)) notes.push('≈ Purity is estimated from bands within 8% of the expected size (the tagged form counts only before the tag is removed), weighted over the pool\'s lanes; "unclear" means too little signal at that size. Mark the target band on a gel to measure it.');
   { const mt = $('#methodsText'); if (mt && $('#methodsBox').open) { const t = methodsText(); if (mt.value !== t) mt.value = t;
-    /* each gap named by what is missing, or by its paragraph when the bracket only says "not entered" */
-    const gp = [...new Set(t.split(/\n\n/).flatMap(par => (par.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).map(g => { const w = g.slice(1, -1).replace(/\s*not entered\s*/i, '').trim(); return w || (par.match(/^([^:(]+)/) || ['', 'a step'])[1].trim(); })))], ge = $('#methodsGaps'); ge.hidden = !gp.length; ge.innerHTML = gp.length ? `Still to fill in: ${gp.map(w => `<button type="button" class="linkbtn gap-btn" data-gap="${esc(w)}">${esc(w)}</button>`).join(', ')}. Each is marked in [brackets] below.` : ''; } }
+    const gp = methodGapNames(t), ge = $('#methodsGaps'); ge.hidden = !gp.length; ge.innerHTML = gp.length ? `Still to fill in: ${gp.map(w => `<button type="button" class="linkbtn gap-btn" data-gap="${esc(w)}">${esc(w)}</button>`).join(', ')}. Each is marked in [brackets] below.` : ''; } }
   /* the core columns show; the rest wait behind More columns (the CSV keeps them all) */
   { const tb = $('#sumTable'), hd = [...(tb.rows[0] || {cells: []}).cells].map(c => c.textContent), allNd = rows.every(x => x.pur == null);
     const extra = hd.map(t => /A₂₈₀ area|NanoDrop|^Form|nmol|mg per|^Purity/.test(t) && !(/^Purity/.test(t) && !allNd));
@@ -5758,10 +5821,27 @@ async function addGelFiles(files){
     catch (e) { bad.push(f.name); }
   }
   gelTarget = null;
-  if (last) { cur = last.id; renderList(); syncControls(); render(); toast(last.autoCropped ? `Gel added and cropped to ${last.nLanes} lanes. Type your lane labels to set the count, then detect the ladder.` : 'Gel added. Trim it to the lanes, then mark the ladder.'); }
+  if (last) { cur = last.id; renderList(); syncControls(); render(); toast(last.autoCropped ? `Gel added and cropped to ${last.nLanes} lanes. Select lane labels in the sidebar to set the count, then detect the ladder.` : 'Gel added. Trim it to the lanes, then mark the ladder.'); }
   if (bad.length) toast(`Could not open ${bad.join(', ')}. Try exporting the gel as PNG or JPEG.`);
 }
+/* processTrace sorts a trace whose X axis goes down; say so, and tell a wholly reversed export from one that resets, without changing the source rows */
+function axisOrderDiag(parsed){
+  const xc = parsed.xc ?? 0, yc = parsed.yc ?? 1, axis = parsed.cols[xc] || 'X axis', lines = []; let n = 0, desc = 0, prev = null;
+  parsed.rows.forEach((r, i) => { const x = r[xc], y = r[yc]; if (x == null || y == null || !isFinite(x) || !isFinite(y)) return; n++; if (prev != null && x < prev) { desc++; if (parsed.retained && lines.length < 3) lines.push(parsed.retained.start + i); } prev = x; });
+  if (!desc) return null;
+  const all = desc === n - 1, tr = `${desc} descending transition${desc > 1 ? 's' : ''}`, at = lines.length ? ` (at line${lines.length > 1 ? 's' : ''} ${lines.join(', ')}${desc > lines.length ? ', …' : ''})` : '';
+  return {axis, transitions: desc, points: n, descending: all, lines,
+    summary: all ? `${axis} runs entirely in descending order; plotted series was sorted` : `${axis} has ${tr} (reset or discontinuous segments); plotted series was sorted`,
+    msg: all ? `The selected X axis, ${axis}, decreases from each of its ${n} points to the next (${tr}): the export runs from high to low. The plotted series was sorted by ${axis} in ascending order; the source rows are kept as imported.`
+      : `The selected X axis, ${axis}, goes down ${desc === 1 ? 'once' : desc + ' times'}${at} (${tr}), so the export has reset or discontinuous segments. The plotted series was sorted by ${axis} in ascending order, which joins the segments into one curve; the source rows are kept as imported. Check that the file holds a single acquisition before integrating or labelling peaks.`};
+}
 function genericDiag(srcName, nm, parsed){
+  const d = genericBlockDiag(srcName, nm, parsed), o = axisOrderDiag(parsed);
+  if (!o) return d;
+  if (!d) return {source: srcName, kind: 'generic', reordered: o, summary: o.summary, msg: o.msg};
+  return Object.assign(d, {reordered: o, summary: `${d.summary}; ${o.summary}`, msg: `${d.msg} ${o.msg}`});
+}
+function genericBlockDiag(srcName, nm, parsed){
   if (parsed.discarded && parsed.discarded.length) {
     const dsc = parsed.discarded, oCount = dsc.reduce((s, b) => s + b.count, 0);
     const oRanges = dsc.map(b => b.start === b.end ? `line ${b.start}` : `lines ${b.start}–${b.end}`).join(', ');
@@ -6089,7 +6169,7 @@ function loadGenBankText(text, fname){
 }
 function renderPrep(){
   const pn = $('#prepPanel'); if (!pn) return;
-  pn.querySelectorAll('[data-prep]').forEach(el => { if (el === document.activeElement) return; const v = prep[el.dataset.prep]; if (el.type === 'checkbox') el.checked = !!v; else if (el.value !== String(v == null ? '' : v)) el.value = v == null ? '' : v; });
+  pn.querySelectorAll('[data-prep]').forEach(el => { if (el === document.activeElement) return; const k = el.dataset.prep; let v = prep[k]; if (el.type === 'checkbox') el.checked = !!v; else { if (Array.isArray(v)) v = v.join(', '); const s = v == null ? '' : String(v); if (el.value !== s) el.value = s; } });
   pn.querySelectorAll('details.sub').forEach(el => el.classList.toggle('off', el.dataset.sub === 'pclv' ? !prep.cleave : !prep.on));
 
   const cList = $('#cloneList');
@@ -6123,6 +6203,10 @@ function renderPrep(){
       </div>
     `).join('');
   }
+  { const sel = $('#pr-cMethod'); if (sel) {
+      if (sel !== document.activeElement) sel.value = prep.cMethod || 'plasmid';
+      pn.querySelectorAll('[data-cmethod]').forEach(el => { el.hidden = el.dataset.cmethod !== (prep.cMethod || 'plasmid'); el.style.display = el.hidden ? 'none' : 'flex'; });
+  } }
   { const t = $('#pr-trPlasmid'); if (t) t.placeholder = String(prep.name || '').trim() || (prep.gb && prep.gb.name) || 'e.g. pET28-SUMO-NADK'; }
   $('#prSeqOnly').hidden = !!prep.gb; $('#prIndAmt').hidden = prep.indKind === 'auto';
   { const sel = $('#pr-cleaveAfter'), wf = runs.filter(r => r.inWf), cid = cleaveRunId(), h = wf.map((r, k) => `<option value="${r.id}"${r.id === cid ? ' selected' : ''}>${k + 1}. ${esc(stepTitle(r))}</option>`).join('') || '<option value="">No runs yet</option>';
@@ -6144,11 +6228,19 @@ function renderPrep(){
   if (st._h !== h) { st._h = h; st.innerHTML = h; }
 }
 let prepT = 0;
-$('#prepPanel').addEventListener('input', e => { const el = e.target, k = el.dataset.prep; if (!k) return;
+function onPrepInput(e){ const el = e.target, k = el.dataset.prep; if (!k) return;
   if (el.type === 'number' && el.value !== '') { const v = +el.value; if (!isFinite(v) || v < 0 || v > 1e5) { el.setCustomValidity('Enter a positive number'); return; } el.setCustomValidity(''); }
-  prep[k] = el.type === 'checkbox' ? el.checked : el.value;
+  if (k === 'derivedConstructIds') prep[k] = el.value.split(',').map(s => s.trim()).filter(Boolean);
+  else if (k === 'parentConstructId') prep[k] = el.value.trim() || null;
+  else prep[k] = el.type === 'checkbox' ? el.checked : el.value;
+  prep.cDetails = prep.cDetails || { digest: {}, overlap: {}, recomb: {} };
+  if (k === 'cEnz') { prep.cDetails.digest = prep.cDetails.digest || {}; prep.cDetails.digest.enzymes = el.value; }
+  else if (k === 'cOverlap') { prep.cDetails.overlap = prep.cDetails.overlap || {}; prep.cDetails.overlap.overlapBp = el.value; }
+  else if (k === 'cRecomb') { prep.cDetails.recomb = prep.cDetails.recomb || {}; prep.cDetails.recomb.sites = el.value; }
   /* typing in a text field redraws once the typing pauses */
-  if (el.type === 'text') { clearTimeout(prepT); prepT = setTimeout(render, 260); return; } if (['on', 'lysLanes', 'lysis', 'cleave'].includes(k)) gels.forEach(g => { g._prepA = null; }); render(); });
+  if (el.type === 'text') { clearTimeout(prepT); prepT = setTimeout(render, 260); return; } if (['on', 'lysLanes', 'lysis', 'cleave'].includes(k)) gels.forEach(g => { g._prepA = null; }); render(); }
+$('#prepPanel').addEventListener('input', onPrepInput);
+$('#prepPanel').addEventListener('change', onPrepInput);
 $('#gbPick').addEventListener('click', () => $('#gbFile').click());
 $('#gbFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) loadGenBank(f); });
 $('#gbPaste').addEventListener('click', () => { const b = $('#gbPasteBox'); b.hidden = !b.hidden; if (!b.hidden) $('#gbText').focus(); });
@@ -6634,7 +6726,7 @@ function nextStep(){
   if (runs.length && !gels.length && steps.length && (fk === 'workflow' || (fk === 'run' && !isSec(f0.run)))) { const _n = {k: 'gel', t: 'Optional: add a gel to show its lanes under each run.', go: 'Add gel image', act: () => $('#gelFile').click()}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
   const gOrder = gels.slice().sort((a, b) => (b.id === cur) - (a.id === cur));
   for (const g of gOrder) { if (fk === 'run' && isSec(f0.run)) break; if (fk === 'gel' && g.id !== cur) continue; const labs = gelLabels(g), dflt = labs[0] === 'M' && labs.slice(1).every((t, i) => t === String(i + 1));
-    if (dflt) { const _n = {k: 'labels:' + g.id, t: `Type the lane labels for ${g.name}, one per lane.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) d.open = true; const el = $('#g-labels'); el.scrollIntoView({behavior: smooth(), block: 'center'}); setTimeout(() => el.focus(), 300); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
+    if (dflt) { const _n = {k: 'labels:' + g.id, t: `Select lane labels in the sidebar for ${g.name}, one per lane.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) d.open = true; const el = $('#g-labels'); el.scrollIntoView({behavior: smooth(), block: 'center'}); setTimeout(() => el.focus(), 300); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
     gelLabels(g).forEach((_, i) => laneAssign(g, i)); const amb = Object.keys((g._auto && g._auto.amb) || {}).filter(i => !(g.assign || [])[i]).length;
     if (amb) { const _n = {k: 'amb:' + g.id + ':' + amb, t: `${amb} lane${amb === 1 ? '' : 's'} on ${g.name} name${amb === 1 ? 's a fraction' : ' fractions'} found in more than one run. Pick the run for ${amb === 1 ? 'it' : 'them'}, or set each run's pooled fractions.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) { d.open = true; const x = document.querySelector('.lrow.amb select') || $('#laneTable'); x.scrollIntoView({behavior: smooth(), block: 'center'}); if (x.focus) setTimeout(() => x.focus(), 250); } }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
     if (lanesFor(g, 'marker').length && g.marks.length < 2) { const _n = {k: 'ladder:' + g.id, t: `Ladder not found on ${g.name}.`, go: 'Go to ladder', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="gladder"]'); if (d) { d.open = true; d.scrollIntoView({behavior: smooth(), block: 'center'}); } }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
@@ -6689,6 +6781,14 @@ function cleanProject(d){
     if (!('secStds' in d.opt) && (d.runs.some(r => r.secMode === 'on') || (Array.isArray(d.opt.secCals) && d.opt.secCals.length > 0))) d.opt.secStds = true;
   }
   if (!d.srcDiag || typeof d.srcDiag !== 'object' || Array.isArray(d.srcDiag)) d.srcDiag = {};
+  if (d.prep && typeof d.prep === 'object' && !Array.isArray(d.prep)) {
+    if (!Array.isArray(d.prep.constructs)) d.prep.constructs = [];
+    if (!Array.isArray(d.prep.primers)) d.prep.primers = [];
+    if (!('parentConstructId' in d.prep)) d.prep.parentConstructId = null;
+    if (!Array.isArray(d.prep.derivedConstructIds)) d.prep.derivedConstructIds = [];
+    if (!d.prep.cMethod) d.prep.cMethod = 'plasmid';
+    if (!d.prep.cDetails || typeof d.prep.cDetails !== 'object') d.prep.cDetails = { digest: {}, overlap: {}, recomb: {} };
+  }
   return skipped; }
 async function openProject(data, name, noUndo){
   if (!data || data.app !== 'HPLC Figure Bench' || !Array.isArray(data.runs)) { toast(`${name || 'That file'} is not a project saved by this tool`); return; }
@@ -6699,7 +6799,7 @@ async function openProject(data, name, noUndo){
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
       Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
-  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
+  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (!Array.isArray(prep.constructs)) prep.constructs = []; if (!Array.isArray(prep.primers)) prep.primers = []; if (!('parentConstructId' in prep)) prep.parentConstructId = null; if (!Array.isArray(prep.derivedConstructIds)) prep.derivedConstructIds = []; if (!prep.cMethod) prep.cMethod = 'plasmid'; if (!prep.cDetails || typeof prep.cDetails !== 'object') prep.cDetails = { digest: {}, overlap: {}, recomb: {} }; if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
   srcDiag = (data.srcDiag && typeof data.srcDiag === 'object' && !Array.isArray(data.srcDiag)) ? Object.assign({}, data.srcDiag) : {};
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
@@ -6712,7 +6812,7 @@ async function openProject(data, name, noUndo){
   toast(`Opened ${name || 'project'}: ${runs.length} run${runs.length === 1 ? '' : 's'}, ${traces.length} trace${traces.length === 1 ? '' : 's'}, ${gels.length} gel${gels.length === 1 ? '' : 's'}${skipped ? `. Skipped ${skipped} damaged or incomplete item${skipped === 1 ? '' : 's'} in the file` : ''}`);
   nextHidden.delete('undoOpen'); renderNext();
 }
-$('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex)) { toast('Load some data first'); return; }
+$('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex) && !prep.gb && !cleanSeq(opt.protSeq) && !prep.name && !prep.parentConstructId && !(prep.constructs && prep.constructs.length) && !prep.cEnz && !prep.cOverlap && !prep.cRecomb) { toast('Load some data first'); return; }
   const nm = (runs[0] && runs[0].name) || (gels[0] && gels[0].name) || (traces.find(t => !t.ex) || {}).name || 'figures'; const d = projectData(); if (MODE === 'quick') d.quick = true; saveFile(`${safe(nm)}_project.json`, JSON.stringify(d)); });
 $('#projOpen').addEventListener('click', () => $('#projFile').click());
 $('#projFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; let data;
@@ -6732,9 +6832,15 @@ async function importAsProject(data, fname){
 /* ---------- projects: a project per purification, saved with the page (db + assets) or in this browser ---------- */
 let PROJ = null, MODE = 'quick', curStep = 'construct';
 const STORE = {mode: 'pending', db: null, assets: null, uid: null, idb: null, ready: null};
-function idbOpen(){ return new Promise((res, rej) => { if (!window.indexedDB) return rej(new Error('no idb')); const q = indexedDB.open('hfb-projects', 1);
-  q.onupgradeneeded = () => { q.result.createObjectStore('projects', {keyPath: 'id'}); }; q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
-function idbDo(mode, fn){ return new Promise((res, rej) => { const tx = STORE.idb.transaction('projects', mode), st = tx.objectStore('projects'), q = fn(st); tx.oncomplete = () => res(q && q.result); tx.onerror = () => rej(tx.error); }); }
+function idbOpen(){ return new Promise((res, rej) => { if (!window.indexedDB) return rej(new Error('no idb')); const q = indexedDB.open('hfb-projects', 2);
+  q.onupgradeneeded = () => {
+    if (!q.result.objectStoreNames.contains('projects')) q.result.createObjectStore('projects', {keyPath: 'id'});
+    if (!q.result.objectStoreNames.contains('blobs')) q.result.createObjectStore('blobs', {keyPath: 'id'});
+  }; q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+function idbDo(mode, fn, store = 'projects'){ return new Promise((res, rej) => { const tx = STORE.idb.transaction(store, mode), st = tx.objectStore(store), q = fn(st); tx.oncomplete = () => res(q && q.result); tx.onerror = () => rej(tx.error); }); }
+const newBlobId = () => 'b-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+async function putLocalBlob(id, data){ await idbDo('readwrite', st => st.put({id, data}), 'blobs'); return id; }
+async function getLocalBlob(id){ if (!id) return null; const r = await idbDo('readonly', st => st.get(id), 'blobs'); return r ? r.data : null; }
 function storeInit(){
   if (STORE.ready) return STORE.ready;
   STORE.ready = (async () => {
@@ -6754,23 +6860,32 @@ async function storeList(){
   return [];
 }
 const RUN_HEAVY = ['uvs', 'grad', 'cond', 'fracs', 'phases'];
-async function upJSON(obj){ return (await STORE.assets.upload(new Blob([JSON.stringify(obj)], {type: 'application/json'}), {type: 'application/json'})).id; }
-async function upPNG(canvas){ const b = await new Promise(res => canvas.toBlob(res, 'image/png')); return (await STORE.assets.upload(b, {type: 'image/png'})).id; }
+async function upJSON(obj){
+  if (STORE.mode === 'local') { const id = newBlobId(); await putLocalBlob(id, obj); return id; }
+  return (await STORE.assets.upload(new Blob([JSON.stringify(obj)], {type: 'application/json'}), {type: 'application/json'})).id;
+}
+async function upPNG(canvas){
+  if (STORE.mode === 'local') {
+    const id = 'img-' + newBlobId();
+    let img = ''; try { img = canvas.toDataURL('image/png'); if (img.length > 12e6) img = canvas.toDataURL('image/jpeg', 0.95); } catch (e) {}
+    await putLocalBlob(id, img); return id;
+  }
+  const b = await new Promise(res => canvas.toBlob(res, 'image/png')); return (await STORE.assets.upload(b, {type: 'image/png'})).id;
+}
 /* each saved project carries its own upload list, revision and anything that failed to load, so saves never mix projects */
 const mkProj = (id, name, created) => ({id, name: String(name || '').trim() || 'Untitled project', created: created || Date.now(), refs: [], rev: 0, sig: '', blocked: '', lost: {runs: [], traces: [], gels: [], struct: null, nd: []}});
 const lostCount = P => P.lost.runs.length + P.lost.traces.length + P.lost.gels.length + P.lost.nd.length + (P.lost.struct ? 1 : 0);
 /* everything a save needs, taken at once, before any wait, so a later switch of project cannot leak into it */
 function snapshot(){
   prep.nextUid = uid;
-  const S = {meta: {kind: 'project', name: PROJ.name, protein: projProtein(), created: PROJ.created, dots: stepDots()}, step: curStep};
-  if (STORE.mode === 'cloud') Object.assign(S, {opt: plain(opt), prep: JSON.parse(JSON.stringify(prep)), srcDiag: Object.assign({}, srcDiag), runs: runs.map(r => ({obj: r, o: plain(r)})), traces: traces.filter(t => !t.ex).map(t => ({obj: t, o: plain(t)})),
+  const S = {meta: {kind: 'project', name: PROJ.name, protein: projProtein(), created: PROJ.created, dots: stepDots()}, step: curStep, cur};
+  if (STORE.mode === 'cloud' || STORE.mode === 'local') Object.assign(S, {opt: plain(opt), prep: JSON.parse(JSON.stringify(prep)), srcDiag: Object.assign({}, srcDiag), runs: runs.map(r => ({obj: r, o: plain(r)})), traces: traces.filter(t => !t.ex).map(t => ({obj: t, o: plain(t)})),
     gels: gels.map(g => ({obj: g, o: plain(g)})), struct, nd: ndSamples.map(n => ({obj: n, o: Object.assign({}, n)}))});
-  else if (STORE.mode === 'local') { const d = projectData(); d.step = curStep; S.data = d; }
   return S;
 }
 /* the project as small JSON, with the heavy parts (run curves, gel images, the structure, spectra) uploaded once and referenced */
 async function packCloud(S, P){
-  const st = {app: 'HPLC Figure Bench', version: 2, opt: S.opt, prep: S.prep, step: S.step, srcDiag: S.srcDiag || {}, runs: [], traces: [], gels: [], struct: null, nanodrop: []}, refs = [];
+  const st = {app: 'HPLC Figure Bench', version: 2, cur: S.cur || cur, opt: S.opt, prep: S.prep, step: S.step, srcDiag: S.srcDiag || {}, runs: [], traces: [], gels: [], struct: null, nanodrop: []}, refs = [];
   for (const {obj: r, o} of S.runs) { if (!r.blobId) { const h = {}; RUN_HEAVY.forEach(k => { if (k in r) h[k] = r[k]; }); r.blobId = await upJSON(h); } const c = Object.assign({}, o, {blobId: r.blobId}); RUN_HEAVY.forEach(k => delete c[k]); st.runs.push(c); refs.push(r.blobId); }
   for (const {obj: t, o} of S.traces) { if (!t.blobId) t.blobId = await upJSON({rows: t.rows}); const c = Object.assign({}, o, {blobId: t.blobId}); delete c.rows; st.traces.push(c); refs.push(t.blobId); }
   for (const {obj: g, o} of S.gels) { if (!g.imageId) g.imageId = await upPNG(g.src); const c = Object.assign({}, o, {imageId: g.imageId}); ['src', 'thumb', 'out', 'pix', 'hist', 'crop', 'cropPrev', 'bandHist', 'image'].forEach(k => delete c[k]); st.gels.push(c); refs.push(g.imageId); }
@@ -6781,6 +6896,40 @@ async function packCloud(S, P){
   L.gels.forEach(o => { st.gels.push(o); if (o.imageId) refs.push(o.imageId); }); L.nd.forEach(o => { st.nanodrop.push(o); refs.push(o.specId); });
   if (L.struct && !st.struct) { st.struct = L.struct; refs.push(L.struct.blobId); }
   return {st, refs: refs.filter(Boolean)};
+}
+async function unpackLocal(st){
+  const names = [], lost = {runs: [], traces: [], gels: [], struct: null, nd: []};
+  const one = async (o, kind, f) => { try { return await f(); } catch (e) { names.push(o.name || o.code || 'an item'); if (kind === 'struct') lost.struct = o; else lost[kind].push(o); return null; } };
+  const runs2 = (await Promise.all((st.runs || []).map(o => one(o, 'runs', async () => {
+    if (!o.blobId) return o;
+    const b = await getLocalBlob(o.blobId);
+    if (!b) throw new Error('missing blob');
+    return Object.assign({}, o, b, {blobId: o.blobId});
+  })))).filter(Boolean);
+  const tr2 = (await Promise.all((st.traces || []).map(o => one(o, 'traces', async () => {
+    if (!o.blobId) return o;
+    const b = await getLocalBlob(o.blobId);
+    if (!b) throw new Error('missing blob');
+    return Object.assign({}, o, b, {blobId: o.blobId});
+  })))).filter(Boolean);
+  const gels2 = (await Promise.all((st.gels || []).map(o => one(o, 'gels', async () => {
+    if (!o.imageId) return o;
+    const img = await getLocalBlob(o.imageId);
+    if (!img) throw new Error('missing gel image');
+    return Object.assign({}, o, {image: img, imageId: o.imageId});
+  })))).filter(Boolean);
+  const s2 = st.struct && st.struct.blobId ? await one(st.struct, 'struct', async () => {
+    const b = await getLocalBlob(st.struct.blobId);
+    if (!b) throw new Error('missing struct blob');
+    return Object.assign(b, {ent: st.struct.ent, blobId: st.struct.blobId});
+  }) : st.struct;
+  const nd2 = (await Promise.all((st.nanodrop || []).map(async o => o.specId ? await one(o, 'nd', async () => {
+    const b = await getLocalBlob(o.specId);
+    if (!b) throw new Error('missing nd blob');
+    return Object.assign({}, o, {spec: b, specId: o.specId});
+  }) : o))).filter(Boolean);
+  if (names.length) toast(`Could not load ${names.slice(0, 3).join(', ')}${names.length > 3 ? ' and more' : ''}. They are kept and will load next time.`);
+  return {app: 'HPLC Figure Bench', version: 2, cur: st.cur || 'overlay', opt: st.opt, prep: st.prep, srcDiag: st.srcDiag || {}, runs: runs2, traces: tr2, gels: gels2, struct: s2, nanodrop: nd2, step: st.step, _lost: lost};
 }
 async function unpackCloud(st){
   const get = id => fetch('/_blob/' + id).then(r => { if (!r.ok) throw new Error('missing'); return r.json(); }), names = [], lost = {runs: [], traces: [], gels: [], struct: null, nd: []};
@@ -6820,8 +6969,14 @@ function queueSave(){ if (!PROJ || PROJ.blocked) return; clearTimeout(saveT); sa
 function flushSave(force){ clearTimeout(saveT); if (!PROJ || PROJ.blocked) return saveChain; const P = PROJ, S = snapshot(); S.seq = P.editSeq || 0; saveChain = saveChain.then(() => saveOne(P, S, force)).catch(() => {}); return saveChain; }
 /* what a save would write, and a signature to tell whether anything changed */
 async function packFor(P, S){
-  if (STORE.mode === 'cloud') { const {st, refs} = await packCloud(S, P); return {sig: JSON.stringify([S.meta, Object.assign({}, st, {step: 0})]), st, refs}; }
-  if (STORE.mode === 'local') { const d = Object.assign({}, S.data); delete d.saved; if (P.lost.gels.length) d.gels = d.gels.concat(P.lost.gels); const js = JSON.stringify(d), sj = JSON.stringify(Object.assign({}, d, {step: 0, cur: 0})); return {sig: JSON.stringify(S.meta) + sj.length + ':' + hashStr(sj), js}; }
+  if (STORE.mode === 'cloud' || STORE.mode === 'local') {
+    const {st, refs} = await packCloud(S, P);
+    if (STORE.mode === 'local') {
+      const js = JSON.stringify(st), sj = JSON.stringify(Object.assign({}, st, {step: 0, cur: 0}));
+      return {sig: JSON.stringify(S.meta) + sj.length + ':' + hashStr(sj), js, refs, st};
+    }
+    return {sig: JSON.stringify([S.meta, Object.assign({}, st, {step: 0})]), st, refs};
+  }
   return null;
 }
 /* opening a project only reads it: the state as opened becomes the baseline, so a tab that only looks never writes */
@@ -6844,7 +6999,8 @@ async function saveOne(P, S, force){
     } else if (STORE.mode === 'local') {
       const js = pk.js; show('Saving…');
       const now = await idbDo('readonly', st => st.get(P.id)); if (!now && P.rev > 0) return stop('gone'); if (now && (now.rev || 0) !== P.rev) return stop('newer');
-      await idbDo('readwrite', st => st.put(Object.assign({id: P.id}, S.meta, {updated: Date.now(), rev: P.rev + 1, data: js}))); P.rev++; P.sig = sig; savedTo(P, S.seq);
+      await idbDo('readwrite', st => st.put(Object.assign({id: P.id}, S.meta, {updated: Date.now(), rev: P.rev + 1, data: js, refs: pk.refs}))); P.rev++; P.sig = sig; savedTo(P, S.seq);
+      if (now && now.refs) { const keep = new Set(pk.refs || []); now.refs.filter(id => !keep.has(id)).forEach(id => idbDo('readwrite', st => st.delete(id), 'blobs').catch(() => {})); }
     }
     const n = lostCount(P); show(n ? `Saved. ${n} item${n === 1 ? '' : 's'} did not load and ${n === 1 ? 'is' : 'are'} kept for next time` : STORE.mode === 'cloud' ? 'Saved' : 'Saved in this browser');
   } catch (e) { const c = e && e.code;
@@ -6857,12 +7013,19 @@ async function storeLoad(id){
   if (STORE.mode === 'cloud') { const d = await projCol().doc(id).get(); if (!d.exists) throw new Error('gone'); const doc = d.data();
     let st = doc.state; if (!st && doc.stateBlob) st = await fetch('/_blob/' + doc.stateBlob).then(r => { if (!r.ok) throw new Error('state'); return r.json(); });
     return {meta: doc, data: await unpackCloud(st)}; }
-  const p = await idbDo('readonly', st => st.get(id)); if (!p) throw new Error('gone'); return {meta: p, data: JSON.parse(p.data)};
+  const p = await idbDo('readonly', st => st.get(id)); if (!p) throw new Error('gone');
+  let d = JSON.parse(p.data);
+  if (d.app === 'HPLC Figure Bench' && d.version >= 2) d = await unpackLocal(d);
+  return {meta: p, data: d};
 }
 async function storeDelete(id){
   await storeInit();
   if (STORE.mode === 'cloud') { const ref = projCol().doc(id), d = await ref.get(); const refs = d.exists ? (d.data().refs || []) : []; await ref.delete(); refs.forEach(x => STORE.assets.delete(x).catch(() => {})); return; }
-  if (STORE.mode === 'local') await idbDo('readwrite', st => st.delete(id));
+  if (STORE.mode === 'local') {
+    const p = await idbDo('readonly', st => st.get(id));
+    await idbDo('readwrite', st => st.delete(id));
+    if (p && p.refs) p.refs.forEach(x => idbDo('readwrite', st => st.delete(x), 'blobs').catch(() => {}));
+  }
 }
 /* upload ids belong to the project they were uploaded for: a file or quick work uploads again */
 function stripBlobIds(){ runs.forEach(r => delete r.blobId); traces.forEach(t => delete t.blobId); gels.forEach(g => delete g.imageId); if (struct) delete struct.blobId; ndSamples.forEach(n => delete n.specId); }
@@ -6958,11 +7121,13 @@ function bufMismatch(r, c){ if (!c.mBufA || !c.mBufB || isSec(r)) return '';
 function runNeeds(r){ const c = runCond(r), n = [], pr = poolRows(r); if (!hasTxt(r.path) && !(pr && pr.measured)) n.push('UV path for mg'); if (!c.mCol) n.push('column'); if (!c.mBufA) n.push('buffer'); if (!c.mFlow) n.push('flow rate'); if (!isSec(r) && !c.mGrad && !c.mBufB) n.push('elution'); { const bm = bufMismatch(r, c); if (bm) n.push(`buffer B check: ${bm}`); } return n; }
 let gapMemo = {k: '', n: 0};
 function methodGaps(){ const t = methodsText(); if (gapMemo.k !== t) gapMemo = {k: t, n: (t.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).length}; return gapMemo.n; }
+/* each gap named by what is missing, or by its paragraph when the bracket only says "not entered" */
+function methodGapNames(t){ return [...new Set(t.split(/\n\n/).flatMap(par => (par.match(/\[[^\]]*(not entered|check)[^\]]*\]/g) || []).map(g => { const w = g.slice(1, -1).replace(/\s*not entered\s*/i, '').trim(); return w || (par.match(/^([^:(]+)/) || ['', 'a step'])[1].trim(); })))]; }
 function stepList(){
   const v = k => hasTxt(prep[k]), m = k => stepMeta(k), L = [];
   const cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
   L.push({k: 'construct', g: 'Upstream', t: 'Construct', done: !!cm, s: cm ? `${cm.tn}, ${fmt(cm.mTag, 1)} kDa` : 'Protein sequence or GenBank file'});
-  const trDone = ['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(v) || !!m('transform').date;
+  const trDone = ['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(v) || !!m('transform').date || !!prep.selectedCloneId || (prep.clones && prep.clones.length > 0);
   L.push({k: 'transform', t: /glycerol/i.test(prep.trMethod || '') ? 'Glycerol stock' : 'Transformation', done: trDone, s: [prep.strain, prep.trSel].map(x => String(x || '').trim()).filter(Boolean).join(', ') || 'Strain and selection, or a glycerol stock'});
   const ex = EXPR_KEYS.some(v) || gels.some(g => lanesFor(g, 'expr').length), el = prepLines('expr').map(x => typeof x === 'string' ? x : x.t);
   L.push({k: 'expr', t: 'Expression', done: ex, s: ex ? el.slice(0, 2).join(', ').replace(/ /g, ' ') : 'Starter, induction, harvest, expression gel'});
@@ -6983,13 +7148,14 @@ function stepList(){
   const ys = finalYields(), y = ys[0] || finalYield(), fin = FIN_KEYS.some(v) || ndSamples.some(n => n.stage === 'final') || !!m('final').date;
   const fw = !fin || !y ? '' : y.meas && y.loaded && y.mg != null && y.mg > y.loaded.mg*1.05 ? `${sig2(y.mg)} mg is more than was loaded, check` : y.purTyped ? 'Purity typed, add a gel of the last pool' : '';
   L.push({k: 'final', g: 'Results', t: 'Final sample', done: fin, warn: fw, s: fw ? fw : fin && y ? `${y.mg !== null ? sig2(y.mg) + ' mg' : 'unknown yield'}${y.perL != null ? `, ${sig2(y.perL)} mg per L` : ''}${y.meas ? '' : ', from the last pool'}` : ys.length > 1 ? `Latest pools: ${ys.map(q => `${q.poolMg != null ? sig2(q.poolMg) + ' mg' : 'unknown yield'} (${stepTitle(q.fin.r)})`).join(', ')}` : y ? `Latest pool: ${y.poolMg != null ? sig2(y.poolMg) + ' mg' : 'unknown yield'} after ${stepTitle(y.fin.r)}` : 'Concentration, storage, quality checks'});
-  const hasWf = figures().some(f => f.kind === 'workflow'), gaps = hasWf ? methodGaps() : 0;
-  L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, s: gaps ? `${gaps} detail${gaps === 1 ? '' : 's'} still needed for Methods text` : hasWf ? 'Workflow figure, summary, methods text' : 'Builds once a column is added'});
+  const hasWf = figures().some(f => f.kind === 'workflow'), gaps = hasWf ? methodGaps() : 0, gn = gaps ? methodGapNames(gapMemo.k) : [];
+  /* name what is missing, at most four on the row so it stays short; the full list is in the tooltip */
+  L.push({k: 'figure', t: 'Figure and methods', done: hasWf && !gaps, gn: gn.length ? `Missing: ${gn.length > 4 ? `${gn.slice(0, 3).join(', ')} and ${gn.length - 3} more` : gn.join(', ')}` : '', gt: gn.length ? `Still to fill in: ${gn.join(', ')}` : '', s: gaps ?`${gaps} detail${gaps === 1 ? '' : 's'} still needed for Methods text` : hasWf ? 'Workflow figure, summary, methods text' : 'Builds after you add a purification step.'});
   L.forEach(x => { if (['transform', 'expr', 'lysis'].includes(x.k) && skipped(x.k)) Object.assign(x, {done: false, warn: '', skip: true, s: 'Skipped, left out of the figure and methods'}); });
   return L;
 }
 const STEP_LANE = k => k === 'expr' || k === 'lysis' || k === 'cleave' ? k : k.startsWith('run:') || k.startsWith('man:') ? k.slice(4) : null;
-const STEP_WHAT = {construct: 'Paste the protein sequence, or load the plasmid\'s GenBank file to draw the construct.',
+const STEP_WHAT = {construct: 'Construct records (design and provenance records rather than scientific validation). Paste the protein sequence, or load the plasmid\'s GenBank file to draw the construct.',
   transform: 'Plasmid, strain and selection, or the glycerol stock you started from.',
   expr: 'Starter culture, induction and harvest. An expression gel (U, I, S, P) is optional.',
   lysis: 'Lysis method, buffer, additives and clarification.',
@@ -7013,15 +7179,15 @@ function addMan(kind){ const L = wfList(), last = L[L.length - 1], n = Math.max(
   prep.manual = (prep.manual || []).concat([{id: 'm' + n, kind, name: '', after: last ? last.id : ''}]); gels.forEach(g => { g._prepA = null; }); selectStep('man:m' + n); }
 function renderSteps(){
   if (!PROJ) return; const L = stepList(), key = curStep;
-  const h = L.map(s => (s.g ? `<li class="tl-head"><p class="tl-h">${esc(s.g)}</p></li>` : '') + (s.add ? `<li class="tl-addrow">${addRowHtml()}</li>` : `<li class="${s.done ? 'done' : ''}${s.warn ? ' warn' : ''}${s.sub ? ' sub' : ''}${s.k === key ? ' cur' : ''}"><button type="button" class="tl-i" data-step="${esc(s.k)}"${s.k === key ? ' aria-current="step"' : ''}>
-    <span class="mk" aria-hidden="true">${s.warn ? '!' : s.done ? '✓' : ''}</span><span class="tt">${esc(s.t)}</span><span class="td">${esc(stepMeta(s.k).date ? fmtWhen(new Date(stepMeta(s.k).date + 'T12:00').getTime()) : '')}</span><span class="ts">${esc(s.s || '')}</span></button></li>`)).join('');
+  const h = L.map(s => (s.g ? `<li class="tl-head"><p class="tl-h">${esc(s.g)}</p></li>` : '') + (s.add ? `<li class="tl-addrow">${addRowHtml()}</li>` : `<li class="${s.done ? 'done' : ''}${s.warn ? ' warn' : ''}${s.sub ? ' sub' : ''}${s.k === key ? ' cur' : ''}"><button type="button" class="tl-i" data-step="${esc(s.k)}"${s.k === key ? ' aria-current="step"' : ''}${s.gt ? ` title="${esc(s.gt)}"` : ''}>
+    <span class="mk" aria-hidden="true">${s.warn ? '!' : s.done ? '✓' : ''}</span><span class="tt">${esc(s.t)}</span><span class="td">${esc(stepMeta(s.k).date ? fmtWhen(new Date(stepMeta(s.k).date + 'T12:00').getTime()) : '')}</span><span class="ts">${esc(s.s || '')}</span>${s.gn ? `<span class="tg">${esc(s.gn)}</span>` : ''}</button></li>`)).join('');
   if (h !== tlHtml) { tlHtml = h; $('#tl').innerHTML = h; }
   renderStepSheet(L);
 }
 function renderStepSheet(L){
   const k = curStep, s = (L || stepList()).find(x => x.k === k) || {t: ''}, kind = k.includes(':') ? k.split(':')[0] : k, f = curFig(), onGel = f && f.kind === 'gel';
   $('#ssTitle').textContent = onGel ? `Gel: ${f.gel.name}` : s.t;
-  $('#ssWhat').textContent = onGel ? 'Type the lane labels and check the ladder. The lanes appear under their step in the figure.' : (STEP_WHAT[kind] || '') + '';
+  $('#ssWhat').textContent = onGel ? 'Select lane labels in the sidebar and check the ladder. The lanes appear under their step in the figure.' : (STEP_WHAT[kind] || '') + '';
   const di = $('#ssDate'), ni = $('#ssNotes'), mm = stepMeta(k); di.parentNode.hidden = k === 'figure' || onGel; ni.parentNode.hidden = k === 'figure' || onGel;
   if (di !== document.activeElement) di.value = mm.date || ''; if (ni !== document.activeElement) ni.value = mm.notes || '';
   const lane = STEP_LANE(k), gl = lane ? gels.filter(g => lanesFor(g, lane).length) : [], rid = kind === 'run' ? k.slice(4) : '', rr = rid && runs.find(r => r.id === rid);
@@ -7121,8 +7287,8 @@ function quickTarget(kind){
   if (kind === 'run') return runs.find(r => r.id === id) || null;
   if (kind === 'man') return (prep.manual || []).find(m => m.id === id) || null;
   if (kind === 'btw') { prep.btw = prep.btw || {}; return prep.btw[id] || (prep.btw[id] = {how: 'conc'}); }
-  return ['transform', 'expr', 'lysis', 'cleave', 'final'].includes(kind) ? prep : null; }
-const QUICK_KEYS = {transform: ['strain', 'trMethod', 'trSel', 'trPlasmid', 'trStock'], expr: ['strain', 'medium', 'cultureL', 'indKind', 'inducer', 'od', 'temp', 'time', 'exStarter', 'exHarvest', 'exStore'], lysis: ['lysMethod', 'lysBuffer', 'lysAdd', 'lysSet', 'clarify'],
+  return ['construct', 'transform', 'expr', 'lysis', 'cleave', 'final'].includes(kind) ? prep : null; }
+const QUICK_KEYS = {construct: ['name', 'backbone', 'promoter', 'resist', 'cMethod', 'cEnz', 'cOverlap', 'cRecomb'], transform: ['strain', 'trMethod', 'trSel', 'trPlasmid', 'trStock'], expr: ['strain', 'medium', 'cultureL', 'indKind', 'inducer', 'od', 'temp', 'time', 'exStarter', 'exHarvest', 'exStore'], lysis: ['lysMethod', 'lysBuffer', 'lysAdd', 'lysSet', 'clarify'],
   cleave: ['protease', 'ratio', 'dialBuffer', 'clvTemp', 'clvTime', 'mwco'], run: ['mCol', 'mCV', 'mFlow', 'mTemp', 'mBufA', 'mBufB', 'mWash', 'mGrad', 'mLoad', 'mFrac', 'mInst', 'mOther'],
   man: ['kind', 'name', 'resin', 'buffer', 'wash', 'elution', 'note'], btw: ['how', 'device', 'mwco', 'note'], final: ['finBuffer', 'store', 'qcPurity']};
 /* your own quick fills, kept with the settings in this browser and in the project */
@@ -7158,7 +7324,7 @@ $('#ssQuick').addEventListener('click', e => { const b = e.target.closest('butto
   if (b.dataset.qdel) { opt.myQuick = (opt.myQuick || []).filter(x => x.id !== b.dataset.qdel); opt.myQuickDel = (Array.isArray(opt.myQuickDel) ? opt.myQuickDel : []).concat([b.dataset.qdel]); saveOpt(); if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1; render(); return; }
   if (b.dataset.qsave) { const tgt = quickTarget(kind); if (!tgt) return; const set = {}; (QUICK_KEYS[kind] || []).forEach(k => { if (String(tgt[k] ?? '').trim()) set[k] = tgt[k]; });
     if (!Object.keys(set).length) { toast('Fill in some fields first, then save them as a quick fill'); return; }
-    const nm = (kind === 'expr' ? [set.medium, set.temp ? set.temp + ' °C' : ''] : kind === 'run' ? [set.mCol, set.mFlow ? set.mFlow + ' mL/min' : ''] : kind === 'man' ? [set.name || MAN_NAME[set.kind]] : kind === 'lysis' ? [set.lysMethod, set.lysBuffer] : [Object.values(set)[0]])
+    const nm = (kind === 'construct' ? [set.cMethod ? set.cMethod + ' record' : 'Construct record'] : kind === 'expr' ? [set.medium, set.temp ? set.temp + ' °C' : ''] : kind === 'run' ? [set.mCol, set.mFlow ? set.mFlow + ' mL/min' : ''] : kind === 'man' ? [set.name || MAN_NAME[set.kind]] : kind === 'lysis' ? [set.lysMethod, set.lysBuffer] : [Object.values(set)[0]])
       .filter(Boolean).join(', ').slice(0, 48) || 'My quick fill';
     opt.myQuick = (Array.isArray(opt.myQuick) ? opt.myQuick : []).concat([{id: 'q' + Date.now().toString(36), k: kind, n: nm, set}]); saveOpt(); render(); toast(`Saved "${nm}" as a quick fill`); } });
 /* a step that others follow hands them on to the step before it */
@@ -7234,7 +7400,14 @@ function btwCarry(){ const el = $('#btwCarry'), rid = curStep.startsWith('btw:')
   el.textContent = !r ? '' : card ? `${stepTitle(r)} has a reading typed on its run card, which is used instead.`
     : !p ? `Pool the fractions on ${stepTitle(r)} first.`
     : p.measured && p.src === 'btw' ? `${sig2(p.mg)} mg (${fmt(p.conc, 2)} mg/mL × ${fmtAuto(p.measVol)} mL)${p.mgArea > 0 ? `. The UV area of ${stepTitle(r)} estimated ${sig2(p.mgArea)} mg` : ''}.`
-    : ms.c > 0 ? `Enter the volume after concentrating to get the mg (the pool was ${fmt(p.vol, 1)} ${xUnit(r)}).` : `After ${stepTitle(r)}.`; }
+    : ms.c > 0 ? `Enter the volume after concentrating to get the mg (the pool was ${fmt(p.vol, 1)} ${xUnit(r)}).` : `After ${stepTitle(r)}.`;
+  /* the split between the next step and what was kept back */
+  const sp = btwSplit(b), se = $('#btwSplit'), sm = r ? (btwMg(r) || {}).mg : null;
+  se.textContent = sp.bad === 'over' ? `Loaded plus kept back is ${fmtAuto((sp.vl || 0) + (sp.vk || 0))} mL, more than the ${fmtAuto(sp.vo)} mL after concentrating. Until that is fixed, all of it counts as loaded on the next step.`
+    : sp.bad === 'novol' ? 'Enter the volume after concentrating too. Until then, all of it counts as loaded on the next step.' : sp.bad === 'zero' ? 'A load of 0 mL leaves no amount to count the next step’s yield from. Until that is fixed, all of it counts as loaded on the next step.' : sp.bad === 'neg' ? 'A volume can’t be below 0. Until that is fixed, all of it counts as loaded on the next step.'
+    : sp.set && sm > 0 ? `${sig2(sm*sp.f)} mg (${fmtAuto(sp.vl)} of ${fmtAuto(sp.vo)} mL) went on to the next step${sp.vk > 0 ? `, ${fmtAuto(sp.vk)} mL kept back` : ''}.` : '';
+  if (numOr(b.vLoad, null) != null || numOr(b.vKeep, null) != null || String(b.keepAs || '').trim()) $('#btwSplitBox').open = true;
+  se.hidden = !se.textContent; se.classList.toggle('warnc', !!sp.bad); }
 /* a NanoDrop export loaded on the Concentrated step: every protein reading in it is the concentrated sample of the column before */
 $('#btwNdAdd').addEventListener('click', () => $('#btwNdFile').click());
 $('#btwNdFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f || !curStep.startsWith('btw:')) return; const rid = curStep.slice(4), r = runs.find(x => x.id === rid);
@@ -7248,7 +7421,7 @@ const btwEdit = e => { const el = e.target.closest('[data-btw]'); if (!el || !cu
   prep.btw[rid] = Object.assign({how: 'conc'}, prep.btw[rid], {[el.dataset.btw]: el.value}); const r = runs.find(x => x.id === rid);
   /* one reading per pool: a value typed here replaces one left on the run card */
   if (r && ['conc', 'vOut'].includes(el.dataset.btw) && (r.poolConc != null || r.poolFinalVol != null)) { if (r.poolConc != null && prep.btw[rid].conc === '' && el.dataset.btw !== 'conc') prep.btw[rid].conc = r.poolConc; delete r.poolConc; delete r.poolFinalVol; }
-  btwCarry(); render(); if (e.type === 'change' && ['conc', 'vOut'].includes(el.dataset.btw)) setTimeout(() => { renderList(); render(); }, 0); };
+  btwCarry(); render(); if (e.type === 'change' && ['conc', 'vOut', 'vLoad', 'vKeep'].includes(el.dataset.btw)) setTimeout(() => { renderList(); render(); }, 0); };
 $('#prepPanel').addEventListener('input', btwEdit); $('#prepPanel').addEventListener('change', btwEdit);
 const metaSet = (k, f, v) => { const all = prep.stepMeta = prep.stepMeta || {}; all[k] = Object.assign({}, all[k], {[f]: v}); };
 $('#ssDate').addEventListener('change', e => { metaSet(curStep, 'date', e.target.value); render(); });
