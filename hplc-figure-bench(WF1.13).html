@@ -5805,7 +5805,7 @@ async function addGelFiles(files){
     catch (e) { bad.push(f.name); }
   }
   gelTarget = null;
-  if (last) { cur = last.id; renderList(); syncControls(); render(); toast(last.autoCropped ? `Gel added and cropped to ${last.nLanes} lanes. Type your lane labels to set the count, then detect the ladder.` : 'Gel added. Trim it to the lanes, then mark the ladder.'); }
+  if (last) { cur = last.id; renderList(); syncControls(); render(); toast(last.autoCropped ? `Gel added and cropped to ${last.nLanes} lanes. Select lane labels in the sidebar to set the count, then detect the ladder.` : 'Gel added. Trim it to the lanes, then mark the ladder.'); }
   if (bad.length) toast(`Could not open ${bad.join(', ')}. Try exporting the gel as PNG or JPEG.`);
 }
 /* processTrace sorts a trace whose X axis goes down; say so, and tell a wholly reversed export from one that resets, without changing the source rows */
@@ -6626,7 +6626,7 @@ function nextStep(){
   if (runs.length && !gels.length && steps.length && (fk === 'workflow' || (fk === 'run' && !isSec(f0.run)))) { const _n = {k: 'gel', t: 'Optional: add a gel to show its lanes under each run.', go: 'Add gel image', act: () => $('#gelFile').click()}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
   const gOrder = gels.slice().sort((a, b) => (b.id === cur) - (a.id === cur));
   for (const g of gOrder) { if (fk === 'run' && isSec(f0.run)) break; if (fk === 'gel' && g.id !== cur) continue; const labs = gelLabels(g), dflt = labs[0] === 'M' && labs.slice(1).every((t, i) => t === String(i + 1));
-    if (dflt) { const _n = {k: 'labels:' + g.id, t: `Type the lane labels for ${g.name}, one per lane.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) d.open = true; const el = $('#g-labels'); el.scrollIntoView({behavior: smooth(), block: 'center'}); setTimeout(() => el.focus(), 300); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
+    if (dflt) { const _n = {k: 'labels:' + g.id, t: `Select lane labels in the sidebar for ${g.name}, one per lane.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) d.open = true; const el = $('#g-labels'); el.scrollIntoView({behavior: smooth(), block: 'center'}); setTimeout(() => el.focus(), 300); }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
     gelLabels(g).forEach((_, i) => laneAssign(g, i)); const amb = Object.keys((g._auto && g._auto.amb) || {}).filter(i => !(g.assign || [])[i]).length;
     if (amb) { const _n = {k: 'amb:' + g.id + ':' + amb, t: `${amb} lane${amb === 1 ? '' : 's'} on ${g.name} name${amb === 1 ? 's a fraction' : ' fractions'} found in more than one run. Pick the run for ${amb === 1 ? 'it' : 'them'}, or set each run's pooled fractions.`, go: 'Go to lanes', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="glanes"]'); if (d) { d.open = true; const x = document.querySelector('.lrow.amb select') || $('#laneTable'); x.scrollIntoView({behavior: smooth(), block: 'center'}); if (x.focus) setTimeout(() => x.focus(), 250); } }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
     if (lanesFor(g, 'marker').length && g.marks.length < 2) { const _n = {k: 'ladder:' + g.id, t: `Ladder not found on ${g.name}.`, go: 'Go to ladder', act: () => { selectFig(g.id); const d = document.querySelector('details[data-sub="gladder"]'); if (d) { d.open = true; d.scrollIntoView({behavior: smooth(), block: 'center'}); } }}; if (!nextHidden.has(_n.k) && nextHere(_n.k)) return _n; }
@@ -7087,7 +7087,7 @@ function renderSteps(){
 function renderStepSheet(L){
   const k = curStep, s = (L || stepList()).find(x => x.k === k) || {t: ''}, kind = k.includes(':') ? k.split(':')[0] : k, f = curFig(), onGel = f && f.kind === 'gel';
   $('#ssTitle').textContent = onGel ? `Gel: ${f.gel.name}` : s.t;
-  $('#ssWhat').textContent = onGel ? 'Type the lane labels and check the ladder. The lanes appear under their step in the figure.' : (STEP_WHAT[kind] || '') + '';
+  $('#ssWhat').textContent = onGel ? 'Select lane labels in the sidebar and check the ladder. The lanes appear under their step in the figure.' : (STEP_WHAT[kind] || '') + '';
   const di = $('#ssDate'), ni = $('#ssNotes'), mm = stepMeta(k); di.parentNode.hidden = k === 'figure' || onGel; ni.parentNode.hidden = k === 'figure' || onGel;
   if (di !== document.activeElement) di.value = mm.date || ''; if (ni !== document.activeElement) ni.value = mm.notes || '';
   const lane = STEP_LANE(k), gl = lane ? gels.filter(g => lanesFor(g, lane).length) : [], rid = kind === 'run' ? k.slice(4) : '', rr = rid && runs.find(r => r.id === rid);
