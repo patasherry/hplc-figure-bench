@@ -1,4 +1,4 @@
-const {open, H, suite, fs, path, DATA} = require('../lib/harness');
+const {open, H, suite, fs: hfs, path, DATA} = require('../lib/harness');
 const T = suite('45_yield_semantic');
 
 async function fresh(id, fn){
@@ -34,23 +34,19 @@ async function fresh(id, fn){
     await h.step('figure');
     await h.wait(500);
 
-    // Because SVG text layout can be tricky to grab from harness `svgTexts` reliably
-    // we use `methodsText` and check `#sumTable` for 0.00 verification where it also affects
     let m = await methods();
     let res = (m.match(/Results:[^]*/) || [''])[0];
     T.check('zero_measured_shows_sample_in_methods', /After the Final buffer exchange step, the sample held 0\.00 mg/.test(res), `Results: ${res}`);
 
-    // And also check SVG directly
     let html = await p.evaluate(() => document.querySelector('#paper').innerHTML);
     T.check('zero_measured_shows_sample_svg', html.includes('Final sample:') || html.includes('Final sample ('), `SVG includes Final sample: ${html.includes('Final sample:')}`);
 
-    // 2. Now let's test missing/unknown data by disabling the reading
     const steps = await p.$$eval('#tl button[data-step]', els => els.map(e => e.getAttribute('data-step')));
     const manStep = steps.find(s => s.startsWith('man:'));
     await p.click(`#tl [data-step="${manStep}"]`);
     await h.wait(400);
 
-    await setField('#man-conc', ''); // Unknown!
+    await setField('#man-conc', '');
 
     await h.step('figure');
     await h.wait(500);
@@ -62,7 +58,6 @@ async function fresh(id, fn){
     let html2 = await p.evaluate(() => document.querySelector('#paper').innerHTML);
     T.check('unknown_shows_pool', html2.includes('Final pool:') || html2.includes('Final pool ('), `SVG includes Final pool: ${html2.includes('Final pool:')}`);
 
-    // Case 3: Purity Zero vs Missing
     await p.evaluate(() => {
       const b = document.querySelector('#pr-qcPurity');
       if (b) { b.value = '0% pure by gel'; b.dispatchEvent(new Event('input', {bubbles: true})); b.dispatchEvent(new Event('change', {bubbles: true})); }
