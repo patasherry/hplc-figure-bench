@@ -36,11 +36,10 @@ suite('Clone UI selection text update', async p => {
     render();
   });
 
-
-
   await p.evaluate(() => {
       document.querySelector('details#methodsBox').open = true;
   });
+
   // fallback if the locator read fails, Playwright locator might be timing out if invisible
   const text = await p.evaluate(() => document.querySelector('#methodsText').value);
 
