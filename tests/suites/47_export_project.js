@@ -63,6 +63,30 @@ const {open, H, suite, src, fs, path, DATA} = require('../lib/harness');
       homeGuidance.includes('Open a project, then choose Export project') && saveHiddenHome && saveVisibleStored && saveVisibleImported,
       `Guidance: ${homeGuidance}, hiddenOnHome: ${saveHiddenHome}, visibleInStored: ${saveVisibleStored}, visibleInImported: ${saveVisibleImported}`);
 
+    // Verify IndexedDB blobs backing and bundling into project export (#915)
+    const idbBlobsCount = await p.evaluate(async () => {
+      return new Promise((resolve) => {
+        const req = indexedDB.open('hfb-projects');
+        req.onsuccess = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('blobs')) return resolve(-1);
+          const tx = db.transaction('blobs', 'readonly');
+          const st = tx.objectStore('blobs');
+          const countReq = st.count();
+          countReq.onsuccess = () => resolve(countReq.result);
+          countReq.onerror = () => resolve(-2);
+        };
+        req.onerror = () => resolve(-3);
+      });
+    });
+    const exportedData = JSON.parse(fs.readFileSync(savePath, 'utf8'));
+    const exportedBundlesBlobs = exportedData.runs && exportedData.runs.length > 0 &&
+      Array.isArray(exportedData.runs[0].uvs) && exportedData.runs[0].uvs.length > 0 &&
+      !exportedData.runs[0].blobId;
+    T.check('raw instrument files backed by IndexedDB blobs store and bundled into project export',
+      idbBlobsCount > 0 && exportedBundlesBlobs,
+      `idbBlobsCount: ${idbBlobsCount}, exportedBundlesBlobs: ${exportedBundlesBlobs}`);
+
     T.check('no page errors', !errs.length, errs.join(' | '));
     await close();
   });

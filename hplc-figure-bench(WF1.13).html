@@ -6715,9 +6715,15 @@ async function importAsProject(data, fname){
 /* ---------- projects: a project per purification, saved with the page (db + assets) or in this browser ---------- */
 let PROJ = null, MODE = 'quick', curStep = 'construct';
 const STORE = {mode: 'pending', db: null, assets: null, uid: null, idb: null, ready: null};
-function idbOpen(){ return new Promise((res, rej) => { if (!window.indexedDB) return rej(new Error('no idb')); const q = indexedDB.open('hfb-projects', 1);
-  q.onupgradeneeded = () => { q.result.createObjectStore('projects', {keyPath: 'id'}); }; q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
-function idbDo(mode, fn){ return new Promise((res, rej) => { const tx = STORE.idb.transaction('projects', mode), st = tx.objectStore('projects'), q = fn(st); tx.oncomplete = () => res(q && q.result); tx.onerror = () => rej(tx.error); }); }
+function idbOpen(){ return new Promise((res, rej) => { if (!window.indexedDB) return rej(new Error('no idb')); const q = indexedDB.open('hfb-projects', 2);
+  q.onupgradeneeded = () => {
+    if (!q.result.objectStoreNames.contains('projects')) q.result.createObjectStore('projects', {keyPath: 'id'});
+    if (!q.result.objectStoreNames.contains('blobs')) q.result.createObjectStore('blobs', {keyPath: 'id'});
+  }; q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); }
+function idbDo(mode, fn, store = 'projects'){ return new Promise((res, rej) => { const tx = STORE.idb.transaction(store, mode), st = tx.objectStore(store), q = fn(st); tx.oncomplete = () => res(q && q.result); tx.onerror = () => rej(tx.error); }); }
+const newBlobId = () => 'b-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+async function putLocalBlob(id, data){ await idbDo('readwrite', st => st.put({id, data}), 'blobs'); return id; }
+async function getLocalBlob(id){ if (!id) return null; const r = await idbDo('readonly', st => st.get(id), 'blobs'); return r ? r.data : null; }
 function storeInit(){
   if (STORE.ready) return STORE.ready;
   STORE.ready = (async () => {
@@ -6737,23 +6743,32 @@ async function storeList(){
   return [];
 }
 const RUN_HEAVY = ['uvs', 'grad', 'cond', 'fracs', 'phases'];
-async function upJSON(obj){ return (await STORE.assets.upload(new Blob([JSON.stringify(obj)], {type: 'application/json'}), {type: 'application/json'})).id; }
-async function upPNG(canvas){ const b = await new Promise(res => canvas.toBlob(res, 'image/png')); return (await STORE.assets.upload(b, {type: 'image/png'})).id; }
+async function upJSON(obj){
+  if (STORE.mode === 'local') { const id = newBlobId(); await putLocalBlob(id, obj); return id; }
+  return (await STORE.assets.upload(new Blob([JSON.stringify(obj)], {type: 'application/json'}), {type: 'application/json'})).id;
+}
+async function upPNG(canvas){
+  if (STORE.mode === 'local') {
+    const id = 'img-' + newBlobId();
+    let img = ''; try { img = canvas.toDataURL('image/png'); if (img.length > 12e6) img = canvas.toDataURL('image/jpeg', 0.95); } catch (e) {}
+    await putLocalBlob(id, img); return id;
+  }
+  const b = await new Promise(res => canvas.toBlob(res, 'image/png')); return (await STORE.assets.upload(b, {type: 'image/png'})).id;
+}
 /* each saved project carries its own upload list, revision and anything that failed to load, so saves never mix projects */
 const mkProj = (id, name, created) => ({id, name: String(name || '').trim() || 'Untitled project', created: created || Date.now(), refs: [], rev: 0, sig: '', blocked: '', lost: {runs: [], traces: [], gels: [], struct: null, nd: []}});
 const lostCount = P => P.lost.runs.length + P.lost.traces.length + P.lost.gels.length + P.lost.nd.length + (P.lost.struct ? 1 : 0);
 /* everything a save needs, taken at once, before any wait, so a later switch of project cannot leak into it */
 function snapshot(){
   prep.nextUid = uid;
-  const S = {meta: {kind: 'project', name: PROJ.name, protein: projProtein(), created: PROJ.created, dots: stepDots()}, step: curStep};
-  if (STORE.mode === 'cloud') Object.assign(S, {opt: plain(opt), prep: JSON.parse(JSON.stringify(prep)), srcDiag: Object.assign({}, srcDiag), runs: runs.map(r => ({obj: r, o: plain(r)})), traces: traces.filter(t => !t.ex).map(t => ({obj: t, o: plain(t)})),
+  const S = {meta: {kind: 'project', name: PROJ.name, protein: projProtein(), created: PROJ.created, dots: stepDots()}, step: curStep, cur};
+  if (STORE.mode === 'cloud' || STORE.mode === 'local') Object.assign(S, {opt: plain(opt), prep: JSON.parse(JSON.stringify(prep)), srcDiag: Object.assign({}, srcDiag), runs: runs.map(r => ({obj: r, o: plain(r)})), traces: traces.filter(t => !t.ex).map(t => ({obj: t, o: plain(t)})),
     gels: gels.map(g => ({obj: g, o: plain(g)})), struct, nd: ndSamples.map(n => ({obj: n, o: Object.assign({}, n)}))});
-  else if (STORE.mode === 'local') { const d = projectData(); d.step = curStep; S.data = d; }
   return S;
 }
 /* the project as small JSON, with the heavy parts (run curves, gel images, the structure, spectra) uploaded once and referenced */
 async function packCloud(S, P){
-  const st = {app: 'HPLC Figure Bench', version: 2, opt: S.opt, prep: S.prep, step: S.step, srcDiag: S.srcDiag || {}, runs: [], traces: [], gels: [], struct: null, nanodrop: []}, refs = [];
+  const st = {app: 'HPLC Figure Bench', version: 2, cur: S.cur || 'overlay', opt: S.opt, prep: S.prep, step: S.step, srcDiag: S.srcDiag || {}, runs: [], traces: [], gels: [], struct: null, nanodrop: []}, refs = [];
   for (const {obj: r, o} of S.runs) { if (!r.blobId) { const h = {}; RUN_HEAVY.forEach(k => { if (k in r) h[k] = r[k]; }); r.blobId = await upJSON(h); } const c = Object.assign({}, o, {blobId: r.blobId}); RUN_HEAVY.forEach(k => delete c[k]); st.runs.push(c); refs.push(r.blobId); }
   for (const {obj: t, o} of S.traces) { if (!t.blobId) t.blobId = await upJSON({rows: t.rows}); const c = Object.assign({}, o, {blobId: t.blobId}); delete c.rows; st.traces.push(c); refs.push(t.blobId); }
   for (const {obj: g, o} of S.gels) { if (!g.imageId) g.imageId = await upPNG(g.src); const c = Object.assign({}, o, {imageId: g.imageId}); ['src', 'thumb', 'out', 'pix', 'hist', 'crop', 'cropPrev', 'bandHist', 'image'].forEach(k => delete c[k]); st.gels.push(c); refs.push(g.imageId); }
@@ -6764,6 +6779,17 @@ async function packCloud(S, P){
   L.gels.forEach(o => { st.gels.push(o); if (o.imageId) refs.push(o.imageId); }); L.nd.forEach(o => { st.nanodrop.push(o); refs.push(o.specId); });
   if (L.struct && !st.struct) { st.struct = L.struct; refs.push(L.struct.blobId); }
   return {st, refs: refs.filter(Boolean)};
+}
+async function unpackLocal(st){
+  const names = [], lost = {runs: [], traces: [], gels: [], struct: null, nd: []};
+  const one = async (o, kind, f) => { try { return await f(); } catch (e) { names.push(o.name || o.code || 'an item'); if (kind === 'struct') lost.struct = o; else lost[kind].push(o); return null; } };
+  const runs2 = (await Promise.all((st.runs || []).map(o => one(o, 'runs', async () => o.blobId ? Object.assign({}, o, await getLocalBlob(o.blobId)) : o)))).filter(Boolean);
+  const tr2 = (await Promise.all((st.traces || []).map(o => one(o, 'traces', async () => Object.assign({}, o, await getLocalBlob(o.blobId)))))).filter(Boolean);
+  const gels2 = (await Promise.all((st.gels || []).map(o => one(o, 'gels', async () => { const img = await getLocalBlob(o.imageId); return Object.assign({}, o, {image: img || ''}); })))).filter(Boolean);
+  const s2 = st.struct && st.struct.blobId ? await one(st.struct, 'struct', async () => Object.assign(await getLocalBlob(st.struct.blobId), {ent: st.struct.ent, blobId: st.struct.blobId})) : null;
+  const nd2 = (await Promise.all((st.nanodrop || []).map(async o => o.specId ? await one(o, 'nd', async () => Object.assign({}, o, {spec: await getLocalBlob(o.specId)})) : o))).filter(Boolean);
+  if (names.length) toast(`Could not load ${names.slice(0, 3).join(', ')}${names.length > 3 ? ' and more' : ''}. They are kept and will load next time.`);
+  return {app: 'HPLC Figure Bench', version: 2, cur: st.cur || 'overlay', opt: st.opt, prep: st.prep, srcDiag: st.srcDiag || {}, runs: runs2, traces: tr2, gels: gels2, struct: s2, nanodrop: nd2, step: st.step, _lost: lost};
 }
 async function unpackCloud(st){
   const get = id => fetch('/_blob/' + id).then(r => { if (!r.ok) throw new Error('missing'); return r.json(); }), names = [], lost = {runs: [], traces: [], gels: [], struct: null, nd: []};
@@ -6803,8 +6829,14 @@ function queueSave(){ if (!PROJ || PROJ.blocked) return; clearTimeout(saveT); sa
 function flushSave(force){ clearTimeout(saveT); if (!PROJ || PROJ.blocked) return saveChain; const P = PROJ, S = snapshot(); S.seq = P.editSeq || 0; saveChain = saveChain.then(() => saveOne(P, S, force)).catch(() => {}); return saveChain; }
 /* what a save would write, and a signature to tell whether anything changed */
 async function packFor(P, S){
-  if (STORE.mode === 'cloud') { const {st, refs} = await packCloud(S, P); return {sig: JSON.stringify([S.meta, Object.assign({}, st, {step: 0})]), st, refs}; }
-  if (STORE.mode === 'local') { const d = Object.assign({}, S.data); delete d.saved; if (P.lost.gels.length) d.gels = d.gels.concat(P.lost.gels); const js = JSON.stringify(d), sj = JSON.stringify(Object.assign({}, d, {step: 0, cur: 0})); return {sig: JSON.stringify(S.meta) + sj.length + ':' + hashStr(sj), js}; }
+  if (STORE.mode === 'cloud' || STORE.mode === 'local') {
+    const {st, refs} = await packCloud(S, P);
+    if (STORE.mode === 'local') {
+      const js = JSON.stringify(st), sj = JSON.stringify(Object.assign({}, st, {step: 0, cur: 0}));
+      return {sig: JSON.stringify(S.meta) + sj.length + ':' + hashStr(sj), js, refs, st};
+    }
+    return {sig: JSON.stringify([S.meta, Object.assign({}, st, {step: 0})]), st, refs};
+  }
   return null;
 }
 /* opening a project only reads it: the state as opened becomes the baseline, so a tab that only looks never writes */
@@ -6827,7 +6859,8 @@ async function saveOne(P, S, force){
     } else if (STORE.mode === 'local') {
       const js = pk.js; show('Saving…');
       const now = await idbDo('readonly', st => st.get(P.id)); if (!now && P.rev > 0) return stop('gone'); if (now && (now.rev || 0) !== P.rev) return stop('newer');
-      await idbDo('readwrite', st => st.put(Object.assign({id: P.id}, S.meta, {updated: Date.now(), rev: P.rev + 1, data: js}))); P.rev++; P.sig = sig; savedTo(P, S.seq);
+      await idbDo('readwrite', st => st.put(Object.assign({id: P.id}, S.meta, {updated: Date.now(), rev: P.rev + 1, data: js, refs: pk.refs}))); P.rev++; P.sig = sig; savedTo(P, S.seq);
+      if (now && now.refs) { const keep = new Set(pk.refs || []); now.refs.filter(id => !keep.has(id)).forEach(id => idbDo('readwrite', st => st.delete(id), 'blobs').catch(() => {})); }
     }
     const n = lostCount(P); show(n ? `Saved. ${n} item${n === 1 ? '' : 's'} did not load and ${n === 1 ? 'is' : 'are'} kept for next time` : STORE.mode === 'cloud' ? 'Saved' : 'Saved in this browser');
   } catch (e) { const c = e && e.code;
@@ -6840,12 +6873,19 @@ async function storeLoad(id){
   if (STORE.mode === 'cloud') { const d = await projCol().doc(id).get(); if (!d.exists) throw new Error('gone'); const doc = d.data();
     let st = doc.state; if (!st && doc.stateBlob) st = await fetch('/_blob/' + doc.stateBlob).then(r => { if (!r.ok) throw new Error('state'); return r.json(); });
     return {meta: doc, data: await unpackCloud(st)}; }
-  const p = await idbDo('readonly', st => st.get(id)); if (!p) throw new Error('gone'); return {meta: p, data: JSON.parse(p.data)};
+  const p = await idbDo('readonly', st => st.get(id)); if (!p) throw new Error('gone');
+  let d = JSON.parse(p.data);
+  if (d.app === 'HPLC Figure Bench' && d.version >= 2) d = await unpackLocal(d);
+  return {meta: p, data: d};
 }
 async function storeDelete(id){
   await storeInit();
   if (STORE.mode === 'cloud') { const ref = projCol().doc(id), d = await ref.get(); const refs = d.exists ? (d.data().refs || []) : []; await ref.delete(); refs.forEach(x => STORE.assets.delete(x).catch(() => {})); return; }
-  if (STORE.mode === 'local') await idbDo('readwrite', st => st.delete(id));
+  if (STORE.mode === 'local') {
+    const p = await idbDo('readonly', st => st.get(id));
+    await idbDo('readwrite', st => st.delete(id));
+    if (p && p.refs) p.refs.forEach(x => idbDo('readwrite', st => st.delete(x), 'blobs').catch(() => {}));
+  }
 }
 /* upload ids belong to the project they were uploaded for: a file or quick work uploads again */
 function stripBlobIds(){ runs.forEach(r => delete r.blobId); traces.forEach(t => delete t.blobId); gels.forEach(g => delete g.imageId); if (struct) delete struct.blobId; ndSamples.forEach(n => delete n.specId); }
