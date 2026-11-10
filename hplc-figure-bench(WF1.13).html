@@ -2377,7 +2377,7 @@ function zoomWindow(lo, hi, a, b){
   const za = Math.max(lo, hasA ? +a : hasB ? lo : lo + (hi - lo)/3), zb = Math.min(hi, hasB ? +b : hasA ? hi : lo + (hi - lo)*2/3);
   return zb > za ? {a: za, b: zb} : null;
 }
-function zoomCompose(S, m, win, buildIn, zObj){
+function zoomCompose(S, m, win, buildIn, zObj) {
   const o = opt, pos = zoomPos(), beside = pos === 'beside', g = m.geo, {L, R, T, B} = g;
   zObj = zObj || opt;
   const lay = insetLayout(zObj, false), val = v => v !== null && v !== undefined && isFinite(+v) ? +v : null, old = k => lay && val(lay[k]) !== null ? val(lay[k]) : (zObj ? val(zObj['zoomInset' + k.toUpperCase()]) : null), ar = Math.max(.2, (R-L)/Math.max(1, B-T));
@@ -2386,13 +2386,25 @@ function zoomCompose(S, m, win, buildIn, zObj){
   iw = Math.max(30, Math.min(S.W, iw)); ih = Math.max(20, Math.min(S.H, ih));
   const pad = 3;
   if (!beside && ih > B-T-pad*2) { ih = B-T-pad*2; iw = ih*ar; }
+
   const def = insetDefault(S, m, iw, ih, beside);
   let ix = old('x') !== null ? old('x') : def.x;
   let iy = old('y') !== null ? old('y') : def.y;
-  ix = Math.max(0, Math.min(S.W - iw, ix)); iy = Math.max(0, Math.min(S.H - ih, iy));
+
+  if (!beside) {
+    // Keep it entirely within the drawing area (L, R, T, B)
+    ix = Math.max(L, Math.min(R - iw, ix));
+    iy = Math.max(T, Math.min(B - ih, iy));
+  } else {
+    ix = Math.max(0, Math.min(S.W - iw, ix));
+    iy = Math.max(0, Math.min(S.H - ih, iy));
+  }
+
   if (ix + iw > S.W) iw = Math.max(30, S.W - ix);
   if (iy + ih > S.H) ih = Math.max(20, S.H - iy);
+
   const ins = buildIn(iw, ih); if (!ins || !ins.svg) return null;
+
   const src = g.uv ? [{xs: g.uv.xs, yp: g.uv.ys}] : g.P; let mx = -Infinity;
   src.forEach(p => { for (let i = Math.max(0, lowerBound(p.xs, win.a)); i < p.xs.length && p.xs[i] <= win.b; i++) if (p.yp[i] > mx) mx = p.yp[i]; });
   const rTop = isFinite(mx) ? Math.max(T, Math.min(B - 4, g.py(mx) - 3)) : T, xa = g.px(win.a), xb = g.px(win.b);
@@ -2448,7 +2460,18 @@ function zoomCompose(S, m, win, buildIn, zObj){
       + `<rect data-handle="nw" x="0" y="0" width="${hit}" height="${hit}" fill="transparent" style="cursor:nw-resize;pointer-events:all;"/>`
       + `</g>`;
   }
-  out.push(`<g id="zoomInsetContainer" class="zoom-inset" data-plot="inset" transform="translate(${r2(ix)} ${r2(iy)})"><g id="zoom-inset">${beside ? '' : `<rect class="zoom-inset-bg" width="${r2(iw)}" height="${r2(ih)}" fill="#ffffff" stroke="#999999" stroke-width="0.4"/>`}${ins.svg}</g>${handles}</g></svg>`);
+
+  // To keep everything inside the inset box: clip-path the inset content precisely at the zoom-inset-bg bounds
+  const clipId = 'zoom-inset-clip-' + Math.random().toString(36).slice(2,8);
+  const clip = `<defs><clipPath id="${clipId}"><rect x="0" y="0" width="${r2(iw)}" height="${r2(ih)}"/></clipPath></defs>`;
+
+  out.push(`${clip}<g id="zoomInsetContainer" class="zoom-inset" data-plot="inset" transform="translate(${r2(ix)} ${r2(iy)})">`);
+
+  if (!beside) {
+      out.push(`<rect class="zoom-inset-bg" width="${r2(iw)}" height="${r2(ih)}" fill="#ffffff" stroke="#999999" stroke-width="0.4"/>`);
+  }
+  out.push(`<g id="zoom-inset" clip-path="url(#${clipId})">${ins.svg}</g>${handles}</g></svg>`);
+
   return {svg: out.join(''), geo: Object.assign({}, g, {zoomInset: {x: ix, y: iy, w: iw, h: ih, figW: S.W, figH: S.H, zObj}})};
 }
 
