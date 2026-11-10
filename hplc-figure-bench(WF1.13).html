@@ -2614,7 +2614,7 @@ function buildSVG(ov){
   const m = withOpt({xmin: '', xmax: ''}, () => buildOverlaySVG(beside ? {noZoom: true, nest: true, wPt: S.W*(1 - zoomSize()), hPt: S.H} : {noZoom: true}));
   if (!m.svg) return m;
   const win = zoomWindow(m.geo.xlo, m.geo.xhi, opt.zoomWinA, opt.zoomWinB);
-  const z = win && zoomCompose(S, m, win, (w, h) => withOpt({xmin: win.a, xmax: win.b, legend: 'none', scalebar: false, xlabel: '', showY: true, ylabel: opt.ylabel === DEF.ylabel ? 'Absorbance (mAU)' : opt.ylabel, ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildOverlaySVG({noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})), opt);
+  const z = win && zoomCompose(S, m, win, (w, h) => withOpt({xmin: win.a, xmax: win.b, legend: 'none', scalebar: false, xlabel: '', showY: true, ylabel: (opt.ylabel === DEF.ylabel ? 'mAU' : opt.ylabel).length * fontSize() * 0.8 * 0.56 > h ? '' : (opt.ylabel === DEF.ylabel ? 'mAU' : opt.ylabel), ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildOverlaySVG({noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})), opt);
   return z || buildOverlaySVG({noZoom: true});
 }
 
@@ -2631,7 +2631,7 @@ function buildRunSVG(run, ov){
   if (!m.svg) return m;
   const win = zoomWindow(m.geo.xlo, m.geo.xhi, run.zoomWinA !== undefined ? run.zoomWinA : opt.zoomWinA, run.zoomWinB !== undefined ? run.zoomWinB : opt.zoomWinB);
   const z = win && zoomCompose(S, m, win, (w, h) => { try { put(win.a, win.b);
-    return withOpt({rxlabel: '', rylabel: opt.rylabel === DEF.rylabel ? uvTitle(DEF.rylabel, uvOf(run)) : opt.rylabel, showY: true, runCond: 'none', ndFig: 'none', runTitle: false, ymin: m.geo.y0, ymax: m.geo.y1, fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true, wPt: w, hPt: h, idp: 'zi-'}))); } finally { put(wa, wb); } }, ov.nest ? run : (curRun() || opt));
+    return withOpt({rxlabel: '', rylabel: (opt.rylabel === DEF.rylabel ? 'mAU' : opt.rylabel).length * fontSize() * 0.8 * 0.56 > h ? '' : (opt.rylabel === DEF.rylabel ? 'mAU' : opt.rylabel), showY: true, runCond: 'none', ndFig: 'none', runTitle: false, ymin: m.geo.y0, ymax: m.geo.y1, fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true, wPt: w, hPt: h, idp: 'zi-'}))); } finally { put(wa, wb); } }, ov.nest ? run : (curRun() || opt));
   return z || buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true}));
 }
 function buildRunPlainSVG(run, ov){

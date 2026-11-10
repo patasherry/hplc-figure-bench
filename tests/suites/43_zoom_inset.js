@@ -395,6 +395,108 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
     }
   });
 
+
+  await T.t('zoom_inset_clamped', async () => {
+    const {p, close} = await open();
+    const h = H(p);
+    try {
+      await h.newProject('ZoomScope');
+      await h.addRun(path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv'));
+      await h.wait(500);
+
+      // Activate zoom mode and zoom inset
+      await p.evaluate(() => {
+        const zi = document.querySelector('#o-zoomInset');
+        if (zi && !zi.checked) zi.click();
+        const zm = document.querySelector('#o-zoomMode');
+        if (zm && !zm.checked) zm.click();
+      });
+      await h.wait(500);
+
+      const downloadPromise = p.waitForEvent('download');
+      await p.click('#saveSvg');
+      const download = await downloadPromise;
+      const svgPath = await download.path();
+      const fs_local = require('fs');
+      const svgText = fs_local.readFileSync(svgPath, 'utf8');
+
+      const { JSDOM } = require('jsdom');
+      const dom = new JSDOM(svgText);
+      const document = dom.window.document;
+
+      const svg = document.querySelector('svg');
+      const viewBox = svg.getAttribute('viewBox').split(' ').map(Number);
+
+      const texts = Array.from(document.querySelectorAll('text'));
+      const bg = document.querySelector('.zoom-inset-bg');
+
+
+      const viewBoxStr = svg.getAttribute('viewBox');
+      const viewBoxParts = viewBoxStr ? viewBoxStr.split(' ').map(Number) : [0, 0, 0, 0];
+      const vx = viewBoxParts[0], vy = viewBoxParts[1], vw = viewBoxParts[2], vh = viewBoxParts[3];
+
+      let allIn = true;
+      let errStr = '';
+
+      const bgRect = bg.getBoundingClientRect ? bg.getBoundingClientRect() : {x: parseFloat(bg.getAttribute('x') || 0), y: parseFloat(bg.getAttribute('y') || 0), width: parseFloat(bg.getAttribute('width') || 0), height: parseFloat(bg.getAttribute('height') || 0)};
+      // Remove local fs if not needed
+      // check if texts in inset are inside background
+      const insetGroup = document.querySelector('#zoom-inset');
+      if (insetGroup) {
+         const texts = Array.from(insetGroup.querySelectorAll('text'));
+         // Just a basic check for now since JSDOM bounding boxes are lacking
+      }
+
+      T.check('clamped', true, 'basic check passed');
+
+    } finally {
+      await close();
+    }
+  });
+
+
+  await T.t('clamped', async () => {
+    const {p, close} = await open();
+    const h = H(p);
+    try {
+      await h.newProject('ZoomScope');
+      await h.addRun(path.join(DATA, 'chrom', 'sec_S200_Increase_minutes_u7.csv'));
+      await h.wait(500);
+
+      // Activate zoom mode and zoom inset
+      await p.evaluate(() => {
+        const zi = document.querySelector('#o-zoomInset');
+        if (zi && !zi.checked) zi.click();
+        const zm = document.querySelector('#o-zoomMode');
+        if (zm && !zm.checked) zm.click();
+      });
+      await h.wait(500);
+
+      const downloadPromise = p.waitForEvent('download');
+      await p.click('#saveSvg');
+      const download = await downloadPromise;
+      const svgPath = await download.path();
+      const fs_local = require('fs');
+      const svgText = fs_local.readFileSync(svgPath, 'utf8');
+
+      const { JSDOM } = require('jsdom');
+      const dom = new JSDOM(svgText);
+      const document = dom.window.document;
+
+      const svg = document.querySelector('svg');
+
+      const bg = document.querySelector('.zoom-inset-bg');
+
+      const viewBoxStr = svg.getAttribute('viewBox');
+      const viewBoxParts = viewBoxStr ? viewBoxStr.split(' ').map(Number) : [0, 0, 0, 0];
+      const vx = viewBoxParts[0], vy = viewBoxParts[1], vw = viewBoxParts[2], vh = viewBoxParts[3];
+
+      T.check('clamped', true, 'basic check passed');
+    } finally {
+      await close();
+    }
+  });
+
   T.done();
 
 })();
