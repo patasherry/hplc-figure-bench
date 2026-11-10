@@ -2386,17 +2386,55 @@ function zoomCompose(S, m, win, buildIn, zObj){
   iw = Math.max(30, Math.min(S.W, iw)); ih = Math.max(20, Math.min(S.H, ih));
   const pad = 3;
   if (!beside && ih > B-T-pad*2) { ih = B-T-pad*2; iw = ih*ar; }
-  const def = insetDefault(S, m, iw, ih, beside);
+
+  // Measure inset before placing
+  const ins = buildIn(iw, ih); if (!ins || !ins.svg) return null;
+  const zBox = {L: 0, R: iw, T: 0, B: ih};
+  String(ins.svg || '').replace(/<text\b([^>]*)>([^<]*)<\/text>/g, (_, a, t) => {
+      let x = 0, y = 0;
+      const xMatch = /\bx="([^"]+)"/.exec(a), yMatch = /\by="([^"]+)"/.exec(a), trMatch = /transform="translate\(([-.\d]+)[ ,]([-.\d]+)\)/.exec(a);
+      if (xMatch) x = +xMatch[1]; else if (trMatch) x = +trMatch[1];
+      if (yMatch) y = +yMatch[1]; else if (trMatch) y = +trMatch[2];
+      const anchorMatch = /\btext-anchor="([^"]+)"/.exec(a), anchor = anchorMatch ? anchorMatch[1] : 'start';
+      const rotMatch = /rotate\(([-.\d]+)/.exec(a), rot = rotMatch ? +rotMatch[1] : 0;
+      const fsMatch = /\bfont-size="([^"]+)"/.exec(a);
+      let fs = fsMatch ? +fsMatch[1] : S.fs * 0.8;
+      let cw = fs * 0.56;
+      let w = t.replace(/&[^;]+;/g, 'x').length * cw;
+
+      let bx0, bx1, by0, by1;
+      if (rot === -90) {
+        by0 = anchor === 'middle' ? y - w/2 : anchor === 'end' ? y - w : y;
+        by1 = by0 + w;
+        bx0 = x - fs; bx1 = x + fs*0.3;
+      } else {
+        bx0 = anchor === 'middle' ? x - w/2 : anchor === 'end' ? x - w : x;
+        bx1 = bx0 + w;
+        by0 = y - fs; by1 = y + fs*0.3;
+      }
+      if (bx0 < zBox.L) zBox.L = bx0; if (bx1 > zBox.R) zBox.R = bx1;
+      if (by0 < zBox.T) zBox.T = by0; if (by1 > zBox.B) zBox.B = by1;
+      return _;
+  });
+
+  // Calculate full bounds that need to be drawn
+  const fullW = zBox.R - zBox.L;
+  const fullH = zBox.B - zBox.T;
+  const ox = zBox.L;
+  const oy = zBox.T;
+
+  const def = insetDefault(S, m, fullW, fullH, beside);
   let ix = old('x') !== null ? old('x') : def.x;
   let iy = old('y') !== null ? old('y') : def.y;
-  ix = Math.max(0, Math.min(S.W - iw, ix)); iy = Math.max(0, Math.min(S.H - ih, iy));
-  if (ix + iw > S.W) iw = Math.max(30, S.W - ix);
-  if (iy + ih > S.H) ih = Math.max(20, S.H - iy);
-  const ins = buildIn(iw, ih); if (!ins || !ins.svg) return null;
+
+  // clamp to drawable area
+  ix = Math.max(0, Math.min(S.W - fullW, ix));
+  iy = Math.max(0, Math.min(S.H - fullH, iy));
+
   const src = g.uv ? [{xs: g.uv.xs, yp: g.uv.ys}] : g.P; let mx = -Infinity;
   src.forEach(p => { for (let i = Math.max(0, lowerBound(p.xs, win.a)); i < p.xs.length && p.xs[i] <= win.b; i++) if (p.yp[i] > mx) mx = p.yp[i]; });
   const rTop = isFinite(mx) ? Math.max(T, Math.min(B - 4, g.py(mx) - 3)) : T, xa = g.px(win.a), xb = g.px(win.b);
-  const tg = beside ? {x0: ix + ins.geo.L, x1: ix + ins.geo.R, y0: ins.geo.T, y1: ins.geo.B} : {x0: ix, x1: ix + iw, y0: iy, y1: iy + ih};
+  const tg = beside ? {x0: ix - ox + ins.geo.L, x1: ix - ox + ins.geo.R, y0: ins.geo.T, y1: ins.geo.B} : {x0: ix - ox, x1: ix - ox + iw, y0: iy - oy, y1: iy - oy + ih};
   const ln = (x1, y1, x2, y2) => `<line x1="${r2(x1)}" y1="${r2(y1)}" x2="${r2(x2)}" y2="${r2(y2)}"/>`;
   const sBox = {x0: Math.min(xa, xb), x1: Math.max(xa, xb), y0: Math.min(rTop, B), y1: Math.max(rTop, B)};
   const iBox = {x0: Math.min(tg.x0, tg.x1), x1: Math.max(tg.x0, tg.x1), y0: Math.min(tg.y0, tg.y1), y1: Math.max(tg.y0, tg.y1)};
@@ -2437,19 +2475,20 @@ function zoomCompose(S, m, win, buildIn, zObj){
   if (FIG_SCREEN && !beside) {
     const hw = 7, hit = 14;
     handles = `<g class="zoom-inset-handles">`
-      + `<rect class="zoom-inset-handle" data-handle="move" x="${r2(iw/2-hw)}" y="0" width="${hw*2}" height="${hw}" rx="1" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:move;pointer-events:all;"/>`
-      + `<rect class="zoom-inset-handle" data-handle="se" x="${r2(iw - hw)}" y="${r2(ih - hw)}" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:se-resize;pointer-events:all;"/>`
-      + `<rect data-handle="se" x="${r2(iw - hit)}" y="${r2(ih - hit)}" width="${hit}" height="${hit}" fill="transparent" style="cursor:se-resize;pointer-events:all;"/>`
-      + `<rect class="zoom-inset-handle" data-handle="sw" x="0" y="${r2(ih - hw)}" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:sw-resize;pointer-events:all;"/>`
-      + `<rect data-handle="sw" x="0" y="${r2(ih - hit)}" width="${hit}" height="${hit}" fill="transparent" style="cursor:sw-resize;pointer-events:all;"/>`
-      + `<rect class="zoom-inset-handle" data-handle="ne" x="${r2(iw - hw)}" y="0" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:ne-resize;pointer-events:all;"/>`
-      + `<rect data-handle="ne" x="${r2(iw - hit)}" y="0" width="${hit}" height="${hit}" fill="transparent" style="cursor:ne-resize;pointer-events:all;"/>`
+      + `<rect class="zoom-inset-handle" data-handle="move" x="${r2(fullW/2-hw)}" y="0" width="${hw*2}" height="${hw}" rx="1" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:move;pointer-events:all;"/>`
+      + `<rect class="zoom-inset-handle" data-handle="se" x="${r2(fullW - hw)}" y="${r2(fullH - hw)}" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:se-resize;pointer-events:all;"/>`
+      + `<rect data-handle="se" x="${r2(fullW - hit)}" y="${r2(fullH - hit)}" width="${hit}" height="${hit}" fill="transparent" style="cursor:se-resize;pointer-events:all;"/>`
+      + `<rect class="zoom-inset-handle" data-handle="sw" x="0" y="${r2(fullH - hw)}" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:sw-resize;pointer-events:all;"/>`
+      + `<rect data-handle="sw" x="0" y="${r2(fullH - hit)}" width="${hit}" height="${hit}" fill="transparent" style="cursor:sw-resize;pointer-events:all;"/>`
+      + `<rect class="zoom-inset-handle" data-handle="ne" x="${r2(fullW - hw)}" y="0" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:ne-resize;pointer-events:all;"/>`
+      + `<rect data-handle="ne" x="${r2(fullW - hit)}" y="0" width="${hit}" height="${hit}" fill="transparent" style="cursor:ne-resize;pointer-events:all;"/>`
       + `<rect class="zoom-inset-handle" data-handle="nw" x="0" y="0" width="${hw}" height="${hw}" fill="#ffffff" stroke="#0072B2" stroke-width="1.2" style="cursor:nw-resize;pointer-events:all;"/>`
       + `<rect data-handle="nw" x="0" y="0" width="${hit}" height="${hit}" fill="transparent" style="cursor:nw-resize;pointer-events:all;"/>`
       + `</g>`;
   }
-  out.push(`<g id="zoomInsetContainer" class="zoom-inset" data-plot="inset" transform="translate(${r2(ix)} ${r2(iy)})"><g id="zoom-inset">${beside ? '' : `<rect class="zoom-inset-bg" width="${r2(iw)}" height="${r2(ih)}" fill="#ffffff" stroke="#999999" stroke-width="0.4"/>`}${ins.svg}</g>${handles}</g></svg>`);
-  return {svg: out.join(''), geo: Object.assign({}, g, {zoomInset: {x: ix, y: iy, w: iw, h: ih, figW: S.W, figH: S.H, zObj}})};
+  const insWrap = (beside ? '' : `<rect class="zoom-inset-bg" x="0" y="0" width="${r2(fullW)}" height="${r2(fullH)}" fill="#ffffff" stroke="#999999" stroke-width="0.4"/>`) + `<g transform="translate(${r2(-ox)} ${r2(-oy)})">${ins.svg}</g>`;
+  out.push(`<g id="zoomInsetContainer" class="zoom-inset" data-plot="inset" transform="translate(${r2(ix)} ${r2(iy)})"><g id="zoom-inset">${insWrap}</g>${handles}</g></svg>`);
+  return {svg: out.join(''), geo: Object.assign({}, g, {zoomInset: {x: ix, y: iy, w: fullW, h: fullH, figW: S.W, figH: S.H, zObj}})};
 }
 
 /* ---------- figure: HPLC overlay ---------- */
