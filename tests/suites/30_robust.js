@@ -337,7 +337,8 @@ await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open
   await p.setInputFiles('#projFile', {name: 'legacy_exact.json', mimeType: 'application/json', buffer: require('fs').readFileSync(require('path').join(__dirname, '../synth/legacy_exact.json'))});
   await p.waitForTimeout(1000);
 
-  let saved = await getSaved();
+  const [dl1] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
+  let saved = JSON.parse(require('fs').readFileSync(await dl1.path(), 'utf8'));
   let nd1 = saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd1');
 
   T.check('legacy-exact.nd-migrated', nd1 && nd1.stage === 'conc' && Math.abs((nd1.conc||0) - 1.5) < 0.1, 'valid runId with btw migrated to conc with exact conc 1.5');
@@ -349,23 +350,20 @@ await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open
   T.check('legacy-exact.metadata-refresh', dnak && Math.abs(dnak.kda - 69.1) < 0.1, 'intentional metadata refresh to DnaK 69.1');
   T.check('legacy-exact.metadata-preserved', synth && Math.abs(synth.kda - 42) < 0.1, 'custom metadata 42 preserved');
 
-  const [dl1] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
-  const out1 = JSON.parse(require('fs').readFileSync(await dl1.path(), 'utf8'));
-  T.check('legacy-exact.round-trip', out1.nanodrop && out1.nanodrop.find(x => x.id === 'nd1') && out1.nanodrop.find(x => x.id === 'nd1').stage === 'conc', 'reload identity check');
+  T.check('legacy-exact.round-trip', saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd1') && saved.nanodrop.find(x => x.id === 'nd1').stage === 'conc', 'reload identity check');
 
   // Test 2: Fields absent
   await p.locator('#homeQuick').evaluate(e => e.click());
   await p.setInputFiles('#projFile', {name: 'legacy_missing.json', mimeType: 'application/json', buffer: require('fs').readFileSync(require('path').join(__dirname, '../synth/legacy_missing.json'))});
   await p.waitForTimeout(1000);
 
-  saved = await getSaved();
+  const [dl2] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
+  saved = JSON.parse(require('fs').readFileSync(await dl2.path(), 'utf8'));
   const nd2 = saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd2');
   T.check('legacy-missing.nd-preserved', nd2 && nd2.stage === 'final' && Math.abs(nd2.a280 - 3.5) < 0.1, 'no btw preserved as final with exact a280');
   T.check('legacy-missing.sec-defaults', saved.opt && saved.opt.secCals && saved.opt.secCals.unit === 'mL', 'default SEC unit missing');
 
-  const [dl2] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
-  const out2 = JSON.parse(require('fs').readFileSync(await dl2.path(), 'utf8'));
-  T.check('legacy-missing.round-trip', out2.nanodrop && out2.nanodrop.find(x => x.id === 'nd2') && out2.nanodrop.find(x => x.id === 'nd2').stage === 'final', 'reload identity check missing');
+  T.check('legacy-missing.round-trip', saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd2') && saved.nanodrop.find(x => x.id === 'nd2').stage === 'final', 'reload identity check missing');
 
   await close(); });
 /* a project file dropped together with other files: the others are not loaded, and the user is told */
