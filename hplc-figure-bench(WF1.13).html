@@ -638,6 +638,7 @@ button,input,select,textarea{font-family:inherit}
         <label class="f">Chromatogram height (in)<input type="number" step="0.1" min="1" id="o-wfH" data-opt="wfH"></label>
         <label class="f">Panel titles<select id="o-wfTitle" data-opt="wfTitle"><option value="step">Step type</option><option value="name">File names</option></select></label>
       </div>
+      <label class="f" title="Text panels (expression, lysis, cleavage, steps without a chromatogram) are as tall as their text plus this margin. Empty: 0.8 × the font size">Margin under text panels (pt)<input type="number" step="0.5" min="1" id="o-wfPad" data-opt="wfPad" placeholder="auto"></label>
       <label class="f" title="Each run's conditions, from its card's Run conditions, printed under its chromatogram">Run conditions under each trace<select id="o-runCond" data-opt="runCond"><option value="none">None</option><option value="short">Column, flow and temperature</option><option value="full">Also buffers, gradient and load</option></select></label>
       <div class="checks">
         <label class="check"><input type="checkbox" id="o-wfLetters" data-opt="wfLetters">Panel letters</label>
@@ -1391,7 +1392,7 @@ const DEF = {pdbCode:'', protSeq:'', protSrc:'', tagSeq:'', tagPos:'N', mode:'ov
   rxlabel:'Volume (mL)', rylabel:'Absorbance (mAU)', y2grad:'Buffer B (%)', y2cond:'Conductivity (mS/cm)',
   secCals: null, secMono:'', secLabel:'mw', secMarks:'void', ovPeakText:'x', ovSecCal:'',
   intMethod:'gauss', poolStyle:'band', poolColor:'#E69F00', poolAlpha:0.3, intBase:'line', intLabel:'num', intProm:5, intFill:true, eps:'', path:2,
-  wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfGelH:1.3, wfLetters:true, wfGels:true, wfFull:false, wfArrows:true, gelFrame:true, ladder:'biorad',
+  wfLayout:'row', wfYield:false, runCond:'short', wfTitle:'step', wfFit:true, noGelSlot:false, wfW:7.2, wfH:2.2, wfPad:'', wfGelH:1.3, wfLetters:true, wfGels:true, wfFull:false, wfArrows:true, gelFrame:true, ladder:'biorad',
   zoomMode:false, zoomInset:false, zoomInsetPos:'tr', zoomInsetSize:0.4, zoomInsetW:0, zoomInsetH:0, zoomInsetX:null, zoomInsetY:null,
   preset:'single', w:3.5, h:2.6, fs:8, lw:0.75, font:'Arial', palette:'okabe', bg:true, dpi:600};
 const RANGE = ['xmin','xmax','ymin','ymax'];
@@ -3841,6 +3842,8 @@ function laneLinks(){
   return map;
 }
 function gelsFor(r){ return gels.filter(g => g.out && lanesFor(g, r.id).length); }
+/* the margin kept under a text panel's content (Margin under text panels, pt), never so small that descenders touch the next item */
+const textPad = fs => Math.max(fs*0.35, numOr(opt.wfPad, fs*0.8));
 function composeRuns(list, cfg){
   const fs = fontSize(), cw = fs*0.56, n = list.length; if (!n) return {svg: null, geo: null};
   let Wt = cfg.W, chromH = cfg.chromH;
@@ -3871,7 +3874,7 @@ function composeRuns(list, cfg){
   if (widened) Wt = row ? pw.reduce((a, b) => a + b, 0) + (n-1)*gap : grid ? 2*Math.max(...pw) + gap : Math.max(...pw);
   if (widened && !row) pw.fill(grid ? (Wt - gap)/2 : Wt);
   /* the upstream band is as tall as its tallest panel's text at the width that panel really gets */
-  if (cfg.bandH) cfg = Object.assign({}, cfg, {bandH: Math.max(cfg.bandH, ...list.map((r, i) => { const c = buildRunSVG(r, {wPt: pw[i], hPt: chromH, nest: true}); return c.geo && c.geo.used ? c.geo.used + fs*0.8 : 0; }))});
+  if (cfg.bandH) cfg = Object.assign({}, cfg, {bandH: Math.max(cfg.bandH, ...list.map((r, i) => { const c = buildRunSVG(r, {wPt: pw[i], hPt: chromH, nest: true}); return c.geo && c.geo.used ? c.geo.used + textPad(fs) : 0; }))});
   /* panel titles wrap onto a second line instead of being cut off */
   /* if any title has to drop its shared prefix, all of them do, so the panels read alike */
   const roomOf = i => Math.max(4, Math.floor((pw[i] - (cfg.letters ? fs*1.6 : 0))/(fs*0.55))), anyShort = list.some((r, i) => stepTitle(r) === r.name && r.name.length > roomOf(i) && shortRunName(r) !== r.name);
@@ -3938,8 +3941,8 @@ function composeRuns(list, cfg){
     /* a wide stacked panel spreads its connectors far sideways: give them a little more drop so they don't run flat */
     const connH = gl.length && !sideHere ? (cfg.connectors ? fs*1.9 + (!row && chart.geo ? Math.min(fs*2.2, 0.06*(chart.geo.R - chart.geo.L)) : 0) : fs*0.8) + extraGap : 0;
     const off = r.gelOff || {};
-    /* a text or construct panel outside the side-by-side layout is only as tall as its content, so its gel follows it closely */
-    const ch = cfg.bandH ? cfg.bandH : r.prep && !row && list.every(x => x.prep) && chart.geo && chart.geo.used ? Math.min(chromH, chart.geo.used + fs*0.8) : chromH;
+    /* a text or construct panel outside the side-by-side layout is only as tall as its content plus the margin, so its gel or the next step follows it closely */
+    const ch = cfg.bandH ? cfg.bandH : r.prep && !row && chart.geo && chart.geo.used ? Math.min(chromH, chart.geo.used + textPad(fs)) : chromH;
     let gy = sideHere ? titleH + (chart.geo ? chart.geo.T : 0) : titleH + ch + connH, bottom = titleH + (chart.svg ? ch : 0);
     const gi = gl.map(g => {
       const idx = lanesFor(g, 'marker').concat(lanesFor(g, r.id)).sort((a,b) => a - b);
@@ -5137,7 +5140,7 @@ function onGel(el){
   } else render();
 }
 /* numbers typed into a field are held to its min and max, and to a sensible ceiling, so a stray 1e6 cannot freeze the page */
-const SANE_MAX = {w: 40, h: 40, wfW: 40, wfH: 20, wfGelH: 20, fs: 72, lw: 10, stack: 1000, runPad: 500, gelGap: 400, peakMax: 200, peakDec: 4, prom: 100, intProm: 100, path: 100, eps: 100, tagTol: 10, knownTol: 25, knownMin: 50, bandSens: 60, gelSide: 90, tagKda: 500, protKda: 2000, sbValue: 1e6, nLanes: 30};
+const SANE_MAX = {w: 40, h: 40, wfW: 40, wfH: 20, wfPad: 72, wfGelH: 20, fs: 72, lw: 10, stack: 1000, runPad: 500, gelGap: 400, peakMax: 200, peakDec: 4, prom: 100, intProm: 100, path: 100, eps: 100, tagTol: 10, knownTol: 25, knownMin: 50, bandSens: 60, gelSide: 90, tagKda: 500, protKda: 2000, sbValue: 1e6, nLanes: 30};
 function saneNum(el, v, key){
   if (v === '' || !isFinite(v)) return v === '' ? '' : null;
   const lo = el.min !== '' ? +el.min : -Infinity, hi = Math.min(el.max !== '' ? +el.max : Infinity, SANE_MAX[key] != null ? SANE_MAX[key] : Infinity);
