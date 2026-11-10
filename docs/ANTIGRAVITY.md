@@ -27,6 +27,8 @@ Each run, work at most ONE job:
      gh issue list --repo patasherry/hplc-figure-bench --label for-antigravity --state open --limit 50
    If gh is not available, the repository is public, so an unauthenticated read works:
      curl -s "https://api.github.com/repos/patasherry/hplc-figure-bench/issues?labels=for-antigravity&state=open&per_page=50"
+   That endpoint returns pull requests as well as issues. Skip any entry that has a "pull_request" field:
+   a pull request is work already done, not a job. `gh issue list` drops them for you.
 
 3. Skip a job if any of these is true, and say which rule you applied:
      - an open pull request already exists for it: a branch ending /issue-<N>, or a body saying "Closes #<N>"
@@ -79,6 +81,8 @@ For each job:
      gh issue list --repo patasherry/hplc-figure-bench --label for-antigravity --state open --limit 50
    If gh is not available, the repository is public, so an unauthenticated read works:
      curl -s "https://api.github.com/repos/patasherry/hplc-figure-bench/issues?labels=for-antigravity&state=open&per_page=50"
+   That endpoint returns pull requests as well as issues. Skip any entry that has a "pull_request" field:
+   a pull request is work already done, not a job. `gh issue list` drops them for you.
 
 2. Skip a job if any of these is true, and say which rule you applied:
      - an open pull request already exists for it: a branch ending /issue-<N>, or a body saying "Closes #<N>"
