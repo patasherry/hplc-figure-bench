@@ -684,6 +684,13 @@ button,input,select,textarea{font-family:inherit}
           <label class="f">Colonies<input type="text" id="pr-trCol" data-prep="trCol" placeholder="e.g. about 200"></label>
           <label class="f">Glycerol stock<input type="text" id="pr-trStock" data-prep="trStock" placeholder="e.g. box 3, A4"></label>
         </div>
+        <div id="cloneWrap">
+          <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+            <label style="font-weight:600; font-size:13px;">Clones</label>
+            <button type="button" class="btn quiet" id="trAddClone" style="min-height:24px; font-size:11px; padding:2px 6px;">Add clone</button>
+          </div>
+          <div id="cloneList" style="display:flex; flex-direction:column; gap:6px;"></div>
+        </div>
         <datalist id="dl-trmethod"><option value="heat shock"><option value="electroporation"><option value="KCM transformation"><option value="from a glycerol stock"></datalist>
       </details>
       <details class="sub" data-sub="pexp" open><summary>Expression</summary>
@@ -4631,8 +4638,14 @@ function methodsText(){
   if (PROJ && prep.on && !skipped('transform') && !['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(k => hasTxt(prep[k]))) P.push('Transformation: [not entered].');
   if (PROJ && prep.on && !skipped('expr') && !EXPR_KEYS.some(k => hasTxt(prep[k]))) P.push('Expression: [not entered].');
   let trSaid = false;
-  if (prep.on && !skipped('transform') && ['trPlasmid', 'trMethod', 'trSel'].some(k => hasTxt(prep[k]))) { const pl = v(prep.trPlasmid) || (cm && cm.name) || 'The plasmid', st = v(prep.strain), me = v(prep.trMethod), se = v(prep.trSel);
-    const ec = st ? `E. coli ${st.replace(/^e\.? ?coli\s*/i, '')}` : 'E. coli', gs = v(prep.trStock);
+  if (prep.on && !skipped('transform') && (['trPlasmid', 'trMethod', 'trSel'].some(k => hasTxt(prep[k])) || prep.selectedCloneId)) {
+    const cid = prep.selectedCloneId, cl = cid ? (prep.clones || []).find(c => c.id === cid) : null;
+    const pl = cl && hasTxt(cl.plasmid) ? v(cl.plasmid) : v(prep.trPlasmid) || (cm && cm.name) || 'The plasmid';
+    const st = cl && hasTxt(cl.strain) ? v(cl.strain) : v(prep.strain);
+    const me = cl && hasTxt(cl.method) ? v(cl.method) : v(prep.trMethod);
+    const se = cl && hasTxt(cl.selection) ? v(cl.selection) : v(prep.trSel);
+    const ec = st ? `E. coli ${st.replace(/^e\.? ?coli\s*/i, '')}` : 'E. coli';
+    const gs = cl && hasTxt(cl.stock) ? v(cl.stock) : v(prep.trStock);
     P.push(/glycerol/i.test(me) ? `Cells of ${ec} carrying ${pl === 'The plasmid' ? 'the plasmid' : pl} were taken from a glycerol stock${gs ? ` (${gs})` : ''}${se ? ` and grown on ${se}` : ''}.` : `${pl} was transformed into ${ec}${me ? ` by ${lc(me)}` : ''}${se ? `, selecting on ${se}` : ''}.`); trSaid = true; }
   if (prep.on && !skipped('expr') && EXPR_KEYS.some(k => hasTxt(prep[k]))) { const st = v(prep.strain), md = v(prep.medium), L = numOr(prep.cultureL, 0), od = v(prep.od), amt = v(prep.inducer), kind = prep.indKind || 'IPTG', T = v(prep.temp), h = v(prep.time), g = numOr(prep.pellet, 0);
     const ind = kind === 'auto' || (/auto|5052/i.test(md) && !amt) ? 'by autoinduction' : amt ? `with ${/^\d+(\.\d+)?$/.test(amt) ? (kind === 'IPTG' ? `${amt} mM IPTG` : `${amt}% L-${kind}`) : amt}${od ? ` at an OD600 of ${od}` : ''}` : od ? `at an OD600 of ${od}` : '';
@@ -6078,6 +6091,38 @@ function renderPrep(){
   const pn = $('#prepPanel'); if (!pn) return;
   pn.querySelectorAll('[data-prep]').forEach(el => { if (el === document.activeElement) return; const v = prep[el.dataset.prep]; if (el.type === 'checkbox') el.checked = !!v; else if (el.value !== String(v == null ? '' : v)) el.value = v == null ? '' : v; });
   pn.querySelectorAll('details.sub').forEach(el => el.classList.toggle('off', el.dataset.sub === 'pclv' ? !prep.cleave : !prep.on));
+
+  const cList = $('#cloneList');
+  if (cList) {
+    const clones = prep.clones || [];
+    cList.innerHTML = clones.map((c, i) => `
+      <div class="clone-card" data-cid="${c.id}" style="border:1px solid var(--sep); border-radius:6px; padding:6px; background:${c.id === prep.selectedCloneId ? 'var(--tint)' : '#fff'}; margin-bottom: 8px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <input type="text" class="c-name" value="${esc(c.name || '')}" placeholder="Clone ${i + 1}" style="font-weight:600; width:120px; border:none; background:transparent; padding:0;">
+          <div>
+            <select class="c-status" style="font-size:11px; padding:2px; height:22px;">
+              <option value="pending"${c.status === 'pending' ? ' selected' : ''}>Pending</option>
+              <option value="success"${c.status === 'success' ? ' selected' : ''}>Success</option>
+              <option value="failed"${c.status === 'failed' ? ' selected' : ''}>Failed</option>
+            </select>
+            <button type="button" class="btn quiet c-del" title="Remove clone" style="padding:0 4px; min-height:22px;">×</button>
+          </div>
+        </div>
+        <div class="row" style="margin-bottom:4px;">
+          <label class="f" style="font-size:11px;">Plasmid<input type="text" class="c-plasmid" value="${esc(c.plasmid || '')}" placeholder="overrides prep" style="font-size:11px; padding:2px 4px; min-height:24px;"></label>
+          <label class="f" style="font-size:11px;">Strain<input type="text" class="c-strain" value="${esc(c.strain || '')}" list="dl-strain" style="font-size:11px; padding:2px 4px; min-height:24px;"></label>
+        </div>
+        <div class="row" style="margin-bottom:4px;">
+          <label class="f" style="font-size:11px;">Method<input type="text" class="c-method" value="${esc(c.method || '')}" list="dl-trmethod" style="font-size:11px; padding:2px 4px; min-height:24px;"></label>
+          <label class="f" style="font-size:11px;">Selection<input type="text" class="c-selection" value="${esc(c.selection || '')}" style="font-size:11px; padding:2px 4px; min-height:24px;"></label>
+        </div>
+        <div class="row">
+          <label class="f" style="font-size:11px;">Stock<input type="text" class="c-stock" value="${esc(c.stock || '')}" style="font-size:11px; padding:2px 4px; min-height:24px;"></label>
+          <label class="f" style="font-size:11px;">&nbsp;<button type="button" class="btn c-sel" style="min-height:24px; font-size:11px;" ${c.status === 'failed' ? 'disabled' : ''}>${c.id === prep.selectedCloneId ? 'Selected' : 'Select for prep'}</button></label>
+        </div>
+      </div>
+    `).join('');
+  }
   { const t = $('#pr-trPlasmid'); if (t) t.placeholder = String(prep.name || '').trim() || (prep.gb && prep.gb.name) || 'e.g. pET28-SUMO-NADK'; }
   $('#prSeqOnly').hidden = !!prep.gb; $('#prIndAmt').hidden = prep.indKind === 'auto';
   { const sel = $('#pr-cleaveAfter'), wf = runs.filter(r => r.inWf), cid = cleaveRunId(), h = wf.map((r, k) => `<option value="${r.id}"${r.id === cid ? ' selected' : ''}>${k + 1}. ${esc(stepTitle(r))}</option>`).join('') || '<option value="">No runs yet</option>';
@@ -6108,6 +6153,58 @@ $('#gbPick').addEventListener('click', () => $('#gbFile').click());
 $('#gbFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) loadGenBank(f); });
 $('#gbPaste').addEventListener('click', () => { const b = $('#gbPasteBox'); b.hidden = !b.hidden; if (!b.hidden) $('#gbText').focus(); });
 $('#gbPasteGo').addEventListener('click', () => { const t = $('#gbText').value; if (!t.trim()) { toast('Paste the GenBank text first.'); return; } loadGenBankText(t, 'Pasted text'); });
+
+$('#prepPanel').addEventListener('click', e => {
+  const cAdd = e.target.closest('#trAddClone');
+  if (cAdd) {
+    prep.clones = prep.clones || [];
+    prep.clones.push({id: 'c' + Date.now() + Math.floor(Math.random()*1000), name: '', status: 'pending', plasmid: '', strain: '', method: '', selection: '', stock: ''});
+    renderPrep();
+    return;
+  }
+
+  const cDel = e.target.closest('.c-del');
+  if (cDel) {
+    const cid = cDel.closest('.clone-card').dataset.cid;
+    prep.clones = prep.clones.filter(c => c.id !== cid);
+    if (prep.selectedCloneId === cid) prep.selectedCloneId = null;
+    renderPrep(); render();
+    return;
+  }
+
+  const cSel = e.target.closest('.c-sel');
+  if (cSel) {
+    const card = cSel.closest('.clone-card');
+    const cid = card.dataset.cid;
+    const c = prep.clones.find(x => x.id === cid);
+    if (c && c.status !== 'failed') {
+      if (prep.selectedCloneId === cid) prep.selectedCloneId = null;
+      else prep.selectedCloneId = cid;
+      renderPrep(); render();
+    }
+    return;
+  }
+});
+
+$('#prepPanel').addEventListener('input', e => {
+  const card = e.target.closest('.clone-card');
+  if (card) {
+    const cid = card.dataset.cid;
+    const c = prep.clones.find(x => x.id === cid);
+    if (c) {
+      if (e.target.classList.contains('c-name')) c.name = e.target.value;
+      if (e.target.classList.contains('c-status')) { c.status = e.target.value; if (c.status === 'failed' && prep.selectedCloneId === cid) prep.selectedCloneId = null; }
+      if (e.target.classList.contains('c-plasmid')) c.plasmid = e.target.value;
+      if (e.target.classList.contains('c-strain')) c.strain = e.target.value;
+      if (e.target.classList.contains('c-method')) c.method = e.target.value;
+      if (e.target.classList.contains('c-selection')) c.selection = e.target.value;
+      if (e.target.classList.contains('c-stock')) c.stock = e.target.value;
+
+      clearTimeout(prepT); prepT = setTimeout(() => { renderPrep(); render(); }, 260);
+    }
+  }
+});
+
 $('#gbClear').addEventListener('click', () => { prep.gb = null; prep.prevProt = null; render(); });
 $('#gbStatus').addEventListener('click', e => { if (e.target.id === 'gbUse') { prep.prevProt = null; useOrf(constructModel()); }
   else if (e.target.id === 'gbBack' && prep.prevProt) { Object.assign(opt, prep.prevProt); prep.prevProt = null; applyProt(); }
