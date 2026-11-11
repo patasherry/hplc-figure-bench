@@ -1,3 +1,0 @@
-fix: Create 100x100 empty canvas when legacy gel missing image
-
-Closes #404
