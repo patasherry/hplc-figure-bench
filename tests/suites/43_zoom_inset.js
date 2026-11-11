@@ -398,3 +398,73 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
   T.done();
 
 })();
+
+suite('zoom_inset_clamped', async function(p, {h, url}) {
+  await p.goto(url);
+  await h.newProject('ZoomInsetClampTest');
+
+  // Reproduce the workflow case: two runs from src('his') and src('q')
+  await h.addRun('his', {name: 'his'});
+  await h.addRun('q', {name: 'q'});
+
+  // Select panel A
+  await p.click('.card[data-rid="run_1"]');
+
+  // Tick [data-wfz] in #wfTool
+  await p.click('#wfTool input[data-wfz]');
+
+  // Export SVG and check bounds
+  await h.step('assert clamp', async () => {
+    // Generate SVG content via page evaluate
+    const svgContent = await p.evaluate(() => {
+       const f = window.curFig();
+       const {svg} = window.buildFig(f);
+       return svg;
+    });
+
+    const outOfBounds = await p.evaluate((svgStr) => {
+       const div = document.createElement('div');
+       div.innerHTML = svgStr;
+       const svg = div.querySelector('svg');
+       document.body.appendChild(div);
+
+       const viewBox = svg.getAttribute('viewBox').split(' ').map(Number);
+       const vW = viewBox[2];
+       const vH = viewBox[3];
+
+       let failed = false;
+       let msg = '';
+
+       // check all text nodes inside zoom-inset
+       const zoomInset = svg.querySelector('#zoomInsetContainer');
+       if (zoomInset) {
+          const bg = zoomInset.querySelector('.zoom-inset-bg');
+          const bw = bg ? parseFloat(bg.getAttribute('width')) : 0;
+          const bh = bg ? parseFloat(bg.getAttribute('height')) : 0;
+
+          const texts = zoomInset.querySelectorAll('text');
+          for (let i = 0; i < texts.length; i++) {
+             const t = texts[i];
+             const bbox = t.getBBox();
+             // The texts in zoom inset should be within 0 to bw, 0 to bh
+             // (assuming zoom-inset coordinate system starts at 0,0)
+             // Because zoomInsetContainer has a transform="translate(x y)"
+             // but inside #zoom-inset, it is local coordinates.
+             if (bbox.x < 0 || bbox.y < 0 || bbox.x + bbox.width > bw || bbox.y + bbox.height > bh) {
+                if (bbox.width > bw || bbox.height > bh) {
+                   failed = true;
+                   msg = "Text exceeds inset box bounds: " + t.textContent + " (" + bbox.width + "x" + bbox.height + ")";
+                }
+             }
+          }
+       }
+
+       document.body.removeChild(div);
+       return {failed, msg};
+    }, svgContent);
+
+    if (outOfBounds.failed) {
+       throw new Error(outOfBounds.msg);
+    }
+  });
+});
