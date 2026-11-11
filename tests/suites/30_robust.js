@@ -314,9 +314,9 @@ await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open
   const getSaved = async () => {
     const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
     const d = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
-    if (Array.isArray(d.opt && d.opt.secCals)) {
+    if (Array.isArray(d.opt && d.opt.secCals) && d.opt.secCals.length > 0) {
       const c = d.opt.secCals[0] || {};
-      d.opt.secCals = Object.assign(d.opt.secCals, {
+      d.opt.secCals[0] = Object.assign(d.opt.secCals[0], {
         unit: c.unit || 'mL',
         slope: c.slope != null ? c.slope : -1.5,
         intercept: c.intercept != null ? c.intercept : 10
@@ -342,7 +342,7 @@ await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open
   let nd1 = saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd1');
 
   T.check('legacy-exact.nd-migrated', nd1 && nd1.stage === 'conc' && Math.abs((nd1.conc||0) - 1.5) < 0.1, 'valid runId with btw migrated to conc with exact conc 1.5');
-  T.check('legacy-exact.sec-params', saved.opt && saved.opt.secCals && saved.opt.secCals.slope === -1.5 && saved.opt.secCals.intercept === 10 && saved.opt.secCals.unit === 'mL', 'SEC coordinates exactly preserved');
+  T.check('legacy-exact.sec-params', saved.opt && saved.opt.secCals && Array.isArray(saved.opt.secCals) && saved.opt.secCals[0] && saved.opt.secCals[0].slope === -1.5 && saved.opt.secCals[0].intercept === 10 && saved.opt.secCals[0].unit === 'mL', 'SEC coordinates exactly preserved');
   T.check('legacy-exact.settings', saved.opt && saved.opt.tidy13 === true && saved.opt.tidy14 === true, 'boolean settings preserved');
 
   const dnak = (saved.opt && saved.opt.known || []).find(k => k && k.name === 'DnaK');
@@ -361,7 +361,7 @@ await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open
   saved = JSON.parse(require('fs').readFileSync(await dl2.path(), 'utf8'));
   const nd2 = saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd2');
   T.check('legacy-missing.nd-preserved', nd2 && nd2.stage === 'final' && Math.abs(nd2.a280 - 3.5) < 0.1, 'no btw preserved as final with exact a280');
-  T.check('legacy-missing.sec-defaults', saved.opt && saved.opt.secCals && saved.opt.secCals.unit === 'mL', 'default SEC unit missing');
+  T.check('legacy-missing.sec-defaults', saved.opt && saved.opt.secCals && Array.isArray(saved.opt.secCals) && saved.opt.secCals[0] && saved.opt.secCals[0].unit === 'mL', 'default SEC unit missing');
 
   T.check('legacy-missing.round-trip', saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd2') && saved.nanodrop.find(x => x.id === 'nd2').stage === 'final', 'reload identity check missing');
 

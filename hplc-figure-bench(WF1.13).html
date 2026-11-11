@@ -2066,7 +2066,7 @@ const SEC_STD_SETS = {
 function newSecCal(col, unit){ const c = SEC_COLUMNS[col] || SEC_COLUMNS.custom, vt = c.vt === '' ? '' : (unit === 'min' ? '' : c.vt);
   return {id: 'sc' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: c.name, col, unit: unit || 'mL', v0: vt === '' ? '' : Math.round(vt*0.36*100)/100, v0est: true, vt, set: 'biorad',
     stds: SEC_STD_SETS.biorad.stds.map(([name, kda, off]) => ({name, kda, ve: '', off: !!off}))}; }
-function secCals(){ const ok = c => c && typeof c === 'object' && !Array.isArray(c); if (!Array.isArray(opt.secCals)) opt.secCals = []; else if (!opt.secCals.every(ok)) opt.secCals = opt.secCals.filter(ok); opt.secCals.forEach(c => { c.unit = c.unit || 'mL'; c.stds = Array.isArray(c.stds) ? c.stds.filter(s => s && typeof s === 'object') : []; }); return opt.secCals; }
+function secCals(){ const ok = c => c && typeof c === 'object' && !Array.isArray(c); if (opt.secCals && !Array.isArray(opt.secCals) && typeof opt.secCals === 'object') opt.secCals = [opt.secCals]; else if (!Array.isArray(opt.secCals)) opt.secCals = []; else if (!opt.secCals.every(ok)) opt.secCals = opt.secCals.filter(ok); opt.secCals.forEach(c => { c.unit = c.unit || 'mL'; c.stds = Array.isArray(c.stds) ? c.stds.filter(s => s && typeof s === 'object') : []; }); return opt.secCals; }
 /* the calibration a run uses: its own choice, else one for its column and units, made on first use */
 function secCalFor(r){
   const L = secCals(); let c = r.secCal && L.find(x => x.id === r.secCal);
