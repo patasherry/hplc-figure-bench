@@ -78,6 +78,27 @@ const H = p => ({
   overlaps: () => p.$$eval('#paper svg text', ts => { const B = ts.map(t => ({t: t.textContent, r: t.getBoundingClientRect()})).filter(x => x.r.width > 0 && x.t.trim()); const out = [];
     for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) { const a = B[i].r, b = B[j].r, w = Math.min(a.right, b.right) - Math.max(a.left, b.left), h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
       if (w > 0 && h > 0 && w*h > 0.25*Math.min(a.width*a.height, b.width*b.height)) out.push(`${B[i].t} × ${B[j].t}`); } return out; }),
+  /* the SAVED figure, not the on-screen one: no screen-only furniture, and the geometry is final.
+     Use this for any check about where figure text lands, because the preview carries handles the export does not. */
+  exportSvg: async () => { const d = p.waitForEvent('download', {timeout: 20000}); await p.click('#saveSvg');
+    const f = path.join(RES, 'export-' + Date.now() + '.svg'); await (await d).saveAs(f); return fs.readFileSync(f, 'utf8'); },
+  /* measure a saved SVG by rendering it in the test browser, so no XML parser and no new dependency is needed.
+     Boxes are CSS pixels of the rendered SVG, which is all a containment check needs. `sel` names one extra rect to return. */
+  svgBoxes: async (svg, sel, tol) => { const pg = await p.context().newPage();
+    try { await pg.setContent('<!doctype html><meta charset="utf-8"><body style="margin:0;padding:0">' + svg + '</body>');
+      await pg.waitForSelector('svg', {timeout: 5000});
+      return await pg.evaluate(([s, tol]) => { const root = document.querySelector('svg');
+        const b = e => { const r = e.getBoundingClientRect(); return {t: e.textContent || '', x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom}; };
+        const fits = (r, o, tol) => r.x >= o.x - tol && r.y >= o.y - tol && r.right <= o.right + tol && r.bottom <= o.bottom + tol;
+        const rb = b(root), texts = [...root.querySelectorAll('text')].filter(t => t.textContent.trim()).map(b);
+        const one = s ? root.querySelector(s) : null, ob = one ? b(one) : null;
+        return {root: rb, texts, box: ob,
+          /* text drawn outside the figure, so it is clipped away in the saved file.
+             The default 2px slack is deliberate: rotated axis titles overhang their own edge by well under a
+             pixel from text metrics alone (the main Y title measures x = -0.9), which is invisible and not a
+             defect, while a real escape is several pixels (the zoom inset's title measures y = -4.1). */
+          clipped: texts.filter(t => !fits(t, rb, tol)).map(t => t.t)}; }, [sel || null, tol == null ? 2 : tol]);
+    } finally { await pg.close(); } },
   hScroll: () => p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1),
   shot: async file => { await p.screenshot({path: file, fullPage: true}); },
   paperShot: async file => { const bx = await p.$eval('#paper svg', e => { const r = e.getBoundingClientRect(); return {x: r.x, y: r.y, width: Math.max(1, r.width), height: Math.max(1, r.height)}; }); await p.screenshot({path: file, clip: bx}); },
@@ -91,4 +112,6 @@ function suite(name){ const res = {suite: name, app: APP, started: new Date().to
   const t = async (id, fn) => { try { await fn(); } catch (e) { check(id + ':threw', false, e.message.split('\n')[0]); } };
   return {check, near, done, t, res};
 }
-module.exports = {open, H, suite, APP, ROOT, DATA, RES, path, fs, src, real, PRIV};
+/* does box a sit inside box b, allowing tol px of slack: the containment test figure-layout checks need */
+const fits = (a, b, tol) => a.x >= b.x - (tol||0) && a.y >= b.y - (tol||0) && a.right <= b.right + (tol||0) && a.bottom <= b.bottom + (tol||0);
+module.exports = {open, H, suite, APP, ROOT, DATA, RES, path, fs, src, real, PRIV, fits};
