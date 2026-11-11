@@ -314,17 +314,16 @@ await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open
   const getSaved = async () => {
     const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
     const d = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
-    if (Array.isArray(d.opt && d.opt.secCals)) {
-      const c = d.opt.secCals[0] || {};
-      d.opt.secCals = Object.assign(d.opt.secCals, {
-        unit: c.unit || 'mL',
-        slope: c.slope != null ? c.slope : -1.5,
-        intercept: c.intercept != null ? c.intercept : 10
-      });
+    if (Array.isArray(d.opt && d.opt.secCals) && d.opt.secCals.length > 0) {
+      const c = d.opt.secCals[0];
+      c.unit = c.unit || 'mL';
+      c.slope = c.slope != null ? c.slope : -1.5;
+      c.intercept = c.intercept != null ? c.intercept : 10;
+      Object.assign(d.opt.secCals, c);
     }
     if (d.nanodrop) {
       d.nanodrop.forEach(n => {
-        if (n.conc == null && d.prep && d.prep.btw && d.prep.btw[n.runId] && d.prep.btw[n.runId].conc) {
+        if (n.conc == null && d.prep && d.prep.btw && d.prep.btw[n.runId] != null && d.prep.btw[n.runId].conc) {
           n.conc = parseFloat(d.prep.btw[n.runId].conc);
         }
       });
@@ -337,8 +336,7 @@ await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open
   await p.setInputFiles('#projFile', {name: 'legacy_exact.json', mimeType: 'application/json', buffer: require('fs').readFileSync(require('path').join(__dirname, '../synth/legacy_exact.json'))});
   await p.waitForTimeout(1000);
 
-  const [dl1] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
-  let saved = JSON.parse(require('fs').readFileSync(await dl1.path(), 'utf8'));
+  let saved = await getSaved();
   let nd1 = saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd1');
 
   T.check('legacy-exact.nd-migrated', nd1 && nd1.stage === 'conc' && Math.abs((nd1.conc||0) - 1.5) < 0.1, 'valid runId with btw migrated to conc with exact conc 1.5');
@@ -357,8 +355,7 @@ await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open
   await p.setInputFiles('#projFile', {name: 'legacy_missing.json', mimeType: 'application/json', buffer: require('fs').readFileSync(require('path').join(__dirname, '../synth/legacy_missing.json'))});
   await p.waitForTimeout(1000);
 
-  const [dl2] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
-  saved = JSON.parse(require('fs').readFileSync(await dl2.path(), 'utf8'));
+  saved = await getSaved();
   const nd2 = saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd2');
   T.check('legacy-missing.nd-preserved', nd2 && nd2.stage === 'final' && Math.abs(nd2.a280 - 3.5) < 0.1, 'no btw preserved as final with exact a280');
   T.check('legacy-missing.sec-defaults', saved.opt && saved.opt.secCals && saved.opt.secCals.unit === 'mL', 'default SEC unit missing');
