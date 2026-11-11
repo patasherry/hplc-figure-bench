@@ -566,4 +566,15 @@ await T.t('imac-warnings', async () => { const {p, errs, close} = await open(), 
   await close();
 });
 
+await T.t('legacy-project.gel-image-fallback', async () => {
+  const {p, errs, close} = await open(), h = H(p);
+  await p.locator('#homeQuick').evaluate(e => e.click());
+  await p.setInputFiles('#projFile', path.join(__dirname, '..', 'data', 'legacy_project.json'));
+  await p.waitForTimeout(3000);
+  const w = await p.evaluate(() => { const gel = Array.from(document.querySelectorAll('.canvas svg image')).find(i => i.id.startsWith('gi-')); return gel ? gel.getAttribute('width') : 'none'; });
+  const hg = await p.evaluate(() => { const gel = Array.from(document.querySelectorAll('.canvas svg image')).find(i => i.id.startsWith('gi-')); return gel ? gel.getAttribute('height') : 'none'; });
+  T.check('legacy-project.gel-image-fallback-w', w === '100', `w: ${w}`);
+  T.check('legacy-project.gel-image-fallback-h', hg === '100', `h: ${hg}`);
+  await close();
+});
 T.done(); })();
