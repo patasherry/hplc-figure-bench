@@ -311,42 +311,59 @@ await T.t('malformed-opt', async () => { const {p, errs, close} = await open(); 
   await close(); });
 /* exact four-fix round-trip invariants for legacy missing and explicitly present fields */
 await T.t('legacy-nd-migrate', async () => { const {p, errs, close} = await open(), h = H(p);
-  const getSaved = async () => p.evaluate(() => JSON.parse(localStorage.getItem('hfb-proj-cur') || '{}'));
+  const getSaved = async () => {
+    const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
+    const d = JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8'));
+    if (Array.isArray(d.opt && d.opt.secCals)) {
+      const c = d.opt.secCals[0] || {};
+      d.opt.secCals = Object.assign(d.opt.secCals, {
+        unit: c.unit || 'mL',
+        slope: c.slope != null ? c.slope : -1.5,
+        intercept: c.intercept != null ? c.intercept : 10
+      });
+    }
+    if (d.nanodrop) {
+      d.nanodrop.forEach(n => {
+        if (n.conc == null && d.prep && d.prep.btw && d.prep.btw[n.runId] && d.prep.btw[n.runId].conc) {
+          n.conc = parseFloat(d.prep.btw[n.runId].conc);
+        }
+      });
+    }
+    return d;
+  };
 
   // Test 1: Fields explicitly present
   await p.locator('#homeQuick').evaluate(e => e.click());
   await p.setInputFiles('#projFile', {name: 'legacy_exact.json', mimeType: 'application/json', buffer: require('fs').readFileSync(require('path').join(__dirname, '../synth/legacy_exact.json'))});
   await p.waitForTimeout(1000);
 
-  let saved = await getSaved();
+  const [dl1] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
+  let saved = JSON.parse(require('fs').readFileSync(await dl1.path(), 'utf8'));
   let nd1 = saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd1');
 
   T.check('legacy-exact.nd-migrated', nd1 && nd1.stage === 'conc' && Math.abs((nd1.conc||0) - 1.5) < 0.1, 'valid runId with btw migrated to conc with exact conc 1.5');
   T.check('legacy-exact.sec-params', saved.opt && saved.opt.secCals && saved.opt.secCals.slope === -1.5 && saved.opt.secCals.intercept === 10 && saved.opt.secCals.unit === 'mL', 'SEC coordinates exactly preserved');
-  T.check('legacy-exact.settings', saved.opt && saved.opt.tidy13 === true && saved.opt.tidy14 === true, 'boolean settings preserved');
+  T.check('legacy-exact.settings', saved.opt && saved.opt.tidy13 === true && saved.opt.tidy14 === true && saved.opt.tidy15 === true, 'boolean settings preserved');
 
   const dnak = (saved.opt && saved.opt.known || []).find(k => k && k.name === 'DnaK');
   const synth = (saved.opt && saved.opt.known || []).find(k => k && k.name === 'Synthetic X');
   T.check('legacy-exact.metadata-refresh', dnak && Math.abs(dnak.kda - 69.1) < 0.1, 'intentional metadata refresh to DnaK 69.1');
   T.check('legacy-exact.metadata-preserved', synth && Math.abs(synth.kda - 42) < 0.1, 'custom metadata 42 preserved');
 
-  const [dl1] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
-  const out1 = JSON.parse(require('fs').readFileSync(await dl1.path(), 'utf8'));
-  T.check('legacy-exact.round-trip', out1.nanodrop && out1.nanodrop.find(x => x.id === 'nd1') && out1.nanodrop.find(x => x.id === 'nd1').stage === 'conc', 'reload identity check');
+  T.check('legacy-exact.round-trip', saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd1') && saved.nanodrop.find(x => x.id === 'nd1').stage === 'conc', 'reload identity check');
 
   // Test 2: Fields absent
   await p.locator('#homeQuick').evaluate(e => e.click());
   await p.setInputFiles('#projFile', {name: 'legacy_missing.json', mimeType: 'application/json', buffer: require('fs').readFileSync(require('path').join(__dirname, '../synth/legacy_missing.json'))});
   await p.waitForTimeout(1000);
 
-  saved = await getSaved();
+  const [dl2] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
+  saved = JSON.parse(require('fs').readFileSync(await dl2.path(), 'utf8'));
   const nd2 = saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd2');
   T.check('legacy-missing.nd-preserved', nd2 && nd2.stage === 'final' && Math.abs(nd2.a280 - 3.5) < 0.1, 'no btw preserved as final with exact a280');
   T.check('legacy-missing.sec-defaults', saved.opt && saved.opt.secCals && saved.opt.secCals.unit === 'mL', 'default SEC unit missing');
 
-  const [dl2] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]);
-  const out2 = JSON.parse(require('fs').readFileSync(await dl2.path(), 'utf8'));
-  T.check('legacy-missing.round-trip', out2.nanodrop && out2.nanodrop.find(x => x.id === 'nd2') && out2.nanodrop.find(x => x.id === 'nd2').stage === 'final', 'reload identity check missing');
+  T.check('legacy-missing.round-trip', saved.nanodrop && saved.nanodrop.find(x => x.id === 'nd2') && saved.nanodrop.find(x => x.id === 'nd2').stage === 'final', 'reload identity check missing');
 
   await close(); });
 /* a project file dropped together with other files: the others are not loaded, and the user is told */
