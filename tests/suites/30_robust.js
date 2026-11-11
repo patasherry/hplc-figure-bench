@@ -566,4 +566,90 @@ await T.t('imac-warnings', async () => { const {p, errs, close} = await open(), 
   await close();
 });
 
+
+  await T.t('p9_staged_consistency', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    p.setDefaultTimeout(10000);
+    await h.newProject('Staged Consistency Test');
+
+    // We are going to setup an IMAC and SEC run and check staged_consistency.imac_purity_mapped
+    const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false; el.value = v; el.dispatchEvent(new Event('input', {bubbles: true})); el.dispatchEvent(new Event('change', {bubbles: true})); return true; }, [id, String(v)]);
+    await setOpt(p, 'o-protKda', '50');
+    await setOpt(p, 'o-eps', '1');
+
+    await h.addRun('tests/data/chrom/hplc_export.csv');
+    await h.pool('A2-A6');
+    await h.wait(200);
+
+    // Now we add a synthetic gel to setup imac_purity_mapped
+    const gelScript = `
+      const c = document.createElement('canvas'); c.width = 100; c.height = 100;
+      const ctx = c.getContext('2d'); ctx.fillStyle = 'white'; ctx.fillRect(0,0,100,100);
+      window.__HFB_GEL = c.toDataURL('image/png');
+    `;
+    await p.evaluate(gelScript);
+    await h.wait(100);
+    const dataUrl = await p.evaluate(() => window.__HFB_GEL);
+    const buf = Buffer.from(dataUrl.split(',')[1], 'base64');
+    await p.setInputFiles('#gelFile', { name: 'synth.png', mimeType: 'image/png', buffer: buf });
+    await h.wait(500);
+
+    // Now set gel marks
+    await p.evaluate(() => {
+       const g = window.gels && window.gels[0];
+       if(g) {
+           g.marks = [{kda: 100, y: 0.2}, {kda: 10, y: 0.8}];
+           g.tags = [{kind: 'target', lane: 1, y: 0.5}];
+           g.assign = ['marker', window.runs[0].id];
+           g.gelAutoCrop = false;
+           const sel = document.querySelector('.gel-lane-sel');
+           if (sel) { sel.value = window.runs[0].id; sel.dispatchEvent(new Event('change', {bubbles: true})); }
+       }
+       document.querySelector('#o-purBase').value = 'lane';
+       document.querySelector('#o-purBase').dispatchEvent(new Event('change', {bubbles: true}));
+       if(window.render) window.render();
+    });
+    await h.wait(500);
+
+    // Add concentration step using DOM evaluate to avoid timeouts with locator.fill
+    await p.evaluate(() => document.querySelector('#tl [data-addmenu]').click()); await h.wait(100);
+    await p.evaluate(() => document.querySelector('#tl [data-addstep="conc"]').click()); await h.wait(500);
+    await p.evaluate(() => {
+        const c = document.querySelector('#btw-conc');
+        if (c) { c.value = '5'; c.dispatchEvent(new Event('input', {bubbles: true})); c.dispatchEvent(new Event('change', {bubbles: true})); }
+        const v = document.querySelector('#btw-vOut');
+        if (v) { v.value = '1'; v.dispatchEvent(new Event('input', {bubbles: true})); v.dispatchEvent(new Event('change', {bubbles: true})); }
+    });
+    await h.wait(500);
+
+    // Run 2
+    await h.addRun('tests/data/chrom/hplc_export.csv');
+    await h.pool('A2-A6');
+    await h.wait(200);
+
+    await h.step('figure');
+    await p.waitForSelector('#sumTable tr:nth-child(2)', { timeout: 10000 });
+    await h.wait(600);
+
+    await p.evaluate(() => {
+       const b = document.querySelector('.trace.run.sel [data-k="basis"]');
+       if(b) { b.value = 'umol'; b.dispatchEvent(new Event('change', {bubbles:true})); }
+       else {
+           const o = document.querySelector('#o-basis');
+           if (o) { o.value = 'umol'; o.dispatchEvent(new Event('change', {bubbles:true})); }
+       }
+       if(window.render) window.render();
+    });
+    await h.wait(500);
+
+    const rows = await h.sumTable();
+    T.check('staged_consistency.imac_purity_mapped', rows.some(r => /\d+%/.test(r[r.length - 1] || '')), `summary rows: ${JSON.stringify(rows)}`);
+
+    T.check('staged_consistency.umol_yield_calculated', rows.some(r => {
+      const yld = r.find(c => /\d+%/.test(c));
+      return yld && !/NaN/.test(yld);
+    }), `yields present: ${JSON.stringify(rows)}`);
+    await close();
+  });
+
 T.done(); })();
