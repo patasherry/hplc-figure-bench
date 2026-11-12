@@ -89,7 +89,7 @@ details.log pre { font-size: .75rem; max-height: 16rem; overflow: auto; backgrou
   <p class="err" id="err" hidden></p>
 
   <section class="card">
-    <div><h2>Needs you</h2><p class="note">Decisions only you can make: changes to numbers the app reports. Issues labelled for-antigravity are picked up automatically, and anything not started within antigravity_stall_minutes (config key, default 45) is handed to Jules.</p></div>
+    <div><h2>Needs you</h2><p class="note">Decisions only you can make: changes to numbers the app reports. Issues labelled for-antigravity are picked up automatically, and anything not started within antigravity_stall_minutes (config key, default 45) returns to the queue.</p></div>
     <div id="inbox"></div>
     <p class="cta">Hit a problem while using the app? <a href="https://github.com/patasherry/hplc-figure-bench/issues/new?template=from-patrick.md" target="_blank" rel="noopener">Report it with the From Patrick form</a>. Those go to the front of the queue.</p>
   </section>
@@ -112,8 +112,7 @@ details.log pre { font-size: .75rem; max-height: 16rem; overflow: auto; backgrou
 
   <section class="tiles">
     <div class="tile" id="t-you"><div class="l">Waiting on you</div><div class="n" id="n-you">–</div></div>
-    <div class="tile"><div class="l">Jules working now</div><div class="n" id="n-run">–</div></div>
-    <div class="tile"><div class="l">Queued for Jules</div><div class="n" id="n-queue">–</div></div>
+        <div class="tile"><div class="l">Queued</div><div class="n" id="n-queue">–</div></div>
     <div class="tile"><div class="l">In review or with the lead</div><div class="n" id="n-review">–</div></div>
     <div class="tile"><div class="l">App fixes, last 30 days</div><div class="n" id="n-fix">–</div></div>
   </section>
@@ -152,10 +151,10 @@ details.log pre { font-size: .75rem; max-height: 16rem; overflow: auto; backgrou
 "use strict";
 const REPO = 'patasherry/hplc-figure-bench', APP = 'hplc-figure-bench(WF1.13).html', TRACK = 17, OWNER = 'patasherry';
 const API = 'https://api.github.com/repos/' + REPO;
-const ORDER = ['Waiting on you', 'Waiting on the lead', 'Pull request in review', 'Jules working', 'Queued for Jules', 'Being sorted'];
-const DOT = {'Waiting on you': 'warn', 'Waiting on the lead': 'warn', 'Pull request in review': '', 'Jules working': '', 'Queued for Jules': 'idle', 'Being sorted': 'idle'};
+const ORDER = ['Waiting on you', 'Waiting on the lead', 'Pull request in review', 'Queued', 'Being sorted'];
+const DOT = {'Waiting on you': 'warn', 'Waiting on the lead': 'warn', 'Pull request in review': '', 'Queued': 'idle', 'Being sorted': 'idle'};
 const LABELS = [['needs-owner', 'Waiting on you'], ['for-coordinator', 'Waiting on the lead'], ['needs-coordinator', 'Waiting on the lead'],
-  ['jules-running', 'Jules working'], ['jules-queue', 'Queued for Jules'], ['needs-triage', 'Being sorted']];
+  ['queued', 'Queued'], ['jules-queue', 'Queued'], ['needs-triage', 'Being sorted']];
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const link = (href, text) => { const a = el('a', '', text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a; };
@@ -181,7 +180,7 @@ async function load() {
       gh('/pulls?state=closed&sort=updated&direction=desc&per_page=100'),
       gh('/commits?sha=main&per_page=100&since=' + since30 + '&path=' + encodeURIComponent(APP)),
       gh(`/issues/${TRACK}/comments?per_page=100&since=${since3}`),
-      gh('/actions/workflows/jules-leader.yml/runs?per_page=15'), gh('/actions/workflows/tests.yml/runs?per_page=15'),
+      gh('/actions/workflows/queue-leader.yml/runs?per_page=15'), gh('/actions/workflows/tests.yml/runs?per_page=15'),
       gh('/issues/comments?sort=created&direction=desc&per_page=60')]);
     const open = open1.concat(open2), names = (i) => new Set(i.labels.map((l) => l.name));
     const appPRs = new Set(appCommits.map((c) => (c.commit.message.split('\n')[0].match(/\(#(\d+)\)\s*$/) || [])[1]).filter(Boolean).map(Number));
@@ -191,7 +190,7 @@ async function load() {
     const inbox = [];
     for (const i of open) { if (i.pull_request) continue; const l = names(i);
       if (l.has('needs-owner')) inbox.push({n: i.number, title: i.title, why: 'Needs your OK', url: i.html_url});
-      if (l.has('for-antigravity')) inbox.push({n: i.number, title: i.title, why: 'Issues labelled for-antigravity are picked up automatically, and anything not started within antigravity_stall_minutes (config key, default 45) is handed to Jules', url: i.html_url}); }
+      if (l.has('for-antigravity')) inbox.push({n: i.number, title: i.title, why: 'Issues labelled for-antigravity are picked up automatically, and anything not started within antigravity_stall_minutes (config key, default 45) returns to the queue', url: i.html_url}); }
     if (checkin) for (const line of checkin.body.split('\n')) { const m = line.match(/^\s*[-*]\s*\**Patrick:?\**:?\s*(.+)/); if (m) inbox.push({n: TRACK, title: clean(m[1]), why: 'From the lead check-in', url: checkin.html_url}); }
 
     const work = [];
@@ -206,10 +205,10 @@ async function load() {
 
     const lastRun = (r) => (r.workflow_runs || []).find((x) => x.conclusion && !['skipped', 'cancelled'].includes(x.conclusion));
     const mgr = recent.find((c) => c.body.includes('From the local manager') || c.body.startsWith('<!-- local-first-pass -->'));
-    const busy = work.some((w) => w.stage === 'Jules working' || w.stage === 'Queued for Jules');
+    const busy = work.some((w) => w.stage === 'Queued');
     const run = (part, r, stallH) => !r ? {part, status: 'Unknown', at: null} : {part, at: r.updated_at,
       status: stallH && busy && hrs(r.updated_at) > stallH ? 'Stalled' : r.conclusion === 'success' ? 'OK' : 'Last run failed'};
-    const health = [run('Jules leader (GitHub)', lastRun(leader), 1), run('Test suite (GitHub)', lastRun(tests)),
+    const health = [run('Queue leader (GitHub)', lastRun(leader), 1), run('Test suite (GitHub)', lastRun(tests)),
       {part: 'Local manager (your PC)', status: mgr && hrs(mgr.created_at) < 26 ? 'OK' : 'Quiet', at: mgr && mgr.created_at},
       {part: 'Daily digest', status: digest ? 'OK' : 'Missing', at: digest && digest.created_at},
       {part: 'Lead check-in', status: checkin ? 'OK' : 'Not yet', at: checkin && checkin.created_at}];
@@ -227,10 +226,10 @@ async function load() {
 function draw() {
   const {inbox, work, merged, health, notes} = data;
   const n = (s) => work.filter((w) => s.includes(w.stage)).length;
-  const v = {you: inbox.length, run: n(['Jules working']), queue: n(['Queued for Jules', 'Being sorted']), review: n(['Pull request in review', 'Waiting on the lead']), fix: merged.filter((m) => m.app).length};
+  const v = {you: inbox.length, run: 0, queue: n(['Queued', 'Being sorted']), review: n(['Pull request in review', 'Waiting on the lead']), fix: merged.filter((m) => m.app).length};
   $('n-you').textContent = v.you; $('n-run').textContent = v.run; $('n-queue').textContent = v.queue; $('n-review').textContent = v.review; $('n-fix').textContent = v.fix;
   $('t-you').classList.toggle('alert', v.you > 0);
-  $('take').textContent = `${v.you ? `${v.you} ${v.you === 1 ? 'thing needs' : 'things need'} you.` : 'Nothing needs you right now.'} Jules is working on ${v.run} ${v.run === 1 ? 'task' : 'tasks'} with ${v.queue} queued, and ${v.fix} app fixes went in over the last 30 days.`;
+  $('take').textContent = `${v.you ? `${v.you} ${v.you === 1 ? 'thing needs' : 'things need'} you.` : 'Nothing needs you right now.'} ${v.queue} ${v.queue === 1 ? 'job is' : 'jobs are'} queued, and ${v.fix} app fixes went in over the last 30 days.`;
 
   const box = $('inbox'); box.replaceChildren();
   if (!inbox.length) { const e = el('div', 'empty'); e.append(dot(), 'Nothing needs you right now.'); box.append(e); }

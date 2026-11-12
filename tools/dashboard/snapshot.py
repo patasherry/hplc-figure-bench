@@ -46,7 +46,7 @@ for i in issues:
     if 'needs-owner' in l:
         inbox.append({'number': i['number'], 'title': i['title'], 'why': 'Needs your OK (changes a number the app reports)', 'url': i['html_url'], 'since': i['updated_at']})
     if 'for-antigravity' in l:
-        inbox.append({'number': i['number'], 'title': i['title'], 'why': 'Issues labelled for-antigravity are picked up automatically, and anything not started within antigravity_stall_minutes (config key, default 45) is handed to Jules', 'url': i['html_url'], 'since': i['updated_at']})
+        inbox.append({'number': i['number'], 'title': i['title'], 'why': 'Issues labelled for-antigravity are picked up automatically, and anything not started within antigravity_stall_minutes (config key, default 45) returns to the queue', 'url': i['html_url'], 'since': i['updated_at']})
 if checkin:
     for line in checkin['body'].splitlines():
         m = re.match(r'\s*[-*]\s*\**Patrick:?\**:?\s*(.+)', line)
@@ -55,7 +55,7 @@ if checkin:
 
 # ---------- work: everything open, by stage ----------
 STAGES = [('needs-owner', 'Waiting on you'), ('for-coordinator', 'Waiting on the lead'), ('needs-coordinator', 'Waiting on the lead'),
-          ('jules-running', 'Jules working'), ('jules-queue', 'Queued for Jules'), ('needs-triage', 'Being sorted')]
+          ('queued', 'Queued'), ('jules-queue', 'Queued'), ('needs-triage', 'Being sorted')]
 work = []
 for i in issues:
     if i['number'] == TRACK:
@@ -93,14 +93,14 @@ def runs(wf):
     r = gh(f'repos/{REPO}/actions/workflows/{wf}/runs?per_page=10').get('workflow_runs', [])
     done = [x for x in r if x.get('conclusion') not in (None, 'skipped', 'cancelled')]
     return done[0] if done else None
-for part, wf, limit in (('Jules leader (GitHub)', 'jules-leader.yml', 1), ('Test suite (GitHub)', 'tests.yml', 72)):
+for part, wf, limit in (('Queue leader (GitHub)', 'queue-leader.yml', 1), ('Test suite (GitHub)', 'tests.yml', 72)):
     try:
         r = runs(wf)
         if not r:
             health.append({'part': part, 'status': 'Unknown', 'detail': 'No finished runs yet', 'at': None})
         else:
             ok = r['conclusion'] == 'success'
-            stale = ago(r['updated_at']) > limit and part.startswith('Jules') and any(w['stage'] in ('Jules working', 'Queued for Jules') for w in work)
+            stale = ago(r['updated_at']) > limit and part.startswith('Queue') and any(w['stage'] == 'Queued' for w in work)
             health.append({'part': part, 'status': 'Stalled' if stale else 'OK' if ok else 'Last run failed',
                            'detail': f"Last finished run: {r['conclusion']}", 'at': r['updated_at']})
     except Exception as e:
