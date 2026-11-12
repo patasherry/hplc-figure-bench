@@ -1,14 +1,17 @@
 name: Claude Code Review
 
+# Manual only since 2026-11-12 (Patrick's choice, to save his Claude plan): this used to run on every pull request that
+# changed the app. The Test suite, the manager's gate and the Gemini lead review already cover each PR. To get a Claude
+# review of one PR: Actions, Claude Code Review, Run workflow, and give the PR number. `@claude` on a PR also still works.
 on:
-  pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
-    paths:
-      - 'hplc-figure-bench(WF1.13).html'
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Pull request number to review'
+        required: true
 
 jobs:
   claude-review:
-    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,7 +32,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ inputs.pr }}'
           claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options

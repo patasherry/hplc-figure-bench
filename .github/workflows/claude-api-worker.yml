@@ -22,7 +22,7 @@ permissions:
 
 env:
   REPO: ${{ github.repository }}
-  MAX_PER_DAY: '2'        # cost cap: jobs started per UTC day
+  MAX_PER_DAY: '1'        # cost cap: jobs started per UTC day (was 2 until 2026-11-12: Claude is the last resort)
   MODEL: claude-sonnet-5-5
   MAX_TURNS: '80'
 
