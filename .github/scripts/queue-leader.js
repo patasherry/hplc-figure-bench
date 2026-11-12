@@ -123,10 +123,15 @@ module.exports = async ({github, context, core}) => {
         if (!exists) { await github.rest.issues.create({owner, repo, title, labels: [L.triage], body: `${body}\n\n_From ${f} (#${p.number})._`}); say(`follow-up issue: ${title}`); routedAg = true; } } } }
 
   await wakeCloud(routedAg);
-  /* Check again soon only while there is something the leader can actually do: an issue it would route, or a
-     routed one whose PR it may need to merge. Counting every queued issue made the heartbeat chain re-trigger
-     every 3 minutes for ever when the only queued jobs carried ag-returned, which the routing loop skips. */
-  const more = (await queued()).filter(routable).length + (await issues('for-antigravity')).length;
+  /* Check again soon only while the NEXT run would actually do something: a queued issue this leader would
+     route, and a worker available to route it to. Two ways this looped before, both costing a run every three
+     minutes for nothing:
+       - counting issues carrying ag-returned, which the routing loop skips
+       - counting routable issues while agAvailable is false (PC off and the Antigravity API paused), when the
+         routing loop does not run at all. That state lasts hours, so it was the more expensive of the two.
+     A job already on for-antigravity is not counted: the leader never acts on those, and it wakes on a
+     finished Test suite run to merge whatever the workers open. */
+  const more = agAvailable ? (await queued()).filter(routable).length : 0;
   core.setOutput('active', more > 0 ? 'true' : 'false');
   await core.summary.addHeading('Queue leader').addList(log.length ? log : ['nothing to do']).write();
 };
