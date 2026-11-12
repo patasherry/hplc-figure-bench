@@ -66,6 +66,8 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .projname:hover{border-color:var(--line)} .projname:focus{outline:none;border-color:var(--accent);background:var(--field)}
 .savestate{color:var(--muted);font-size:12.5px;white-space:nowrap}
 .savestate.err{color:var(--t-con)}
+.rawfiles{position:relative;font-size:12.5px;color:var(--muted)} .rawfiles summary{cursor:pointer;white-space:nowrap} .rawlist{position:absolute;top:100%;left:0;z-index:30;background:var(--panel);border:1px solid var(--line2);border-radius:6px;padding:8px;min-width:300px;max-height:50vh;overflow:auto;color:var(--ink)}
+.rawlist .rawrow{display:flex;align-items:center;gap:8px;padding:3px 0} .rawlist .rawname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tl{list-style:none;margin:0;padding:0;display:grid;counter-reset:step}
 .tl li{position:relative}
 .tl li:not(:last-child)::before{content:"";position:absolute;left:13px;top:26px;bottom:-4px;width:1.5px;background:var(--line)}
@@ -521,6 +523,7 @@ button,input,select,textarea{font-family:inherit}
     <span class="pb-sep" aria-hidden="true">/</span><label for="projName" class="pb-lab">Project name</label>
     <input type="text" id="projName" class="projname" aria-label="Project name" placeholder="Project name" spellcheck="false">
     <span class="savestate" id="saveState" role="status" aria-live="polite"></span>
+    <details class="rawfiles" id="rawPanel" hidden><summary id="rawSum">Raw files</summary><div class="rawlist" id="rawList"></div></details>
   </div>
   <div class="btns top-act">
     <button class="btn ghost" id="homeBtn" type="button" hidden>All projects</button>
@@ -1460,6 +1463,7 @@ tidyLists();
 function saveOpt(){ try { localStorage.setItem('hplc-fig-opt', JSON.stringify(opt)); } catch(e) {} }
 
 let wfSel = null, wfSelKey = '', gelMovedAt = 0;
+let rawFiles = [];
 let traces = [], runs = [], gels = [], uid = 1, G = null, cur = 'overlay', marking = null, tagMode = '', srcDiag = {};
 
 /* ---------- helpers ---------- */
@@ -5829,6 +5833,7 @@ async function imageToCanvas(file){
   finally { URL.revokeObjectURL(url); }
 }
 async function addGelFiles(files){
+  keepRaw(files);
   let last = null; const bad = [];
   for (const f of files) {
     try { const c = await imageToCanvas(f); const g = makeGel(f.name.replace(/\.[^.]+$/, ''), c);
@@ -5885,6 +5890,7 @@ async function loadFiles(files){
   const proj = files.find(f => /\.json$/i.test(f.name)); if (proj && MODE !== 'quick') { let d = null; try { d = JSON.parse(await proj.text()); } catch (e) { toast(`Could not open ${proj.name}`); } if (d) await importAsProject(d, proj.name);
     const rest = files.length - 1; if (rest) toast(`${rest} other file${rest === 1 ? ' was' : 's were'} dropped with the project and not loaded. Drop ${rest === 1 ? 'it' : 'them'} again once the project is open.`); return; }
   if (proj) { try { await openProject(JSON.parse(await proj.text()), proj.name); } catch (e) { toast(`Could not open ${proj.name}`); } files = files.filter(f => f !== proj); if (!files.length) return; }
+  keepRaw(files);
   const gbf = files.filter(f => /\.(gb|gbk|genbank|ape|dna)$/i.test(f.name)); for (const f of gbf) await loadGenBank(f); files = files.filter(f => !gbf.includes(f)); if (!files.length) return;
   const sf = files.filter(f => /\.(cif|mmcif|pdb|ent)$/i.test(f.name)); for (const f of sf) await loadStructFile(f); files = files.filter(f => !sf.includes(f)); if (!files.length) return;
   const imgs = files.filter(isImage), data = files.filter(f => !isImage(f));
@@ -6751,7 +6757,7 @@ async function openProject(data, name, noUndo){
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0);
       const g = Object.assign(makeGel(sg.name, c), sg); delete g.image;
       Object.assign(g, {marks: Array.isArray(g.marks) ? g.marks : [], assign: Array.isArray(g.assign) ? g.assign : [], tags: Array.isArray(g.tags) ? g.tags : [], edits: g.edits && typeof g.edits === 'object' ? g.edits : {added: [], removed: []}}); processGel(g); ng.push(g); } catch (e) { failedGels.push(sg); toast(`Could not restore gel ${sg.name}`); } }
-  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (!Array.isArray(prep.constructs)) prep.constructs = []; if (!Array.isArray(prep.primers)) prep.primers = []; if (!('parentConstructId' in prep)) prep.parentConstructId = null; if (!Array.isArray(prep.derivedConstructIds)) prep.derivedConstructIds = []; if (!prep.cMethod) prep.cMethod = 'plasmid'; if (!prep.cDetails || typeof prep.cDetails !== 'object') prep.cDetails = { digest: {}, overlap: {}, recomb: {} }; canonClones(prep); if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
+  runs = data.runs.map(r => { if (r.fracs && !Array.isArray(r.fracs)) r.fracs = [r.fracs]; else if (!Array.isArray(r.fracs)) r.fracs = []; return r; }); traces = (data.traces || []).map((t, i, a) => Object.assign(t, {color: t.color || paletteColor(i, a.length), visible: t.visible !== false, cols: Array.isArray(t.cols) ? t.cols : ['X', 'Y'], xc: t.xc ?? 0, yc: t.yc ?? 1, offset: t.offset ?? 0, scale: t.scale ?? 1, xshift: t.xshift ?? 0, peaks: parsePeaks(t.peaks)})); gels = ng; rawFiles = Array.isArray(data.rawFiles) ? data.rawFiles.filter(r => r && r.blobId && r.name).map(r => Object.assign({}, r)) : []; struct = data.struct || null; prep = Object.assign(JSON.parse(JSON.stringify(PREP_DEF)), data.prep && typeof data.prep === 'object' && !Array.isArray(data.prep) ? data.prep : {}); ['btw', 'skip', 'stepMeta', 'offs', 'titles'].forEach(k => { if (!prep[k] || typeof prep[k] !== 'object' || Array.isArray(prep[k])) prep[k] = {}; }); if (!Array.isArray(prep.manual)) prep.manual = []; if (!Array.isArray(prep.constructs)) prep.constructs = []; if (!Array.isArray(prep.primers)) prep.primers = []; if (!('parentConstructId' in prep)) prep.parentConstructId = null; if (!Array.isArray(prep.derivedConstructIds)) prep.derivedConstructIds = []; if (!prep.cMethod) prep.cMethod = 'plasmid'; if (!prep.cDetails || typeof prep.cDetails !== 'object') prep.cDetails = { digest: {}, overlap: {}, recomb: {} }; canonClones(prep); if (prep.gb && !Array.isArray(prep.gb.feats)) prep.gb = null; gels.forEach(g => { g._prepA = null; }); ndSamples = data.nanodrop || []; ndMigrate(); ndUid = ndSamples.length + 1 + Date.now() % 1000;
   srcDiag = (data.srcDiag && typeof data.srcDiag === 'object' && !Array.isArray(data.srcDiag)) ? Object.assign({}, data.srcDiag) : {};
   /* the project's settings apply, but calibrations and known proteins kept in this browser are merged rather than replaced */
   if (data.opt) { const dopt = data.opt, myCals = secCals().slice(), myKnown = Array.isArray(opt.known) ? opt.known.slice() : null, myQ = Array.isArray(opt.myQuick) ? opt.myQuick.slice() : [], myQDel = Array.isArray(opt.myQuickDel) ? opt.myQuickDel.slice() : []; Object.assign(opt, JSON.parse(JSON.stringify(DEF)), dopt);
@@ -6816,6 +6822,10 @@ async function upJSON(obj){
   if (STORE.mode === 'local') { const id = newBlobId(); await putLocalBlob(id, obj); return id; }
   return (await STORE.assets.upload(new Blob([JSON.stringify(obj)], {type: 'application/json'}), {type: 'application/json'})).id;
 }
+async function upRaw(f){
+  if (STORE.mode === 'local') { const id = 'raw-' + newBlobId(); await putLocalBlob(id, f); return id; }
+  return (await STORE.assets.upload(f, {type: f.type || 'application/octet-stream'})).id;
+}
 async function upPNG(canvas){
   if (STORE.mode === 'local') {
     const id = 'img-' + newBlobId();
@@ -6832,17 +6842,20 @@ function snapshot(){
   prep.nextUid = uid;
   const S = {meta: {kind: 'project', name: PROJ.name, protein: projProtein(), created: PROJ.created, dots: stepDots()}, step: curStep, cur};
   if (STORE.mode === 'cloud' || STORE.mode === 'local') Object.assign(S, {opt: plain(opt), prep: JSON.parse(JSON.stringify(prep)), srcDiag: Object.assign({}, srcDiag), runs: runs.map(r => ({obj: r, o: plain(r)})), traces: traces.filter(t => !t.ex).map(t => ({obj: t, o: plain(t)})),
-    gels: gels.map(g => ({obj: g, o: plain(g)})), struct, nd: ndSamples.map(n => ({obj: n, o: Object.assign({}, n)}))});
+    gels: gels.map(g => ({obj: g, o: plain(g)})), struct, nd: ndSamples.map(n => ({obj: n, o: Object.assign({}, n)})),
+    raw: rawFiles.map(r => ({obj: r, o: {id: r.id, name: r.name, size: r.size, type: r.type, mod: r.mod, time: r.time}}))});
   return S;
 }
 /* the project as small JSON, with the heavy parts (run curves, gel images, the structure, spectra) uploaded once and referenced */
 async function packCloud(S, P){
-  const st = {app: 'HPLC Figure Bench', version: 2, cur: S.cur || cur, opt: S.opt, prep: S.prep, step: S.step, srcDiag: S.srcDiag || {}, runs: [], traces: [], gels: [], struct: null, nanodrop: []}, refs = [];
+  const st = {app: 'HPLC Figure Bench', version: 2, cur: S.cur || cur, opt: S.opt, prep: S.prep, step: S.step, srcDiag: S.srcDiag || {}, runs: [], traces: [], gels: [], struct: null, nanodrop: [], rawFiles: []}, refs = [];
   for (const {obj: r, o} of S.runs) { if (!r.blobId) { const h = {}; RUN_HEAVY.forEach(k => { if (k in r) h[k] = r[k]; }); r.blobId = await upJSON(h); } const c = Object.assign({}, o, {blobId: r.blobId}); RUN_HEAVY.forEach(k => delete c[k]); st.runs.push(c); refs.push(r.blobId); }
   for (const {obj: t, o} of S.traces) { if (!t.blobId) t.blobId = await upJSON({rows: t.rows}); const c = Object.assign({}, o, {blobId: t.blobId}); delete c.rows; st.traces.push(c); refs.push(t.blobId); }
   for (const {obj: g, o} of S.gels) { if (!g.imageId) g.imageId = await upPNG(g.src); const c = Object.assign({}, o, {imageId: g.imageId}); ['src', 'thumb', 'out', 'pix', 'hist', 'crop', 'cropPrev', 'bandHist', 'image'].forEach(k => delete c[k]); st.gels.push(c); refs.push(g.imageId); }
   if (S.struct) { const x = S.struct; if (!x.blobId) { const c = Object.assign({}, x); delete c.blobId; x.blobId = await upJSON(c); } st.struct = {blobId: x.blobId, ent: x.ent, code: x.code}; refs.push(x.blobId); }
   for (const {obj: n, o} of S.nd) { if (n.spec) { if (!n.specId) n.specId = await upJSON(n.spec); o.specId = n.specId; delete o.spec; refs.push(n.specId); } st.nanodrop.push(o); }
+  /* the files exactly as uploaded (ÄKTA, HPLC, NanoDrop exports) go to the same store as the curves: the project keeps only name, size, time and a reference */
+  for (const {obj: r, o} of S.raw || []) { if (!r.blobId && r._f) { r.blobId = await upRaw(r._f); delete r._f; } if (r.blobId) { st.rawFiles.push(Object.assign({}, o, {blobId: r.blobId})); refs.push(r.blobId); } }
   /* items that did not load this time are kept as they were, so a brief network error never deletes them */
   const L = P.lost; L.runs.forEach(o => { st.runs.push(o); refs.push(o.blobId); }); L.traces.forEach(o => { st.traces.push(o); refs.push(o.blobId); });
   L.gels.forEach(o => { st.gels.push(o); if (o.imageId) refs.push(o.imageId); }); L.nd.forEach(o => { st.nanodrop.push(o); refs.push(o.specId); });
@@ -6883,7 +6896,7 @@ async function unpackLocal(st){
     return Object.assign({}, o, {spec: b, specId: o.specId});
   }) : o))).filter(Boolean);
   if (names.length) toast(`Could not load ${names.slice(0, 3).join(', ')}${names.length > 3 ? ' and more' : ''}. They are kept and will load next time.`);
-  return {app: 'HPLC Figure Bench', version: 2, cur: st.cur || 'overlay', opt: st.opt, prep: st.prep, srcDiag: st.srcDiag || {}, runs: runs2, traces: tr2, gels: gels2, struct: s2, nanodrop: nd2, step: st.step, _lost: lost};
+  return {app: 'HPLC Figure Bench', version: 2, cur: st.cur || 'overlay', opt: st.opt, prep: st.prep, srcDiag: st.srcDiag || {}, runs: runs2, traces: tr2, gels: gels2, struct: s2, nanodrop: nd2, step: st.step, rawFiles: Array.isArray(st.rawFiles) ? st.rawFiles : [], _lost: lost};
 }
 async function unpackCloud(st){
   const get = id => fetch('/_blob/' + id).then(r => { if (!r.ok) throw new Error('missing'); return r.json(); }), names = [], lost = {runs: [], traces: [], gels: [], struct: null, nd: []};
@@ -6894,7 +6907,7 @@ async function unpackCloud(st){
   const s2 = st.struct && st.struct.blobId ? await one(st.struct, 'struct', async () => Object.assign(await get(st.struct.blobId), {ent: st.struct.ent, blobId: st.struct.blobId})) : null;
   const nd2 = (await Promise.all((st.nanodrop || []).map(async o => o.specId ? await one(o, 'nd', async () => Object.assign({}, o, {spec: await get(o.specId)})) : o))).filter(Boolean);
   if (names.length) toast(`Could not load ${names.slice(0, 3).join(', ')}${names.length > 3 ? ' and more' : ''}. They are kept and will load next time.`);
-  return {app: 'HPLC Figure Bench', version: 2, opt: st.opt, prep: st.prep, srcDiag: st.srcDiag || {}, runs: runs2, traces: tr2, gels: gels2, struct: s2, nanodrop: nd2, step: st.step, _lost: lost};
+  return {app: 'HPLC Figure Bench', version: 2, opt: st.opt, prep: st.prep, srcDiag: st.srcDiag || {}, runs: runs2, traces: tr2, gels: gels2, struct: s2, nanodrop: nd2, step: st.step, rawFiles: Array.isArray(st.rawFiles) ? st.rawFiles : [], _lost: lost};
 }
 function projProtein(){ const m = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null; return String(opt.targetName || '').trim() || (m && m.pn !== 'protein' ? m.pn : ''); }
 function stepDots(){ return stepList().filter(s => !s.add).map(s => s.warn ? 2 : s.done ? 1 : 0); }
@@ -6984,6 +6997,25 @@ async function storeDelete(id){
 /* upload ids belong to the project they were uploaded for: a file or quick work uploads again */
 function stripBlobIds(){ runs.forEach(r => delete r.blobId); traces.forEach(t => delete t.blobId); gels.forEach(g => delete g.imageId); if (struct) delete struct.blobId; ndSamples.forEach(n => delete n.specId); }
 
+/* the raw files uploaded into this project: kept in the browser database (or the page's asset store), listed here, and downloadable as they were */
+function keepRaw(fs){
+  if (MODE !== 'proj' || !PROJ) return; let n = 0;
+  fs.forEach(f => { if (rawFiles.some(r => r.name === f.name && r.size === f.size && r.mod === f.lastModified)) return; rawFiles.push({id: 'f-' + newBlobId().slice(2), name: f.name, size: f.size, type: f.type || '', mod: f.lastModified || 0, time: Date.now(), _f: f}); n++; });
+  if (n) { PROJ.editSeq = (PROJ.editSeq || 0) + 1; renderRaw(); queueSave(); }
+}
+const fmtSize = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' kB' : (n / 1048576).toFixed(1) + ' MB';
+function renderRaw(){
+  const box = $('#rawPanel'); if (!box) return; box.hidden = !PROJ || !rawFiles.length; $('#rawSum').textContent = `Raw files (${rawFiles.length})`;
+  $('#rawList').innerHTML = rawFiles.map(r => `<div class="rawrow" data-raw="${esc(r.id)}"><span class="rawname" title="${esc(r.name)}">${esc(r.name)}</span><span>${fmtSize(r.size || 0)}, ${esc(new Date(r.time || 0).toLocaleDateString())}</span><button type="button" class="mini" data-rawdl="${esc(r.id)}">Download</button><button type="button" class="mini" data-rawrm="${esc(r.id)}">Remove</button></div>`).join('');
+}
+$('#rawList').addEventListener('click', async e => {
+  const dl = e.target.closest('[data-rawdl]'), rm = e.target.closest('[data-rawrm]'), id = (dl || rm || {dataset: {}}).dataset.rawdl || (rm || {dataset: {}}).dataset.rawrm, r = rawFiles.find(x => x.id === id); if (!r) return;
+  if (rm) { rawFiles = rawFiles.filter(x => x !== r); PROJ.editSeq = (PROJ.editSeq || 0) + 1; renderRaw(); flushSave(); return; }
+  try { let b = r._f; if (!b && r.blobId) { if (STORE.mode === 'local') b = await getLocalBlob(r.blobId); else { const rs = await fetch('/_blob/' + r.blobId); if (!rs.ok) throw new Error('missing'); b = await rs.blob(); } }
+    if (!b) throw new Error('missing'); const url = URL.createObjectURL(b), a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); }
+  catch (err) { toast(`Could not read ${r.name} from storage`); }
+});
+
 /* ---------- home ---------- */
 const fmtWhen = t => { if (!t) return ''; const d = new Date(t), now = new Date(), same = d.toDateString() === now.toDateString();
   return same ? `today, ${d.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}` : d.toLocaleDateString([], {month: 'short', day: 'numeric', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric'}); };
@@ -7016,7 +7048,7 @@ function leaveWorkspace(){
 }
 function showHome(){ leaveWorkspace().then(() => { if (MODE === 'home') renderHome(); }); setSaveState(''); document.body.classList.remove('proj'); $('#home').hidden = false; document.querySelector('.app').hidden = true; applyProjUI(); renderHome(); }
 function enterApp(){ $('#home').hidden = true; document.querySelector('.app').hidden = false; }
-function resetWorkspace(){ runs = []; traces = []; gels = []; struct = null; ndSamples = []; srcDiag = {}; prep = JSON.parse(JSON.stringify(PREP_DEF)); prep.on = true;
+function resetWorkspace(){ rawFiles = []; runs = []; traces = []; gels = []; struct = null; ndSamples = []; srcDiag = {}; prep = JSON.parse(JSON.stringify(PREP_DEF)); prep.on = true;
   QKEYS.forEach(k => { opt[k] = DEF[k]; }); cur = 'overlay'; marking = null; tagMode = ''; nextHidden.clear(); projUndo = null; }
 const newPid = () => 'p-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 async function newProject(name, protein){
@@ -7053,7 +7085,7 @@ function applyProjUI(){
   const inP = !!PROJ; $('#projBar').hidden = !inP; $('#homeBtn').hidden = MODE === 'home'; $('#quickSave').hidden = MODE !== 'quick';
   $('#projOpen').hidden = MODE === 'home'; $('#projSave').hidden = MODE === 'home';
   $('#stepsPanel').hidden = !inP; $('#stepSheet').hidden = !inP; $('#stepFoot').hidden = !inP;
-  if (inP) { const n = $('#projName'); if (n !== document.activeElement) n.value = PROJ.name; } document.body.classList.toggle('proj', inP);
+  if (inP) { const n = $('#projName'); if (n !== document.activeElement) n.value = PROJ.name; } document.body.classList.toggle('proj', inP); renderRaw();
 }
 addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && PROJ) { writePending(); flushSave(); } });
 

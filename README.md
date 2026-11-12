@@ -81,6 +81,7 @@ Status messages and hints explain missing inputs or unverified numbers. For exam
 **Outputs:**
 *   **Figures:** SVG (clipboard or file), PNG (300, 600, or 1200 dpi), or a combined ZIP archive (**"Save all (ZIP)"**) of all figures and CSV tables.
 *   **Tables & Text:** Purification summary CSV, peak integration CSV, gel band densitometry CSV, and generated Methods text.
+*   **Raw Files:** Files uploaded inside a project (ÄKTA, HPLC, NanoDrop, gel images) are kept as uploaded in the same browser database (`blobs` store), or the page's asset store when hosted. The project record holds only name, size, date and a reference. A **Raw files (n)** list in the project bar downloads or removes each one. They are not included in the exported project `.json`.
 *   **Project Backups:** Single-file `.json` project exports containing all runs, traces, cropped/original gels, NanoDrop readings, structures, steps, and figure settings.
 
 ## Protein mg from the UV area and NanoDrop
