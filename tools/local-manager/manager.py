@@ -2410,6 +2410,28 @@ def app_sections(limit=60):
 PATHY = re.compile(r'[\w./-]*\w+\.(?:js|ts|jsx|tsx|json|html|css|md|py)\b')
 
 
+# a camelCase identifier inside backticks: the board naming something it believes is already in the code
+BACKTICKED = re.compile(r'`([A-Za-z_][A-Za-z0-9_]*)`')
+CAMEL = re.compile(r'^[a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$')
+
+
+def unknown_idents(text, app=None):
+    """camelCase names a proposal puts in backticks that do not occur in the app file.
+
+    Unlike a path, a new function is a legitimate thing to propose, so this never rejects: it is reported so
+    the worker knows the name came from the board and not from the code. #1384 asked for an audit of
+    `drawZoomInset`, which does not exist (the function is zoomCompose), and the proposal's whole premise
+    rested on it. invented_paths() could not catch that, because it is an identifier, not a path."""
+    if app is None:
+        try:
+            app = (ROOT / 'hplc-figure-bench(WF1.13).html').read_text(encoding='utf-8', errors='replace')
+        except Exception:
+            return []
+    if not app:
+        return []
+    return sorted({n for n in BACKTICKED.findall(text or '') if CAMEL.match(n) and n not in app})
+
+
 def invented_paths(text, tracked=None):
     """Paths a proposal names that are not in the repository. The board invented
     src/workflows/templates/miniprep.js and test/workflows/reusability.test.js for #1374, a
@@ -2599,6 +2621,18 @@ def board_round(s, topic=''):
         lines += ['**Not adopted, written against a repository that does not exist:** ' + '; '.join(fake),
                   'The app is one file. A proposal must name a section of it, not a new file. Re-propose the same idea as a change to a named section.', '']
         log(f'board: discarded {len(fake)} proposals naming invented paths')
+    # Names the board put in backticks that are not in the app. Never a rejection, since proposing a new
+    # function is fair, but the worker should know the name is the board's rather than the code's.
+    unknown = {}
+    for r in agreed:
+        p = ranked[r - 1]
+        u = unknown_idents(' '.join(str(p.get(k, '')) for k in ('title', 'why', 'evidence', 'change')))
+        if u:
+            unknown[r] = u
+    if unknown:
+        lines += ['**Names used that are not in the app:** ' + '; '.join(f'{r}: ' + ', '.join(v[:4]) for r, v in unknown.items()),
+                  'These may be functions the proposal means to add. Check them against the code before building on them.', '']
+        log(f'board: flagged unknown identifiers in {len(unknown)} proposals')
     if dups:
         lines += ['**Not adopted, already done or queued:** ' + '; '.join(dups), '']
         log(f'board: skipped {len(dups)} duplicate proposals')
@@ -2612,8 +2646,14 @@ def board_round(s, topic=''):
         to_relay = rl.board_route(sc, len(who), BOARD_GO, relayed, BOARD_RELAY_MAX, rt.is_light(p['title'])) == 'relay'  # split scores: a request for the offline relay instead of the queue
         relayed += to_relay
         if not DRY:
+            u = unknown.get(r) or []
+            note = ''
+            if u:
+                verb = 'does' if len(u) == 1 else 'do'
+                note = ('> **Check these names before building on them:** `' + '`, `'.join(u) + '` ' + verb
+                        + ' not occur in the app file. The board wrote them, so they may be functions it means to add, or may be mistaken.\n\n')
             i = gh(f'repos/{REPO}/issues', 'POST', {'title': p['title'], 'labels': ([RELAY_BOARD] if to_relay else [QUEUE]) + (['board-approved'] if strong else []) + ['from-board'],
-                   'body': f'{p["why"]}\n\n**Change:** {p["change"]}\n\n**Evidence:** {p["evidence"]}\n\n**Risk to avoid:** {p["risk"]}\n\n'
+                   'body': f'{p["why"]}\n\n**Change:** {p["change"]}\n\n**Evidence:** {p["evidence"]}\n\n**Risk to avoid:** {p["risk"]}\n\n{note}'
                            f'### Why the advisers chose it\n{votes}\n\n<details><summary>The debate</summary>\n\n{args}\n\n</details>\n\n'
                            f'Proposed by {p["by"]} on the Direction board (#{BOARD}) and adopted after debate: all three advisers backed it' +
                            (f', each with {BOARD_GO} or more, so it was queued without waiting for Patrick. If it changes a reported number, the lead checks the science before merging.' if strong else '.') +
