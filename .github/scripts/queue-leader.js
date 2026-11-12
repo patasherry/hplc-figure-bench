@@ -66,9 +66,11 @@ module.exports = async ({github, context, core}) => {
       if (!pcUp && agApiPaused) { agAvailable = false; say('PC is off and the Antigravity API is paused: leaving the coding jobs in the queue'); }
     } catch (e) { say(`could not check #17 status: ${e.message}`); }
   }
+  /* an issue a worker handed back (ag-returned), or one already routed, is not the leader's to act on */
+  const routable = i => !labels(i).some(l => l === 'ag-returned' || l === 'for-antigravity');
   if (agAvailable) {
     for (const i of await queued()) {
-      if (labels(i).some(l => l === 'ag-returned' || l === 'for-antigravity')) continue;
+      if (!routable(i)) continue;
       await setLabels(i.number, ['for-antigravity'], [L.queue, QUEUE_OLD]);
       await github.rest.issues.createComment({owner, repo, issue_number: i.number,
         body: 'Routed to the Google Antigravity agent, which takes the coding work. If it cannot take this one, the local manager hands it back to the queue, where the Antigravity CLI and Codex pick jobs up on the owner\'s PC.'});
@@ -121,7 +123,10 @@ module.exports = async ({github, context, core}) => {
         if (!exists) { await github.rest.issues.create({owner, repo, title, labels: [L.triage], body: `${body}\n\n_From ${f} (#${p.number})._`}); say(`follow-up issue: ${title}`); routedAg = true; } } } }
 
   await wakeCloud(routedAg);
-  /* tell the workflow whether to check again soon (GitHub rarely fires the schedule) */
-  core.setOutput('active', ((await queued()).length + (await issues('for-antigravity')).length) > 0 ? 'true' : 'false');
+  /* Check again soon only while there is something the leader can actually do: an issue it would route, or a
+     routed one whose PR it may need to merge. Counting every queued issue made the heartbeat chain re-trigger
+     every 3 minutes for ever when the only queued jobs carried ag-returned, which the routing loop skips. */
+  const more = (await queued()).filter(routable).length + (await issues('for-antigravity')).length;
+  core.setOutput('active', more > 0 ? 'true' : 'false');
   await core.summary.addHeading('Queue leader').addList(log.length ? log : ['nothing to do']).write();
 };
