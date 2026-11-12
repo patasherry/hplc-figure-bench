@@ -86,7 +86,7 @@ function Add-Button($text, $x, $yy, $w, $action) {
 $null = Add-Button 'Start everything' 16 200 205 { Start-Ollama; Start-Manager; $status.Text = 'Started. The console answers in about 20 seconds.' }
 $null = Add-Button 'Stop for the night' 231 200 205 {
   Stop-Manager
-  $status.Text = 'Manager stopped. Jules keeps working in the cloud. It starts again when you log in.'
+  $status.Text = 'Manager stopped. The cloud manager keeps working. It starts again when you log in.'
   if ($stopOllama.Checked) { Get-Process | Where-Object { $_.ProcessName -like 'ollama*' } | Stop-Process -Force -ErrorAction SilentlyContinue; $status.Text += ' Ollama stopped.' }
 }
 $null = Add-Button 'Update and restart' 16 244 205 {

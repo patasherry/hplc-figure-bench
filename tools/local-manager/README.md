@@ -5,9 +5,9 @@ Runs on the owner's PC every 5 minutes, using the local model (Ollama) and, when
 Each pass:
 
 1. **Reviews** new or updated app PRs (first-pass notes).
-2. **Answers Jules:** the local model answers what AGENTS.md and the test helpers settle. Gemini answers factual questions. Claude Code (read-only plan mode) answers questions that need the code. Decisions go to the lead with the `for-coordinator` label. Answers are posted as `Answer for Jules:` comments, which the leader relays.
-3. **Triages** `needs-triage` issues. Safe ones go to `jules-queue` (at most 20 a day). Anything that could change a number gets `needs-owner` and a one-line summary for Patrick.
-4. **Flags stuck work** for the lead: a Jules job with 3 or more questions, or a PR whose tests have failed for over an hour.
+2. **Answers coding agents:** the local model answers what AGENTS.md and the test helpers settle. Gemini answers factual questions. Claude Code (read-only plan mode) answers questions that need the code. Decisions go to the lead with the `for-coordinator` label. Answers are posted on the issue.
+3. **Triages** `needs-triage` issues. Safe ones go to `queued` (at most 20 a day). Anything that could change a number gets `needs-owner` and a one-line summary for Patrick.
+4. **Flags stuck work** for the lead: a job with 3 or more questions, or a PR whose tests have failed for over an hour.
 5. **Advises the lead:** Claude Code (read-only), or Codex if Claude's daily cap is used, posts a recommendation on each new `for-coordinator` item.
 6. **Daily digest** on issue #17 after 7 AM: merged, open, queued, waiting for Patrick, waiting for the lead. It also shows the manager is alive.
 

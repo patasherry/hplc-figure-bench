@@ -48,7 +48,7 @@ jobs:
           used=$(gh api -X GET search/issues -f q="repo:$REPO is:issue \"Claude API worker claim $today\" in:comments" --jq .total_count)
           echo "jobs started today: $used of $MAX_PER_DAY"
           if [ "$used" -ge "$MAX_PER_DAY" ]; then echo "Daily cap reached."; exit 0; fi
-          busy='claude-cloud-running claude-code-running codex-running antigravity-running jules-running openclaw-running copilot-running'
+          busy='claude-cloud-running claude-code-running codex-running antigravity-running agy-running openclaw-running copilot-running'
           ok() {  # $1 = issue JSON: open, not busy, and not waiting for the owner's OK
             echo "$1" | python3 -c "
           import json,sys; i=json.load(sys.stdin); L={l['name'] for l in i['labels']}
@@ -73,7 +73,7 @@ jobs:
           if [ -z "$n" ]; then echo "No job to take."; exit 0; fi
           first=$(gh api repos/$REPO/issues/$n --jq '[.labels[].name] | index("for-claude-first") != null')
           gh api repos/$REPO/issues/$n/labels -X POST -f 'labels[]=claude-cloud-running' >/dev/null
-          for l in for-claude-cloud for-claude-code for-claude-first jules-queue; do gh api -X DELETE repos/$REPO/issues/$n/labels/$l >/dev/null 2>&1 || true; done
+          for l in for-claude-cloud for-claude-code for-claude-first queued jules-queue; do gh api -X DELETE repos/$REPO/issues/$n/labels/$l >/dev/null 2>&1 || true; done
           gh api repos/$REPO/issues/$n/comments -f body="Taken by the Claude API worker on GitHub Actions (run ${{ github.run_id }}). Claude API worker claim $today." >/dev/null
           echo "issue=$n" >> "$GITHUB_OUTPUT"; echo "first=$first" >> "$GITHUB_OUTPUT"
           echo "Took #$n"
@@ -123,7 +123,7 @@ jobs:
           T: ${{ runner.temp }}
         run: |
           done_with() { gh api -X DELETE repos/$REPO/issues/$N/labels/claude-cloud-running >/dev/null 2>&1 || true; }
-          next=for-coordinator; [ "$FIRST" = true ] && next=jules-queue  # a first try on an audit finding goes on to Jules
+          next=for-coordinator; [ "$FIRST" = true ] && next=queued  # a first try on an audit finding goes back to the queue
           fail() { gh api repos/$REPO/issues/$N/comments -f body="$1" >/dev/null; gh api repos/$REPO/issues/$N/labels -X POST -f "labels[]=$next" >/dev/null; done_with; exit 0; }
           git add -A
           files=$(git diff --cached --name-only)

@@ -32,7 +32,7 @@ Each run, work at most ONE job:
 
 3. Skip a job if any of these is true, and say which rule you applied:
      - an open pull request already exists for it: a branch ending /issue-<N>, or a body saying "Closes #<N>"
-     - it carries jules-running, antigravity-running, agy-running, claude-code-running, codex-running, antigravity-done or agy-done
+     - it carries antigravity-running, agy-running, claude-code-running, codex-running, antigravity-done or agy-done
      - it carries needs-owner without owner-approved (it changes a reported number and is waiting on the owner)
      - you already failed it twice: do not take it a third time, say so and move on
    Take the newest issue that survives. If none survive, report "queue empty" and end the run. Do not cancel
@@ -86,7 +86,7 @@ For each job:
 
 2. Skip a job if any of these is true, and say which rule you applied:
      - an open pull request already exists for it: a branch ending /issue-<N>, or a body saying "Closes #<N>"
-     - it carries jules-running, antigravity-running, agy-running, claude-code-running, codex-running, antigravity-done or agy-done
+     - it carries antigravity-running, agy-running, claude-code-running, codex-running, antigravity-done or agy-done
      - it carries needs-owner without owner-approved (it changes a reported number and is waiting on the owner)
    Take the newest issue that survives.
 
@@ -121,4 +121,4 @@ labels it `paste-to-antigravity`. That label means the action is yours: paste th
 The label clears itself once a pull request appears or another worker takes the job.
 
 Nothing waits on you. The stall guard hands any `for-antigravity` job that nobody starts within
-`antigravity_stall_minutes` (45) to Jules instead.
+`antigravity_stall_minutes` (45) back to the `queued` label instead.

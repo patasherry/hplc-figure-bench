@@ -16,11 +16,11 @@ PAGE = Path(__file__).resolve().parents[2] / 'tools' / 'dashboard' / 'mission-co
 
 ASK = """You are the local manager of the HPLC Figure Bench project, running on Patrick's PC (model {model}).
 Patrick is asking you about the project's automation. Answer in plain language, at most 8 short lines, no em dashes, no semicolons.
-What you do, every few minutes: leave first-pass notes on app pull requests, answer Jules' questions, sort new issues
-(safe ones to the Jules queue, ones that change a reported number to Patrick), flag pull requests whose tests have failed for over an hour,
+What you do, every few minutes: leave first-pass notes on app pull requests, answer coding agents' questions, sort new issues
+(safe ones to the work queue, ones that change a reported number to Patrick), flag pull requests whose tests have failed for over an hour,
 and post a daily digest on GitHub issue #17. You update yourself from GitHub once an hour.
 When you talk to the other agents (this is exact, use it when asked):
-- Jules' questions: you decide first, in up to three attempts (quick, then twice with the app and test code in front of you), each answer checked by a second pass of yours.
+- Coding agents' questions: you decide first, in up to three attempts (quick, then twice with the app and test code in front of you), each answer checked by a second pass of yours.
   Only if you are still unsure do you ask Gemini (you send it the code it needs), then ChatGPT through Codex (read-only, reads the repo itself),
   then you try once more with their notes. Only if all of that fails does it go to the lead (Claude), with the label for-coordinator.
 - Anything that would change a number the app reports goes to Patrick (label needs-owner), never decided by an AI.
@@ -29,12 +29,12 @@ When you talk to the other agents (this is exact, use it when asked):
   you, Gemini and ChatGPT each propose up to 3 directions with evidence and risks, argue for 2 rounds, then vote 1 to 5. Proposals all three back become issues automatically.
   Patrick replies "No 2" to drop one or "OK 4" to add one. If Patrick asks how to start it: open issue #222 on GitHub and comment "Discuss: <topic>".
 - GitHub Copilot: its cloud agent takes overflow jobs. While the cloud agent is paused (for example out of AI Credits), you run the Copilot CLI on this PC instead, one job at a time, like a Claude Code job.
-- Your review gate checks every finished Jules PR and sends weak ones back to Jules. When Jules is out of tries, you hand the job to Claude Code on this PC.
+- Your review gate checks every finished PR and sends weak ones back to the queue. When the queue workers are out of tries, you hand the job to Claude Code on this PC.
 - Otherwise you use Claude Code only as the last step of the question ladder, and for recommendations when ChatGPT's cap is used up. Each agent has a daily cap (shown under "use").
-The lead (Claude in the cloud) merges app changes and posts a daily check-in on #17 that you follow. Jules does the coding, started by a GitHub workflow called the leader.
+The lead (Claude in the cloud) merges app changes and posts a daily check-in on #17 that you follow. The Antigravity CLI and Codex do the coding on this PC, and a GitHub workflow called the queue leader routes the work to them.
 Answer what Patrick actually asks. A greeting or small talk gets a short friendly reply and one line on what you can check for him, not a report.
 Give a status report only when he asks how things are going or whether something works.
-It is now {now}. Judge what is true NOW from the "github" section (live from GitHub): which Jules jobs run and in what state, and what waits on the lead or on Patrick.
+It is now {now}. Judge what is true NOW from the "github" section (live from GitHub): which jobs are running and with whom, and what waits on the lead or on Patrick.
 The log only shows what you did and when. A log line about an issue is history unless the github section shows the same problem now.
 For facts about the automation, use ONLY the status and log below. If they don't show something, say you can't see it from here.
 The log is history: an old line (like a stuck flag) may already be resolved, so say when it happened.
@@ -49,26 +49,22 @@ def start(m, port=8765):
     cache = {'gh': (0, None), 'agents': (0, None), 'live': (0, None)}
 
     def live():
-        """What is true on GitHub now: running Jules jobs and their state, and what waits on the lead or Patrick. Cached 5 minutes."""
+        """What is true on GitHub now: which jobs are running and with whom, and what waits on the lead or Patrick. Cached 5 minutes."""
         t, res = cache['live']
         if time.time() - t < 300 and res:
             return res
         try:
             lab = lambda l: m.gh(f'repos/{m.REPO}/issues?state=open&labels={l}&per_page=100')
+            # Jules was removed on 2026-11-12. The workers now carry their own running label, so read those.
             running = []
-            for i in lab('jules-running'):
-                st = {}
-                for c in m.gh(f"repos/{m.REPO}/issues/{i['number']}/comments?per_page=100"):
-                    if c['body'].startswith('<!-- jules-leader '):
-                        try:
-                            st = json.loads(c['body'][len('<!-- jules-leader '):].split(' -->', 1)[0])
-                        except Exception:
-                            pass
-                        break
-                running.append({'issue': i['number'], 'title': i['title'], 'jules_state': st.get('state', 'starting'),
-                                'attempt_started': st.get('since'), 'automatic_replies': st.get('replies', 0)})
+            for name in sorted(m.ALL_RUNNING):
+                who = name[:-len('-running')]
+                for i in lab(name):
+                    if 'pull_request' in i:
+                        continue
+                    running.append({'issue': i['number'], 'title': i['title'], 'worker': who})
             short = lambda rows: [{'issue': i['number'], 'title': i['title']} for i in rows if 'pull_request' not in i]
-            res = {'jules_running': running, 'queued_for_jules': len(lab('jules-queue')),
+            res = {'running': running, 'queued': len({i['number'] for i in lab(m.QUEUE) + lab(m.QUEUE_OLD)}),
                    'waiting_on_lead': short(lab('for-coordinator')) + short(lab('needs-coordinator')),
                    'waiting_on_patrick': short(lab('needs-owner')),
                    'open_pull_requests': [{'pr': p['number'], 'title': p['title']} for p in m.gh(f'repos/{m.REPO}/pulls?state=open&per_page=50')]}
@@ -94,7 +90,7 @@ def start(m, port=8765):
         age = (time.time() - last) / 60 if last else None
         busy = s.get('busy') or {}
         bmin = (time.time() - busy['since']) / 60 if busy.get('since') else None
-        names = {'board': 'a team meeting on the direction board', 'claude jobs': 'a Claude Code job', 'questions': "Jules' questions (the ladder)", 'gate': 'reviewing PRs', 'review': 'reviewing PRs'}
+        names = {'board': 'a team meeting on the direction board', 'claude jobs': 'a Claude Code job', 'questions': 'a coding agent\'s question (the ladder)', 'gate': 'reviewing PRs', 'review': 'reviewing PRs'}
         if bmin is not None:
             checks.append({'part': 'Manager loop', 'ok': bmin < (75 if busy.get('duty') == 'claude jobs' else 45),
                            'detail': f'busy with {names.get(busy.get("duty"), busy.get("duty"))} for {int(bmin)} min'})

@@ -6,8 +6,8 @@ Written 2026-10-26 by the lead (Claude) while Patrick's Claude usage is used up.
 
 Almost everything keeps working:
 
-- **Jules** works the `jules-queue` (leader workflow on GitHub).
-- **The local manager** on Patrick's PC answers Jules' questions, triages issues, runs the review gate and rebuilds, and **auto-merges safe PRs**. A safe PR passes the tests and the gate, and its issue has none of `needs-owner`, `owner-approved` or `board-approved`.
+- **The Antigravity CLI, Codex and the Antigravity API** work the `queued` label, routed by the queue leader workflow on GitHub. Google Jules was removed on 2026-11-12.
+- **The local manager** on Patrick's PC answers coding agents' questions, triages issues, runs the review gate and rebuilds, and **auto-merges safe PRs**. A safe PR passes the tests and the gate, and its issue has none of `needs-owner`, `owner-approved` or `board-approved`.
 - **The Direction board (#222)** holds meetings and adopts work.
 - **The Copilot CLI** takes overflow jobs while the Copilot cloud agent is out of AI Credits.
 
@@ -48,8 +48,8 @@ Never change scientific constants (`LADDERS`, `KNOWN_DEFAULT`, extinction coeffi
 
 ## How to handle `for-coordinator` items
 
-- **A PR that failed the gate only because of stray files or a merge conflict:** close it. The manager's rebuild covers it, or put the issue back in `jules-queue`.
-- **A PR whose own new check fails** (`page.click` or `page.fill` timeouts are common): close it, and put the issue in `jules-queue` or `for-copilot` with a short note on what failed.
+- **A PR that failed the gate only because of stray files or a merge conflict:** close it. The manager's rebuild covers it, or put the issue back in `queued`.
+- **A PR whose own new check fails** (`page.click` or `page.fill` timeouts are common): close it, and put the issue in `queued` or `for-copilot` with a short note on what failed.
 - **An issue that is too big:** split it into issues that each have one task, and label them `needs-triage`.
 
 ## Hard rules
