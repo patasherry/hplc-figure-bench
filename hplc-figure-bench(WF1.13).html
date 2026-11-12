@@ -2384,6 +2384,8 @@ function zoomWindow(lo, hi, a, b){
   const za = Math.max(lo, hasA ? +a : hasB ? lo : lo + (hi - lo)/3), zb = Math.min(hi, hasB ? +b : hasA ? hi : lo + (hi - lo)*2/3);
   return zb > za ? {a: za, b: zb} : null;
 }
+/* the inset shares its parent's ordinate, so its Y title is the unit alone, and none when even that is longer than the inset's side */
+function zoomYTitle(t, fsz, side){ t = String(t || '').trim(); const u = t.match(/\(([^()]+)\)\s*$/), s = u ? u[1].trim() : t; return s && s.length*fsz*0.56 <= side ? s : ''; }
 function zoomCompose(S, m, win, buildIn, zObj){
   const o = opt, pos = zoomPos(), beside = pos === 'beside', g = m.geo, {L, R, T, B} = g;
   zObj = zObj || opt;
@@ -2614,7 +2616,7 @@ function buildSVG(ov){
   const m = withOpt({xmin: '', xmax: ''}, () => buildOverlaySVG(beside ? {noZoom: true, nest: true, wPt: S.W*(1 - zoomSize()), hPt: S.H} : {noZoom: true}));
   if (!m.svg) return m;
   const win = zoomWindow(m.geo.xlo, m.geo.xhi, opt.zoomWinA, opt.zoomWinB);
-  const z = win && zoomCompose(S, m, win, (w, h) => withOpt({xmin: win.a, xmax: win.b, legend: 'none', scalebar: false, xlabel: '', showY: true, ylabel: opt.ylabel === DEF.ylabel ? 'Absorbance (mAU)' : opt.ylabel, ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildOverlaySVG({noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})), opt);
+  const z = win && zoomCompose(S, m, win, (w, h) => withOpt({xmin: win.a, xmax: win.b, legend: 'none', scalebar: false, xlabel: '', showY: true, ylabel: zoomYTitle(yLabelText(), fontSize()*0.8, h), ymin: '', ymax: '', fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildOverlaySVG({noZoom: true, nest: true, wPt: w, hPt: h, idp: 'zi-'})), opt);
   return z || buildOverlaySVG({noZoom: true});
 }
 
@@ -2631,7 +2633,7 @@ function buildRunSVG(run, ov){
   if (!m.svg) return m;
   const win = zoomWindow(m.geo.xlo, m.geo.xhi, run.zoomWinA !== undefined ? run.zoomWinA : opt.zoomWinA, run.zoomWinB !== undefined ? run.zoomWinB : opt.zoomWinB);
   const z = win && zoomCompose(S, m, win, (w, h) => { try { put(win.a, win.b);
-    return withOpt({rxlabel: '', rylabel: opt.rylabel === DEF.rylabel ? uvTitle(DEF.rylabel, uvOf(run)) : opt.rylabel, showY: true, runCond: 'none', ndFig: 'none', runTitle: false, ymin: m.geo.y0, ymax: m.geo.y1, fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true, wPt: w, hPt: h, idp: 'zi-'}))); } finally { put(wa, wb); } }, ov.nest ? run : (curRun() || opt));
+    return withOpt({rxlabel: '', rylabel: zoomYTitle(opt.rylabel, fontSize()*0.8, h), showY: true, runCond: 'none', ndFig: 'none', runTitle: false, ymin: m.geo.y0, ymax: m.geo.y1, fs: fontSize()*0.8, w: numOr(opt.w, 3.5)*w/S.W, h: numOr(opt.h, 2.6)*h/S.H}, () => buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true, wPt: w, hPt: h, idp: 'zi-'}))); } finally { put(wa, wb); } }, ov.nest ? run : (curRun() || opt));
   return z || buildRunPlainSVG(run, Object.assign({}, ov, {noZoom: true}));
 }
 function buildRunPlainSVG(run, ov){

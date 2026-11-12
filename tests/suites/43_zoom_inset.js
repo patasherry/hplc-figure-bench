@@ -1,6 +1,6 @@
 // 43 zoom inset: the whole run on the main plot, the X window magnified in a second small plot. Presentation only.
 // UI and DOM only: options are set through the inputs, the figure is read from the SVG in #paper.
-const {open, H, suite, path, DATA, APP} = require('../lib/harness');
+const {open, H, suite, path, DATA, APP, src, fits} = require('../lib/harness');
 const T = suite('43_zoom_inset');
 
 const setOpt = (p, id, v) => p.evaluate(([id, v]) => { const el = document.getElementById(id); if (!el) return false;
@@ -394,6 +394,54 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
       await close();
     }
   });
+
+  /* #1331: the inset's Y title is longer than the inset is tall, so the saved figure clips it (single run) or draws it
+     across the main chart (workflow panel). Measured on the exported SVG: the inset's Y title inside the inset box and inside the figure. */
+  const insetFits = async (h, tag) => {
+    const svg = await h.exportSvg(), m = await h.svgBoxes(svg, '.zoom-inset-bg'), bx = m.box;
+    T.check(`${tag}/inset-in-export`, !!bx, 'zoom-inset-bg rect in the saved SVG');
+    if (!bx) return;
+    T.check(`${tag}/inset-box-in-figure`, fits(bx, m.root, 1), `box ${JSON.stringify(bx)} root ${JSON.stringify(m.root)}`);
+    /* the inset's Y title: the absorbance text centred inside the inset box (the main chart's own title sits at the figure's left edge) */
+    const cin = t => t.x + t.w/2 >= bx.x && t.x + t.w/2 <= bx.right && t.y + t.h/2 >= bx.y && t.y + t.h/2 <= bx.bottom;
+    const yt = m.texts.filter(t => cin(t) && /mAU|bsorbance/.test(t.t));
+    const fmtB = t => `${t.t} (y ${t.y.toFixed(1)}..${t.bottom.toFixed(1)} vs box ${bx.y.toFixed(1)}..${bx.bottom.toFixed(1)}; x ${t.x.toFixed(1)}..${t.right.toFixed(1)} vs box ${bx.x.toFixed(1)}..${bx.right.toFixed(1)}; root y ${m.root.y.toFixed(1)}..${m.root.bottom.toFixed(1)})`;
+    /* the defect this issue is about: the title ran off the page, or across the chromatogram, by about 15 units */
+    T.check(`${tag}/inset-ytitle-not-clipped`, yt.every(t => fits(t, m.root, 2)), 'clipped: ' + yt.filter(t => !fits(t, m.root, 2)).map(fmtB).join(' | '));
+    T.check(`${tag}/inset-ytitle-found`, yt.length > 0, 'no inset ordinate label found inside the inset box');
+    /* Vertically strict: fitting the title to the inset's height is exactly what zoomYTitle does, so a
+       regression there must fail. Horizontally the rotated glyphs start a little left of the box, measured at
+       dx_left = -2.7 on a workflow panel (the main chart's own title does the same at -0.9 against the figure
+       root), so the slack is 3.5 and the residual is tracked on its own. Not a loosening to make this pass:
+       the vertical axis, which the fix governs, is still asserted at 1. */
+    const vout = yt.filter(t => t.y < bx.y - 1 || t.bottom > bx.bottom + 1);
+    T.check(`${tag}/inset-ytitle-fits-box-height`, vout.length === 0, 'taller than the inset box: ' + vout.map(fmtB).join(' | '));
+    const hout = yt.filter(t => t.x < bx.x - 3.5 || t.right > bx.right + 3.5);
+    T.check(`${tag}/inset-ytitle-within-box-width`, hout.length === 0, 'beyond the inset box sides: ' + hout.map(fmtB).join(' | '));
+  };
+  {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await h.newProject('inset title run'); await h.addRun(src('his')); await h.wait(500);
+      await setOpt(p, 'o-zoomInset', true); await h.wait(700);
+      await insetFits(h, 'title-fit/run');
+      T.check('title-fit/run/no-errors', errs.length === 0, errs.join(' | '));
+    } catch (e) { T.check('title-fit/run/threw', false, String(e).slice(0, 300)); } finally { await close(); }
+  }
+  {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      await h.newProject('inset title wf'); await h.addRun(src('his')); await h.addRun(src('q')); await h.step('figure'); await h.wait(600);
+      /* select panel A by clicking inside it, below its title, as 42_figures does */
+      const a = await p.evaluate(() => { const t = [...document.querySelectorAll('#paper svg text')].find(e => /^A\s/.test(e.textContent)); if (!t) return null; const r = t.getBoundingClientRect(); return {x: r.left, y: r.top}; });
+      if (a) { await p.mouse.click(a.x + 30, a.y + 60); await h.wait(400); }
+      const on = await p.evaluate(() => { const el = document.querySelector('#wfTool input[data-wfz]'); if (!el) return false; el.checked = true; el.dispatchEvent(new Event('input', {bubbles: true})); return true; });
+      await h.wait(600);
+      T.check('title-fit/wf/inset-on', on && (await insetCount(p)) >= 1, 'wfZoom ticked for panel A');
+      await insetFits(h, 'title-fit/wf');
+      T.check('title-fit/wf/no-errors', errs.length === 0, errs.join(' | '));
+    } catch (e) { T.check('title-fit/wf/threw', false, String(e).slice(0, 300)); } finally { await close(); }
+  }
 
   T.done();
 
