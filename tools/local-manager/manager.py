@@ -40,7 +40,7 @@ AUTO_MAX, AUTO_QUEUE, AUTO_AVG = cfg.get('board_adopt_max', 2), cfg.get('board_q
 BOARD_GO = cfg.get('board_go_score', 4)  # every adviser's score at least this: the board's decision is enough, Patrick isn't asked
 DEBATE_ROUNDS = cfg.get('debate_rounds', 2)  # rounds of open debate between the proposals and the vote
 COPILOT_MODE = cfg.get('copilot_mode', 'off')  # off (Patrick has no Copilot credits): no Copilot jobs at all, and its turn goes to Claude Code. auto: the cloud agent, and the Copilot CLI while it is paused. cloud or cli: only that one
-CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 40), 'agy': cfg.get('max_agy_jobs', 8), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 3), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 40), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
+CAP = {'codex_jobs': cfg.get('max_codex_jobs', 6), 'openclaw': cfg.get('max_openclaw_jobs', 8), 'antigravity': cfg.get('max_antigravity_jobs', 40), 'agy': cfg.get('max_agy_jobs', 20), 'copilot': cfg.get('max_copilot_jobs', 10), 'claude_jobs': cfg.get('max_claude_jobs', 1), 'claude': cfg.get('max_claude', 10), 'codex': cfg.get('max_codex', 10), 'gemini': cfg.get('max_gemini', 100), 'queue': cfg.get('max_queue', 20)}
 TRACK = cfg.get('tracking_issue', 17)
 CLOUD_STANDBY = cfg.get('cloud_standby_minutes', 20)  # the cloud copy works only when the PC manager has been quiet this long
 DIGEST_HOUR = cfg.get('digest_hour', 7)
@@ -1098,7 +1098,10 @@ def gate(s):
                  ['GitHub waits for a person to approve the tests on this Copilot PR, so the manager rebuilds it on its own branch, where they run.'] if waits_approval else gate_problems(full, files, diff, report_of(n)))
         m = re.search(r'(?:closes|fixes|resolves)\s+#(\d+)', pr.get('body') or '', re.I)
         issue = int(m.group(1)) if m else linked_issue(n)
-        cop = 'copilot' in pr['user']['login'].lower() or COPILOT_CLI_MARK in (pr.get('body') or '') or AG_MARK in (pr.get('body') or '') or BG['agy']['mark'] in (pr.get('body') or '') or OC_MARK in (pr.get('body') or '') or BG['codex']['mark'] in (pr.get('body') or '')
+        # Antigravity (API route and CLI) is the first worker since Jules went, so a PR of its that fails the gate goes back to the
+        # queue with the notes, up to MAX_SENDBACKS, as the first worker's always did. Counting it as a retry worker sent every
+        # failed Antigravity PR straight to for-claude-code, which Codex's heavy model and then Claude Code serve.
+        cop = 'copilot' in pr['user']['login'].lower() or COPILOT_CLI_MARK in (pr.get('body') or '') or OC_MARK in (pr.get('body') or '') or BG['codex']['mark'] in (pr.get('body') or '')
         mine = bool(re.search(r'Generated (?:with|by) \[Claude Code\]|claude\.ai/code/session_', pr.get('body') or '')) or CC_MARK in (pr.get('body') or '')  # the lead's rebuilds and Claude Code jobs are not sent back to the queue
         if probs and issue and all(p.startswith(JUNK_ONLY) for p in probs) and CLEAN_MARK not in (pr.get('body') or ''):
             new = clean_rebuild(full, files, issue)  # only stray files or a conflict: fix it here instead of a worker retry
@@ -1122,7 +1125,7 @@ def gate(s):
             notes = '\n'.join(f'- {x}' for x in probs)
             if not DRY:
                 gh(f'repos/{REPO}/issues/{issue}', 'PATCH', {'body': ibody + f'\n\n### Automatic review of PR #{n} (out of tries)\n\n{notes}'})
-                post(n, ('**Handed to Claude Code** on the owner\'s PC: Copilot\'s attempt did not pass either.' if cop else f'**Handed to Copilot**, then Claude Code if needed: the job was sent back {MAX_SENDBACKS} times.') + f' Problems:\n\n{notes}' + SIGN.format(rv.MODEL))
+                post(n, ('**Handed to the retry workers** (Codex, then Claude Code): this retry did not pass either.' if cop else f'**Handed to {"the retry workers (Codex, then Claude Code)" if COPILOT_MODE == "off" else "Copilot, then Claude Code if needed"}**: the job was sent back {MAX_SENDBACKS} times.') + f' Problems:\n\n{notes}' + SIGN.format(rv.MODEL))
                 gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
             nxt = 'for-claude-code' if cop or COPILOT_MODE == 'off' else 'for-copilot'
             label(issue, add=[nxt], remove=list(ALL_RUNNING | ALL_DONE | {QUEUE, QUEUE_OLD, 'needs-coordinator'}))
@@ -1856,26 +1859,32 @@ def ship_worktree(wt, n, title, desc, branch, who, mark):
 
 BG_HOURS = {'openclaw': cfg.get('openclaw_hours', 1.5), 'codex': cfg.get('codex_hours', 1.5), 'agy': cfg.get('agy_hours', 2)}
 AGY_MODEL = cfg.get('agy_model', 'gemini-3.8-flash')  # the model the Antigravity CLI runs a job on; '' takes the sign-in's own default
+# A job Antigravity already failed once, or one the gate sent back with notes, gets the stronger model for its second attempt, so the
+# retry is a better try and not the same try again. '' drops --model and takes the sign-in's default (the stronger model on AI Pro).
+# This is what keeps a failed job with Antigravity and away from Codex and Claude (Patrick's choice, 2026-11-12).
+AGY_MODEL_RETRY = cfg.get('agy_model_retry', '')
+agy_model_for = lambda retry=False: AGY_MODEL_RETRY if retry else AGY_MODEL
+SENT_BACK = '### Automatic review of PR #'  # the heading the gate adds to an issue when it sends a PR back
 _bg = {'openclaw': {}, 'codex': {}, 'agy': {}}  # issue -> running job, per worker; kept in memory, since the processes belong to this manager
 BG = {  # how each local coding worker is started and labelled
     'openclaw': {'name': 'OpenClaw', 'who': lambda: f'OpenClaw with the local model ({rv.MODEL_LOCAL})', 'mark': '<!-- openclaw-job -->', 'exe': 'openclaw',
-                 'args': lambda wt, src='': ['agent', 'exec', '--message-file', str(wt / TASK_FILE), '--cwd', str(wt)],
+                 'args': lambda wt, src='', retry=False: ['agent', 'exec', '--message-file', str(wt / TASK_FILE), '--cwd', str(wt)],
                  'own': 'for-openclaw', 'takes_claude': False, 'cap': 'openclaw', 'desc': "the local model writing code", 'small_only': True},
     'codex': {'name': 'Codex', 'who': lambda: 'ChatGPT Codex on the owner\'s PC', 'mark': '<!-- codex-job -->', 'exe': 'codex',
-              'args': lambda wt, src='': ['exec', '--sandbox', 'workspace-write'] + codex_opts(src in ('for-claude-code', 'for-codex')) + ['-C', str(wt), f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE}.'],
+              'args': lambda wt, src='', retry=False: ['exec', '--sandbox', 'workspace-write'] + codex_opts(src in ('for-claude-code', 'for-codex')) + ['-C', str(wt), f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE}.'],
               'own': 'for-codex', 'takes_claude': True, 'cap': 'codex_jobs', 'desc': 'ChatGPT Codex writing code'},
     # The Antigravity CLI, covered by Patrick's Google AI Pro subscription: the CLI is included at every tier and draws on the
     # subscription quota through the sign-in cached by an interactive `agy` session, not on the Gemini API key whose project
     # has refused every Interactions API call since Nov 1 (HTTP 429). Headless: `agy -p` prints to stdout and exits.
     'agy': {'name': 'the Antigravity CLI', 'who': lambda: 'the Antigravity CLI (agy) on the owner\'s PC, on his Google AI Pro subscription', 'mark': '<!-- agy-job -->', 'exe': 'agy',
-            'args': lambda wt, src='': ['-p', f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE} and do not commit, push or open a pull request: the manager does that.',
+            'args': lambda wt, src='', retry=False: ['-p', f'Read {TASK_FILE} in this folder and do exactly what it says. Do not edit {TASK_FILE} and do not commit, push or open a pull request: the manager does that.',
                                         '--output-format', 'text', '--print-timeout', f'{int(BG_HOURS["agy"] * 3600)}s']
                                        # --model picks the model for this run (added in CLI 1.0.5; /model is interactive
                                        # only, so it is no use headless). Patrick's choice: 3.8 Flash rather than the
                                        # Gemini 4 Argon the sign-in defaults to, to spend less of the AI Pro quota per
                                        # job. `agy models` lists the names this build accepts; agy_model: "" drops the
                                        # flag and takes whatever the sign-in defaults to.
-                                       + (['--model', AGY_MODEL] if AGY_MODEL else [])
+                                       + (['--model', agy_model_for(retry)] if agy_model_for(retry) else [])
                                        # Off by default: unverified on Windows, and an unsupported flag here fails the way
                                        # permissions did, silently. Turn it on once a smoke test shows the CLI still edits
                                        # a file with both flags, and we get containment as well as no prompts.
@@ -1901,6 +1910,7 @@ Answer with ONE JSON object: {{"small": true or false, "why": "one short sentenc
 
 Issue: {title}
 {body}"""
+CODEX_QUEUE = cfg.get('codex_queue', 'returned')  # returned: from the open queue Codex takes only jobs Antigravity handed back (ag-returned), to save the ChatGPT allowance. all: any queued job
 OC_WAIT_MIN = cfg.get('openclaw_wait_minutes', 10)  # take a queued job only after it waited this long, so a free worker gets first go
 
 
@@ -2048,7 +2058,8 @@ def bg_worker(s, key):
                   ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] if W['takes_claude'] else []) + \
                   ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
                   [(i, QUEUE) for i in queue if ok(i) and 'from-patrick' not in {l['name'] for l in i['labels']}
-                   and now - seen[str(i['number'])] >= OC_WAIT_MIN * 60 and (key != 'agy' or not rt.is_light(i['title']))]
+                   and now - seen[str(i['number'])] >= OC_WAIT_MIN * 60 and (key != 'agy' or not rt.is_light(i['title']))
+                   and (key != 'codex' or CODEX_QUEUE == 'all' or 'ag-returned' in {l['name'] for l in i['labels']})]
     waiting = rt.prefer_unlocked(waiting, busy_sections(s), lambda x: issue_sections(x.get('title', ''), x.get('body', ''))[1])
     if not waiting or not use(s, W['cap']):
         return
@@ -2061,7 +2072,8 @@ def bg_worker(s, key):
         why = 'Another agent could not finish it.' if src not in (QUEUE, W['own']) else 'You are taking it so the other agents can work on other jobs.'
         (wt / TASK_FILE).write_text(CC_JOB.format(who=W['who'](), why=why, n=n, title=i['title'], body=spec_brief(i['title'], i.get('body') or '')), encoding='utf-8')
         logf = open(WORK / f'{key}-{n}.log', 'w', encoding='utf-8')
-        proc = subprocess.Popen([exe] + W['args'](wt, src), cwd=wt, stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+        retry = key == 'agy' and (rt.tries(tried.get(str(n))) >= 1 or SENT_BACK in (i.get('body') or ''))
+        proc = subprocess.Popen([exe] + W['args'](wt, src, retry), cwd=wt, stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
     except Exception as e:
         s['count'][W['cap']] -= 1
         return log(f'#{n}: {W["name"]} could not start: {e}')
@@ -2069,7 +2081,7 @@ def bg_worker(s, key):
     if key == 'codex':
         log(f'#{n}: Codex uses {CODEX_HEAVY if src in ("for-claude-code", "for-codex") else CODEX_LIGHT}')
     if key == 'agy':
-        log(f'#{n}: the Antigravity CLI uses {AGY_MODEL or "the model its sign-in defaults to"}')  # a name this build rejects shows up here, not as a mystery failure
+        log(f'#{n}: the Antigravity CLI uses {agy_model_for(retry) or "the model its sign-in defaults to"}' + (' (second attempt)' if retry else ''))  # a name this build rejects shows up here, not as a mystery failure
         s['agy_seen'] = time.time()  # it started, so a later PATH lookup that misses must not report it as uninstalled
     label(n, add=[f'{key}-running'], remove=[src])
     post(n, f'Handed to **{W["name"]}** on Patrick\'s PC ({W["desc"]}). Its PR goes through the same tests and review gate.' + SIGN.format(rv.MODEL))
@@ -2533,7 +2545,7 @@ def board_round(s, topic=''):
         who = [('Gemini Flash', lambda q: ask_gemini(q, ['gemini-flash-latest', 'gemini-2.5-flash']), 'gemini'),
                ('Gemini Flash Lite', lambda q: ask_gemini(q, ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite']), 'gemini')]
     else:
-        who = [('the local AI', lambda q: rv.ask_model('You are a careful, critical adviser.', q), None), ('Gemini', ask_gemini, 'gemini'), ('ChatGPT', ask_codex, 'codex')]
+        who = [('the local AI', lambda q: rv.ask_model('You are a careful, critical adviser.', q), None), ('Gemini', ask_gemini, 'gemini')] + ([('ChatGPT', ask_codex, 'codex')] if cfg.get('board_codex', False) else [])  # board_codex: off to save the ChatGPT allowance
     who = [w for w in who if (w[2] != 'codex' or shutil.which('codex')) and (w[2] is None or ((w[2] != 'gemini' or GEMINI_KEY) and s['count'].get(w[2], 0) + 1 + DEBATE_ROUNDS <= CAP[w[2]] and use(s, w[2])))]
     if not CLOUD and LOCAL_ROLE == 'coder' and rv.MODEL == 'Gemini':  # the local model only writes code now; its seat would just be Gemini twice
         who = [w for w in who if w[0] != 'the local AI']
@@ -2873,12 +2885,12 @@ def advise(s):
             continue
         body = ((i.get('body') or '') + '\n\n' + '\n\n'.join(c['body'] for c in cs[-4:]))[:8000]
         try:
-            if shutil.which('codex') and use(s, 'codex'):
+            if GEMINI_KEY and use(s, 'gemini'):  # Gemini first (free), then ChatGPT, and Claude only when neither is there
+                rec, who = ask_gemini(ADVISE.format(n=n, title=i['title'], body=body + '\n\nCode excerpts:\n' + code_for(body)), REVIEW_MODELS), 'Gemini'
+            elif shutil.which('codex') and use(s, 'codex'):
                 rec, who = ask_codex(ADVISE.format(n=n, title=i['title'], body=body)), 'ChatGPT (Codex, read-only)'
             elif shutil.which('claude') and use(s, 'claude'):
                 rec, who = ask_claude(ADVISE.format(n=n, title=i['title'], body=body)), 'Claude Code (read-only)'
-            elif GEMINI_KEY and use(s, 'gemini'):
-                rec, who = ask_gemini(ADVISE.format(n=n, title=i['title'], body=body + '\n\nCode excerpts:\n' + code_for(body)), REVIEW_MODELS), 'Gemini'
             else:
                 log(f'#{n} for-coordinator: daily caps reached, waiting')
                 continue

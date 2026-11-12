@@ -6,7 +6,7 @@ Written 2026-10-26 by the lead (Claude) while Patrick's Claude usage is used up.
 
 Almost everything keeps working:
 
-- **The Antigravity CLI, Codex and the Antigravity API** work the `queued` label, routed by the queue leader workflow on GitHub. Google Jules was removed on 2026-11-12.
+- **The Antigravity CLI, Codex and the Antigravity API** work the `queued` label (see `docs/ORCHESTRATION.md` for the current order), routed by the queue leader workflow on GitHub. Google Jules was removed on 2026-11-12.
 - **The local manager** on Patrick's PC answers coding agents' questions, triages issues, runs the review gate and rebuilds, and **auto-merges safe PRs**. A safe PR passes the tests and the gate, and its issue has none of `needs-owner`, `owner-approved` or `board-approved`.
 - **The Direction board (#222)** holds meetings and adopts work.
 - **The Copilot CLI** takes overflow jobs while the Copilot cloud agent is out of AI Credits.
