@@ -7239,20 +7239,21 @@ function clPanelHtml(){ const c = CL(), onC = curStep === 'transform', id = curS
     <div class="cl-tpls">${Object.keys(CL_TPL).map(k => `<button type="button" class="btn${c.tpl === k ? ' primary' : ''}" data-cl="tpl" data-v="${k}"${c.tpl === k ? ' aria-pressed="true"' : ''}>${esc(CL_TPL[k].t)}</button>`).join('')}</div>${addSel}
     ${c.stages.length ? `<pre class="cl-lin" id="clLineage">${esc(clLineage())}</pre><div class="cl-acts"><button type="button" class="btn" data-cl="copy">Copy the lineage report</button></div>` : ''}${clTypeSel()}`;
   const d = CL_KIND[s.kind], fl = s.skip ? [] : clFlags(s), i = c.stages.indexOf(s);
-  return `<h2>${esc(clTitle(s))}</h2>${(d.ref || []).map(r => `<p class="hint cl-ref">${esc(r)}</p>`).join('')}${fl.map(f => `<p class="cl-flag">${esc(f)}</p>`).join('')}
+  return `<h2>${esc(clTitle(s))}</h2><label class="f">Stage name<input type="text" data-cname="1" value="${esc(s.name)}" placeholder="${esc(d.t)}"></label>${(d.ref || []).map(r => `<p class="hint cl-ref">${esc(r)}</p>`).join('')}${fl.map(f => `<p class="cl-flag">${esc(f)}</p>`).join('')}
     ${s.skip ? '<p class="hint">Skipped. Its records are kept.</p>' : s.at.map((a, j) => clAttemptHtml(s, a, j)).join('')}
-    <div class="cl-acts">${s.skip ? '' : `<button type="button" class="btn" data-cl="addat">${s.at.some(a => a.st === 'fail') ? 'Repeat this step' : 'Add an attempt'}</button>`}<button type="button" class="btn quiet" data-cl="skip">${s.skip ? 'Include this stage' : 'Skip this stage'}</button>
+    <div class="cl-acts">${s.skip ? '' : `<button type="button" class="btn" data-cl="addat">${s.at.some(a => a.st === 'fail') ? 'Repeat this step' : 'Add an attempt'}</button>`}<button type="button" class="btn quiet" data-cl="dupst">Duplicate this stage</button><button type="button" class="btn quiet" data-cl="skip">${s.skip ? 'Include this stage' : 'Skip this stage'}</button>
       <button type="button" class="btn" data-cl="up"${i > 0 ? '' : ' disabled'}>Move up</button><button type="button" class="btn" data-cl="down"${i < c.stages.length - 1 ? '' : ' disabled'}>Move down</button><span class="sp"></span>
       <button type="button" class="btn danger${clArm === 'st:' + s.id ? ' armed' : ''}" data-cl="rmst">${clArm === 'st:' + s.id ? 'Remove? Click again' : 'Remove this stage'}</button></div>${addSel}`; }
 /* redrawn only when its content changed, and never under the cursor: typing in a field must not lose the focus */
 function renderClone(force){ const el = $('#clonePanel'); if (!el || !PROJ || !(curStep === 'transform' || curStep.startsWith('clone:'))) return; const h = clPanelHtml(), ae = document.activeElement, inside = el.contains(ae);
   if (h === clHtml && !force) return; if (!force && inside && /^(INPUT|TEXTAREA)$/.test(ae.tagName)) return;
-  const key = inside ? ['cf', 'at', 'cst', 'cfrom', 'cext', 'cck', 'cadd', 'cl', 'v'].filter(k => ae.dataset[k] != null).map(k => `[data-${k}="${ae.dataset[k]}"]`).join('') : '';
+  const key = inside ? ['cf', 'at', 'cst', 'cfrom', 'cext', 'cck', 'cadd', 'cname', 'cl', 'v'].filter(k => ae.dataset[k] != null).map(k => `[data-${k}="${ae.dataset[k]}"]`).join('') : '';
   clHtml = h; el.innerHTML = h; if (key) { const n = el.querySelector(key); if (n) n.focus(); } }
 function clChanged(redraw){ renderSteps(); if (redraw) renderClone(true); queueSave(); }
 const clAt = id => { for (const s of CL().stages) { const a = s.at.find(x => x.id === id); if (a) return {s, a}; } return null; };
 function onCloneField(e){ const t = e.target, c = CL();
   if (t.dataset.ctype) { if (e.type === 'change') setCloneType(t.value); return; }
+  if (t.dataset.cname) { const s = c.stages.find(x => 'clone:' + x.id === curStep); if (s) { s.name = t.value; const h2 = $('#clonePanel h2'); if (h2) h2.textContent = clTitle(s); clHtml = clPanelHtml(); clChanged(false); } return; }
   if (t.dataset.cext) { c.ext[t.dataset.cext] = t.value; clChanged(t.tagName === 'SELECT' || e.type === 'change'); return; }
   if (t.dataset.cadd) { const v = t.value, cur = c.stages.find(x => 'clone:' + x.id === curStep); if (!v) return; let s = null;
     if (v === 'cc:all') CL_CC.forEach(k => { const x = c.stages.find(q => q.kind === k) || clAddStage(k); s = s || x; }); else if (clHas(CL_KIND, v)) s = clAddStage(v, '', cur && cur.id); if (!s) return;
@@ -7275,6 +7276,9 @@ function onCloneClick(e){ const b = e.target.closest('[data-cl]'); if (!b) retur
     clChanged(true); return; }
   if (!s) return;
   if (w === 'addat') { const n = {id: clNextId('a'), st: 'todo', from: '', f: {}, ck: {}}; s.at.push(n); clOpen = n.id; }
+  else if (w === 'dupst') { const last = s.at[s.at.length - 1], ns = clAddStage(s.kind, '', s.id), na = ns.at[0];
+    if (last) { na.from = last.from; na.f = JSON.parse(JSON.stringify(last.f)); delete na.f._d; delete na.f._n; delete na.f._dev; }
+    clOpen = na.id; selectStep('clone:' + ns.id); queueSave(); return; }
   else if (w === 'skip') s.skip = !s.skip;
   else if (w === 'up' && i > 0) c.stages.splice(i - 1, 0, c.stages.splice(i, 1)[0]);
   else if (w === 'down' && i < c.stages.length - 1) c.stages.splice(i + 1, 0, c.stages.splice(i, 1)[0]);
