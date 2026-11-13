@@ -8,44 +8,44 @@
 
 | Lines | Section | Purpose |
 |---|---|---|
-| 1487–1550 | `helpers` | Generic string escaping, array math, tick fitting, formatting, and SVG helpers |
-| 1551–1654 | `parsing: generic` | General text/CSV/TSV chromatogram parsing, header detection, and delimiter splitting |
-| 1655–1741 | `parsing: ÄKTA / UNICORN` | ÄKTA exported CSV parsing for UV, gradient (%B), conductivity, pressure, and fraction logs |
-| 1742–1775 | `UNICORN 7 result archive (.zip)` | Decompressing UNICORN 7 `.zip` archives and extracting binary result curves |
-| 1776–1890 | `traces and runs` | Managing trace data objects, baseline correction, smoothing, and run data creation |
-| 1891–2015 | `runs: windows and fractions` | Fraction boundary detection, fraction segment calculation, and time/volume windowing |
-| 2016–2037 | `peak integration` | Numerical integration algorithms (Simpson/trapezoidal, Gaussian fit) between retention limits |
-| 2038–2313 | `size exclusion (SEC)` | SEC molecular weight calibration, standards curve fitting ($V_e/V_0$ and $K_{av}$ vs $\log M_w$), and peak mass calculations |
-| 2314–2358 | `figure: shared bits` | Common SVG chart dimensions, axis tick rendering, styles, and color definitions |
-| 2359–2485 | `figure: zoom inset` | Magnified inset plot on HPLC and ÄKTA figures showing an expanded sub-window within or beside the main chart |
-| 2486–2644 | `figure: HPLC overlay` | Rendering analytical HPLC overlay chromatograms with aligned peak labels and legend |
-| 2645–2963 | `figure: ÄKTA run chart` | Rendering ÄKTA preparative run figures with dual Y-axes, fractions, and phase shading |
-| 2964–3049 | `gels` | SDS-PAGE gel image object construction, lane assignments, and crop metadata |
-| 3050–3160 | `auto crop: find the stained lanes, their spacing, and the top and bottom of the bands` | Image processing to detect stained SDS-PAGE lanes, lane spacing, and top/bottom gel bounds |
-| 3161–3381 | `gel densitometry: lane profiles, bands, ladder calibration` | Lane pixel intensity profile extraction, band peak detection, and ladder $R_f$ log-MW calibration |
-| 3382–3848 | `band tags and purity` | Gel band tagging, contaminant identification, known protein matching, and lane purity math |
-| 3849–4186 | `composite: run with gels, and the workflow` | Rendering multi-panel purification workflow figures combining chromatograms, SDS-PAGE gel aligned lanes, parallel branches, and final yield line |
-| 4187–4619 | `upstream steps: construct, expression and lysis, drawn before the first column` | Upstream purification steps (construct cassette, expression, lysis, cleavage) diagram rendering and GenBank parsing |
-| 4620–4833 | `run conditions: column, buffers, flow, temperature, gradient, load, fractions` | Formatting run conditions (column model, buffer compositions, flow rate, gradient) and generating methods and results text |
-| 4834–4871 | `figures` | Active figure selection and figure state getters |
-| 4872–5387 | `UI` | DOM element event bindings, tab management, control synchronization, and interactive table rendering |
-| 5388–5836 | `editing the workflow figure in place: click a panel for its title, arrow note, width and gel size` | On-figure interactive click handlers and floating toolbar (`#wfTool`, `#wfSelBox`) to adjust panel titles, arrow notes, widths, gel heights, and drag offsets (`wfDx`, `wfDy`) |
-| 5837–6032 | `loading` | File drag-and-drop / file input handlers for chromatograms, gel images, GenBank, and PDB files |
-| 6033–6191 | `protein: sequence properties and PDB structures` | Protein MW, $\varepsilon_{280}$, pI calculations from sequence, and PDB/mmCIF 3D structure domain parsing |
-| 6192–6326 | `construct and expression panel` | UI controls, GenBank file loading/text pasting (`#gbPaste`), and SVG builder for construct cassette, expression host, and lysis parameters |
-| 6327–6560 | `NanoDrop: protein A280 readings` | NanoDrop UV-Vis spectrum/summary parser, $A_{280}$ concentration calculations, and concentration bar charts |
-| 6561–6629 | `SEC panel` | UI controls and calibration curve plots for size-exclusion chromatography standards |
-| 6630–6639 | `collapsible panel sections (remembered), each with a one-line summary when closed` | Expand/collapse accordion panel UI state persistence in `localStorage` |
-| 6640–6685 | `More options inside each section (open or closed remembered), and the settings search` | Condensed progressive disclosure sections (`details.more`), settings search filter (`#panelSearch`), and automatic expansion of non-default settings (`moreSync`) |
-| 6686–6729 | `what to do next: one suggestion above the figure, with a button that takes you there` | Guided workflow suggestion bar above figures with actionable next-step buttons |
-| 6730–6811 | `projects: everything in one JSON file` | Exporting workspace state to `.json` files and importing project files |
-| 6812–7040 | `projects: a project per purification, saved with the page (db + assets) or in this browser` | IndexedDB (`hfb-projects`) and cloud persistence for multi-project management and asset blob storage |
-| 7041–7115 | `home` | Home screen workspace project list and project creation/opening UI |
-| 7116–7304 | `cloning workflow: stages, attempts and lineage` | The cloning engine: stage kinds and templates as data (`CL_KIND`, `CL_TPL`), attempts, flags, lineage and the `#clonePanel` |
-| 7305–7438 | `the step timeline` | Step-by-step purification timeline editor and step metadata sheet |
-| 7439–7654 | `quick fill: the lab's usual procedures, one click per step; every field stays editable` | One-click lab protocol templates (`LABQ`) populating workflow steps (IMAC, SEC, cleavage, expression, lysis) |
-| 7655–7758 | `export` | Exporting figures to High-DPI PNG, SVG, and bundled ZIP archives |
-| 7759–7779 | `example data` | Built-in demo chromatogram curves and gel images for instant testing |
+| 1488–1551 | `helpers` | Generic string escaping, array math, tick fitting, formatting, and SVG helpers |
+| 1552–1655 | `parsing: generic` | General text/CSV/TSV chromatogram parsing, header detection, and delimiter splitting |
+| 1656–1742 | `parsing: ÄKTA / UNICORN` | ÄKTA exported CSV parsing for UV, gradient (%B), conductivity, pressure, and fraction logs |
+| 1743–1776 | `UNICORN 7 result archive (.zip)` | Decompressing UNICORN 7 `.zip` archives and extracting binary result curves |
+| 1777–1891 | `traces and runs` | Managing trace data objects, baseline correction, smoothing, and run data creation |
+| 1892–2016 | `runs: windows and fractions` | Fraction boundary detection, fraction segment calculation, and time/volume windowing |
+| 2017–2038 | `peak integration` | Numerical integration algorithms (Simpson/trapezoidal, Gaussian fit) between retention limits |
+| 2039–2314 | `size exclusion (SEC)` | SEC molecular weight calibration, standards curve fitting ($V_e/V_0$ and $K_{av}$ vs $\log M_w$), and peak mass calculations |
+| 2315–2359 | `figure: shared bits` | Common SVG chart dimensions, axis tick rendering, styles, and color definitions |
+| 2360–2486 | `figure: zoom inset` | Magnified inset plot on HPLC and ÄKTA figures showing an expanded sub-window within or beside the main chart |
+| 2487–2645 | `figure: HPLC overlay` | Rendering analytical HPLC overlay chromatograms with aligned peak labels and legend |
+| 2646–2964 | `figure: ÄKTA run chart` | Rendering ÄKTA preparative run figures with dual Y-axes, fractions, and phase shading |
+| 2965–3050 | `gels` | SDS-PAGE gel image object construction, lane assignments, and crop metadata |
+| 3051–3161 | `auto crop: find the stained lanes, their spacing, and the top and bottom of the bands` | Image processing to detect stained SDS-PAGE lanes, lane spacing, and top/bottom gel bounds |
+| 3162–3382 | `gel densitometry: lane profiles, bands, ladder calibration` | Lane pixel intensity profile extraction, band peak detection, and ladder $R_f$ log-MW calibration |
+| 3383–3849 | `band tags and purity` | Gel band tagging, contaminant identification, known protein matching, and lane purity math |
+| 3850–4187 | `composite: run with gels, and the workflow` | Rendering multi-panel purification workflow figures combining chromatograms, SDS-PAGE gel aligned lanes, parallel branches, and final yield line |
+| 4188–4620 | `upstream steps: construct, expression and lysis, drawn before the first column` | Upstream purification steps (construct cassette, expression, lysis, cleavage) diagram rendering and GenBank parsing |
+| 4621–4834 | `run conditions: column, buffers, flow, temperature, gradient, load, fractions` | Formatting run conditions (column model, buffer compositions, flow rate, gradient) and generating methods and results text |
+| 4835–4872 | `figures` | Active figure selection and figure state getters |
+| 4873–5389 | `UI` | DOM element event bindings, tab management, control synchronization, and interactive table rendering |
+| 5390–5838 | `editing the workflow figure in place: click a panel for its title, arrow note, width and gel size` | On-figure interactive click handlers and floating toolbar (`#wfTool`, `#wfSelBox`) to adjust panel titles, arrow notes, widths, gel heights, and drag offsets (`wfDx`, `wfDy`) |
+| 5839–6034 | `loading` | File drag-and-drop / file input handlers for chromatograms, gel images, GenBank, and PDB files |
+| 6035–6193 | `protein: sequence properties and PDB structures` | Protein MW, $\varepsilon_{280}$, pI calculations from sequence, and PDB/mmCIF 3D structure domain parsing |
+| 6194–6328 | `construct and expression panel` | UI controls, GenBank file loading/text pasting (`#gbPaste`), and SVG builder for construct cassette, expression host, and lysis parameters |
+| 6329–6562 | `NanoDrop: protein A280 readings` | NanoDrop UV-Vis spectrum/summary parser, $A_{280}$ concentration calculations, and concentration bar charts |
+| 6563–6631 | `SEC panel` | UI controls and calibration curve plots for size-exclusion chromatography standards |
+| 6632–6641 | `collapsible panel sections (remembered), each with a one-line summary when closed` | Expand/collapse accordion panel UI state persistence in `localStorage` |
+| 6642–6687 | `More options inside each section (open or closed remembered), and the settings search` | Condensed progressive disclosure sections (`details.more`), settings search filter (`#panelSearch`), and automatic expansion of non-default settings (`moreSync`) |
+| 6688–6731 | `what to do next: one suggestion above the figure, with a button that takes you there` | Guided workflow suggestion bar above figures with actionable next-step buttons |
+| 6732–6813 | `projects: everything in one JSON file` | Exporting workspace state to `.json` files and importing project files |
+| 6814–7042 | `projects: a project per purification, saved with the page (db + assets) or in this browser` | IndexedDB (`hfb-projects`) and cloud persistence for multi-project management and asset blob storage |
+| 7043–7117 | `home` | Home screen workspace project list and project creation/opening UI |
+| 7118–7306 | `cloning workflow: stages, attempts and lineage` | The cloning engine: stage kinds and templates as data (`CL_KIND`, `CL_TPL`), attempts, flags, lineage and the `#clonePanel` |
+| 7307–7442 | `the step timeline` | Step-by-step purification timeline editor and step metadata sheet |
+| 7443–7658 | `quick fill: the lab's usual procedures, one click per step; every field stays editable` | One-click lab protocol templates (`LABQ`) populating workflow steps (IMAC, SEC, cleavage, expression, lysis) |
+| 7659–7762 | `export` | Exporting figures to High-DPI PNG, SVG, and bundled ZIP archives |
+| 7763–7783 | `example data` | Built-in demo chromatogram curves and gel images for instant testing |
 
 ---
 
