@@ -4738,6 +4738,7 @@ function methodsText(){
   const art = t => /^[aeiouäÄ]/i.test(t) || /^[FHLMNRSX][A-Z0-9]/.test(t) ? 'an' : 'a', deg = t => unitIf(t, '°C'), hrs = t => unitIf(t, 'h');
   const steps = runs.filter(r => r.inWf), pre = prepSteps(), letterOf = r => opt.wfLetters ? String.fromCharCode(65 + pre.concat(wfFigList()).indexOf(r)) : '';
   if (cm && prep.on && (prep.gb || hasTxt(prep.name) || EXPR_KEYS.some(k => hasTxt(prep[k])))) P.push(`${cm.tn} (${fmt(cm.mTag, 1)} kDa)${cm.name ? ` was encoded in ${cm.name}${cm.backbone ? `, a ${cm.backbone} derivative` : ''}${cm.res.length ? ` carrying ${cm.res.join(' and ')} resistance` : ''}` : ''}.${cm.cut ? ` A ${cm.cut.name} site separates the tag from ${cm.pn} (${fmt(cm.mProt, 1)} kDa, ${cm.protSeq.length} residues after cleavage).` : ''}`);
+  { const clm = clMethodsText(); if (clm) P.push(clm); }
   if (PROJ && prep.on && !skipped('transform') && !['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(k => hasTxt(prep[k]))) P.push('Transformation: [not entered].');
   if (PROJ && prep.on && !skipped('expr') && !EXPR_KEYS.some(k => hasTxt(prep[k]))) P.push('Expression: [not entered].');
   let trSaid = false;
@@ -4984,6 +4985,7 @@ function render(){
   $('#bandPanel').hidden = kind !== 'gel'; if (kind === 'gel' && f) renderBandTable(f.gel);
   updatePrompt();
   clearTimeout(render._s); render._s = setTimeout(saveOpt, 300);
+  { const mt = $('#methodsText'); if (mt) { const t = methodsText(); if (mt.value !== t) mt.value = t; } }
   if (PROJ) { renderSteps(); queueSave(); }
 }
 function selectFig(id){ if (marking && marking.gelId !== id) marking = null; if (!gels.some(g => g.id === id)) tagMode = ''; cur = id; if (PROJ && id === 'overlay' && traces.some(t => !t.ex)) curStep = 'hplc'; syncControls(); render(); }
@@ -7233,10 +7235,165 @@ function clAttemptHtml(s, a, i){ const d = CL_KIND[s.kind], src = clSources(d), 
     ${(d.ck || []).length ? `<div class="cl-wide cl-ck">${d.ck.map((t, j) => `<label class="check"><input type="checkbox" data-cck="${j}" data-at="${esc(a.id)}"${a.ck[j] ? ' checked' : ''}> ${esc(t)}</label>`).join('')}</div>` : ''}
     ${clFields(d).map(fd => clField(a, fd)).join('')}${clField(a, {k: '_dev', l: 'Deviations', ty: 'a'})}${clField(a, {k: '_n', l: 'Result and notes', ty: 'a'})}
     <div class="cl-wide cl-acts"><button type="button" class="btn quiet" data-cl="dup" data-v="${esc(a.id)}">Duplicate this attempt</button>${s.at.length > 1 ? `<button type="button" class="btn danger${clArm === 'at:' + a.id ? ' armed' : ''}" data-cl="rmat" data-v="${esc(a.id)}">${clArm === 'at:' + a.id ? 'Remove? Click again' : 'Remove attempt'}</button>` : ''}</div></div></details>`; }
+function clMethodsText(){
+  const c = CL(); if (!c) return '';
+  const cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
+  const lc = t => !t ? t : /^[A-Z][A-Z0-9]|^[A-Z][a-z]+[A-Z]/.test(t) ? t : t.replace(/^./, x => x.toLowerCase());
+  const art = t => /^[aeiouäÄ]/i.test(t) || /^[FHLMNRSX][A-Z0-9]/.test(t) ? 'an' : 'a';
+  if (c.type === 'expression') {
+    if (!c.ext || (!hasTxt(c.ext.src) && !(c.ext.ver === 'yes' && hasTxt(c.ext.note)))) return '';
+    const src = hasTxt(c.ext.src) ? c.ext.src.trim().replace(/\.$/, '') : '';
+    const ver = c.ext.ver === 'yes' && hasTxt(c.ext.note);
+    const pl = (hasTxt(prep.name) ? prep.name.trim() : (cm && cm.name) || (hasTxt(prep.trPlasmid) ? prep.trPlasmid.trim() : '')) || '';
+    const pIntro = pl ? `Plasmid ${pl}` : 'The plasmid';
+    if (src) return `${pIntro} was obtained from ${src}${ver ? `, and was sequence verified (${c.ext.note.trim().replace(/\.$/, '')})` : ''}.`;
+    return `${pIntro} was sequence verified (${c.ext.note.trim().replace(/\.$/, '')}).`;
+  }
+  if (c.type !== 'cloning') return '';
+  const okAttempts = s => (s && !s.skip && Array.isArray(s.at) ? s.at.filter(a => CL_OK(a.st)) : []);
+  const lastOkAt = kind => {
+    const stgs = c.stages.filter(s => s.kind === kind && !s.skip);
+    for (let i = stgs.length - 1; i >= 0; i--) {
+      const at = stgs[i].at.slice().reverse().find(a => CL_OK(a.st));
+      if (at) return at;
+    }
+    return null;
+  };
+  const ts = c.stages.find(s => s.kind === 'transfer');
+  const ta = ts && !ts.skip ? ts.at.slice().reverse().find(a => CL_OK(a.st)) : null;
+  if (c.stages.some(s => s.kind === 'transfer') && !ta) return '';
+  if (!c.stages.some(s => okAttempts(s).length)) return '';
+
+  const wfName = c.tpl && CL_TPL[c.tpl] ? CL_TPL[c.tpl].t : '';
+  const pl = (ta && hasTxt(ta.f.plasmid) ? ta.f.plasmid.trim() : '') ||
+             (lastOkAt('select') && hasTxt(lastOkAt('select').f.plasmid) ? lastOkAt('select').f.plasmid.trim() : '') ||
+             (lastOkAt('design_mut') && hasTxt(lastOkAt('design_mut').f.parent) ? lastOkAt('design_mut').f.parent.trim() : '') ||
+             (lastOkAt('design') && hasTxt(lastOkAt('design').f.construct) ? lastOkAt('design').f.construct.trim() : '') ||
+             (hasTxt(prep.name) ? prep.name.trim() : '') ||
+             (hasTxt(prep.trPlasmid) ? prep.trPlasmid.trim() : '');
+
+  const dma = lastOkAt('design_mut');
+  let mutStr = '';
+  if (dma) {
+    const parts = [];
+    if (hasTxt(dma.f.mutType)) parts.push(`${art(dma.f.mutType)} ${dma.f.mutType.toLowerCase()}`);
+    if (hasTxt(dma.f.pos)) parts.push(`at position ${dma.f.pos.trim()}`);
+    if (hasTxt(dma.f.codonFrom) && hasTxt(dma.f.codonTo)) parts.push(`(${dma.f.codonFrom.trim()} to ${dma.f.codonTo.trim()})`);
+    else if (hasTxt(dma.f.codonTo)) parts.push(`(to ${dma.f.codonTo.trim()})`);
+    if (hasTxt(dma.f.expLen)) parts.push(`(${dma.f.expLen.trim()} bp)`);
+    mutStr = parts.join(' ');
+  }
+  const da = lastOkAt('design');
+  let constrStr = '';
+  if (da) {
+    const parts = [];
+    if (hasTxt(da.f.insert)) parts.push(`insert ${da.f.insert.trim()}`);
+    if (hasTxt(da.f.vector)) parts.push(`vector ${da.f.vector.trim()}`);
+    if (hasTxt(da.f.target)) parts.push(`for ${da.f.target.trim()}`);
+    if (hasTxt(da.f.method)) parts.push(`by ${da.f.method.trim()}`);
+    if (hasTxt(da.f.expLen)) parts.push(`(${da.f.expLen.trim()} bp)`);
+    constrStr = parts.join(' ');
+  }
+  const dha = lastOkAt('design_hifi');
+  let hifiStr = '';
+  if (dha) {
+    const parts = [];
+    if (hasTxt(dha.f.gblock)) parts.push(`gBlock ${dha.f.gblock.trim()}`);
+    if (hasTxt(dha.f.vector)) parts.push(`vector ${dha.f.vector.trim()}`);
+    if (hasTxt(dha.f.finalLen)) parts.push(`(${dha.f.finalLen.trim()} bp)`);
+    hifiStr = parts.join(' ');
+  }
+
+  let intro = '';
+  if (pl) {
+    intro = `Plasmid ${pl} was generated${wfName ? ` by ${wfName}` : ''}`;
+    if (dma && hasTxt(dma.f.parent)) intro += ` from ${dma.f.parent.trim()}`;
+    if (mutStr) intro += `, introducing ${mutStr}`;
+    else if (constrStr) intro += ` (${constrStr})`;
+    else if (hifiStr) intro += ` (${hifiStr})`;
+    intro += '.';
+  } else if (wfName) {
+    intro = `${wfName} was performed`;
+    if (dma && hasTxt(dma.f.parent)) intro += ` on ${dma.f.parent.trim()}`;
+    if (mutStr) intro += ` to introduce ${mutStr}`;
+    else if (constrStr) intro += ` (${constrStr})`;
+    else if (hifiStr) intro += ` (${hifiStr})`;
+    intro += '.';
+  } else if (mutStr || constrStr || hifiStr) {
+    intro = `Cloning was performed${mutStr ? ` to introduce ${mutStr}` : constrStr ? ` (${constrStr})` : ` (${hifiStr})`}.`;
+  }
+
+  const pcrAt = lastOkAt('pcr_setup');
+  let pcrSent = '';
+  if (pcrAt && hasTxt(pcrAt.f.pol)) {
+    pcrSent = `PCR amplification was performed with ${pcrAt.f.pol.trim()}${hasTxt(pcrAt.f.expSize) ? ` (expected amplicon ${pcrAt.f.expSize.trim()} bp)` : ''}.`;
+  }
+
+  const kldAt = lastOkAt('kld'), hifiAt = lastOkAt('hifi'), asmAt = lastOkAt('assembly');
+  let asmSent = '';
+  if (kldAt) {
+    asmSent = `PCR products were treated by KLD treatment${hasTxt(kldAt.f.inc) ? ` (${kldAt.f.inc.trim()})` : ''}.`;
+  } else if (hifiAt) {
+    asmSent = `HiFi assembly was performed${hasTxt(hifiAt.f.mix) ? ` with ${hifiAt.f.mix.trim()}` : ''}${hasTxt(hifiAt.f.inc) ? ` (${hifiAt.f.inc.trim()})` : ''}.`;
+  } else if (asmAt) {
+    asmSent = `Assembly was performed by ${hasTxt(asmAt.f.method) ? asmAt.f.method.trim() : 'DNA assembly'}${hasTxt(asmAt.f.kit) ? ` using ${asmAt.f.kit.trim()}` : ''}.`;
+  }
+
+  const trAt = lastOkAt('transform');
+  const trHost = trAt && hasTxt(trAt.f.host) ? trAt.f.host.trim() : '';
+  const tfHost = ta && hasTxt(ta.f.host) ? ta.f.host.trim() : '';
+  let hostSent = '';
+  if (trHost && tfHost) {
+    hostSent = `Reaction products were transformed into ${trHost}${trAt && hasTxt(trAt.f.method) ? ` by ${lc(trAt.f.method.trim())}` : ''}, and transferred to ${tfHost} for expression.`;
+  } else if (trHost) {
+    hostSent = `Reaction products were transformed into ${trHost}${trAt && hasTxt(trAt.f.method) ? ` by ${lc(trAt.f.method.trim())}` : ''}.`;
+  } else if (tfHost) {
+    hostSent = `The construct was transferred to ${tfHost} for expression.`;
+  }
+
+  const seqAt = lastOkAt('seq'), selAt = lastOkAt('select');
+  const prov = seqAt && hasTxt(seqAt.f.provider) ? seqAt.f.provider.trim() : '';
+  const seqM = seqAt && hasTxt(seqAt.f.method) ? seqAt.f.method.trim() : '';
+  const verified = c.stages.some(s => s.kind === 'select' && !s.skip && s.at.some(a => CL_OK(a.st) && a.f.ver === 'Sequence verified'));
+  const bypassed = !!(ta && ta.f.bypass);
+  let seqSent = '';
+  if (prov) {
+    if (bypassed) {
+      seqSent = `Sequencing was performed by ${prov}${seqM ? ` (${seqM})` : ''}; verification was not recorded (bypassed).`;
+    } else if (verified) {
+      seqSent = `Sequencing by ${prov}${seqM ? ` (${seqM})` : ''} confirmed the sequence.`;
+    } else if (selAt && selAt.f.ver === 'Failed verification') {
+      seqSent = `Sequencing by ${prov}${seqM ? ` (${seqM})` : ''} failed verification.`;
+    } else {
+      seqSent = `Sequencing was performed by ${prov}${seqM ? ` (${seqM})` : ''}.`;
+    }
+  } else {
+    if (bypassed) {
+      seqSent = `Sequence verification was not recorded (bypassed).`;
+    } else if (verified) {
+      seqSent = `A sequence-verified clone was confirmed.`;
+    }
+  }
+
+  const sents = [intro, pcrSent, asmSent, hostSent, seqSent].filter(Boolean);
+  return sents.join(' ');
+}
 const clTypeSel = () => `<label class="f cl-type">Workflow type<select data-ctype="1"><option value="">Not specified</option><option value="cloning"${CL().type === 'cloning' ? ' selected' : ''}>Starts with cloning</option><option value="expression"${CL().type === 'expression' ? ' selected' : ''}>Starts with expression</option></select></label>`;
 function clPanelHtml(){ const c = CL(), onC = curStep === 'transform', id = curStep.startsWith('clone:') ? curStep.slice(6) : '', s = c.stages.find(x => x.id === id);
   if (onC) { if (!c.type) return `<h2>Cloning</h2><p class="hint" id="clTypeNote">Workflow type not specified. Does this project include cloning?</p><div class="cl-acts"><button type="button" class="btn" data-cl="type" data-v="cloning">Yes, start with cloning</button><button type="button" class="btn" data-cl="type" data-v="expression">No, start with expression</button></div>`;
-    if (c.type === 'cloning') return '';
+    if (c.type === 'cloning') {
+      const ts = c.stages.find(x => x.kind === 'transfer');
+      const ta = ts && !ts.skip ? ts.at.slice().reverse().find(a => CL_OK(a.st)) : null;
+      if (!ta) return '';
+      const pl = (ta.f.plasmid || '').trim(), clId = (ta.f.clone || '').trim();
+      const verified = c.stages.some(s => s.kind === 'select' && !s.skip && s.at.some(a => CL_OK(a.st) && a.f.ver === 'Sequence verified'));
+      const verStr = ta.f.bypass ? 'verification was not recorded (bypassed)' : (verified ? 'sequence-verified clone recorded' : 'verification was not recorded');
+      const parts = [];
+      if (pl) parts.push(`plasmid ${pl}`);
+      if (clId) parts.push(`clone ${clId}`);
+      parts.push(verStr);
+      return `<h2>Cloning record</h2><p class="hint cl-ro" id="clTrLine">${esc(parts.join(', ').replace(/^./, x => x.toUpperCase()))}.</p>${clTypeSel()}`;
+    }
     const bad = c.ext.ver === 'yes' && !hasTxt(c.ext.note);
     return `<h2>Where the plasmid came from</h2><p class="hint">Cloning was done outside this workflow, or was not documented here.</p><div class="cl-grid"><label class="f cl-wide">Source of the plasmid or construct<input type="text" data-cext="src" value="${esc(c.ext.src)}"></label>
       <label class="f">Sequence verification<select data-cext="ver"><option value="">Not recorded</option><option value="yes"${c.ext.ver === 'yes' ? ' selected' : ''}>Sequence verified</option><option value="no"${c.ext.ver === 'no' ? ' selected' : ''}>Not verified</option></select></label>
