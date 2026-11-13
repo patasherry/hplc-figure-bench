@@ -1,0 +1,45 @@
+name: Automation checks
+
+# The manager, the reviewer and the queue leader run the whole project, and until 2026-11-12 nothing checked them: one of the
+# manager's own tests had been failing on main unseen. This runs on every pull request that touches them. No AI, no tokens.
+on:
+  pull_request:
+    paths:
+      - 'tools/**'
+      - '.github/scripts/**'
+      - 'tests/quick.js'
+      - 'tests/tools/**'
+      - '.github/workflows/automation-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Python files compile
+        run: python -m py_compile tools/local-manager/*.py tools/local-reviewer/*.py tools/dashboard/*.py
+      - name: No undefined names
+        run: |
+          pip install -q pyflakes
+          out=$(python -m pyflakes tools/local-manager/*.py tools/local-reviewer/*.py tools/dashboard/*.py | grep "undefined name" || true)
+          if [ -n "$out" ]; then echo "$out"; exit 1; fi
+      - name: Manager tests
+        run: |
+          cd tools/local-manager
+          for t in test_*.py; do echo "== $t"; python "$t"; done
+      - name: Scripts parse
+        run: |
+          for f in .github/scripts/*.js tests/quick.js tests/tools/*.js; do node --check "$f"; done
+      - name: The code map tool runs
+        run: node tests/tools/codemap.js --plain > /dev/null

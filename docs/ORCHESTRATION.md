@@ -16,6 +16,8 @@ Patrick asked for a cleaner hierarchy after his cloning request, posted on the D
 7. **Every job has a check.** A queued issue follows the job-card form (`.github/ISSUE_TEMPLATE/job.md`). The leader holds a queued issue that names no check as `needs-plan` before any worker starts it. Patrick's own requests are exempt: the worker writes the check, and the gate demands one.
 8. **A scorecard.** The status page carries a table of each worker's pull requests over the last 7 days (merged, closed without merging, open), told apart by branch prefix.
 
+The automation itself is checked too: the **Automation checks** workflow runs on every pull request that touches `tools/`, `.github/scripts/` or the test tooling. It compiles the Python, fails on any undefined name, runs the manager's own tests and parses the scripts. Copilot and OpenClaw remain in `manager.py` as switched-off options (`copilot_mode: off`, `openclaw_jobs_on: false`). They were left in on purpose: the Copilot duty still forwards `for-copilot` jobs while it is off, so removing it would strand them.
+
 Tooling that goes with this: `node tests/quick.js` is the worker's fast comparison, the Code map workflow rewrites the line ranges in `docs/CODEMAP.md` after every app change, and `.github/pull_request_template.md` is the form of a PR description.
 
 The lead's part: when Patrick says "work through my status page" or "plan my requests", read the status page, plan each `needs-plan` issue into jobs (label them `queued`, `from-patrick`, `owner-approved`, link them from the request and close the request only when all of them are done), and settle anything under Waiting on Claude.
