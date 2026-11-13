@@ -23,3 +23,14 @@ It is advisory only. It never merges, pushes, approves, edits files, or runs cod
 The model can be wrong. Treat its notes as a head start for the coordinator's review, not as a sign-off.
 
 The script keeps which commits it has reviewed in `C:\Users\<you>\.hfb-reviewer-state.json`. Delete that file to review everything again.
+
+## What the local model knows about the project
+
+The model remembers nothing between jobs. Each job is sent a short set of standing notes (`memory()` in `reviewer.py`), about 1,000 to 3,000 tokens:
+
+1. `docs/LOCAL_AI_BRIEF.md`: what the project is, its rules and the common mistakes. Edit it like any doc.
+2. `docs/REVIEW_LESSONS.md`: the newest 20 lessons, one line each, written by the owner or the lead when a review missed something.
+3. `.hfb-lessons.txt` in the user folder: the newest 10 pull requests the gate sent back and why. The manager writes this itself.
+4. For a review, the `docs/CODEMAP.md` rows of the app sections the diff touches.
+
+The manager's other local jobs (triage, answering a worker, the board) get 1 to 3 as well. Set `"memory": false` in the settings file to switch all of it off. Keep `num_ctx` at 32768 or more so a large diff and the notes both fit.

@@ -1124,6 +1124,8 @@ def gate(s):
                 gh(f'repos/{REPO}/pulls/{n}', 'PATCH', {'state': 'closed'})
             label(issue, add=[QUEUE], remove=list(ALL_RUNNING | ALL_DONE | {'needs-coordinator', 'for-coordinator'}))
             log(f'PR #{n} sent back to the queue on #{issue} ({len(probs)} problems)')
+            if not DRY:
+                rv.learn(f"PR #{n} ({pr['title'][:80]}): {probs[0]}")  # the local model's memory of what the gate catches (see rv.memory)
         elif probs and issue and not mine:  # out of tries: Claude Code on the owner's PC takes the job
             notes = '\n'.join(f'- {x}' for x in probs)
             if not DRY:
@@ -3183,7 +3185,7 @@ if __name__ == '__main__':
         sys.exit()
     rv.MODEL_LOCAL = rv.MODEL
     if CLOUD or (LOCAL_ROLE == 'coder' and GEMINI_KEY):  # no Ollama in the cloud, and in the coder role the local model only writes code: Gemini manages
-        rv.ask_model = lambda system, user: ask_gemini(system + '\n\n' + user)
+        rv.ask_model = lambda system, user, diff=None: ask_gemini(system + '\n\n' + rv.memory(diff) + '\n\n' + user)
         rv.MODEL = 'Gemini'
     log(f'manager started ({rv.MODEL}; caps {CAP}){" DRY RUN" if DRY else ""}{" IN THE CLOUD" if CLOUD else ""}')
     if not DRY and not CLOUD and '--once' not in sys.argv:

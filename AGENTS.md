@@ -17,6 +17,7 @@ The owner is a biochemistry graduate student who uses it for real lab data. Scie
 - `AGENTS.md`: this file.
 - `CLAUDE.md`: points Claude Code to this file.
 - `.github/workflows/`: GitHub Actions: the test suite on every PR, the queue leader, the cloud manager, and Claude Code on request (`@claude` mentions, or a review started by hand).
+- `docs/LOCAL_AI_BRIEF.md` and `docs/REVIEW_LESSONS.md`: the standing notes sent to the local AI with every job. Add a line to the lessons file when a review misses something.
 - `docs/ORCHESTRATION.md`: how the agents and the automation divide the work. Not needed for an ordinary coding job.
 - `.github/copilot-instructions.md` and `.github/workflows/copilot-setup-steps.yml`: standing instructions for GitHub Copilot (coding agent and code review), and the setup of its workspace so it can run the tests.
 - `tests/`: the automated browser test suite and its synthetic test data.
