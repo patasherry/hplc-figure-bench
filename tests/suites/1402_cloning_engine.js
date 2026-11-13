@@ -86,6 +86,18 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
       T.check('ath/transfer-flagged', (await row(h, 'Transfer to expression')).warn, (await row(h, 'Transfer to expression')).s);
       await cl(p).locator('[data-cf=bypass]').check(); await h.wait(300);
       T.check('ath/bypass-recorded', !(await row(h, 'Transfer to expression')).warn, (await row(h, 'Transfer to expression')).s);
+      await field(p, 'Plasmid used').fill('pET28-ATH-syn'); await field(p, 'Plasmid used').dispatchEvent('change'); await h.wait(200);
+      await field(p, 'Clone ID').fill('Clone 4'); await field(p, 'Clone ID').dispatchEvent('change'); await h.wait(200);
+
+      // transformation step and methods text reflect the cloning transfer attempt and bypass
+      await h.step('transform');
+      const trLine = await cl(p).innerText();
+      T.check('ath/transform-names-plasmid', trLine.includes('pET28-ATH-syn'), trLine);
+      T.check('ath/transform-bypassed-says-unverified', /verification was not recorded/.test(trLine), trLine);
+      await h.step('figure'); await p.evaluate(() => { const b = document.getElementById('methodsBox'); if (b) b.open = true; }); await h.wait(300);
+      const mText = await h.methods();
+      T.check('ath/methods-names-plasmid', mText.includes('pET28-ATH-syn'), mText);
+      T.check('ath/methods-bypassed-says-unverified', /verification was not recorded/.test(mText), mText);
 
       // a stage can be skipped, and the miniprep carries its checklist and its recipe note
       await go(h, 'Overnight culture'); await cl(p).locator('[data-cl=skip]').click(); await h.wait(300);
@@ -233,6 +245,82 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
         T.check('dupst/reload no page errors', errs2.length === 0, errs2.join(' | '));
       } finally { await close2(); }
     }
+  });
+
+  await T.t('cloning-methods-and-transform', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      p.setDefaultTimeout(15000);
+      // Expression project: plasmid source record
+      await h.newProject('Expr Source Synthetic', 'expression');
+      await h.step('transform');
+      await cl(p).locator('[data-cext=src]').fill('Addgene #12345'); await cl(p).locator('[data-cext=src]').dispatchEvent('change'); await h.wait(200);
+      await cl(p).locator('[data-cext=ver]').selectOption('yes'); await h.wait(200);
+      await h.step('figure'); await p.evaluate(() => { const b = document.getElementById('methodsBox'); if (b) b.open = true; }); await h.wait(300);
+      let m = await h.methods();
+      T.check('expr-source/unverified-without-note', m.includes('Addgene #12345') && !m.includes('sequence verified'), m);
+      await h.step('transform');
+      await cl(p).locator('[data-cext=note]').fill('Whole-plasmid sequencing'); await cl(p).locator('[data-cext=note]').dispatchEvent('change'); await h.wait(200);
+      await h.step('figure'); await h.wait(300);
+      m = await h.methods();
+      T.check('expr-source/verified-with-note', m.includes('Addgene #12345') && m.includes('sequence verified') && m.includes('Whole-plasmid sequencing'), m);
+      T.check('expr-source/no page errors', errs.length === 0, errs.join(' | '));
+    } finally { await close(); }
+
+    const {p: p2, errs: errs2, close: close2} = await open(), h2 = H(p2);
+    try {
+      p2.setDefaultTimeout(15000);
+      // Cloning ATH project: fully verified
+      await h2.newProject('ATH Verified Synthetic', 'cloning');
+      await cl(p2).locator('[data-cl=tpl][data-v=ath]').click(); await h2.wait(400);
+      await go(h2, 'Construct and mutation design');
+      await field(p2, 'Parent plasmid').fill('pET28-SUMO'); await field(p2, 'Parent plasmid').dispatchEvent('change'); await h2.wait(200);
+      await field(p2, 'Mutation type').selectOption('Substitution'); await h2.wait(200);
+      await field(p2, 'Mutation position').fill('K12A'); await field(p2, 'Mutation position').dispatchEvent('change'); await h2.wait(200);
+      await setStatus(p2, h2, 0, 'done');
+
+      await go(h2, 'Q5 PCR setup');
+      await field(p2, 'Polymerase or master mix').fill('Q5 High-Fidelity DNA Polymerase'); await field(p2, 'Polymerase or master mix').dispatchEvent('change'); await h2.wait(200);
+      await setStatus(p2, h2, 0, 'done');
+
+      await go(h2, 'KLD treatment');
+      await setStatus(p2, h2, 0, 'done');
+
+      await go(h2, 'Chemical transformation');
+      await field(p2, 'Host strain').fill('NEB 5-alpha'); await field(p2, 'Host strain').dispatchEvent('change'); await h2.wait(200);
+      await setStatus(p2, h2, 0, 'done');
+
+      await go(h2, 'Sequencing and alignment');
+      await field(p2, 'Sequencing provider').fill('Plasmidsaurus'); await field(p2, 'Sequencing provider').dispatchEvent('change'); await h2.wait(200);
+      await setStatus(p2, h2, 0, 'done');
+
+      await go(h2, 'Selection of a sequence-verified clone');
+      await cl(p2).locator('[data-cfrom]').first().selectOption({index: 1}); await h2.wait(200);
+      await field(p2, 'Verification status').selectOption('Sequence verified'); await h2.wait(200);
+      await setStatus(p2, h2, 0, 'done');
+
+      await go(h2, 'Transfer to expression');
+      await field(p2, 'Plasmid used').fill('pET28-SUMO-K12A'); await field(p2, 'Plasmid used').dispatchEvent('change'); await h2.wait(200);
+      await field(p2, 'Clone ID').fill('Clone 1'); await field(p2, 'Clone ID').dispatchEvent('change'); await h2.wait(200);
+      await setStatus(p2, h2, 0, 'done');
+
+      await h2.step('transform');
+      const trText = await cl(p2).innerText();
+      T.check('verified/transform-names-plasmid', trText.includes('pET28-SUMO-K12A'), trText);
+      T.check('verified/transform-names-clone', trText.includes('Clone 1'), trText);
+      T.check('verified/transform-shows-verified', /sequence-verified clone recorded/.test(trText), trText);
+
+      await h2.step('figure'); await p2.evaluate(() => { const b = document.getElementById('methodsBox'); if (b) b.open = true; }); await h2.wait(300);
+      const mVerified = await h2.methods();
+      T.check('verified/methods-names-plasmid', mVerified.includes('pET28-SUMO-K12A'), mVerified);
+      T.check('verified/methods-names-workflow', mVerified.includes('Around-the-Horn mutagenesis'), mVerified);
+      T.check('verified/methods-names-polymerase', mVerified.includes('Q5 High-Fidelity DNA Polymerase'), mVerified);
+      T.check('verified/methods-names-kld', /KLD treatment/.test(mVerified), mVerified);
+      T.check('verified/methods-names-host', mVerified.includes('NEB 5-alpha'), mVerified);
+      T.check('verified/methods-names-sequencing', mVerified.includes('Plasmidsaurus') && /confirmed the sequence/.test(mVerified), mVerified);
+
+      T.check('methods-transform/no page errors', errs2.length === 0, errs2.join(' | '));
+    } finally { await close2(); }
   });
 
   T.done();
