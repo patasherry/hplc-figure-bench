@@ -3,7 +3,8 @@
  * codemap.js - Scan hplc-figure-bench(WF1.13).html for section markers and print line ranges.
  * 
  * Usage:
- *   node tests/tools/codemap.js [--table] [path/to/app.html]
+ *   node tests/tools/codemap.js [--plain] [--write] [path/to/app.html]
+ *   --write updates the line ranges in docs/CODEMAP.md in place.
  */
 
 const fs = require('fs');
@@ -62,6 +63,25 @@ for (let i = 0; i < sections.length; i++) {
 }
 
 const isTable = !process.argv.includes('--plain'); // default to table format unless --plain is passed
+
+// --write: bring the line ranges in docs/CODEMAP.md up to date in place, keeping each section's Purpose text. A section the
+// app gained gets a row with an empty purpose, and a row whose section is gone is dropped. The Code map workflow runs this
+// after every merge that changes the app, because agents open the lines this table names.
+if (process.argv.includes('--write')) {
+  const mapPath = path.resolve(__dirname, '../../docs/CODEMAP.md');
+  const doc = fs.readFileSync(mapPath, 'utf8').split('\n');
+  const head = doc.findIndex(l => /^\|\s*Lines\s*\|\s*Section\s*\|/.test(l));
+  if (head < 0) { console.error('Error: no "| Lines | Section |" table in docs/CODEMAP.md'); process.exit(1); }
+  let end = head + 2; while (end < doc.length && /^\|/.test(doc[end])) end++;
+  const purpose = {};
+  doc.slice(head + 2, end).forEach(l => { const m = /^\|[^|]*\|\s*`(.*?)`\s*\|(.*)\|\s*$/.exec(l); if (m) purpose[m[1]] = m[2].trim(); });
+  const rows = sections.map(s => `| ${s.startLine}–${s.endLine} | \`${s.name}\` | ${purpose[s.name] || ''} |`);
+  const next = doc.slice(0, head + 2).concat(rows, doc.slice(end)).join('\n');
+  if (next === doc.join('\n')) { console.log('docs/CODEMAP.md is up to date'); process.exit(0); }
+  fs.writeFileSync(mapPath, next);
+  console.log(`docs/CODEMAP.md updated: ${rows.length} sections`);
+  process.exit(0);
+}
 
 if (isTable) {
   console.log('| Lines | Section | Purpose |');

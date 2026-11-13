@@ -11,14 +11,15 @@
 //   4. Patrick's requests (2026-11-12): intake of every `from-patrick` issue in his own words (small ones are
 //      queued, large ones wait for one planning pass as `needs-plan`), no open issue left without a state, and
 //      the status page, one issue that says where each of his requests stands and mentions him when one needs
-//      him or is stuck.
+//      him or is stuck. The page also carries a weekly scorecard of each worker's pull requests.
+//   5. Job cards: a queued issue that names no check is held as `needs-plan` before any worker starts it.
 // State lives on the issue labels. The per-issue JSON state comment went with the sessions.
 const AG_TAKES_APP = process.env.AG_TAKES_APP !== '0';
 // `queued` was called `jules-queue` until 2026-11-12. Both are read so nothing in flight is stranded; only the
 // new name is ever written. Drop QUEUE_OLD once no open issue carries it.
 const L = {queue: 'queued', fail: 'needs-coordinator', triage: 'needs-triage', parked: 'parked', plan: 'needs-plan', mine: 'from-patrick', status: 'status-page'};
 const TRACKERS = new Set([17, 222, 782]);  // the improvement plan, the Direction board and the Claude Science inbox are standing issues, not work
-const BIG_CHARS = 2500, STUCK_DAYS = 3, DONE_DAYS = 14;
+const BIG_CHARS = 2500, STUCK_DAYS = 3, DONE_DAYS = 14, SCORE_DAYS = 7;
 /* a label that says whose move it is. An open issue with none of these, and no open PR, is invisible to every worker. */
 const isState = l => /^(for-|needs-|awaiting-|relay|paste-)/.test(l) || /-running$/.test(l) || ['queued', 'jules-queue', 'parked', 'ux-report', 'ready-for-lead', 'status-page'].includes(l);
 const QUEUE_OLD = 'jules-queue';
@@ -74,6 +75,15 @@ module.exports = async ({github, context, core}) => {
       if (!pcUp && agApiPaused) { agAvailable = false; say('PC is off and the Antigravity API is paused: leaving the coding jobs in the queue'); }
     } catch (e) { say(`could not check #17 status: ${e.message}`); }
   }
+  /* A job card must say how the worker proves it is done. A queued issue with no check in it is held for the lead
+     (needs-plan) instead of being handed to a worker that cannot tell when it has finished: that is how jobs sat for
+     weeks. Patrick's own requests are exempt, since the worker writes the check for those and the gate demands one. */
+  const hasCheck = b => /(\*\*|#+\s*)check\b/i.test(b) || /fails? on main/i.test(b) || /node tests\/suites\//i.test(b) || /reproduce command/i.test(b) || /check id/i.test(b);
+  for (const i of await queued()) { const ls = labels(i);
+    if (ls.includes(L.mine) || ls.includes('ag-returned') || hasCheck(i.body || '')) continue;
+    await setLabels(i.number, [L.plan], [L.queue, QUEUE_OLD]);
+    await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: 'Held before any worker starts it: this issue does not say which check proves the job is done. It needs a **Check** line in the job-card form (`.github/ISSUE_TEMPLATE/job.md`): the one UI-level check that fails on main and passes after the change. Once the issue text has it, add the `queued` label again.'});
+    say(`#${i.number}: no check named, held for a plan`); }
   /* an issue a worker handed back (ag-returned), or one already routed, is not the leader's to act on */
   const routable = i => !labels(i).some(l => l === 'ag-returned' || l === 'for-antigravity');
   if (agAvailable) {
@@ -195,6 +205,13 @@ module.exports = async ({github, context, core}) => {
       const cs = [...tcs].reverse().find(c => c.body.includes('<!-- cloud-state ')), cm = cs && cs.body.match(/<!-- cloud-state (\{.*?\}) -->/), st = cm ? JSON.parse(cm[1]) : {};
       agLine = st.ag_off_until && st.ag_off_until > Date.now() / 1000 ? `paused (it refused ${st.ag_refused || 'its last'} calls in a row)` : 'available'; } catch (e) { say(`status page: could not read #17: ${e.message}`); }
     const list = (xs, f) => xs.length ? xs.map(f).join('\n') : '_Nothing._';
+    /* the scorecard: what each worker's pull requests came to, so routing can rest on numbers. A worker is known by its branch prefix. */
+    const WHO = {agy: 'Antigravity (CLI and remote agents)', antigravity: 'Antigravity cloud route', codex: 'Codex', claude: 'Claude', copilot: 'Copilot', jules: 'Jules (removed)'};
+    const from = new Date(Date.now() - SCORE_DAYS * 864e5).toISOString(), tally = {};
+    const recent = (await github.rest.pulls.list({owner, repo, state: 'closed', sort: 'updated', direction: 'desc', per_page: 100})).data.filter(p => (p.merged_at || p.closed_at) > from);
+    for (const p of recent.concat(livePrs.filter(p => p.created_at > from))) { const k = WHO[p.head.ref.split('/')[0]] || 'Other';
+      const t = tally[k] = tally[k] || {merged: 0, closed: 0, open: 0}; if (p.merged_at) t.merged++; else if (p.state === 'closed') t.closed++; else t.open++; }
+    const score = Object.keys(tally).length ? '| Worker | Merged | Closed without merging | Open | Merged share |\n|---|---|---|---|---|\n' + Object.entries(tally).sort((a, b) => b[1].merged - a[1].merged).map(([k, t]) => `| ${k} | ${t.merged} | ${t.closed} | ${t.open} | ${t.merged + t.closed ? Math.round(100 * t.merged / (t.merged + t.closed)) + '%' : 'n/a'} |`).join('\n') : '_No pull requests in this period._';
     const body = ['<!-- status-page -->', '# Where your requests stand', '',
       `Rebuilt by the queue leader whenever something changes. To ask for something, open a [new request](https://github.com/${owner}/${repo}/issues/new?template=request.yml) or tell Claude in a chat. A request is filed in your own words and stays on this page until it is done.`, '',
       `## Waiting on you (${askYou.length})`, list(askYou, i => `- ${link(i)}`), '',
@@ -202,7 +219,7 @@ module.exports = async ({github, context, core}) => {
       `## Stuck (${stuck.length})`, stuck.length ? `No movement for ${STUCK_DAYS} days or more.\n` + list(stuck, i => `- ${link(i)}: ${stateOf(i)[1].toLowerCase()}, ${days(i.updated_at)} days`) : '_Nothing._', '',
       `## Your requests in progress (${working.length})`, working.length ? '| Request | State | Days since it moved |\n|---|---|---|\n' + working.map(i => `| ${link(i)} | ${stateOf(i)[1]} | ${days(i.updated_at)} |`).join('\n') : '_Nothing._', '',
       `## Done in the last ${DONE_DAYS} days (${done.length}, newest 10 shown)`, list(done.slice(0, 10), i => `- ${link(i)}${i.state_reason === 'not_planned' ? ' (closed without a change)' : ''}`), '',
-      '## Workers', `- PC manager: ${pcLine}`, `- Antigravity cloud route: ${agLine || 'unknown'}`, `- Parked issues, found by the machine and not started: [${parkedN}](https://github.com/${owner}/${repo}/issues?q=is%3Aissue+is%3Aopen+label%3Aparked). Add the \`queued\` label to one to start it.`].join('\n');
+      `## Workers, last ${SCORE_DAYS} days`, score, '', `- PC manager: ${pcLine}`, `- Antigravity cloud route: ${agLine || 'unknown'}`, `- Parked issues, found by the machine and not started: [${parkedN}](https://github.com/${owner}/${repo}/issues?q=is%3Aissue+is%3Aopen+label%3Aparked). Add the \`queued\` label to one to start it.`].join('\n');
     let page = open.find(i => labels(i).includes(L.status));
     const told0 = page ? ((page.body || '').match(/<!-- status-told (\{.*?\}) -->/) || [])[1] : null; let told = {}; try { told = told0 ? JSON.parse(told0) : {}; } catch (e) { told = {}; }
     const now = {}; askYou.forEach(i => { now[i.number] = 'you'; }); stuck.forEach(i => { now[i.number] = 'stuck'; });
