@@ -7,7 +7,8 @@
 //   2. Merge: open PRs that touch only tests/ or docs/, with a clean Test suite report (no regressions), are
 //      squash-merged. Anything that changes the app or workflows gets `needs-coordinator` instead.
 //   3. Follow up: after a merge, "New checks failing" in the PR's test report and "Ready-to-file issues" in an
-//      audit report become new issues labelled `parked`: machine-found work waits until Patrick starts it.
+//      audit report become new issues labelled `parked`. Parked issues are queued a few at a time when the queue is
+//      nearly empty (PARK_LOW, PARK_WAIT_DAYS, PARK_PER_DAY), unless they carry `keep-parked`.
 //   4. Patrick's requests (2026-11-12): intake of every `from-patrick` issue in his own words (small ones are
 //      queued, large ones wait for one planning pass as `needs-plan`), no open issue left without a state, and
 //      the status page, one issue that says where each of his requests stands and mentions him when one needs
@@ -20,6 +21,9 @@ const AG_TAKES_APP = process.env.AG_TAKES_APP !== '0';
 const L = {queue: 'queued', fail: 'needs-coordinator', triage: 'needs-triage', parked: 'parked', plan: 'needs-plan', mine: 'from-patrick', status: 'status-page'};
 const TRACKERS = new Set([17, 222, 782]);  // the improvement plan, the Direction board and the Claude Science inbox are standing issues, not work
 const BIG_CHARS = 2500, STUCK_DAYS = 3, DONE_DAYS = 14, SCORE_DAYS = 7;
+/* Parked issues go back to the workers a few at a time, when the queue is nearly empty, so they never crowd out Patrick's own requests:
+   fewer than PARK_LOW jobs queued, the issue untouched for PARK_WAIT_DAYS (time for him to close it), at most PARK_PER_DAY a day. */
+const PARK_LOW = 3, PARK_WAIT_DAYS = 2, PARK_PER_DAY = 2, KEEP = 'keep-parked';
 /* a label that says whose move it is. An open issue with none of these, and no open PR, is invisible to every worker. */
 const isState = l => /^(for-|needs-|awaiting-|relay|paste-)/.test(l) || /-running$/.test(l) || ['queued', 'jules-queue', 'parked', 'ux-report', 'ready-for-lead', 'status-page'].includes(l);
 const QUEUE_OLD = 'jules-queue';
@@ -50,7 +54,7 @@ module.exports = async ({github, context, core}) => {
     for (const name of [L.queue, QUEUE_OLD]) for (const i of await issues(name)) if (!seen.has(i.number)) seen.set(i.number, i);
     return [...seen.values()]; };
   const ensureLabels = async () => { const have = new Set((await github.paginate(github.rest.issues.listLabelsForRepo, {owner, repo, per_page: 100})).map(l => l.name));
-    const want = {[L.queue]: '0E8A16', [L.fail]: 'D93F0B', [L.triage]: 'C5DEF5', [L.parked]: 'EEEEEE', [L.plan]: 'FBCA04', [L.status]: '1D76DB'};
+    const want = {[L.queue]: '0E8A16', [L.fail]: 'D93F0B', [L.triage]: 'C5DEF5', [L.parked]: 'EEEEEE', [KEEP]: 'EEEEEE', [L.plan]: 'FBCA04', [L.status]: '1D76DB'};
     for (const [name, color] of Object.entries(want)) if (!have.has(name)) await github.rest.issues.createLabel({owner, repo, name, color}); };
   const setLabels = async (n, add, remove) => { for (const r of remove) await github.rest.issues.removeLabel({owner, repo, issue_number: n, name: r}).catch(() => {});
     if (add.length) await github.rest.issues.addLabels({owner, repo, issue_number: n, labels: add}); };
@@ -176,6 +180,20 @@ module.exports = async ({github, context, core}) => {
         i.labels = ls.concat([L.parked]); say(`#${i.number}: had no state, parked`); }
     }
 
+    /* parked issues trickle back to the workers */
+    const statusPage = open.find(i => labels(i).includes(L.status)), today = new Date().toISOString().slice(0, 10);
+    let out = {day: today, n: 0}; try { const m = ((statusPage && statusPage.body) || '').match(/<!-- park-out (\{.*?\}) -->/); if (m && JSON.parse(m[1]).day === today) out = JSON.parse(m[1]); } catch (e) { /* a bad marker counts as none */ }
+    const live = i => i.state !== 'closed' && !TRACKERS.has(i.number) && !labels(i).includes(L.status);
+    const queuedN = open.filter(i => live(i) && labels(i).includes(L.queue)).length;
+    const ready = open.filter(i => live(i) && labels(i).includes(L.parked) && !labels(i).includes(KEEP) && (Date.now() - Date.parse(i.updated_at)) / 864e5 >= PARK_WAIT_DAYS)
+      .sort((a, b) => (/^Bug found by /.test(b.title) ? 1 : 0) - (/^Bug found by /.test(a.title) ? 1 : 0) || a.number - b.number);
+    if (queuedN < PARK_LOW && out.n < PARK_PER_DAY && ready.length) { const i = ready[0], ls = labels(i);
+      /* the job-card hold (section 5) stops a queued issue that names no check, so give it the standing one here */
+      if (!hasCheck(i.body || '')) await github.rest.issues.update({owner, repo, issue_number: i.number, body: `${i.body || ''}\n\n## Check\n\nAdd a check in \`tests/suites/\` that fails on main and passes on your branch, and name it in the pull request. Change only what this issue describes. If it cannot be tested, or it would change a number the app reports, say so on the issue and stop.`});
+      await setLabels(i.number, [L.queue], [L.parked]);
+      await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: `The queue was nearly empty, so this parked issue is now queued for the coding workers (at most ${PARK_PER_DAY} a day leave the shelf this way). To stop it, remove \`queued\` and add \`${KEEP}\`, or close the issue.`});
+      i.labels = ls.filter(l => l !== L.parked).concat([L.queue]); i.updated_at = new Date().toISOString(); out.n++; routedAg = true; say(`#${i.number}: parked issue queued (${out.n} of ${PARK_PER_DAY} today)`); }
+
     /* the status page */
     const days = t => Math.floor((Date.now() - Date.parse(t)) / 864e5), link = i => `#${i.number} ${String(i.title).replace(/\|/g, '/').slice(0, 90)}`;
     const stateOf = i => { const ls = labels(i), pr = prOf.get(i.number);
@@ -219,12 +237,12 @@ module.exports = async ({github, context, core}) => {
       `## Stuck (${stuck.length})`, stuck.length ? `No movement for ${STUCK_DAYS} days or more.\n` + list(stuck, i => `- ${link(i)}: ${stateOf(i)[1].toLowerCase()}, ${days(i.updated_at)} days`) : '_Nothing._', '',
       `## Your requests in progress (${working.length})`, working.length ? '| Request | State | Days since it moved |\n|---|---|---|\n' + working.map(i => `| ${link(i)} | ${stateOf(i)[1]} | ${days(i.updated_at)} |`).join('\n') : '_Nothing._', '',
       `## Done in the last ${DONE_DAYS} days (${done.length}, newest 10 shown)`, list(done.slice(0, 10), i => `- ${link(i)}${i.state_reason === 'not_planned' ? ' (closed without a change)' : ''}`), '',
-      `## Workers, last ${SCORE_DAYS} days`, score, '', `- PC manager: ${pcLine}`, `- Antigravity cloud route: ${agLine || 'unknown'}`, `- Parked issues, found by the machine and not started: [${parkedN}](https://github.com/${owner}/${repo}/issues?q=is%3Aissue+is%3Aopen+label%3Aparked). Add the \`queued\` label to one to start it.`].join('\n');
+      `## Workers, last ${SCORE_DAYS} days`, score, '', `- PC manager: ${pcLine}`, `- Antigravity cloud route: ${agLine || 'unknown'}`, `- Parked issues, found by the machine and not started: [${parkedN}](https://github.com/${owner}/${repo}/issues?q=is%3Aissue+is%3Aopen+label%3Aparked). When fewer than ${PARK_LOW} jobs are queued, the oldest one untouched for ${PARK_WAIT_DAYS} days is queued, at most ${PARK_PER_DAY} a day (${out.n} today). Add \`queued\` to start one now, \`${KEEP}\` to hold one, or close it.`].join('\n');
     let page = open.find(i => labels(i).includes(L.status));
     const told0 = page ? ((page.body || '').match(/<!-- status-told (\{.*?\}) -->/) || [])[1] : null; let told = {}; try { told = told0 ? JSON.parse(told0) : {}; } catch (e) { told = {}; }
     const now = {}; askYou.forEach(i => { now[i.number] = 'you'; }); stuck.forEach(i => { now[i.number] = 'stuck'; });
     const fresh = Object.keys(now).filter(n => told[n] !== now[n]);
-    const full = `${body}\n\n<!-- status-told ${JSON.stringify(now)} -->`;
+    const full = `${body}\n\n<!-- status-told ${JSON.stringify(now)} -->\n<!-- park-out ${JSON.stringify(out)} -->`;
     if (!page) { page = (await github.rest.issues.create({owner, repo, title: 'Status page: where your requests stand', labels: [L.status], body: full})).data; say(`status page created as #${page.number}`); }
     else if ((page.body || '') !== full) { await github.rest.issues.update({owner, repo, issue_number: page.number, body: full}); say('status page updated'); }
     if (fresh.length) { const by = n => open.find(i => i.number === +n);
