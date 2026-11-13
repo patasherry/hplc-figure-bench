@@ -409,14 +409,11 @@ const insetCount = p => p.evaluate(() => document.querySelectorAll('#paper svg [
     /* the defect this issue is about: the title ran off the page, or across the chromatogram, by about 15 units */
     T.check(`${tag}/inset-ytitle-not-clipped`, yt.every(t => fits(t, m.root, 2)), 'clipped: ' + yt.filter(t => !fits(t, m.root, 2)).map(fmtB).join(' | '));
     T.check(`${tag}/inset-ytitle-found`, yt.length > 0, 'no inset ordinate label found inside the inset box');
-    /* Vertically strict: fitting the title to the inset's height is exactly what zoomYTitle does, so a
-       regression there must fail. Horizontally the rotated glyphs start a little left of the box, measured at
-       dx_left = -2.7 on a workflow panel (the main chart's own title does the same at -0.9 against the figure
-       root), so the slack is 3.5 and the residual is tracked on its own. Not a loosening to make this pass:
-       the vertical axis, which the fix governs, is still asserted at 1. */
+    /* Both axes asserted at 1 unit of slack: zoomYTitle fits the title to the inset's height, and the nested
+       inset chart's left pad keeps the rotated glyphs inside the zoom-inset-bg rect (#1399). */
     const vout = yt.filter(t => t.y < bx.y - 1 || t.bottom > bx.bottom + 1);
     T.check(`${tag}/inset-ytitle-fits-box-height`, vout.length === 0, 'taller than the inset box: ' + vout.map(fmtB).join(' | '));
-    const hout = yt.filter(t => t.x < bx.x - 3.5 || t.right > bx.right + 3.5);
+    const hout = yt.filter(t => t.x < bx.x - 1 || t.right > bx.right + 1);
     T.check(`${tag}/inset-ytitle-within-box-width`, hout.length === 0, 'beyond the inset box sides: ' + hout.map(fmtB).join(' | '));
   };
   {
