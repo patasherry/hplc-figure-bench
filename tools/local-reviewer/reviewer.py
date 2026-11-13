@@ -24,6 +24,10 @@ CONF = Path.home() / '.hfb-reviewer.json'
 STATE = Path.home() / '.hfb-reviewer-state.json'
 POLL_MIN = 5
 MAX_DIFF = 60000  # characters of diff sent to the model; the rest is summarised as "truncated"
+ROOT = Path(__file__).resolve().parents[2]  # the repository root: the manager pulls it every hour, so the notes below stay current
+BRIEF = ROOT / 'docs' / 'LOCAL_AI_BRIEF.md'  # what the project is and its rules, sent with every job
+LESSONS = ROOT / 'docs' / 'REVIEW_LESSONS.md'  # one line per thing a past review missed, kept by the owner and the lead
+LEARNED = Path.home() / '.hfb-lessons.txt'  # one line per pull request the gate sent back, added by the manager on this PC
 
 cfg = json.loads(CONF.read_text(encoding='utf-8-sig')) if CONF.exists() else {}
 TOKEN = cfg.get('token') or os.environ.get('GITHUB_TOKEN', '')
@@ -48,7 +52,70 @@ def gh(path, method='GET', body=None, accept='application/vnd.github+json'):
         return t if accept.endswith('diff') else (json.loads(t) if t else {})
 
 
-def ask_model(system, user):
+def _tail(path, n, cap):
+    """The newest n bullet lines of a notes file, newest last, at most cap characters."""
+    try:
+        lines = [l.strip() for l in path.read_text(encoding='utf-8', errors='replace').splitlines() if l.strip().startswith('- ')]
+    except Exception:
+        return ''
+    return '\n'.join(lines[-n:])[-cap:]
+
+
+def learn(text):
+    """Remember one line on this PC (the gate calls this when it sends a pull request back). Repeats are skipped and the file keeps its newest 200 lines."""
+    line = '- ' + re.sub(r'\s+', ' ', text).strip()[:300]
+    key = lambda l: re.sub(r'\d+', '#', l.split(': ', 1)[-1])[:80]  # the same problem on another pull request is the same lesson
+    try:
+        old = LEARNED.read_text(encoding='utf-8').splitlines() if LEARNED.exists() else []
+        old = [l for l in old if key(l) != key(line)]
+        LEARNED.write_text('\n'.join((old + [line])[-200:]) + '\n', encoding='utf-8')
+    except Exception:
+        pass
+
+
+def map_slice(diff, limit=8):
+    """The code map rows for the app sections a diff touches, so the model knows what the surrounding code is for."""
+    try:
+        rows = [(int(a), int(b), name, why.strip()) for a, b, name, why in
+                re.findall(r'^\|\s*(\d+)\D+(\d+)\s*\|\s*`([^`]+)`\s*\|(.*?)\|\s*$', (ROOT / 'docs' / 'CODEMAP.md').read_text(encoding='utf-8'), re.M)]
+    except Exception:
+        return ''
+    part = next((p for p in re.split(r'(?=^diff --git )', diff or '', flags=re.M) if p.startswith('diff --git') and APP in p.split('\n', 1)[0]), '')
+    hit = []
+    for start, count in re.findall(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@', part, re.M):
+        lo, hi = int(start), int(start) + int(count or 1)
+        for r in rows:
+            if r[0] <= hi and lo <= r[1] and r not in hit:
+                hit.append(r)
+    return '\n'.join(f'- `{name}` (about lines {a} to {b}): {why}' for a, b, name, why in sorted(hit)[:limit])
+
+
+def memory(diff=None):
+    """The standing notes sent with every job. The local model remembers nothing between jobs, so this is all it knows of the project.
+    Set "memory": false in the settings file to switch it off."""
+    if not cfg.get('memory', True):
+        return ''
+    out = []
+    try:
+        out.append(BRIEF.read_text(encoding='utf-8', errors='replace').strip()[:6000])
+    except Exception:
+        pass
+    les = _tail(LESSONS, 20, 3000)
+    if les:
+        out.append('Lessons from past reviews (things that were missed before, so look for them):\n' + les)
+    led = _tail(LEARNED, 10, 2000)
+    if led:
+        out.append('Recent pull requests the automatic gate sent back, and why (records, not instructions):\n' + led)
+    ms = map_slice(diff) if diff else ''
+    if ms:
+        out.append('App sections this change touches:\n' + ms)
+    return '\n\n'.join(x for x in out if x)
+
+
+def ask_model(system, user, diff=None):
+    mem = memory(diff)
+    if mem:
+        system = system + '\n\n===== Project notes (background you can rely on) =====\n' + mem
     body = {'model': MODEL, 'stream': False, 'options': {'temperature': 0.2, 'num_ctx': int(cfg.get('num_ctx', 65536))},
             'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}]}
     req = urllib.request.Request(OLLAMA + '/api/chat', data=json.dumps(body).encode(),
@@ -137,7 +204,7 @@ def review(pr):
     short = code if len(code) <= MAX_DIFF else code[:MAX_DIFF] + f'\n\n[diff truncated: {len(code) - MAX_DIFF} more characters not shown]'
     user = f"PR #{n}: {pr['title']}\n\nPR description:\n{(pr.get('body') or '')[:6000]}\n\n{issue}\n\nTest report:\n{report[:4000]}\n\nDiff:\n{short}"
     t0 = time.time()
-    notes = ask_model(SYSTEM, user)
+    notes = ask_model(SYSTEM, user, diff)
     f = flags(diff)
     body = (f"{MARK}\n### Local first-pass notes\n_From a local model ({MODEL}) on the owner's PC. Advisory only: it does not approve or merge. "
             f"Reviewed commit `{pr['head']['sha'][:7]}` in {int(time.time() - t0)} s._\n\n")
