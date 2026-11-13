@@ -69,12 +69,12 @@ Figure defaults follow publication conventions: the Okabe-Ito colorblind-safe pa
 
 **Before opening a PR that changes the HTML file:**
 
-1. Run the suite on your change and on `main`, and compare them:
+1. Compare your change with `main` on the suites it can affect:
    ```
    cd tests
-   node compare.js
+   node quick.js
    ```
-   This tests your working copy of the app against the version on `origin/main` (read from git) and writes `tests/results/compare.md`. A full run takes several minutes. If you cannot run the comparison, run `node run.js` on your change at least.
+   This picks preflight, smoke, every suite you added or changed, and the suites mapped to the app sections your diff touches, then runs them on your working copy and on `origin/main` and writes `tests/results/compare.md`. It takes minutes. `node quick.js --list` shows the choice without running it, and extra suite names can be added on the command line. The full comparison (`node compare.js`, every suite twice) takes about an hour on one machine, so leave it to the Test suite workflow, which runs it in parallel on every pull request.
 2. Paste the summary into the PR description: pass and fail counts per suite, and every regression (a check that passed on `main` and fails on your branch).
 3. A regression is either fixed, or explained in the PR as intended.
 4. When you fix a bug or add a feature, add a check for it to the suite it belongs to.
@@ -113,7 +113,7 @@ In every PR description, say exactly what you tested and how. Do not claim testi
 3. **Do not add dependencies, frameworks or build tools.**
 4. **Update `README.md`** when user-visible behavior, supported formats, exports or network dependencies change.
 5. **Never commit real lab data** (chromatograms, gel images, sequences). The owner's results may be unpublished.
-6. **Explain the change** in the PR description: what changed, why, how it was tested, and anything uncertain.
+6. **Explain the change** in the PR description, in the form of `.github/pull_request_template.md`: the `Closes #N.` line first, then what changed and why, the check that fails on main and passes here, exactly what you ran, whether any reported number changes, and anything uncertain.
 7. Do not merge. The local manager merges PRs that pass the Test suite and the review gate and do not change a reported number (the owner's choice, `auto_merge`). Changes to reported numbers, after the owner's OK (or the board's strong consensus), are reviewed by the AI lead reviewer the owner picks (see **AI lead review**), and by the coordinator (Claude) when he picks Claude or the reviewer is unsure.
 
 ## How agents divide the work
@@ -126,6 +126,7 @@ What a worker needs to know:
 - **The gate.** Your PR is checked by plain code: only the app, `tests/`, `docs/`, `README.md` and `.gitignore` change. No regressions. At least one check fails on main and passes on the PR. No check you add fails on the PR. No existing check is deleted or commented out. No test reaches into `window.__HFB`. `expected.json` is not rewritten. No merge conflict. A PR that fails is closed and the reasons are added to its issue.
 - **Empty pull requests are never merged.** If the fix is already on main, say so on the issue and close the issue directly, without a PR.
 - **Reported numbers are Patrick's call.** An issue labelled `needs-owner` without `owner-approved` is not yours to start.
+- **A job has a check.** A queued issue follows the job-card form (`.github/ISSUE_TEMPLATE/job.md`): Change, Check, Where, Rules. The Check is how you know you are done. For one of Patrick's own requests, which may not name a check, write the check yourself first.
 - **A `needs-plan` or `parked` issue is not yours to start either.** A `from-patrick` issue is the owner's request in his own words: do what it says, and do not rewrite it into something else.
 - **Agents never push to another agent's branch.** A revision goes on a new branch.
 - **`docs/GOALS.md`** is the owner's list of priorities. Weigh your work by it.

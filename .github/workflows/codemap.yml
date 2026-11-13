@@ -1,0 +1,39 @@
+name: Code map
+
+# Keeps the line ranges in docs/CODEMAP.md true. Every agent is told to read that table before opening the 7,700-line app
+# file, and by 2026-11-12 it had drifted by about a thousand lines. Runs after any push to main that changes the app,
+# rewrites the ranges in place and commits the result. No AI, no tokens.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'hplc-figure-bench(WF1.13).html'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: codemap
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Rewrite the line ranges
+        run: node tests/tools/codemap.js --write
+      - name: Commit if they changed
+        run: |
+          if git diff --quiet -- docs/CODEMAP.md; then echo "up to date"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/CODEMAP.md
+          git commit -m "Code map: line ranges after the latest app change"
+          git pull --rebase -q origin main
+          git push origin HEAD:main

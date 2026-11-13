@@ -13,6 +13,11 @@ Patrick asked for a cleaner hierarchy after his cloning request, posted on the D
 5. **Machine-made work is parked, not queued.** Follow-up issues the leader files from failing new checks and audit reports are labelled `parked`. The board no longer meets on a timer (`board_auto: false`) and the usability walks are off (`ux_every_hours: 0`). Adding `queued` to a parked issue starts it.
 6. **His requests go first.** Every background worker sorts `from-patrick` jobs ahead of the rest, in whichever queue they sit.
 
+7. **Every job has a check.** A queued issue follows the job-card form (`.github/ISSUE_TEMPLATE/job.md`). The leader holds a queued issue that names no check as `needs-plan` before any worker starts it. Patrick's own requests are exempt: the worker writes the check, and the gate demands one.
+8. **A scorecard.** The status page carries a table of each worker's pull requests over the last 7 days (merged, closed without merging, open), told apart by branch prefix.
+
+Tooling that goes with this: `node tests/quick.js` is the worker's fast comparison, the Code map workflow rewrites the line ranges in `docs/CODEMAP.md` after every app change, and `.github/pull_request_template.md` is the form of a PR description.
+
 The lead's part: when Patrick says "work through my status page" or "plan my requests", read the status page, plan each `needs-plan` issue into jobs (label them `queued`, `from-patrick`, `owner-approved`, link them from the request and close the request only when all of them are done), and settle anything under Waiting on Claude.
 
 ## Current routing (2026-11-12)
