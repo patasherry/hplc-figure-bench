@@ -39,6 +39,58 @@ const {open, H, suite, src} = require('../lib/harness');
 
     }
   });
+  await T.t('workflow-toolbar-grid-and-contrast', async () => {
+    const q = await open(), hq = H(q.p), pg = q.p;
+    try {
+      await pg.emulateMedia({colorScheme: 'dark'});
+      await hq.newProject('Workflow UI polish');
+      await hq.addRun(src('his')); await hq.addRun(src('q'));
+      await hq.step('figure'); await hq.wait(700);
+
+      // Grid hint shows only when Grid is chosen
+      const rowHintHidden = await pg.evaluate(() => { const e = document.querySelector('#wfGridHint'); return e ? e.hidden : false; });
+      T.check('grid-hint.hidden-in-row', rowHintHidden, 'grid hint exists and stays hidden in Side by side layout');
+      await pg.click('label[for="wf-grid"]'); await hq.wait(300);
+      const gridHint = await pg.evaluate(() => { const e = document.querySelector('#wfGridHint'); return e ? {hidden: e.hidden, text: e.textContent.trim()} : null; });
+      T.check('grid-hint.shown-in-grid', !!gridHint && !gridHint.hidden && /3 panels/i.test(gridHint.text), JSON.stringify(gridHint));
+
+      // Full drag guidance line without ellipsis truncation
+      const spec2Fit = await pg.$eval('#spec2', e => ({text: e.textContent, sw: e.scrollWidth, cw: e.clientWidth, ws: getComputedStyle(e).whiteSpace}));
+      T.check('spec2.not-clipped', spec2Fit.ws === 'normal' || spec2Fit.sw <= spec2Fit.cw + 2, JSON.stringify(spec2Fit));
+
+      // Select first panel in dark mode
+      const b = await pg.$eval('#paper svg', e => { const r = e.getBoundingClientRect(); return {x: r.x + r.width*0.2, y: r.y + r.height*0.3}; });
+      await pg.mouse.click(b.x, b.y); await hq.wait(300);
+
+      const ui = await pg.evaluate(() => {
+        const box = document.querySelector('#wfSelBox'), tool = document.querySelector('#wfTool');
+        const copy = document.querySelector('#copySvg'), save = document.querySelector('#saveSvg');
+        const a = document.querySelector('#wfA');
+        const csA = getComputedStyle(a), ctx = document.createElement('canvas').getContext('2d');
+        ctx.font = `${csA.fontSize} ${csA.fontFamily}`;
+        const roomA = a.clientWidth - parseFloat(csA.paddingLeft) - parseFloat(csA.paddingRight);
+        const needA = ctx.measureText(a.placeholder).width;
+        const m = getComputedStyle(box).borderColor.match(/\d+/g).map(Number);
+        const lin = c => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+        const L = 0.2126 * lin(m[0]) + 0.7152 * lin(m[1]) + 0.0722 * lin(m[2]);
+        const contrastWhite = (1 + 0.05) / (L + 0.05);
+        return {
+          hint: tool.textContent,
+          toolRect: tool.getBoundingClientRect(),
+          copyRect: copy.getBoundingClientRect(),
+          saveRect: save.getBoundingClientRect(),
+          contrastWhite,
+          roomA,
+          needA,
+        };
+      });
+      T.check('wftool.drag-undo-hint', /Drag to move,\s*Reset position to undo/i.test(ui.hint), ui.hint);
+      T.check('wftool.no-overlap-copySvg', ui.toolRect.bottom <= ui.copyRect.top + 1, `tool bottom ${ui.toolRect.bottom} vs copySvg top ${ui.copyRect.top}`);
+      T.check('wftool.arrow-placeholder-fits', ui.needA <= ui.roomA + 2, `need ${ui.needA.toFixed(1)} vs room ${ui.roomA.toFixed(1)}`);
+      T.check('wfselbox.dark-mode-contrast', ui.contrastWhite >= 4.5, `contrast vs white paper: ${ui.contrastWhite.toFixed(2)}`);
+      T.check('no-page-errors-2', !q.errs.length, q.errs.join(' | '));
+    } finally { await q.close(); }
+  });
   T.check('no page errors', !errs.length, errs.join(' | '));
   await close(); T.done();
 })();

@@ -353,13 +353,14 @@ label.f.condmissing>input{border-color:var(--warn)}
 .figtab[aria-pressed="true"]{color:var(--ink);font-weight:500;border-bottom-color:var(--accent)}
 .paper{background:var(--paper);border:1px solid var(--paper-edge);border-radius:6px;box-shadow:var(--shadow);padding:clamp(10px,3vw,36px);display:flex;justify-content:center;align-items:center;min-height:260px}
 .paperwrap{position:relative}
-.wfsel{position:absolute;pointer-events:none;border:2px solid var(--accent, #2f4ea0);border-radius:4px;background:color-mix(in srgb, var(--accent, #2f4ea0) 5%, transparent)}
-.wfsel::after{content:"";position:absolute;top:-5px;left:-5px;right:-5px;bottom:-5px;background-image:radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, var(--accent, #2f4ea0) 2px, var(--accent, #2f4ea0) 3.5px, transparent 4px);background-position:top left, top right, bottom left, bottom right;background-size:8px 8px;background-repeat:no-repeat}
+.wfsel{position:absolute;pointer-events:none;border:2px solid #0058c4;border-radius:4px;background:rgba(0,88,196,.06);box-shadow:0 0 0 1px rgba(255,255,255,.9)}
+.wfsel::after{content:"";position:absolute;top:-5px;left:-5px;right:-5px;bottom:-5px;background-image:radial-gradient(circle, #fff 1.5px, #0058c4 2px, #0058c4 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, #0058c4 2px, #0058c4 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, #0058c4 2px, #0058c4 3.5px, transparent 4px),radial-gradient(circle, #fff 1.5px, #0058c4 2px, #0058c4 3.5px, transparent 4px);background-position:top left, top right, bottom left, bottom right;background-size:8px 8px;background-repeat:no-repeat}
 .wftool{position:absolute;z-index:10;display:flex;flex-wrap:wrap;align-items:center;gap:6px;max-width:min(560px, calc(100% - 16px));padding:8px;background:var(--card, #fff);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14);font-size:13px}
 .wftool input[type=text]{flex:1 1 150px;min-width:0;padding:5px 7px;border:1px solid var(--line);border-radius:5px;font:inherit;background:var(--well, #fff);color:inherit}
 .wftool #wfA{flex-basis:260px;min-width:min(260px,100%);text-overflow:clip}
 .wftool .wfl{color:var(--muted);font-size:12px}
 .wftool .wfg{display:inline-flex;align-items:center;gap:2px}
+.wftool .wfhint{flex-basis:100%;font-size:11.5px;color:var(--muted)}
 .wftool button{font:inherit}
 .dragbox{position:absolute;pointer-events:none;background:rgba(0,114,178,.14);border-left:1px solid #0072B2;border-right:1px solid #0072B2}
 .lanes{display:grid;gap:4px;max-height:340px;overflow:auto;padding-right:2px}
@@ -478,6 +479,7 @@ body.stepfig .paper > svg{max-width:min(100%,680px);margin-inline:auto}
 .spec{display:grid;gap:1px;font-size:12px;color:var(--muted);min-width:0}
 .spec #spec{color:var(--ink)}
 .spec span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(60ch,100%)}
+.spec #spec2{white-space:normal;overflow:visible;text-overflow:clip;max-width:none}
 .spec #spec2.warn{color:var(--warn);white-space:normal}
 .note{font-size:12.5px;color:var(--muted);border:1px solid var(--line);background:var(--well);border-radius:var(--r);padding:8px 11px;line-height:1.45}
 .toast{pointer-events:none;position:fixed;top:var(--tt,56px);bottom:auto;left:50%;transform:translateX(-50%);display:grid;justify-items:center;gap:6px;z-index:10;width:max-content;max-width:min(560px,calc(100% - 32px))}
@@ -649,6 +651,7 @@ button,input,select,textarea{font-family:inherit}
         <input type="radio" name="wfLayout" id="wf-stack" value="stack" data-opt="wfLayout"><label for="wf-stack">Stacked</label>
         <input type="radio" name="wfLayout" id="wf-grid" value="grid" data-opt="wfLayout"><label for="wf-grid">Grid</label>
       </div>
+      <p class="hint" id="wfGridHint" hidden>Grid wraps panels into rows of 2 from 3 panels.</p>
       <div class="row">
         <label class="f">Figure width (in)<input type="number" step="0.1" min="2" id="o-wfW" data-opt="wfW"></label>
       </div>
@@ -4926,6 +4929,7 @@ function render(){
   /* More options shows when this step has settings to offer */
   { const mo = $('#moreOpts'), any = PROJ && [...document.querySelectorAll('#panel > .optsec')].some(x => !x.hidden); mo.hidden = !any; $('#moreBtn').textContent = document.body.classList.contains('moreopen') ? 'Fewer options' : 'More options'; $('#moreBtn').setAttribute('aria-expanded', document.body.classList.contains('moreopen')); $('#moreWhat').hidden = document.body.classList.contains('moreopen'); }
   renderSec(); renderProt(); renderPrep(); renderND(); grpStatus(); moreSync(); renderNext(); renderWfTool();
+  { const gh = $('#wfGridHint'); if (gh) gh.hidden = opt.wfLayout !== 'grid'; }
   { const lab = id => { const e = $(id); return e && e.closest('label'); }, side = opt.gelPos === 'right', full = opt.gelView === 'full';
     [['#o-gelAlign', side], ['#o-gelSide', !side], ['#o-gelFocusKda', full], ['#o-gelSpan', full]].forEach(([id, hide]) => { const l = lab(id); if (l) l.hidden = hide; }); }
   { const fi = $('#gelFocusInfo'), r0 = kind === 'run' && f ? f.run : null, gl = r0 ? gelsFor(r0) : kind === 'workflow' ? gels : [], g0 = gl.find(x => x._focus);
@@ -5408,10 +5412,11 @@ function renderWfTool(){
       + (!it.noW && row ? `<span class="wfg"><span class="wfl">Width</span><button type="button" class="mini" data-wf="w:-1" aria-label="Narrower">−</button><button type="button" class="mini" data-wf="w:1" aria-label="Wider">+</button></span>` : '')
       + (it.gel ? `<span class="wfg"><span class="wfl">Gel</span><button type="button" class="mini" data-wf="gz:-1" aria-label="Smaller gel">−</button><button type="button" class="mini" data-wf="gz:1" aria-label="Larger gel">+</button></span>` : '')
       + (it.kind === 'run' ? `<label class="check" style="margin-right:12px; margin-left:6px;"><input type="checkbox" data-wfz="1" ${it.zoom ? 'checked' : ''}> Show Inset View</label>` : '')
-      + `<button type="button" class="mini" data-wf="reset">Reset position</button><button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button>`; }
+      + `<button type="button" class="mini" data-wf="reset">Reset position</button><button type="button" class="mini" data-wf="edit">Edit step</button><button type="button" class="mini" data-wf="close" aria-label="Close">Done</button><span class="wfhint">Drag to move, Reset position to undo</span>`; }
   const rb = tool.querySelector('[data-wf=reset]'); if (rb) rb.disabled = !(it.ox || it.oy);
-  tool.hidden = false; const th = tool.offsetHeight, tw = tool.offsetWidth, ww = wrap.clientWidth;
-  let top = a.y - wr.top - th - 8; if (top < 4) top = b.y - wr.top + 8; let left = Math.min(Math.max(4, a.x - wr.left - 4), Math.max(4, ww - tw - 4));
+  tool.hidden = false; const th = tool.offsetHeight, tw = tool.offsetWidth, ww = wrap.clientWidth, wh = wrap.clientHeight;
+  let top = a.y - wr.top - th - 8; if (top < 4) top = b.y - wr.top + 8; if (top + th > wh - 4) top = Math.max(4, wh - th - 4);
+  let left = Math.min(Math.max(4, a.x - wr.left - 4), Math.max(4, ww - tw - 4));
   Object.assign(tool.style, {left: left + 'px', top: top + 'px'}); }
 $('#wfTool').addEventListener('input', e => { const it = wfItem(wfSel); if (!it) return; if (e.target.id === 'wfT') wfSet(it, 'title', e.target.value); else if (e.target.id === 'wfA') wfSet(it, 'arrow', e.target.value); else if (e.target.dataset.wfz) wfSet(it, 'zoom', e.target.checked); });
 $('#wfTool').addEventListener('keydown', e => { if (e.key === 'Escape' || (e.key === 'Enter' && e.target.tagName === 'INPUT')) { wfSel = null; renderWfTool(); } });
