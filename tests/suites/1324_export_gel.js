@@ -1,7 +1,8 @@
 const {open, suite, fs, path, RES} = require('../lib/harness');
 
-/* #1324: project export used to turn PNG gel images over 12 million data-URL characters into JPEGs.
-   The displayed densitometry must nevertheless survive an export/import archive round trip exactly. */
+/* #1324, #1426: project export used to turn PNG gel images over 12 million data-URL characters into JPEGs, and the
+   displayed band areas and purity then changed after export and import. The export is now always PNG, and the
+   displayed densitometry must survive the round trip exactly. */
 const project = image => ({
   app: 'HPLC Figure Bench', version: 1, quick: true, runs: [], traces: [], cur: 'g1',
   gels: [{
@@ -59,7 +60,7 @@ async function displayedDensitometry(p) {
     const [download] = await Promise.all([first.p.waitForEvent('download', {timeout: 20000}), first.p.click('#projSave')]);
     saved = path.join(RES, '1324-export-gel-' + Date.now() + '.json'); await download.saveAs(saved);
     const exported = JSON.parse(fs.readFileSync(saved, 'utf8'));
-    T.check('export exercises JPEG fallback', /^data:image\/jpeg/.test(exported.gels[0].image || ''), (exported.gels[0].image || '').slice(0, 40));
+    T.check('an oversized gel is exported as PNG, not a JPEG copy', /^data:image\/png/.test(exported.gels[0].image || ''), (exported.gels[0].image || '').slice(0, 40));
     const sourceErrors = first.errs.slice(); await first.close(); first = null;
 
     fresh = await open(); await fresh.p.click('#homeQuick');

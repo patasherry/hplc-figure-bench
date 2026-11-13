@@ -6736,7 +6736,8 @@ $('#nextHide').addEventListener('click', () => { const k = $('#nextBar').dataset
 const plain = o => { const out = {}; Object.keys(o).forEach(k => { if (k[0] === '_' || typeof o[k] === 'function') return; if ((k === 'injX' || k === 'injShift' || k === 'pathFromFile') && !Object.prototype.hasOwnProperty.call(o, k)) return; out[k] = o[k]; }); return out; };
 function projectData(){
   const gs = gels.map(g => { const o = plain(g); ['src', 'thumb', 'out', 'pix', 'hist', 'crop', 'cropPrev', 'bandHist'].forEach(k => delete o[k]);
-    let img = g._img || ''; if (!img) { try { img = g.src.toDataURL('image/png'); if (img.length > 12e6) img = g.src.toDataURL('image/jpeg', 0.95); g._img = img; } catch (e) {} } o.image = img; delete o.imageId; return o; });
+    let img = g._img || ''; if (!img) { try { /* always PNG: a JPEG copy of a large gel read differently after export and import (#1324, #1426). JPEG only if the browser cannot make the PNG. */
+      img = g.src.toDataURL('image/png'); if (img.length < 100) img = g.src.toDataURL('image/jpeg', 0.95); g._img = img; } catch (e) {} } o.image = img; delete o.imageId; return o; });
   /* upload ids belong to one saved project, so a file never carries them */
   const noId = (o, k) => { const c = plain(o); delete c[k]; return c; };
   /* The name shown to the user is Protein Purification Bench. This schema field stays 'HPLC Figure Bench' for good:
