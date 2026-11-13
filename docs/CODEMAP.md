@@ -164,6 +164,15 @@
 - `ndSamples`: Array of NanoDrop spectrum/concentration readings:
   - `[{ id, name, conc, a280, a260, r280_260, runId, pool, spec: { wl: [...], abs: [...] }, specId }]`
 
+### `prep.cloning` (Cloning workflow engine, section `cloning workflow: stages, attempts and lineage`)
+- `type`: `''` (not specified, every project saved before #1402), `'cloning'` or `'expression'`
+- `tpl`: key of `CL_TPL` (`ath`, `hifi`, `pcr`, `custom`) or `''`
+- `stages`: ordered array of `{id: 's3', kind, name, skip, at: [...]}`, where `kind` is a key of `CL_KIND`
+- `stages[].at`: attempts, `{id: 'a4', st, from, f: {...}, ck: {...}}`. `st` is a key of `CL_ST`, `from` is the id of the attempt it comes from, `f` holds the typed field values (plus `_d` date, `_op` operator, `_dev` deviations, `_n` notes) and `ck` the ticked checklist items
+- `ext`: `{src, ver, note}`, where the plasmid came from when cloning was not recorded here
+- **To add a stage or a field, edit data only.** `CL_KIND[kind]` holds `t` (title), `from` (stage kinds an attempt may come from), `fromMsg` and `need` (what a completed attempt must have), `ck` (checklist), `ref` (reference lines), `f` (fields as `key:Label:type:extra`) and `rule` (returns a flag text or `''`). `CL_TPL[key].s` lists a template's stage kinds, optionally as `[kind, 'Name']`. The engine (`clPanelHtml`, `clSteps`, `clFlags`, `clLineage`, `canonCloning`) needs no change for that.
+- Step keys are `clone:setup` and `clone:<stage id>`. The panel is `#clonePanel`, shown on cloning steps and, for the plasmid-source record, on the Transformation step.
+
 ### `construct` and `primer` (Cloning Lineage & Design Schemas)
 - `CONSTRUCT_SCHEMA` / `makeConstruct(props)`:
   - `id`: Unique construct string ID (e.g. `'c1'`)

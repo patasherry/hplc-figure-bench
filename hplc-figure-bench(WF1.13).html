@@ -62,6 +62,15 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .home-alt{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .projbar{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 260px}
 .projbar .pb-sep{color:var(--line2);font-size:18px} .projbar .pb-lab{color:var(--muted);font-size:12.5px;white-space:nowrap}
+.np-type{grid-column:1/-1;border:0;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center} .np-type legend{float:left;padding:0;margin-right:6px;font-size:13px;color:var(--muted)}
+.projtype{font:inherit;font-size:12.5px;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:var(--r-s);padding:2px 4px;min-width:0;flex:0 1 auto;max-width:24ch} .clone:empty{display:none} .clone .cl-type{display:none}
+@media (max-width:640px){.projtype{display:none} .clone .cl-type{display:grid}}
+.clone .cl-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px 10px;padding-top:9px} .clone .cl-wide{grid-column:1/-1}
+.clone .cl-at{border:1px solid var(--line);border-radius:var(--r-s);padding:7px 10px} .clone .cl-at > summary{cursor:pointer;display:flex;gap:8px;align-items:center;font-size:13px}
+.clone .cl-badge{font-size:11.5px;border:1px solid var(--line2);border-radius:999px;padding:1px 8px;color:var(--muted)} .clone .cl-badge.cl-fail,.clone .cl-badge.cl-review{border-color:var(--warn);color:var(--warn)} .clone .cl-badge.cl-done,.clone .cl-badge.cl-dev{color:var(--ink);font-weight:600}
+.clone .cl-acts,.clone .cl-tpls{display:flex;flex-wrap:wrap;gap:6px;align-items:center} .clone .cl-acts .sp{flex:1 1 auto} .clone .cl-ck{display:grid;gap:5px}
+.clone .cl-flag{margin:0;font-size:12.5px;color:var(--warn);line-height:1.45} .clone .cl-seq{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
+.clone .cl-lin{margin:0;font:inherit;font-size:12px;line-height:1.5;white-space:pre-wrap;color:var(--muted);border:1px solid var(--line);border-radius:var(--r-s);padding:8px 10px;max-height:260px;overflow:auto}
 .projname{font:inherit;font-size:16px;font-weight:600;border:1px solid transparent;background:transparent;color:var(--ink);padding:3px 6px;border-radius:var(--r-s);min-width:0;flex:0 1 26ch}
 .projname:hover{border-color:var(--line)} .projname:focus{outline:none;border-color:var(--accent);background:var(--field)}
 .savestate{color:var(--muted);font-size:12.5px;white-space:nowrap}
@@ -522,6 +531,7 @@ button,input,select,textarea{font-family:inherit}
   <div class="projbar" id="projBar" hidden>
     <span class="pb-sep" aria-hidden="true">/</span><label for="projName" class="pb-lab">Project name</label>
     <input type="text" id="projName" class="projname" aria-label="Project name" placeholder="Project name" spellcheck="false">
+    <select id="projType" class="projtype" aria-label="Workflow type" title="Whether this project includes cloning. Changing it never deletes a record."><option value="">Workflow type not specified</option><option value="cloning">Starts with cloning</option><option value="expression">Starts with expression</option></select>
     <span class="savestate" id="saveState" role="status" aria-live="polite"></span>
     <details class="rawfiles" id="rawPanel" hidden><summary id="rawSum">Raw files</summary><div class="rawlist" id="rawList"></div></details>
   </div>
@@ -543,6 +553,10 @@ button,input,select,textarea{font-family:inherit}
     <label class="f">Project name<input type="text" id="npName" required placeholder="e.g. KPP-MM, prep 3" spellcheck="false"></label>
     <label class="f">Protein<input type="text" id="npProt" placeholder="e.g. KPP-MM" spellcheck="false"></label>
     <button class="btn primary" type="submit">Start project</button>
+    <fieldset class="np-type" id="npType"><legend>Does this project include cloning?</legend>
+      <label class="check"><input type="radio" name="npType" id="npTypeC" value="cloning" required>Yes, start with cloning</label>
+      <label class="check"><input type="radio" name="npType" id="npTypeE" value="expression" required>No, start with expression</label>
+    </fieldset>
   </form>
   <div class="projlist" id="projList" aria-live="polite"></div>
   <p class="home-where" id="homeWhere"></p>
@@ -593,6 +607,7 @@ button,input,select,textarea{font-family:inherit}
       <div class="traces" id="list"></div>
     </section>
 
+    <section class="grp clone" id="clonePanel" data-for="none" data-step="clone transform"></section>
     <section class="grp" id="protPanel" data-step="construct">
       <h2>Protein</h2>
       <label class="f">PDB entry<span class="joined"><input type="text" id="pdbCode" maxlength="4" placeholder="e.g. 3PFN" autocomplete="off" spellcheck="false" aria-label="PDB code"><button type="button" class="btn" id="pdbGet">Load</button></span></label>
@@ -4208,7 +4223,9 @@ const PREP_DEF = {on: true, construct: true, expr: true, lysis: true, name: '', 
   cleave: false, cleaveAfter: '', protease: '', ratio: '', clvTemp: '', clvTime: '', dialBuffer: '', mwco: '', dialVol: '', dialChanges: '', store: '',
   trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', clones: [], selectedCloneId: null, exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {},
   constructs: [], primers: [], parentConstructId: null, derivedConstructIds: [],
-  cMethod: 'plasmid', cEnz: '', cOverlap: '', cRecomb: '', cDetails: { digest: {}, overlap: {}, recomb: {} }};
+  cMethod: 'plasmid', cEnz: '', cOverlap: '', cRecomb: '', cDetails: { digest: {}, overlap: {}, recomb: {} },
+  /* the cloning workflow (#1402): type is '' until the user says whether the project includes cloning; older projects load with '' */
+  cloning: {type: '', tpl: '', stages: [], ext: {src: '', ver: '', note: ''}}};
 let prep = JSON.parse(JSON.stringify(PREP_DEF));
 const PREP_LANE = ['expr', 'lysis', 'cleave'], PREP_NAME = {construct: 'Construct', expr: 'Expression', lysis: 'Lysis', cleave: 'Dialysis and cleavage'}, prepObj = {};
 const hasTxt = v => String(v == null ? '' : v).trim() !== '';
@@ -4901,7 +4918,7 @@ function render(){
   { const g = curGel(), ls = $('#ladderStatus'); if (ls) ls.textContent = g ? (g.ladderMsg || '') : ''; if (g) stepStatus(g); }
   document.querySelectorAll('[data-for]').forEach(el => { el.hidden = !el.dataset.for.split(' ').includes(kind); });
   /* in a project the panel shows only what the current step needs */
-  if (PROJ) { const sk = curStep.startsWith('btw:') && (kind === 'run' || kind === 'conc') ? 'btw' : kind === 'step' ? (isManId(f.step) ? 'man' : f.step) : kind === 'run' ? 'run' : kind === 'gel' ? 'gel' : curStep === 'final' ? 'final' : 'figure';
+  if (PROJ) { const sk = curStep.startsWith('clone:') ? 'clone' : curStep.startsWith('btw:') && (kind === 'run' || kind === 'conc') ? 'btw' : kind === 'step' ? (isManId(f.step) ? 'man' : f.step) : kind === 'run' ? 'run' : kind === 'gel' ? 'gel' : curStep === 'final' ? 'final' : 'figure';
     document.querySelectorAll('#panel [data-step]').forEach(el => { if (el.closest('#stepsPanel, #stepSheet')) return; el.hidden = !el.dataset.step.split(' ').includes(sk); });
     document.querySelectorAll('#prepPanel details.sub').forEach(d => { d.hidden = ({pcon: 'construct', ptr: 'transform', pexp: 'expr', plys: 'lysis', pclv: 'cleave', pbtw: 'btw', pman: 'man', pfin: 'final'})[d.dataset.sub] !== sk; if (!d.hidden) d.open = true; });
     if (sk === 'btw') syncBtw(); if (sk === 'man') syncMan(); document.querySelectorAll('#prepPanel > p.hint, #prepPanel > details.tip').forEach(x => { x.hidden = true; }); }
@@ -6745,7 +6762,7 @@ function cleanProject(d){
     if (!Array.isArray(d.prep.derivedConstructIds)) d.prep.derivedConstructIds = [];
     if (!d.prep.cMethod) d.prep.cMethod = 'plasmid';
     if (!d.prep.cDetails || typeof d.prep.cDetails !== 'object') d.prep.cDetails = { digest: {}, overlap: {}, recomb: {} };
-    canonClones(d.prep);
+    canonClones(d.prep); canonCloning(d.prep);
   }
   return skipped; }
 async function openProject(data, name, noUndo){
@@ -6770,7 +6787,7 @@ async function openProject(data, name, noUndo){
   toast(`Opened ${name || 'project'}: ${runs.length} run${runs.length === 1 ? '' : 's'}, ${traces.length} trace${traces.length === 1 ? '' : 's'}, ${gels.length} gel${gels.length === 1 ? '' : 's'}${skipped ? `. Skipped ${skipped} damaged or incomplete item${skipped === 1 ? '' : 's'} in the file` : ''}`);
   nextHidden.delete('undoOpen'); renderNext();
 }
-$('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex) && !prep.gb && !cleanSeq(opt.protSeq) && !prep.name && !prep.parentConstructId && !(prep.constructs && prep.constructs.length) && !prep.cEnz && !prep.cOverlap && !prep.cRecomb) { toast('Load some data first'); return; }
+$('#projSave').addEventListener('click', () => { if (!runs.length && !gels.length && !struct && !traces.some(t => !t.ex) && !prep.gb && !cleanSeq(opt.protSeq) && !prep.name && !prep.parentConstructId && !(prep.constructs && prep.constructs.length) && !prep.cEnz && !prep.cOverlap && !prep.cRecomb && !CL().stages.length) { toast('Load some data first'); return; }
   const nm = (runs[0] && runs[0].name) || (gels[0] && gels[0].name) || (traces.find(t => !t.ex) || {}).name || 'figures'; const d = projectData(); if (MODE === 'quick') d.quick = true; saveFile(`${safe(nm)}_project.json`, JSON.stringify(d)); });
 $('#projOpen').addEventListener('click', () => $('#projFile').click());
 $('#projFile').addEventListener('change', async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; let data;
@@ -6920,7 +6937,7 @@ function writePending(){ if (!PROJ || !isDirty(PROJ) || PROJ.blocked) return; co
   try { localStorage.setItem(PEND(PROJ.id), JSON.stringify({t: Date.now(), rev: PROJ.rev, name: PROJ.name, prep, o: Object.fromEntries(QKEYS.concat(['tagPreset', 'tagPos']).map(k => [k, opt[k]])), runIds: runs.map(r => r.id), gelIds: gels.map(g => g.id), runNames: runs.map(r => r.name), runs: runs.map(light), gels: gels.map(g => { const o = plain(g); ['src', 'thumb', 'out', 'pix', 'hist', 'crop', 'cropPrev', 'bandHist', 'image'].forEach(k => delete o[k]); return o; })})); } catch (e) {} }
 function applyPending(P, meta){ let pd = null; try { pd = JSON.parse(localStorage.getItem(PEND(P.id)) || 'null'); } catch (e) {} if (!pd) return false;
   if ((pd.rev || 0) < (P.rev || 0) || pd.t < (meta.updated || 0)) { try { localStorage.removeItem(PEND(P.id)); } catch (e) {} return false; }
-  P.name = pd.name || P.name; if (pd.prep && typeof pd.prep === 'object') { prep = Object.assign(prep, pd.prep); canonClones(prep); }
+  P.name = pd.name || P.name; if (pd.prep && typeof pd.prep === 'object') { prep = Object.assign(prep, pd.prep); canonClones(prep); canonCloning(prep); }
   if (pd.o && typeof pd.o === 'object') Object.keys(pd.o).forEach(k => { if (QKEYS.includes(k) || k === 'tagPreset' || k === 'tagPos') opt[k] = pd.o[k]; });
   /* runs and gels removed just before closing stay removed; runs loaded in those seconds were never uploaded and are named so they can be loaded again */
   if (Array.isArray(pd.runIds)) { runs = runs.filter(r => pd.runIds.includes(r.id)); const miss = pd.runIds.map((id, i) => runs.some(r => r.id === id) ? '' : (pd.runNames || [])[i] || id).filter(Boolean); if (miss.length) setTimeout(() => toast(`Load ${miss.join(', ')} again: ${miss.length === 1 ? 'it was' : 'they were'} added just before the page closed`), 400); }
@@ -7051,9 +7068,10 @@ function enterApp(){ $('#home').hidden = true; document.querySelector('.app').hi
 function resetWorkspace(){ rawFiles = []; runs = []; traces = []; gels = []; struct = null; ndSamples = []; srcDiag = {}; prep = JSON.parse(JSON.stringify(PREP_DEF)); prep.on = true;
   QKEYS.forEach(k => { opt[k] = DEF[k]; }); cur = 'overlay'; marking = null; tagMode = ''; nextHidden.clear(); projUndo = null; }
 const newPid = () => 'p-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-async function newProject(name, protein){
+async function newProject(name, protein, type){
   await leaveWorkspace(); resetWorkspace(); opt.targetName = String(protein || '').trim(); PROJ = mkProj(newPid(), name, Date.now());
-  MODE = 'proj'; enterApp(); applyProjUI(); renderList(); selectStep('construct'); await flushSave(true);
+  CL().type = type === 'cloning' || type === 'expression' ? type : '';
+  MODE = 'proj'; enterApp(); applyProjUI(); renderList(); selectStep(CL().type === 'cloning' ? 'clone:setup' : 'construct'); await flushSave(true);
 }
 let opening = 0;
 async function openStoredProject(id){
@@ -7070,7 +7088,8 @@ async function openStoredProject(id){
     const n = lostCount(P); setSaveState(n ? `${n} item${n === 1 ? '' : 's'} did not load. ${n === 1 ? 'It is' : 'They are'} kept, so reopen the project later` : STORE.mode === 'cloud' ? 'Saved' : 'Saved in this browser', !!n); }
   catch (e) { if (my !== opening) return; console.warn('open failed', e); toast('Could not open that project'); showHome(); }
 }
-$('#newProj').addEventListener('submit', e => { e.preventDefault(); newProject($('#npName').value, $('#npProt').value); $('#npName').value = ''; $('#npProt').value = ''; });
+$('#newProj').addEventListener('submit', e => { e.preventDefault(); const ty = document.querySelector('#newProj input[name=npType]:checked'); if (!ty) return;
+  newProject($('#npName').value, $('#npProt').value, ty.value); $('#npName').value = ''; $('#npProt').value = ''; ty.checked = false; });
 $('#homeQuick').addEventListener('click', async () => { await leaveWorkspace(); MODE = 'quick'; enterApp();
   if (QUICK) { ({runs, traces, gels, struct, ndSamples, prep} = QUICK); QKEYS.forEach(k => { opt[k] = QUICK.o[k]; }); cur = QUICK.cur; QUICK = null; }
   else { if (runs.length || gels.length || struct || traces.some(t => !t.ex)) resetWorkspace(); if (!traces.length) exampleTraces(); cur = figures()[0] ? figures()[0].id : 'overlay'; }
@@ -7085,10 +7104,195 @@ function applyProjUI(){
   const inP = !!PROJ; $('#projBar').hidden = !inP; $('#homeBtn').hidden = MODE === 'home'; $('#quickSave').hidden = MODE !== 'quick';
   $('#projOpen').hidden = MODE === 'home'; $('#projSave').hidden = MODE === 'home';
   $('#stepsPanel').hidden = !inP; $('#stepSheet').hidden = !inP; $('#stepFoot').hidden = !inP;
-  if (inP) { const n = $('#projName'); if (n !== document.activeElement) n.value = PROJ.name; } document.body.classList.toggle('proj', inP); renderRaw();
+  if (inP) { const n = $('#projName'); if (n !== document.activeElement) n.value = PROJ.name; syncCloneType(); clHtml = ''; } document.body.classList.toggle('proj', inP); renderRaw();
 }
 addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && PROJ) { writePending(); flushSave(); } });
 
+/* ---------- cloning workflow: stages, attempts and lineage ---------- */
+/* One engine draws every cloning stage (Patrick's request on #222, issue #1402). A stage kind is data: a title, the stage
+   kinds an attempt may come from, a checklist, reference lines and fields written 'key:Label:type:extra' (t text, n a
+   number with its unit, d date, a long text, q sequence, s a select with a/b/c options, g a gel of this project, b a
+   competent-cell batch, c a tick box). A template is a list of stage kinds. Nothing here calculates or fills in a value:
+   every entry is typed by the user and kept as typed, and a rule only ever flags a record. A failed attempt stays. */
+const CL_ST = {todo: 'Not started', doing: 'In progress', done: 'Completed', dev: 'Completed with deviation', fail: 'Failed', rep: 'Repeated', skip: 'Skipped', review: 'Requires review'}, CL_OK = s => s === 'done' || s === 'dev';
+const CL_KIND = {
+  design: {t: 'Construct design', f: 'construct:Construct name and ID;target:Project or protein target;insert:Gene or insert name;organism:Source organism;template:Template type and ID;insertSeq:Insert sequence:q;vector:Vector name and backbone ID;vectorSeq:Vector sequence:q;method:Cloning method:s:Restriction digest and ligation/Gibson Assembly/NEBuilder HiFi or other homology-based assembly/Golden Gate assembly/TA or blunt-end PCR cloning/Gateway cloning/Site-directed mutagenesis/Synthetic gene or fragment insertion/Custom;expLen:Expected final construct length:n:bp;frame:Expected insert orientation and reading frame;junctions:Expected junctions:a'},
+  design_mut: {t: 'Construct and mutation design', f: 'parent:Parent plasmid;parentSeq:Parent plasmid sequence:q;mutType:Mutation type:s:Substitution/Insertion/Deletion/Other;pos:Mutation position;codonFrom:Original codon;codonTo:Replacement codon;expLen:Expected plasmid length:n:bp'},
+  design_hifi: {t: 'gBlock and final-construct design', f: 'gblock:gBlock name;gblockSeq:gBlock sequence:q;gblockLen:gBlock length:n:bp;vector:pDEST vector;vectorSeq:Vector sequence:q;finalSeq:Expected final sequence:q;finalLen:Expected final length:n:bp;overlaps:Assembly overlaps:a'},
+  primers: {t: 'Forward and reverse primer design', f: 'fName:Forward primer name;fSeq:Forward primer, full sequence:q;fBind:Forward, template-binding part:q;fAdd:Forward, added 5′ sequence:q;fTm:Forward melting temperature:n:°C;fGC:Forward GC content:n:%;rName:Reverse primer name;rSeq:Reverse primer, full sequence:q;rBind:Reverse, template-binding part:q;rAdd:Reverse, added 5′ sequence:q;rTm:Reverse melting temperature:n:°C;rGC:Reverse GC content:n:%;amplicon:Expected amplicon length:n:bp;qc:Quality checks (hairpins, dimers, specificity):a'},
+  primer_prep: {t: 'Primer ordering, resuspension and working stocks', from: ['primers'], f: 'vendor:Vendor;order:Order number;grade:Purification grade:s:Desalted/Cartridge/HPLC/PAGE/Other;received:Date received:d;resusp:Resuspension buffer and volume;stock:Stock concentration:n:µM;working:Working concentration:n:µM;loc:Storage location'},
+  pcr_setup: {t: 'Q5 PCR setup', from: ['primers', 'primer_prep', 'design', 'design_mut', 'design_hifi'], f: 'template:Template identity;tplAmt:Template concentration and amount;fPrimer:Forward primer;rPrimer:Reverse primer;pol:Polymerase or master mix;vol:Reaction volume:n:µL;reps:Number of replicates:n;additives:Additives;pos:Positive control;ntc:No-template control;expSize:Expected amplicon size:n:bp'},
+  cycler: {t: 'Thermocycler program', from: ['pcr_setup'], f: 'initDen:Initial denaturation (temperature and time);cycles:Cycle count:n;den:Denaturation (temperature and time);anneal:Annealing temperature:n:°C;annealT:Annealing time;ext:Extension (temperature and time);finalExt:Final extension;hold:Hold temperature'},
+  gradient: {t: 'Gradient PCR', from: ['pcr_setup'], f: 'low:Lowest annealing temperature:n:°C;high:Highest annealing temperature:n:°C;wells:Annealing temperature of each tube:a;cycles:Cycle count:n;ext:Extension (temperature and time)'},
+  gel: {t: 'Agarose-gel verification', from: ['pcr_setup', 'cycler', 'gradient', 'screen'], f: 'gel:Gel image:g;lanes:Lane assignment:a;ladder:Ladder;pct:Agarose:n:%;expSize:Expected band size:n:bp;obsSize:Observed band size:n:bp;band:Band:s:Present/Absent;bands:Band pattern:s:Single band/Multiple bands;yield:Approximate yield or concentration'},
+  pick: {t: 'Selection of successful PCR product', from: ['gel'], fromMsg: 'A selected product must come from a gel record', need: [['lane', 'A selected product must name its gel lane']], f: 'lane:Gel lane of the selected product;product:Selected reaction or product ID;pooled:Reactions pooled together;pooledId:Pooled product ID;reason:Why this product'},
+  dpni: {t: 'DpnI treatment (optional)', from: ['pick'], f: 'input:PCR product treated;vol:DpnI volume:n:µL;inc:Incubation (temperature and time);lot:Lot number'},
+  cleanup: {t: 'PCR cleanup', from: ['pick', 'dpni', 'gel'], f: 'method:Cleanup method:s:Spin column/Gel extraction/Magnetic beads/Other;kit:Kit and lot;eluBuf:Elution solution;eluVol:Elution volume:n:µL;recovery:Recovery'},
+  dnaq: {t: 'DNA concentration and purity', from: ['cleanup', 'pick', 'miniprep'], f: 'sample:Sample measured;conc:DNA concentration:n:ng/µL;r280:A260/A280:n;r230:A260/A230:n;instrument:Instrument'},
+  vector_prep: {t: 'Vector preparation', f: 'source:Vector source;how:Linearization method;enz:Restriction enzymes or PCR primers;expSize:Expected linearized size:n:bp;dephos:Dephosphorylated:s:Yes/No;cleanup:Cleanup method;conc:Final concentration:n:ng/µL;gel:Gel evidence:g'},
+  kld: {t: 'KLD treatment', from: ['pick'], fromMsg: 'A KLD reaction must name the PCR product it used', f: 'inVol:PCR product volume:n:µL;buffer:KLD reaction buffer volume:n:µL;enz:KLD enzyme mix volume:n:µL;total:Total reaction volume:n:µL;inc:Incubation (temperature and time);lot:Kit lot number'},
+  hifi: {t: 'HiFi assembly', from: ['dnaq', 'cleanup', 'pick'], fromMsg: 'A HiFi assembly must name its input DNA', f: 'backbone:Backbone fragment;bbLen:Backbone length:n:bp;bbConc:Backbone concentration:n:ng/µL;bbMass:Backbone mass used:n:ng;bbVol:Backbone volume:n:µL;insert:Insert fragment;insLen:Insert length:n:bp;insConc:Insert concentration:n:ng/µL;insMass:Insert mass used:n:ng;insVol:Insert volume:n:µL;ratio:Insert to vector molar ratio;mix:Master mix and lot;total:Total reaction volume:n:µL;inc:Incubation (temperature and time);controls:Controls'},
+  assembly: {t: 'DNA assembly or ligation', from: ['cleanup', 'pick', 'vector_prep', 'dnaq'], fromMsg: 'An assembly must name its input DNA', f: 'method:Assembly method;vector:Vector input;inserts:Insert inputs, with lengths:a;conc:Input concentrations:a;ratio:Molar ratios;total:Reaction volume:n:µL;kit:Reagent or kit, and lot;inc:Incubation program;controls:Controls;outcome:Outcome'},
+  transform: {t: 'Chemical transformation', from: ['kld', 'hifi', 'assembly', 'miniprep'], fromMsg: 'A transformation must name the reaction it used', need: [['cells', 'A transformation must name the competent-cell batch and aliquot used']], f: 'dna:DNA volume used:n:µL;host:Host strain;cells:Competent-cell batch and aliquot:b;method:Transformation method:s:Heat shock/Electroporation/Other;recovery:Recovery medium and time;antibiotic:Selection antibiotic;plate:Plate ID;plated:Dilution and volume plated;inc:Incubation conditions;colonies:Colony count:n;ctrl:Control-plate result'},
+  colony: {t: 'Colony selection', from: ['transform'], fromMsg: 'A colony must name its transformation', need: [['plate', 'A colony must name its plate']], f: 'plate:Source plate;ids:Colony IDs picked:a;where:Colony locations;n:Number picked:n'},
+  screen: {t: 'Colony screening', from: ['transform', 'colony'], fromMsg: 'A screened colony must name its transformation', f: 'ids:Colony or clone IDs:a;plate:Source plate;method:Screening method:s:Colony PCR/Restriction digest/Other;primers:Colony-PCR primers;expected:Expected result;observed:Observed band sizes;digest:Restriction-digest result;gel:Screening gel:g;result:Result:s:Positive/Negative/Inconclusive;kept:Colonies retained;stock:Linked culture or glycerol stock'},
+  culture: {t: 'Overnight culture', from: ['colony', 'screen'], f: 'colony:Colony ID;medium:Medium;antibiotic:Antibiotic;vol:Culture volume:n:mL;temp:Temperature:n:°C;time:Duration;id:Culture ID'},
+  glycerol: {t: 'Glycerol-stock creation', from: ['culture'], f: 'id:Glycerol stock ID;pct:Final glycerol:n:%;loc:Freezer and box location'},
+  miniprep: {t: 'Miniprep', from: ['culture', 'colony', 'screen'], fromMsg: 'A miniprep must name its source culture or colony',
+    ck: ['Culture selection and pelleting', 'Resuspension with P1', 'Alkaline lysis with P2', 'Neutralization with N3', 'Lysate clarification', 'Column binding', 'Column washing', 'Column drying', 'DNA elution', 'DNA concentration and purity measurement', 'Plasmid storage or sequencing submission'],
+    ref: ['P1: 50 mM Tris, pH 8.0; 10 mM EDTA; 100 µg/mL RNase A; 43 µg/mL thymolphthalein', 'P2: 200 mM NaOH; 1% SDS', 'N3: 4.2 M guanidinium hydrochloride; 0.9 M potassium acetate, pH 4.8. Requires review: the source recipe had an incomplete entry.'],
+    f: 'colony:Source colony and culture;cultVol:Culture volume:n:mL;spin:Centrifugation conditions;p1:P1 volume:n:µL;p2:P2 volume:n:µL;n3:N3 volume:n:µL;washes:Wash steps and volumes;elu:Elution solution;eluVol:Elution volume:n:µL;conc:Final DNA concentration:n:ng/µL;r280:A260/A280:n;r230:A260/A230:n;sampleId:Final sample ID;loc:Storage location;seqSub:Sequencing submission'},
+  seq: {t: 'Sequencing and alignment', from: ['miniprep'], fromMsg: 'A sequencing record must name the plasmid prep it used', f: 'provider:Sequencing provider;method:Sequencing method;primers:Sequencing primers;order:Order number;file:Sequencing file names:a;aln:Alignment result:a;coverage:Coverage;expMut:Expected mutation:s:Present/Absent/Not applicable;unexpected:Unexpected mutations:a;reviewer:Reviewer;reviewed:Verification date:d'},
+  select: {t: 'Selection of a sequence-verified clone', from: ['seq'], fromMsg: 'A verified clone must name its sequencing record', f: 'clone:Clone ID;plasmid:Plasmid name;stock:Plasmid or glycerol-stock location;ver:Verification status:s:Sequence verified/Failed verification',
+    rule: (a, c) => CL_OK(a.st) && !c.stages.some(x => x.kind === 'seq' && x.at.some(y => CL_OK(y.st))) ? 'A verified clone needs a completed Sequencing record. Colony PCR, growth or a digest is not sequence verification.' : ''},
+  transfer: {t: 'Transfer to expression', from: ['select', 'miniprep'], f: 'plasmid:Plasmid used;clone:Clone ID;host:Expression host;marker:Selection marker and antibiotic;bypass:Proceeding without sequence verification:c',
+    rule: (a, c) => CL_OK(a.st) && !a.f.bypass && !c.stages.some(x => x.kind === 'select' && x.at.some(y => CL_OK(y.st) && y.f.ver === 'Sequence verified')) ? 'No sequence-verified clone is recorded. Tick "Proceeding without sequence verification" to record that it was bypassed.' : ''},
+  cc_starter: {t: 'Competent cells: starter culture', f: 'parent:Parent DH5α stock;id:Starter-culture ID;medium:Medium and volume', ref: ['Source procedure: DH5α cells in 5 mL sterile LB without antibiotics.']},
+  cc_sob: {t: 'Competent cells: SOB medium', f: 'batch:SOB batch ID;tryptone:Bacto tryptone:n:g;yeast:Yeast extract:n:g;naclHow:NaCl added as:s:Mass/Stock volume;nacl:NaCl amount, with unit;kclHow:KCl added as:s:Mass/Stock volume;kcl:KCl amount, with unit;mgcl:1 M MgCl₂:n:mL;mgso:1 M MgSO₄:n:mL;vol:Final volume:n:mL;ph:Final pH:n;sterile:Filter-sterilization record;storage:Storage',
+    ref: ['Source recipe for 200 mL: 4 g Bacto tryptone; 1 g yeast extract; 0.116 g NaCl or the same amount from a recorded stock; 0.038 g KCl or the same amount from a recorded stock; 2 mL of 1 M MgCl₂; 2 mL of 1 M MgSO₄; water to 200 mL; final pH between 6.0 and 7.0; filter sterilize.']},
+  cc_growth: {t: 'Competent cells: growth and harvest', from: ['cc_starter'],
+    ck: ['Pre-cool the centrifuge to 4 °C', 'Prepare the sterile culture flask and add SOB', 'Inoculate 200 mL SOB with 2 mL starter culture', 'Grow at 37 °C and record OD600 over time', 'Continue only when OD600 is between 0.4 and 0.6', 'Cool the culture for 10 minutes', 'Divide the culture among four 50 mL tubes', 'Centrifuge at 3,500 × g for 10 minutes'],
+    ref: ['Source note, requires safety and SOP review: the source includes an informal flask treatment using a microwave. It is not a validated sterilization method.'],
+    f: 'sob:SOB batch used;start:Growth start time;end:Growth end time;odLog:OD600 measurements over time:a;od:OD600 at harvest:n;harvVol:Harvest volume:n:mL;spin:Centrifuge settings',
+    rule: a => hasTxt(a.f.od) && isFinite(+a.f.od) && (+a.f.od < 0.4 || +a.f.od > 0.6) ? 'OD600 at harvest is outside 0.4 to 0.6' : ''},
+  cc_buffers: {t: 'Competent cells: wash and competent-cell buffers', f: 'kit:Kit name;reagents:Reagent names;lots:Lot numbers;vols:Preparation volumes;made:Preparation date:d;temp:Temperature;expiry:Expiration date:d;storage:Storage condition;washId:Wash-buffer batch ID;compId:Competent-buffer batch ID',
+    ref: ['Wash buffer (source): 10 mL of 2X wash buffer + 10 mL of 2X dilution buffer = 20 mL working wash buffer.', 'Competent-cell buffer (source): 10 mL of 2X competent buffer + 10 mL of dilution buffer = 20 mL working competent-cell buffer.', 'Keep both working buffers and the cells cold throughout.']},
+  cc_aliquot: {t: 'Competent cells: wash, resuspend and aliquot', from: ['cc_growth'],
+    ck: ['Resuspend each pellet gently in wash buffer', 'Repeat centrifugation', 'Resuspend each pellet gently in competent-cell buffer', 'Dispense 200 µL aliquots into labeled tubes', 'Store aliquots at −80 °C'],
+    ref: ['The source expects about 90 to 110 aliquots from this preparation.'],
+    f: 'washId:Wash-buffer batch;compId:Competent-buffer batch;resVol:Resuspension volume:n:mL;aliVol:Aliquot volume:n:µL;count:Number of aliquots produced:n;storeT:Storage temperature;loc:Freezer and box location'},
+  cc_batch: {t: 'Competent-cell batch', from: ['cc_aliquot'], fromMsg: 'A competent-cell batch must name its preparation', need: [['id', 'A batch needs a batch ID']], f: 'id:Batch ID;state:Batch state:s:Planned/In progress/Prepared/Testing pending/Qualified/Failed qualification/Contaminated/Depleted/Archived;contam:Contamination check;competency:Competency-test result;left:Aliquots remaining:n',
+    rule: a => a.f.state === 'Qualified' && !hasTxt(a.f.competency) ? 'A Qualified batch needs a recorded competency or transformation test. Producing aliquots is not enough.' : ''}
+};
+const CL_TPL = {
+  ath: {t: 'Around-the-Horn mutagenesis', s: ['design_mut', 'primers', 'primer_prep', 'pcr_setup', 'cycler', 'gel', 'pick', 'kld', 'transform', 'colony', 'culture', 'miniprep', 'seq', 'select', 'transfer']},
+  hifi: {t: 'gBlock-to-pDEST HiFi assembly', s: ['design_hifi', ['pcr_setup', 'pDEST backbone PCR'], 'gradient', ['gel', 'Agarose-gel analysis'], ['pick', 'Selection and pooling of successful PCR reactions'], 'dpni', 'cleanup', 'dnaq', 'hifi', 'transform', 'colony', 'culture', 'glycerol', 'miniprep', ['seq', 'Whole-plasmid sequencing'], 'select', 'transfer']},
+  pcr: {t: 'PCR-based plasmid cloning', s: ['design', ['primers', 'Primer design'], ['pcr_setup', 'PCR amplification'], ['gel', 'PCR product analysis'], ['cleanup', 'DNA cleanup or gel extraction'], 'vector_prep', 'assembly', ['transform', 'Transformation of a cloning strain'], 'screen', ['miniprep', 'Plasmid preparation'], ['seq', 'Sequence verification'], 'select', 'transfer']},
+  custom: {t: 'Custom cloning workflow', s: []}
+};
+const CL_CC = ['cc_starter', 'cc_sob', 'cc_growth', 'cc_buffers', 'cc_aliquot', 'cc_batch'], clHas = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+function canonCloning(pr){ const c = pr.cloning && typeof pr.cloning === 'object' && !Array.isArray(pr.cloning) ? pr.cloning : {}, str = v => v == null ? '' : String(v), obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {}, ids = new Set(), uq = v => { const s = str(v); return s && !ids.has(s) && ids.add(s) ? s : ''; };
+  c.type = c.type === 'cloning' || c.type === 'expression' ? c.type : ''; c.tpl = clHas(CL_TPL, c.tpl) ? c.tpl : '';
+  c.stages = (Array.isArray(c.stages) ? c.stages : []).filter(s => s && typeof s === 'object' && clHas(CL_KIND, s.kind)).map(s => ({id: uq(s.id), kind: s.kind, name: str(s.name), skip: !!s.skip,
+    at: (Array.isArray(s.at) ? s.at : []).filter(a => a && typeof a === 'object').map(a => ({id: uq(a.id), st: clHas(CL_ST, a.st) ? a.st : 'todo', from: str(a.from), f: obj(a.f), ck: obj(a.ck)})).filter(a => a.id)})).filter(s => s.id);
+  const e = obj(c.ext); c.ext = {src: str(e.src), ver: e.ver === 'yes' || e.ver === 'no' ? e.ver : '', note: str(e.note)};
+  pr.cloning = c; return pr; }
+const CL = () => (prep.cloning && Array.isArray(prep.cloning.stages) && prep.cloning.ext ? prep : canonCloning(prep)).cloning;
+const clFields = d => String(d.f || '').split(';').filter(Boolean).map(x => { const p = x.split(':'); return {k: p[0], l: p[1], ty: p[2] || 't', x: p[3] || ''}; });
+const clTitle = s => hasTxt(s.name) ? s.name.trim() : CL_KIND[s.kind].t;
+const clNextId = p => { let n = 0; CL().stages.forEach(s => { [s.id].concat(s.at.map(a => a.id)).forEach(v => { const m = /^[sa](\d+)$/.exec(v); if (m) n = Math.max(n, +m[1]); }); }); return p + (n + 1); };
+function clAddStage(kind, name, afterId){ const c = CL(), s = {id: clNextId('s'), kind, name: name || '', skip: false, at: []}; const i = afterId ? c.stages.findIndex(x => x.id === afterId) : -1;
+  if (i >= 0) c.stages.splice(i + 1, 0, s); else c.stages.push(s); s.at.push({id: clNextId('a'), st: 'todo', from: '', f: {}, ck: {}}); return s; }
+/* a template only ever adds the stages a project lacks: choosing another one never removes a record */
+function clApply(tpl){ const c = CL(); if (!clHas(CL_TPL, tpl)) return; c.tpl = tpl;
+  CL_TPL[tpl].s.forEach(x => { const k = Array.isArray(x) ? x[0] : x, nm = Array.isArray(x) ? x[1] : ''; if (!c.stages.some(s => s.kind === k)) clAddStage(k, nm); }); }
+/* every attempt of the stage kinds this kind may come from, for the Comes from list */
+function clSources(d){ const out = []; if (!d.from) return out; CL().stages.forEach(s => { if (d.from.includes(s.kind)) s.at.forEach((a, i) => out.push({a, lab: `${clTitle(s)}${s.at.length > 1 ? `, attempt ${i + 1}` : ''} (${CL_ST[a.st]})`})); }); return out; }
+function clFlags(s){ const d = CL_KIND[s.kind], c = CL(), out = [], all = c.stages.flatMap(x => x.at);
+  s.at.forEach((a, i) => { const lab = s.at.length > 1 ? `Attempt ${i + 1}: ` : '', src = all.find(x => x.id === a.from);
+    if (CL_OK(a.st) && d.fromMsg && !src) out.push(lab + d.fromMsg);
+    if (CL_OK(a.st) && src && src.st === 'fail') out.push(lab + 'It comes from a failed attempt');
+    if (CL_OK(a.st)) (d.need || []).forEach(([k, msg]) => { if (!hasTxt(a.f[k])) out.push(lab + msg); });
+    if (d.rule) { const m = d.rule(a, c); if (m) out.push(lab + m); } });
+  return out; }
+function clSummary(s){ const n = s.at.length, ok = s.at.filter(a => CL_OK(a.st)).length, bad = s.at.filter(a => a.st === 'fail').length;
+  return s.skip ? 'Skipped' : n > 1 ? `${n} attempts: ${ok} completed, ${bad} failed` : n ? CL_ST[s.at[0].st] : 'No attempt yet'; }
+function clSteps(){ const c = CL(); if (c.type !== 'cloning') return [];
+  const done = c.stages.filter(s => !s.skip && s.at.some(a => CL_OK(a.st))).length, live = c.stages.filter(s => !s.skip).length;
+  const L = [{k: 'clone:setup', g: 'Cloning', t: c.tpl ? CL_TPL[c.tpl].t : 'Cloning workflow', done: live > 0 && done === live, s: c.stages.length ? `${done} of ${live} stages completed` : 'Choose a cloning workflow'}];
+  c.stages.forEach(s => { const fl = s.skip ? [] : clFlags(s); L.push({k: 'clone:' + s.id, t: clTitle(s), sub: true, done: !s.skip && !fl.length && s.at.some(a => CL_OK(a.st)), warn: fl[0] || '', s: fl[0] || clSummary(s)}); });
+  return L; }
+/* the lineage as text: what happened at each stage, with failed attempts named as failed */
+function clLineage(){ const c = CL(), all = c.stages.flatMap(s => s.at.map((a, i) => ({a, s, i}))), L = [`Cloning lineage${PROJ ? ': ' + PROJ.name : ''}`, `Workflow: ${c.tpl ? CL_TPL[c.tpl].t : 'not chosen'}`];
+  c.stages.forEach((s, n) => { if (s.skip) { L.push(`${n + 1}. ${clTitle(s)}: skipped`); return; }
+    s.at.forEach((a, i) => { const src = all.find(x => x.a.id === a.from), id = ['id', 'clone', 'product', 'sampleId', 'plate', 'construct', 'parent', 'gblock'].map(k => a.f[k]).find(hasTxt);
+      L.push(`${n + 1}. ${clTitle(s)}${s.at.length > 1 ? `, attempt ${i + 1}` : ''}: ${CL_ST[a.st].toLowerCase()}${hasTxt(a.f._d) ? ` on ${a.f._d}` : ''}${id ? ` (${String(id).trim()})` : ''}${src ? `, from ${clTitle(src.s)}${src.s.at.length > 1 ? ` attempt ${src.i + 1}` : ''}` : ''}`); }); });
+  const v = c.stages.some(s => s.kind === 'select' && !s.skip && !clFlags(s).length && s.at.some(a => CL_OK(a.st) && a.f.ver === 'Sequence verified'));
+  L.push(v ? 'Cloning → Sequence-verified clone → Expression → Purification' : 'No sequence-verified clone is recorded yet.'); return L.join('\n'); }
+let clOpen = '', clArm = '', clHtml = '';
+function clField(a, fd){ const v = a.f[fd.k] == null ? '' : a.f[fd.k], at = `data-cf="${esc(fd.k)}" data-at="${esc(a.id)}"`, lab = esc(fd.l) + (fd.ty === 'n' && fd.x ? ` (${esc(fd.x)})` : '');
+  if (fd.ty === 'c') return `<label class="check cl-wide"><input type="checkbox" ${at}${v ? ' checked' : ''}> ${lab}</label>`;
+  if (fd.ty === 'a' || fd.ty === 'q') return `<label class="f cl-wide">${lab}<textarea rows="2" ${at}${fd.ty === 'q' ? ' class="cl-seq" spellcheck="false"' : ''}>${esc(v)}</textarea></label>`;
+  if (fd.ty === 's' || fd.ty === 'g') { const os = fd.ty === 'g' ? gels.map(g => g.name) : fd.x.split('/'), all = os.includes(v) || !hasTxt(v) ? os : os.concat([v]);
+    return `<label class="f">${lab}<select ${at}><option value="">${fd.ty === 'g' ? (gels.length ? 'No gel linked' : 'No gel image in this project yet') : 'Not recorded'}</option>${all.map(o => `<option${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`; }
+  if (fd.ty === 'b') { const bs = CL().stages.filter(s => s.kind === 'cc_batch').flatMap(s => s.at).map(x => x.f.id).filter(hasTxt);
+    return `<label class="f cl-wide">${lab}<input type="text" list="clBatches" ${at} value="${esc(v)}" placeholder="${bs.length ? 'Choose a batch made in this project, or type one' : 'Batch ID and aliquot'}"><datalist id="clBatches">${bs.map(b => `<option value="${esc(b)}">`).join('')}</datalist></label>`; }
+  return `<label class="f">${lab}<input type="${fd.ty === 'd' ? 'date' : 'text'}"${fd.ty === 'n' ? ' inputmode="decimal"' : ''} ${at} value="${esc(v)}"></label>`; }
+function clAttemptHtml(s, a, i){ const d = CL_KIND[s.kind], src = clSources(d), open = clOpen === a.id || (!s.at.some(x => x.id === clOpen) && i === s.at.length - 1);
+  return `<details class="cl-at" data-atbox="${esc(a.id)}"${open ? ' open' : ''}><summary><b>Attempt ${i + 1}</b><span class="cl-badge cl-${a.st}">${esc(CL_ST[a.st])}</span></summary><div class="cl-grid">
+    <label class="f">Status<select data-cst="${esc(a.id)}">${Object.keys(CL_ST).map(k => `<option value="${k}"${k === a.st ? ' selected' : ''}>${esc(CL_ST[k])}</option>`).join('')}</select></label>
+    ${clField(a, {k: '_d', l: 'Date', ty: 'd'})}${clField(a, {k: '_op', l: 'Operator', ty: 't'})}
+    ${d.from ? `<label class="f cl-wide">Comes from<select data-cfrom="${esc(a.id)}"><option value="">${src.length ? 'Not linked' : 'Nothing to link to yet'}</option>${src.map(x => `<option value="${esc(x.a.id)}"${x.a.id === a.from ? ' selected' : ''}>${esc(x.lab)}</option>`).join('')}</select></label>` : ''}
+    ${(d.ck || []).length ? `<div class="cl-wide cl-ck">${d.ck.map((t, j) => `<label class="check"><input type="checkbox" data-cck="${j}" data-at="${esc(a.id)}"${a.ck[j] ? ' checked' : ''}> ${esc(t)}</label>`).join('')}</div>` : ''}
+    ${clFields(d).map(fd => clField(a, fd)).join('')}${clField(a, {k: '_dev', l: 'Deviations', ty: 'a'})}${clField(a, {k: '_n', l: 'Result and notes', ty: 'a'})}
+    <div class="cl-wide cl-acts"><button type="button" class="btn quiet" data-cl="dup" data-v="${esc(a.id)}">Duplicate this attempt</button>${s.at.length > 1 ? `<button type="button" class="btn danger${clArm === 'at:' + a.id ? ' armed' : ''}" data-cl="rmat" data-v="${esc(a.id)}">${clArm === 'at:' + a.id ? 'Remove? Click again' : 'Remove attempt'}</button>` : ''}</div></div></details>`; }
+const clTypeSel = () => `<label class="f cl-type">Workflow type<select data-ctype="1"><option value="">Not specified</option><option value="cloning"${CL().type === 'cloning' ? ' selected' : ''}>Starts with cloning</option><option value="expression"${CL().type === 'expression' ? ' selected' : ''}>Starts with expression</option></select></label>`;
+function clPanelHtml(){ const c = CL(), onC = curStep === 'transform', id = curStep.startsWith('clone:') ? curStep.slice(6) : '', s = c.stages.find(x => x.id === id);
+  if (onC) { if (!c.type) return `<h2>Cloning</h2><p class="hint" id="clTypeNote">Workflow type not specified. Does this project include cloning?</p><div class="cl-acts"><button type="button" class="btn" data-cl="type" data-v="cloning">Yes, start with cloning</button><button type="button" class="btn" data-cl="type" data-v="expression">No, start with expression</button></div>`;
+    if (c.type === 'cloning') return '';
+    const bad = c.ext.ver === 'yes' && !hasTxt(c.ext.note);
+    return `<h2>Where the plasmid came from</h2><p class="hint">Cloning was done outside this workflow, or was not documented here.</p><div class="cl-grid"><label class="f cl-wide">Source of the plasmid or construct<input type="text" data-cext="src" value="${esc(c.ext.src)}"></label>
+      <label class="f">Sequence verification<select data-cext="ver"><option value="">Not recorded</option><option value="yes"${c.ext.ver === 'yes' ? ' selected' : ''}>Sequence verified</option><option value="no"${c.ext.ver === 'no' ? ' selected' : ''}>Not verified</option></select></label>
+      <label class="f">How it was verified<input type="text" data-cext="note" value="${esc(c.ext.note)}"></label></div>${bad ? '<p class="cl-flag">Say how it was verified. Without that it is not recorded as sequence verified.</p>' : ''}${clTypeSel()}`; }
+  const addSel = `<label class="f">Add a stage<select data-cadd="1"><option value="">Choose a stage to add</option><optgroup label="Cloning">${Object.keys(CL_KIND).filter(k => !CL_CC.includes(k)).map(k => `<option value="${k}">${esc(CL_KIND[k].t)}</option>`).join('')}</optgroup><optgroup label="Mix and Go competent cells"><option value="cc:all">All competent-cell stages</option>${CL_CC.map(k => `<option value="${k}">${esc(CL_KIND[k].t)}</option>`).join('')}</optgroup></select></label>`;
+  if (!s) return `<h2>Cloning workflow</h2>${c.stages.length ? '' : '<p class="hint">Choose a workflow. Its stages appear in the step list, every one can be skipped or repeated, and choosing another workflow later only adds stages.</p>'}
+    <div class="cl-tpls">${Object.keys(CL_TPL).map(k => `<button type="button" class="btn${c.tpl === k ? ' primary' : ''}" data-cl="tpl" data-v="${k}"${c.tpl === k ? ' aria-pressed="true"' : ''}>${esc(CL_TPL[k].t)}</button>`).join('')}</div>${addSel}
+    ${c.stages.length ? `<pre class="cl-lin" id="clLineage">${esc(clLineage())}</pre><div class="cl-acts"><button type="button" class="btn" data-cl="copy">Copy the lineage report</button></div>` : ''}${clTypeSel()}`;
+  const d = CL_KIND[s.kind], fl = s.skip ? [] : clFlags(s), i = c.stages.indexOf(s);
+  return `<h2>${esc(clTitle(s))}</h2>${(d.ref || []).map(r => `<p class="hint cl-ref">${esc(r)}</p>`).join('')}${fl.map(f => `<p class="cl-flag">${esc(f)}</p>`).join('')}
+    ${s.skip ? '<p class="hint">Skipped. Its records are kept.</p>' : s.at.map((a, j) => clAttemptHtml(s, a, j)).join('')}
+    <div class="cl-acts">${s.skip ? '' : `<button type="button" class="btn" data-cl="addat">${s.at.some(a => a.st === 'fail') ? 'Repeat this step' : 'Add an attempt'}</button>`}<button type="button" class="btn quiet" data-cl="skip">${s.skip ? 'Include this stage' : 'Skip this stage'}</button>
+      <button type="button" class="btn" data-cl="up"${i > 0 ? '' : ' disabled'}>Move up</button><button type="button" class="btn" data-cl="down"${i < c.stages.length - 1 ? '' : ' disabled'}>Move down</button><span class="sp"></span>
+      <button type="button" class="btn danger${clArm === 'st:' + s.id ? ' armed' : ''}" data-cl="rmst">${clArm === 'st:' + s.id ? 'Remove? Click again' : 'Remove this stage'}</button></div>${addSel}`; }
+/* redrawn only when its content changed, and never under the cursor: typing in a field must not lose the focus */
+function renderClone(force){ const el = $('#clonePanel'); if (!el || !PROJ || !(curStep === 'transform' || curStep.startsWith('clone:'))) return; const h = clPanelHtml(), ae = document.activeElement, inside = el.contains(ae);
+  if (h === clHtml && !force) return; if (!force && inside && /^(INPUT|TEXTAREA)$/.test(ae.tagName)) return;
+  const key = inside ? ['cf', 'at', 'cst', 'cfrom', 'cext', 'cck', 'cadd', 'cl', 'v'].filter(k => ae.dataset[k] != null).map(k => `[data-${k}="${ae.dataset[k]}"]`).join('') : '';
+  clHtml = h; el.innerHTML = h; if (key) { const n = el.querySelector(key); if (n) n.focus(); } }
+function clChanged(redraw){ renderSteps(); if (redraw) renderClone(true); queueSave(); }
+const clAt = id => { for (const s of CL().stages) { const a = s.at.find(x => x.id === id); if (a) return {s, a}; } return null; };
+function onCloneField(e){ const t = e.target, c = CL();
+  if (t.dataset.ctype) { if (e.type === 'change') setCloneType(t.value); return; }
+  if (t.dataset.cext) { c.ext[t.dataset.cext] = t.value; clChanged(t.tagName === 'SELECT' || e.type === 'change'); return; }
+  if (t.dataset.cadd) { const v = t.value, cur = c.stages.find(x => 'clone:' + x.id === curStep); if (!v) return; let s = null;
+    if (v === 'cc:all') CL_CC.forEach(k => { const x = c.stages.find(q => q.kind === k) || clAddStage(k); s = s || x; }); else if (clHas(CL_KIND, v)) s = clAddStage(v, '', cur && cur.id); if (!s) return;
+    selectStep('clone:' + s.id); queueSave(); return; }
+  if (t.dataset.cst) { const r = clAt(t.dataset.cst); if (r) { r.a.st = clHas(CL_ST, t.value) ? t.value : 'todo'; clOpen = r.a.id; clChanged(true); } return; }
+  if (t.dataset.cfrom) { const r = clAt(t.dataset.cfrom); if (r) { r.a.from = t.value; clOpen = r.a.id; clChanged(true); } return; }
+  const r = t.dataset.at ? clAt(t.dataset.at) : null; if (!r) return; clOpen = r.a.id;
+  if (t.dataset.cck) { if (t.checked) r.a.ck[t.dataset.cck] = 1; else delete r.a.ck[t.dataset.cck]; clChanged(false); return; }
+  if (t.dataset.cf) { const k = t.dataset.cf; if (t.type === 'checkbox') { if (t.checked) r.a.f[k] = true; else delete r.a.f[k]; } else if (t.value === '') delete r.a.f[k]; else r.a.f[k] = t.value;
+    clChanged(t.tagName === 'SELECT' || t.type === 'checkbox' || e.type === 'change'); } }
+function onCloneClick(e){ const b = e.target.closest('[data-cl]'); if (!b) return; const c = CL(), w = b.dataset.cl, v = b.dataset.v || '', s = c.stages.find(x => 'clone:' + x.id === curStep), i = s ? c.stages.indexOf(s) : -1;
+  const arm = k => { if (clArm === k) { clArm = ''; return true; } clArm = k; renderClone(true); return false; };
+  if (w !== 'rmat' && w !== 'rmst') clArm = '';
+  if (w === 'type') { setCloneType(v); return; }
+  if (w === 'tpl') { clApply(v); clChanged(true); return; }
+  if (w === 'copy') { const t = clLineage(); (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Lineage report copied'), () => toast('Could not copy. Select the text above instead.')); return; }
+  if (w === 'dup' || w === 'rmat') { const r = clAt(v); if (!r) return;
+    if (w === 'dup') { const n = {id: clNextId('a'), st: 'todo', from: r.a.from, f: JSON.parse(JSON.stringify(r.a.f)), ck: {}}; delete n.f._d; delete n.f._n; delete n.f._dev; r.s.at.push(n); clOpen = n.id; }
+    else { if (!arm('at:' + v)) return; r.s.at = r.s.at.filter(x => x !== r.a); }
+    clChanged(true); return; }
+  if (!s) return;
+  if (w === 'addat') { const n = {id: clNextId('a'), st: 'todo', from: '', f: {}, ck: {}}; s.at.push(n); clOpen = n.id; }
+  else if (w === 'skip') s.skip = !s.skip;
+  else if (w === 'up' && i > 0) c.stages.splice(i - 1, 0, c.stages.splice(i, 1)[0]);
+  else if (w === 'down' && i < c.stages.length - 1) c.stages.splice(i + 1, 0, c.stages.splice(i, 1)[0]);
+  else if (w === 'rmst') { if (!arm('st:' + s.id)) return; c.stages = c.stages.filter(x => x !== s); clChanged(false); selectStep('clone:setup'); return; }
+  clChanged(true); }
+/* the project's workflow type. Changing it never deletes a record: cloning stages are only hidden while the type is not cloning */
+let clTypeArm = '';
+function setCloneType(v){ const c = CL(), has = c.stages.some(s => s.at.some(a => a.st !== 'todo' || Object.keys(a.f).length));
+  v = v === 'cloning' || v === 'expression' ? v : '';
+  if (c.type === 'cloning' && v !== 'cloning' && has && clTypeArm !== v) { clTypeArm = v; toast('This project has cloning records. Choose again to confirm. Nothing is deleted.'); syncCloneType(); return; }
+  clTypeArm = ''; c.type = v; syncCloneType(); tlHtml = ''; if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1;
+  if (v === 'cloning') selectStep('clone:setup'); else if (curStep.startsWith('clone:')) selectStep('transform'); else { renderSteps(); renderClone(true); }
+  queueSave(); }
+function syncCloneType(){ const el = $('#projType'); if (el) el.value = CL().type; }
+$('#clonePanel').addEventListener('input', onCloneField);
+$('#clonePanel').addEventListener('change', onCloneField);
+$('#clonePanel').addEventListener('click', onCloneClick);
+$('#projType').addEventListener('change', e => setCloneType(e.target.value));
 /* ---------- the step timeline ---------- */
 function prepObjFor(k){
   if (k === 'cleave') { if (!prep.cleave) prep.cleave = true; return cleaveStep(); }
@@ -7112,6 +7316,7 @@ function methodGapNames(t){ return [...new Set(t.split(/\n\n/).flatMap(par => (p
 function stepList(){
   const v = k => hasTxt(prep[k]), m = k => stepMeta(k), L = [];
   const cm = cleanSeq(opt.protSeq) || prep.gb ? constructModel() : null;
+  clSteps().forEach(x => L.push(x));
   L.push({k: 'construct', g: 'Upstream', t: 'Construct', done: !!cm, s: cm ? `${cm.tn}, ${fmt(cm.mTag, 1)} kDa` : 'Protein sequence or GenBank file'});
   const trDone = ['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(v) || !!m('transform').date;
   L.push({k: 'transform', t: /glycerol/i.test(prep.trMethod || '') ? 'Glycerol stock' : 'Transformation', done: trDone, s: [prep.strain, prep.trSel].map(x => String(x || '').trim()).filter(Boolean).join(', ') || 'Strain and selection, or a glycerol stock'});
@@ -7142,6 +7347,7 @@ function stepList(){
 }
 const STEP_LANE = k => k === 'expr' || k === 'lysis' || k === 'cleave' ? k : k.startsWith('run:') || k.startsWith('man:') ? k.slice(4) : null;
 const STEP_WHAT = {construct: 'Construct records (design and provenance records rather than scientific validation). Paste the protein sequence, or load the plasmid\'s GenBank file to draw the construct.',
+  clone: 'Record each attempt as you go. A failed attempt stays in the record, and a stage can be skipped or repeated.',
   transform: 'Plasmid, strain and selection, or the glycerol stock you started from.',
   expr: 'Starter culture, induction and harvest. An expression gel (U, I, S, P) is optional.',
   lysis: 'Lysis method, buffer, additives and clarification.',
@@ -7192,6 +7398,7 @@ function renderStepSheet(L){
   const ae = $('#ssActs'); if (ae._h !== ah) { ae._h = ah; ae.innerHTML = ah; } ae.hidden = !ah;
   renderQuick(onGel || kind === 'btw' ? '' : kind);
   syncFrom(onGel ? '' : k);
+  renderClone();
   placeFoot();
 }
 /* Comes from: a step can follow any earlier step, so a fraction can go to one next step and another fraction to a second (a branch) */
