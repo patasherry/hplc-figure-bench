@@ -62,8 +62,14 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .home-alt{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .projbar{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 260px}
 .projbar .pb-sep{color:var(--line2);font-size:18px} .projbar .pb-lab{color:var(--muted);font-size:12.5px;white-space:nowrap}
-.np-type{grid-column:1/-1;border:0;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center} .np-type legend{float:left;padding:0;margin-right:6px;font-size:13px;color:var(--muted)}
-.projtype{font:inherit;font-size:12.5px;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:var(--r-s);padding:2px 4px;min-width:0;flex:0 1 auto;max-width:24ch} .clone:empty{display:none} .clone .cl-type{display:none}
+.np-type{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center} .np-type .hint{margin:0}
+/* Include Cloning switch (#1433): one on/off control, a real button so Space and Enter work */
+.sw{display:inline-flex;align-items:center;gap:8px;font:inherit;font-size:13px;color:var(--ink);background:transparent;border:0;padding:2px 0;cursor:pointer}
+.sw .sw-t{position:relative;flex:none;width:30px;height:17px;border-radius:9px;background:var(--line);transition:background .15s}
+.sw .sw-t::after{content:'';position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:left .15s}
+.sw[aria-checked="true"] .sw-t{background:var(--accent)} .sw[aria-checked="true"] .sw-t::after{left:15px}
+.sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-s)}
+.projtype{font-size:12.5px;color:var(--muted);flex:none;white-space:nowrap} .clone:empty{display:none} .clone .cl-type{display:none}
 @media (max-width:640px){.projtype{display:none} .clone .cl-type{display:grid}}
 .clone .cl-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px 10px;padding-top:9px} .clone .cl-wide{grid-column:1/-1}
 .clone .cl-at{border:1px solid var(--line);border-radius:var(--r-s);padding:7px 10px} .clone .cl-at > summary{cursor:pointer;display:flex;gap:8px;align-items:center;font-size:13px}
@@ -534,7 +540,7 @@ button,input,select,textarea{font-family:inherit}
   <div class="projbar" id="projBar" hidden>
     <span class="pb-sep" aria-hidden="true">/</span><label for="projName" class="pb-lab">Project name</label>
     <input type="text" id="projName" class="projname" aria-label="Project name" placeholder="Project name" spellcheck="false">
-    <select id="projType" class="projtype" aria-label="Workflow type" title="Whether this project includes cloning. Changing it never deletes a record."><option value="">Workflow type not specified</option><option value="cloning">Starts with cloning</option><option value="expression">Starts with expression</option></select>
+    <button type="button" id="projType" class="sw projtype" role="switch" aria-checked="false" title="Whether this project includes cloning. Switching it off hides the cloning steps and keeps every record."><span class="sw-t" aria-hidden="true"></span>Include Cloning</button>
     <span class="savestate" id="saveState" role="status" aria-live="polite"></span>
     <details class="rawfiles" id="rawPanel" hidden><summary id="rawSum">Raw files</summary><div class="rawlist" id="rawList"></div></details>
   </div>
@@ -556,10 +562,7 @@ button,input,select,textarea{font-family:inherit}
     <label class="f">Project name<input type="text" id="npName" required placeholder="e.g. KPP-MM, prep 3" spellcheck="false"></label>
     <label class="f">Protein<input type="text" id="npProt" placeholder="e.g. KPP-MM" spellcheck="false"></label>
     <button class="btn primary" type="submit">Start project</button>
-    <fieldset class="np-type" id="npType"><legend>Does this project include cloning?</legend>
-      <label class="check"><input type="radio" name="npType" id="npTypeC" value="cloning" required>Yes, start with cloning</label>
-      <label class="check"><input type="radio" name="npType" id="npTypeE" value="expression" required>No, start with expression</label>
-    </fieldset>
+    <div class="np-type" id="npType"><button type="button" id="npCloning" class="sw" role="switch" aria-checked="false"><span class="sw-t" aria-hidden="true"></span>Include Cloning</button><span class="hint" id="npCloningHint">Off: the project starts at the construct and expression steps.</span></div>
   </form>
   <div class="projlist" id="projList" aria-live="polite"></div>
   <p class="home-where" id="homeWhere"></p>
@@ -4228,7 +4231,7 @@ const PREP_DEF = {on: true, construct: true, expr: true, lysis: true, name: '', 
   trPlasmid: '', trMethod: '', trSel: '', trCol: '', trStock: '', clones: [], selectedCloneId: null, exStarter: '', exHarvest: '', exStore: '', lysAdd: '', lysSet: '', finConc: '', finVol: '', finRatio: '', finBuffer: '', qcPurity: '', qcMass: '', qcActivity: '', btw: {}, manual: [], skip: {}, stepMeta: {}, wfOff: {},
   constructs: [], primers: [], parentConstructId: null, derivedConstructIds: [],
   cMethod: 'plasmid', cEnz: '', cOverlap: '', cRecomb: '', cDetails: { digest: {}, overlap: {}, recomb: {} },
-  /* the cloning workflow (#1402): type is '' until the user says whether the project includes cloning; older projects load with '' */
+  /* the cloning workflow (#1402). includeCloning is deliberately not here: CL() sets it, so a project saved before it existed is migrated from its records */
   cloning: {type: '', tpl: '', stages: [], ext: {src: '', ver: '', note: ''}}};
 let prep = JSON.parse(JSON.stringify(PREP_DEF));
 const PREP_LANE = ['expr', 'lysis', 'cleave'], PREP_NAME = {construct: 'Construct', expr: 'Expression', lysis: 'Lysis', cleave: 'Dialysis and cleavage'}, prepObj = {};
@@ -7079,9 +7082,9 @@ function enterApp(){ $('#home').hidden = true; document.querySelector('.app').hi
 function resetWorkspace(){ rawFiles = []; runs = []; traces = []; gels = []; struct = null; ndSamples = []; srcDiag = {}; prep = JSON.parse(JSON.stringify(PREP_DEF)); prep.on = true;
   QKEYS.forEach(k => { opt[k] = DEF[k]; }); cur = 'overlay'; marking = null; tagMode = ''; nextHidden.clear(); projUndo = null; }
 const newPid = () => 'p-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-async function newProject(name, protein, type){
+async function newProject(name, protein, include){
   await leaveWorkspace(); resetWorkspace(); opt.targetName = String(protein || '').trim(); PROJ = mkProj(newPid(), name, Date.now());
-  CL().type = type === 'cloning' || type === 'expression' ? type : '';
+  prep.includeCloning = include === true || include === 'cloning'; CL();
   MODE = 'proj'; enterApp(); applyProjUI(); renderList(); selectStep(CL().type === 'cloning' ? 'clone:setup' : 'construct'); await flushSave(true);
 }
 let opening = 0;
@@ -7099,8 +7102,11 @@ async function openStoredProject(id){
     const n = lostCount(P); setSaveState(n ? `${n} item${n === 1 ? '' : 's'} did not load. ${n === 1 ? 'It is' : 'They are'} kept, so reopen the project later` : STORE.mode === 'cloud' ? 'Saved' : 'Saved in this browser', !!n); }
   catch (e) { if (my !== opening) return; console.warn('open failed', e); toast('Could not open that project'); showHome(); }
 }
-$('#newProj').addEventListener('submit', e => { e.preventDefault(); const ty = document.querySelector('#newProj input[name=npType]:checked'); if (!ty) return;
-  newProject($('#npName').value, $('#npProt').value, ty.value); $('#npName').value = ''; $('#npProt').value = ''; ty.checked = false; });
+const npSw = on => { const b = $('#npCloning'); b.setAttribute('aria-checked', on ? 'true' : 'false');
+  $('#npCloningHint').textContent = on ? 'On: the project starts with the cloning workflow.' : 'Off: the project starts at the construct and expression steps.'; };
+$('#npCloning').addEventListener('click', () => npSw($('#npCloning').getAttribute('aria-checked') !== 'true'));
+$('#newProj').addEventListener('submit', e => { e.preventDefault(); const on = $('#npCloning').getAttribute('aria-checked') === 'true';
+  newProject($('#npName').value, $('#npProt').value, on); $('#npName').value = ''; $('#npProt').value = ''; npSw(false); });
 $('#homeQuick').addEventListener('click', async () => { await leaveWorkspace(); MODE = 'quick'; enterApp();
   if (QUICK) { ({runs, traces, gels, struct, ndSamples, prep} = QUICK); QKEYS.forEach(k => { opt[k] = QUICK.o[k]; }); cur = QUICK.cur; QUICK = null; }
   else { if (runs.length || gels.length || struct || traces.some(t => !t.ex)) resetWorkspace(); if (!traces.length) exampleTraces(); cur = figures()[0] ? figures()[0].id : 'overlay'; }
@@ -7188,7 +7194,12 @@ function canonCloning(pr){ const c = pr.cloning && typeof pr.cloning === 'object
     at: (Array.isArray(s.at) ? s.at : []).filter(a => a && typeof a === 'object').map(a => ({id: uq(a.id), st: clHas(CL_ST, a.st) ? a.st : 'todo', from: str(a.from), f: obj(a.f), ck: obj(a.ck)})).filter(a => a.id)})).filter(s => s.id);
   const e = obj(c.ext); c.ext = {src: str(e.src), ver: e.ver === 'yes' || e.ver === 'no' ? e.ver : '', note: str(e.note)};
   pr.cloning = c; return pr; }
-const CL = () => (prep.cloning && Array.isArray(prep.cloning.stages) && prep.cloning.ext ? prep : canonCloning(prep)).cloning;
+/* includeCloning (#1433) is the project's one on/off switch for cloning, saved with prep. A project saved before it existed
+   gets it from what it holds: on if it was a cloning project or has any cloning stage, off otherwise. cloning.type is kept
+   in step with it, so older copies of the app read the same choice. */
+const CL = () => { const c = (prep.cloning && Array.isArray(prep.cloning.stages) && prep.cloning.ext ? prep : canonCloning(prep)).cloning;
+  if (typeof prep.includeCloning !== 'boolean') prep.includeCloning = c.type === 'cloning' || c.stages.length > 0;
+  const t = prep.includeCloning ? 'cloning' : 'expression'; if (c.type !== t) c.type = t; return c; };
 const clFields = d => String(d.f || '').split(';').filter(Boolean).map(x => { const p = x.split(':'); return {k: p[0], l: p[1], ty: p[2] || 't', x: p[3] || ''}; });
 const clTitle = s => hasTxt(s.name) ? s.name.trim() : CL_KIND[s.kind].t;
 const clNextId = p => { let n = 0; CL().stages.forEach(s => { [s.id].concat(s.at.map(a => a.id)).forEach(v => { const m = /^[sa](\d+)$/.exec(v); if (m) n = Math.max(n, +m[1]); }); }); return p + (n + 1); };
@@ -7449,9 +7460,9 @@ function clMethodsText(){
   const sents = [intro, pcrSent, asmSent, hostSent, seqSent].filter(Boolean);
   return sents.join(' ');
 }
-const clTypeSel = () => `<label class="f cl-type">Workflow type<select data-ctype="1"><option value="">Not specified</option><option value="cloning"${CL().type === 'cloning' ? ' selected' : ''}>Starts with cloning</option><option value="expression"${CL().type === 'expression' ? ' selected' : ''}>Starts with expression</option></select></label>`;
+const clTypeSel = () => `<div class="cl-type"><button type="button" class="sw" role="switch" data-ctype="1" aria-checked="${prep.includeCloning ? 'true' : 'false'}"><span class="sw-t" aria-hidden="true"></span>Include Cloning</button></div>`;
 function clPanelHtml(){ const c = CL(), onC = curStep === 'transform', id = curStep.startsWith('clone:') ? curStep.slice(6) : '', s = c.stages.find(x => x.id === id);
-  if (onC) { if (!c.type) return `<h2>Cloning</h2><p class="hint" id="clTypeNote">Workflow type not specified. Does this project include cloning?</p><div class="cl-acts"><button type="button" class="btn" data-cl="type" data-v="cloning">Yes, start with cloning</button><button type="button" class="btn" data-cl="type" data-v="expression">No, start with expression</button></div>`;
+  if (onC) {
     if (c.type === 'cloning') {
       const ts = c.stages.find(x => x.kind === 'transfer');
       const ta = ts && !ts.skip ? ts.at.slice().reverse().find(a => CL_OK(a.st)) : null;
@@ -7487,7 +7498,6 @@ function renderClone(force){ const el = $('#clonePanel'); if (!el || !PROJ || !(
 function clChanged(redraw){ renderSteps(); if (redraw) renderClone(true); if (PROJ && curStep.startsWith('clone:')) { const f = curFig(); if (f) { cur = f.id; const r = buildFig(f, true); G = r.geo; if (r.svg) paper.innerHTML = r.svg; } } queueSave(); }
 const clAt = id => { for (const s of CL().stages) { const a = s.at.find(x => x.id === id); if (a) return {s, a}; } return null; };
 function onCloneField(e){ const t = e.target, c = CL();
-  if (t.dataset.ctype) { if (e.type === 'change') setCloneType(t.value); return; }
   if (t.dataset.cname) { const s = c.stages.find(x => 'clone:' + x.id === curStep); if (s) { s.name = t.value; const h2 = $('#clonePanel h2'); if (h2) h2.textContent = clTitle(s); clHtml = clPanelHtml(); clChanged(false); } return; }
   if (t.dataset.cext) { c.ext[t.dataset.cext] = t.value; clChanged(t.tagName === 'SELECT' || e.type === 'change'); return; }
   if (t.dataset.cadd) { const v = t.value, cur = c.stages.find(x => 'clone:' + x.id === curStep); if (!v) return; let s = null;
@@ -7499,10 +7509,11 @@ function onCloneField(e){ const t = e.target, c = CL();
   if (t.dataset.cck) { if (t.checked) r.a.ck[t.dataset.cck] = 1; else delete r.a.ck[t.dataset.cck]; clChanged(false); return; }
   if (t.dataset.cf) { const k = t.dataset.cf; if (t.type === 'checkbox') { if (t.checked) r.a.f[k] = true; else delete r.a.f[k]; } else if (t.value === '') delete r.a.f[k]; else r.a.f[k] = t.value;
     clChanged(t.tagName === 'SELECT' || t.type === 'checkbox' || e.type === 'change'); } }
-function onCloneClick(e){ const b = e.target.closest('[data-cl]'); if (!b) return; const c = CL(), w = b.dataset.cl, v = b.dataset.v || '', s = c.stages.find(x => 'clone:' + x.id === curStep), i = s ? c.stages.indexOf(s) : -1;
+function onCloneClick(e){ const sw = e.target.closest('[data-ctype]'); if (sw) { setCloning(sw.getAttribute('aria-checked') !== 'true'); return; }
+  const b = e.target.closest('[data-cl]'); if (!b) return; const c = CL(), w = b.dataset.cl, v = b.dataset.v || '', s = c.stages.find(x => 'clone:' + x.id === curStep), i = s ? c.stages.indexOf(s) : -1;
   const arm = k => { if (clArm === k) { clArm = ''; return true; } clArm = k; renderClone(true); return false; };
   if (w !== 'rmat' && w !== 'rmst') clArm = '';
-  if (w === 'type') { setCloneType(v); return; }
+  if (w === 'type') { setCloning(v === 'cloning'); return; }
   if (w === 'tpl') { clApply(v); clChanged(true); return; }
   if (w === 'copy') { const t = clLineage(); (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Lineage report copied'), () => toast('Could not copy. Select the text above instead.')); return; }
   if (w === 'dup' || w === 'rmat') { const r = clAt(v); if (!r) return;
@@ -7519,19 +7530,18 @@ function onCloneClick(e){ const b = e.target.closest('[data-cl]'); if (!b) retur
   else if (w === 'down' && i < c.stages.length - 1) c.stages.splice(i + 1, 0, c.stages.splice(i, 1)[0]);
   else if (w === 'rmst') { if (!arm('st:' + s.id)) return; c.stages = c.stages.filter(x => x !== s); clChanged(false); selectStep('clone:setup'); return; }
   clChanged(true); }
-/* the project's workflow type. Changing it never deletes a record: cloning stages are only hidden while the type is not cloning */
-let clTypeArm = '';
-function setCloneType(v){ const c = CL(), has = c.stages.some(s => s.at.some(a => a.st !== 'todo' || Object.keys(a.f).length));
-  v = v === 'cloning' || v === 'expression' ? v : '';
-  if (c.type === 'cloning' && v !== 'cloning' && has && clTypeArm !== v) { clTypeArm = v; toast('This project has cloning records. Choose again to confirm. Nothing is deleted.'); syncCloneType(); return; }
-  clTypeArm = ''; c.type = v; syncCloneType(); tlHtml = ''; if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1;
-  if (v === 'cloning') selectStep('clone:setup'); else if (curStep.startsWith('clone:')) selectStep('transform'); else { renderSteps(); renderClone(true); }
+/* Include Cloning (#1433). Switching it off never deletes a record: the cloning steps, their validation and the cloning
+   lines in the Methods are only hidden until it is switched on again. */
+function setCloning(on){ on = !!on; if (on === !!prep.includeCloning) { syncCloneType(); return; }
+  const kept = CL().stages.length; prep.includeCloning = on; CL(); syncCloneType(); tlHtml = ''; clHtml = ''; if (PROJ) PROJ.editSeq = (PROJ.editSeq || 0) + 1;
+  if (on) selectStep('clone:setup'); else { if (curStep.startsWith('clone:')) selectStep('construct'); else { renderSteps(); renderClone(true); }
+    if (kept) toast(`Cloning is off. Its ${kept} stage${kept === 1 ? ' is' : 's are'} kept and come${kept === 1 ? 's' : ''} back when you switch it on.`); }
   queueSave(); }
-function syncCloneType(){ const el = $('#projType'); if (el) el.value = CL().type; }
+function syncCloneType(){ const el = $('#projType'); if (el) el.setAttribute('aria-checked', prep.includeCloning ? 'true' : 'false'); }
 $('#clonePanel').addEventListener('input', onCloneField);
 $('#clonePanel').addEventListener('change', onCloneField);
 $('#clonePanel').addEventListener('click', onCloneClick);
-$('#projType').addEventListener('change', e => setCloneType(e.target.value));
+$('#projType').addEventListener('click', () => setCloning(!prep.includeCloning));
 /* ---------- the step timeline ---------- */
 function prepObjFor(k){
   if (k === 'cleave') { if (!prep.cleave) prep.cleave = true; return cleaveStep(); }
@@ -7560,7 +7570,9 @@ function stepList(){
   const trDone = ['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(v) || !!m('transform').date;
   L.push({k: 'transform', t: /glycerol/i.test(prep.trMethod || '') ? 'Glycerol stock' : 'Transformation', done: trDone, s: [prep.strain, prep.trSel].map(x => String(x || '').trim()).filter(Boolean).join(', ') || 'Strain and selection, or a glycerol stock'});
   const ex = EXPR_KEYS.some(v) || gels.some(g => lanesFor(g, 'expr').length), el = prepLines('expr').map(x => typeof x === 'string' ? x : x.t);
-  L.push({k: 'expr', t: 'Expression', done: ex, s: ex ? el.slice(0, 2).join(', ').replace(/ /g, ' ') : 'Starter, induction, harvest, expression gel'});
+  /* with cloning on, the clone that went into expression has to be named (#1433): a selected clone at Transformation, or a completed Transfer to expression */
+  const exNeed = ex && prep.includeCloning && !selClone() && !CL().stages.some(st => st.kind === 'transfer' && !st.skip && st.at.some(a => CL_OK(a.st))) ? 'Connect the clone used for expression: select it at Transformation, or complete Transfer to expression' : '';
+  L.push({k: 'expr', t: 'Expression', done: ex && !exNeed, warn: exNeed, s: exNeed || (ex ? el.slice(0, 2).join(', ').replace(/ /g, ' ') : 'Starter, induction, harvest, expression gel')});
   const ly = LYS_KEYS.some(v) || gels.some(g => lanesFor(g, 'lysis').length);
   L.push({k: 'lysis', t: 'Lysis', done: ly, s: ly ? [prep.lysMethod, numOr(prep.lysVol, 0) > 0 ? `${fmtAuto(+prep.lysVol)} mL lysate` : ''].filter(Boolean).join(', ') : 'Method, buffer, additives, clarification'});
   const wf = wfList(), rows = runs.length ? sumRows() : [], odd = r => { const x = rows.find(q => q.r === r); return x && (x.yld > 100 || x.stepY > 105) ? fmt(Math.max(x.yld > 100 ? x.yld : 0, x.stepY || 0), 0) : ''; };

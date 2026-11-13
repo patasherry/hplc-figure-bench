@@ -1,4 +1,4 @@
-// #1402: the cloning workflow engine. A new project asks whether it includes cloning, a cloning project picks a
+// #1402: the cloning workflow engine. A new project has an Include Cloning switch (#1433), a cloning project picks a
 // workflow whose stages appear in the step list, each stage keeps every attempt (a failed one included), rules flag
 // a record and never fill it in, and the whole record survives an export and import. Older projects open unchanged.
 // Everything is driven through the UI. All values are synthetic.
@@ -20,14 +20,13 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
     const {p, errs, close} = await open(), h = H(p);
     try {
       p.setDefaultTimeout(15000);
-      // neither answer is preselected, and the project cannot start without one
-      T.check('entry/no-preselection', await p.locator('#newProj input[name=npType]:checked').count() === 0, 'an answer was preselected');
-      await p.fill('#npName', 'No answer yet'); await p.click('#newProj button[type=submit]'); await h.wait(600);
-      T.check('entry/choice-required', await p.locator('#npName').isVisible() && !(await p.locator('#tl').isVisible()), 'a project started without the cloning question being answered');
+      // #1433 replaced the Yes and No answers with one Include Cloning switch, off by default (Patrick on #222, 2026-11-13).
+      // The two checks that required an answer (entry/no-preselection, entry/choice-required) went with them, on his request.
+      T.check('entry/switch-off-by-default', await p.locator('#npCloning').getAttribute('aria-checked') === 'false', await p.locator('#npCloning').getAttribute('aria-checked'));
 
       await h.newProject('Expression only', 'expression');
       T.check('entry/expression-has-no-cloning-rows', (await rows(h)).length === 0, JSON.stringify(await rows(h)));
-      T.check('entry/expression-header', await p.locator('#projType').inputValue() === 'expression', await p.locator('#projType').inputValue());
+      T.check('entry/expression-header', await p.locator('#projType').getAttribute('aria-checked') === 'false', await p.locator('#projType').getAttribute('aria-checked'));
       await h.step('transform');
       T.check('entry/expression-says-cloning-outside', /outside this workflow/.test(await cl(p).innerText()), await cl(p).innerText());
       // a construct is not recorded as sequence verified without saying how
@@ -36,7 +35,7 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
       await cl(p).locator('[data-cext=note]').fill('Whole-plasmid sequencing, synthetic record'); await cl(p).locator('[data-cext=note]').dispatchEvent('change'); await h.wait(300);
       T.check('entry/verified-with-evidence', await cl(p).locator('.cl-flag').count() === 0, 'the flag stayed after the evidence was entered');
       // cloning can be added later, and nothing is lost
-      await p.locator('#projType').selectOption('cloning'); await h.wait(500);
+      await p.locator('#projType').click(); await h.wait(500);
       T.check('entry/cloning-added-later', (await rows(h)).some(x => x.k === 'clone:setup'), JSON.stringify(await rows(h)));
       T.check('entry/no page errors', errs.length === 0, errs.join(' | '));
     } finally { await close(); }
@@ -184,7 +183,8 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
       T.check('legacy/opens', tl.length > 3 && tl.some(x => x.k === 'construct'), JSON.stringify(tl.map(x => x.k)));
       T.check('legacy/no-cloning-rows', !tl.some(x => /^clone:/.test(x.k)), JSON.stringify(tl.map(x => x.k)));
       const inProj = await p.locator('#projType').isVisible();
-      if (inProj) T.check('legacy/type-not-specified', await p.locator('#projType').inputValue() === '' && /not specified/.test(await p.locator('#projType option:checked').innerText()), await p.locator('#projType').inputValue());
+      // a project saved before #1402 holds no cloning record, so Include Cloning opens off (#1433)
+      if (inProj) T.check('legacy/cloning-off', await p.locator('#projType').getAttribute('aria-checked') === 'false', await p.locator('#projType').getAttribute('aria-checked'));
       T.check('legacy/no page errors', errs.length === 0, errs.join(' | '));
     } finally { await close(); }
   });
