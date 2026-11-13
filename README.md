@@ -68,6 +68,10 @@ Below the figure, click **"Copy SVG"**, **"Save SVG"**, **"Save PNG"** (at 300, 
 **7. Troubleshooting**
 Status messages and hints explain missing inputs or unverified numbers. For example, if UV protein mass cannot be calculated for a run, the summary notes explain why—such as `"the x axis is in minutes and the flow rate is not known (enter it under Flow)"` or `"the selected UV curve is 260 nm, not 280 nm"`.
 
+## Plain traces inside a project
+
+A file with only time and signal columns, such as an analytical HPLC export, is an overlay trace and not a purification run: it has no fractions or pools. When you load one into a project it gets its own step, **HPLC traces**, in the step list. That step shows every plain trace of the project as one overlay and lists their cards. Removing the last trace removes the step.
+
 ## Cloning workflow
 
 A new project asks one question first: **Does this project include cloning?** Neither answer is preselected.

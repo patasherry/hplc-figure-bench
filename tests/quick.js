@@ -11,7 +11,7 @@ const git = (...a) => { const r = spawnSync('git', ['-C', repo, ...a], {encoding
    Coarse on purpose: a wrong guess costs a few minutes here, and the full run on the PR catches what this misses. */
 const MAP = [
   [/^markup and styles$/, ['40_visual', '431_ios_look', '44_panel_more', '950_panel_padding', '1060_sidebar_trace_wrap']],
-  [/^(parsing|UNICORN|traces and runs|loading)/, ['10_data_truth', '11_unicorn_zip', '1197_quoted_csv', '17_cross_format', '18_hplc_load']],
+  [/^(parsing|UNICORN|traces and runs|loading)/, ['10_data_truth', '11_unicorn_zip', '1197_quoted_csv', '17_cross_format', '18_hplc_load', '1415_hplc_in_project']],
   [/^(runs: windows|peak integration)/, ['14_peaks', '770_pool_area', '20_science', '45_yield_semantic']],
   [/^(size exclusion|SEC panel)/, ['15_import_sec', '26_sec_calibration', '27_sec_mass_calculation', '28_sec_figure', 'test_sec_calibration_units']],
   [/^figure: zoom inset/, ['43_zoom_inset']],
@@ -24,7 +24,7 @@ const MAP = [
   [/^(UI$|More options|what to do next|home$)/, ['05_quick', '44_panel_more', '48_empty_start', '950_panel_padding', '1060_sidebar_trace_wrap', '1267_toast_dismiss']],
   [/^projects/, ['47_export_project', '669_persistence_roundtrip', '30_robust', '915_raw_files', '1022_downstream_allocation', '1023_carryover_semantics']],
   [/^cloning workflow/, ['1402_cloning_engine', '1305_selected_clone']],
-  [/^the step timeline/, ['31_wf_full', '44_panel_more', '1089_actionable_methods_gaps', '1402_cloning_engine']],
+  [/^the step timeline/, ['31_wf_full', '44_panel_more', '1089_actionable_methods_gaps', '1402_cloning_engine', '1415_hplc_in_project']],
   [/^export$/, ['50_export', '47_export_project']],
   [/^(helpers|example data)/, ['20_science', '05_quick']]
 ];

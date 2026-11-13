@@ -11,7 +11,10 @@ const F = {gb: src('gb'), imac: src('his'),
 const SEL = {panel: '#panel', gelFile: '#gelFile', layout: k => `label[for="wf-${k}"]`, tool: '#wfTool', moreBtn: '#moreBtn'};
 /* side-panel height budgets in px (scrollHeight of the side panel with More options closed), about 1.25 x the v15 baseline.
    A step that grows past this has picked up clutter. */
-const BUDGET = {1400: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2300, conc: 1500, sec: 2300, final: 1900, figure: 1700},
+/* conc was 1500 until 2026-11-13. The settings search bar (#panelSearch, added in #1213) sits above every step and costs 42 px.
+   Every other step had the room. Concentrate had 23 px, so it read 1519 with nothing new on the step itself (#1417).
+   1545 is the old budget plus that bar, so anything further added to this step still trips it. */
+const BUDGET = {1400: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2300, conc: 1545, sec: 2300, final: 1900, figure: 1700},
                  390: {construct: 2400, transform: 1700, expr: 2300, lysis: 1700, imac: 2300, conc: 1500, sec: 2300, final: 1900, figure: 1700}};
 const OPT_HEADINGS = ['Window', 'Processing', 'Axes', 'Figure style', 'Peak integration', 'Size exclusion (SEC)', 'Peak labels'];
 const shotName = (w, step, theme) => path.join(SHOTS, `${w}_${step}${theme === 'dark' ? '_dark' : ''}.png`);
@@ -31,6 +34,9 @@ const contrast = p => p.evaluate(() => { const lum = c => { const f = v => { v /
     let c = [255, 255, 255, 1]; if (!st.length || st[st.length - 1][3] < 1) c = rgba(getComputedStyle(document.documentElement).backgroundColor)[3] ? rgba(getComputedStyle(document.documentElement).backgroundColor) : c; for (let i = st.length - 1; i >= 0; i--) c = over(st[i], c); return c; };
   const sel = 'label, p, li, td, th, h2, h3, summary, button, .hint, .ts, .tt, .muted, span';
   const out = []; for (const e of document.querySelectorAll(sel)) { if (out.length > 400) break; if (!e.getClientRects().length || e.closest('svg, [hidden], .toast, #toast')) continue;
+    /* text inside a closed <details> has a box but is not drawn, and its colour transition stays frozen at the other theme's value until it is shown:
+       the raw-files list measured 1.12:1 in dark for buttons nobody could see (#1416). Measured open, they are 16:1. */
+    if (e.checkVisibility && !e.checkVisibility()) continue;
     const txt = [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim(); if (txt.length < 2) continue; const cs = getComputedStyle(e); if (cs.visibility === 'hidden' || +cs.opacity === 0) continue;
     if (e.matches(':disabled') || e.closest(':disabled, [aria-disabled=true]')) continue; /* disabled controls are exempt under WCAG */
     const fg = over(rgba(cs.color), bgOf(e)), bg = bgOf(e), L1 = lum(fg), L2 = lum(bg), r = (Math.max(L1, L2) + 0.05)/(Math.min(L1, L2) + 0.05);
@@ -107,16 +113,25 @@ const figGeom = p => p.evaluate(() => { const svg = document.querySelector('#pap
             const P = (await figGeom(p)).panels.find(Q => /IMAC/.test(Q.title));
             if (P) {
               const tr = await p.evaluate(i => { const r = document.querySelectorAll('#paper svg text')[i].getBoundingClientRect(); return {x: r.left, y: r.top, r: r.right, b: r.bottom}; }, P.ti);
-              await p.mouse.move(tr.x + 20, tr.b + 40);
-              await p.mouse.down();
-              await p.mouse.move(tr.x + 20 + 50, tr.b + 40 + 50);
-              await p.mouse.up();
+              /* Rewritten 2026-11-13 (#1418). The old version never selected the panel, and a panel only drags once it is selected,
+                 so nothing moved. It also counted every level arrow, drawn as <line stroke-width="1">, as slanted. So it failed on
+                 main whatever the app drew. Now: select, drag in steps, and judge the arrows by their own geometry. */
+              const px = tr.x + 20, py = tr.b + 40;
+              await p.mouse.click(px, py); await h.wait(250);
+              await p.mouse.move(px, py); await p.mouse.down(); await p.mouse.move(px + 10, py + 10, {steps: 3}); await p.mouse.move(px + 50, py + 50, {steps: 6}); await p.mouse.up();
               await h.wait(400);
-
-              const svg = await p.evaluate(() => document.querySelector('#paper svg').innerHTML);
-              const hasSlant = /<line[^>]*stroke-width="1"/.test(svg);
-              const hasOrtho = /<path[^>]*d="M[^"]*H[^"]*V[^"]*H/.test(svg) || /<path[^>]*d="M[^"]*V[^"]*H[^"]*V/.test(svg);
-              T.check(`${tag}:fig-ortho-arrow:routed`, !hasSlant && hasOrtho, 'arrows should use manhattan path');
+              const arr = await p.evaluate(() => [...document.querySelectorAll('#paper svg [data-wfe]')].map(e => e.tagName === 'line'
+                ? {line: true, slant: Math.abs(+e.getAttribute('x1') - +e.getAttribute('x2')) > 0.01 && Math.abs(+e.getAttribute('y1') - +e.getAttribute('y2')) > 0.01}
+                : {line: false, d: e.getAttribute('d') || ''}));
+              const hasSlant = arr.some(a => a.line && a.slant);
+              const hasOrtho = arr.some(a => !a.line && (/^M[^HVLCZ]*H[^HVLCZ]*V[^HVLCZ]*H/.test(a.d) || /^M[^HVLCZ]*V[^HVLCZ]*H[^HVLCZ]*V/.test(a.d)));
+              T.check(`${tag}:fig-ortho-arrow:routed`, !hasSlant && hasOrtho, `after dragging a panel its arrows should be right-angle paths: ${JSON.stringify(arr)}`);
+              /* put the panel back with the toolbar's own Reset position, so the layouts checked after this one start from the same figure as before */
+              const rs = p.locator('#wfTool [data-wf=reset]'); if (!(await rs.isVisible().catch(() => false))) { await p.mouse.click(px + 50, py + 50); await h.wait(250); }
+              await rs.click(); await h.wait(300);
+              const back = await p.evaluate(() => [...document.querySelectorAll('#paper svg [data-wfe]')].every(e => e.tagName === 'line'));
+              T.check(`${tag}:fig-ortho-arrow:reset`, back, 'Reset position did not bring the arrows back to level lines');
+              await p.locator('#wfTool [data-wf=close]').click().catch(() => {}); await h.wait(150);
             }
           });
         }

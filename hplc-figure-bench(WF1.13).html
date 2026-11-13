@@ -127,7 +127,8 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .tl-menu b{font-weight:600;font-size:13px} .tl-menu span{color:var(--muted);font-size:12px}
 .ss-gels .gchip{font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--field);color:var(--ink);border-radius:999px;padding:3px 10px;cursor:pointer}
 .ss-gels .gchip:hover{border-color:var(--accent)}
-body.proj #list .trace:not(.sel){display:none}
+body.proj:not(.onhplc) #list .trace:not(.sel){display:none}
+body.proj.onhplc #list .trace:not([data-kind="trace"]){display:none} /* the HPLC traces step lists every plain trace, and only those */
 body.proj #dataPanel > h2, body.proj #dataPanel .paste, body.proj #exNote{display:none}
 body.proj #dataPanel .drop{display:none}
 body.proj #prOnWrap{display:none}
@@ -587,7 +588,7 @@ button,input,select,textarea{font-family:inherit}
       <div class="ss-acts" id="ssActs"></div>
     </section>
 
-    <section class="grp" id="dataPanel" data-step="run gel">
+    <section class="grp" id="dataPanel" data-step="run gel hplc">
       <h2>Data</h2>
       <div class="drop" id="drop">
         <svg class="drop-ic" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V3.5M6.2 7.2 10 3.4l3.8 3.8M3.5 12.5v2.2c0 1 .8 1.8 1.8 1.8h9.4c1 0 1.8-.8 1.8-1.8v-2.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -4913,15 +4914,16 @@ function stepStatus(g){
 function render(){
   document.body.classList.toggle('secstds', !!opt.secStds);
   gels.forEach(ensureLadder);
+  if (PROJ && curStep === 'hplc' && !traces.some(t => !t.ex)) { curStep = 'construct'; cur = 'step:construct'; }  /* the last plain trace was removed, and its step with it */
   const f = curFig(); if (f) cur = f.id;
   const {svg, geo} = buildFig(f, true); G = geo;
   paper.innerHTML = svg || '<div class="empty"><p>Load a CSV or ASCII export to start.</p><button type="button" class="btn primary" id="paperPick">Choose data files</button></div>';
   const kind = f ? f.kind : 'overlay';
-  document.body.classList.toggle('stepfig', kind === 'step');
+  document.body.classList.toggle('stepfig', kind === 'step'); document.body.classList.toggle('onhplc', !!PROJ && kind === 'overlay');
   { const g = curGel(), ls = $('#ladderStatus'); if (ls) ls.textContent = g ? (g.ladderMsg || '') : ''; if (g) stepStatus(g); }
   document.querySelectorAll('[data-for]').forEach(el => { el.hidden = !el.dataset.for.split(' ').includes(kind); });
   /* in a project the panel shows only what the current step needs */
-  if (PROJ) { const sk = curStep.startsWith('clone:') ? 'clone' : curStep.startsWith('btw:') && (kind === 'run' || kind === 'conc') ? 'btw' : kind === 'step' ? (isManId(f.step) ? 'man' : f.step) : kind === 'run' ? 'run' : kind === 'gel' ? 'gel' : curStep === 'final' ? 'final' : 'figure';
+  if (PROJ) { const sk = curStep.startsWith('clone:') ? 'clone' : curStep.startsWith('btw:') && (kind === 'run' || kind === 'conc') ? 'btw' : kind === 'step' ? (isManId(f.step) ? 'man' : f.step) : kind === 'run' ? 'run' : kind === 'gel' ? 'gel' : kind === 'overlay' ? 'hplc' : curStep === 'final' ? 'final' : 'figure';
     document.querySelectorAll('#panel [data-step]').forEach(el => { if (el.closest('#stepsPanel, #stepSheet')) return; el.hidden = !el.dataset.step.split(' ').includes(sk); });
     document.querySelectorAll('#prepPanel details.sub').forEach(d => { d.hidden = ({pcon: 'construct', ptr: 'transform', pexp: 'expr', plys: 'lysis', pclv: 'cleave', pbtw: 'btw', pman: 'man', pfin: 'final'})[d.dataset.sub] !== sk; if (!d.hidden) d.open = true; });
     if (sk === 'btw') syncBtw(); if (sk === 'man') syncMan(); document.querySelectorAll('#prepPanel > p.hint, #prepPanel > details.tip').forEach(x => { x.hidden = true; }); }
@@ -4984,7 +4986,7 @@ function render(){
   clearTimeout(render._s); render._s = setTimeout(saveOpt, 300);
   if (PROJ) { renderSteps(); queueSave(); }
 }
-function selectFig(id){ if (marking && marking.gelId !== id) marking = null; if (!gels.some(g => g.id === id)) tagMode = ''; cur = id; syncControls(); render(); }
+function selectFig(id){ if (marking && marking.gelId !== id) marking = null; if (!gels.some(g => g.id === id)) tagMode = ''; cur = id; if (PROJ && id === 'overlay' && traces.some(t => !t.ex)) curStep = 'hplc'; syncControls(); render(); }
 $('#figtabs').addEventListener('click', e => { const b = e.target.closest('[data-fig]'); if (b) selectFig(b.dataset.fig); });
 $('#figtabs').addEventListener('keydown', e => { const k = {ArrowRight: 1, ArrowLeft: -1, Home: -1e9, End: 1e9}[e.key]; if (!k) return; e.preventDefault();
   const ids = figures().map(x => x.id), i = Math.max(0, Math.min(ids.length - 1, ids.indexOf(cur) + k)); selectFig(ids[i]); const b = $(`.figtab[data-fig="${ids[i]}"]`); if (b) b.focus(); });
@@ -5968,7 +5970,7 @@ async function loadFiles(files){
   addParsed(added, true);
   const steps = runs.filter(r => r.inWf);
   if (newRuns.length) cur = steps.length > 1 && !newRuns.every(isSec) ? 'workflow' : (newRuns.find(r => !r.isStd) || newRuns[0]).id;
-  if (PROJ && newRuns.length) { const nr = newRuns.filter(r => r.inWf).pop() || newRuns[newRuns.length - 1]; curStep = 'run:' + nr.id; cur = nr.id; } else if (added.length) cur = 'overlay';
+  if (PROJ && newRuns.length) { const nr = newRuns.filter(r => r.inWf).pop() || newRuns[newRuns.length - 1]; curStep = 'run:' + nr.id; cur = nr.id; } else if (added.length) { cur = 'overlay'; if (PROJ) curStep = 'hplc'; }  /* a plain trace gets its own step (#1415): it used to be drawn while the timeline still showed the old step, and one click on any step hid it for good */
   renderList(); syncControls(); render();
   const n = added.length + newRuns.length, lostMsg = lost.length ? `. Curves with no readable data points were left out: ${lost.join('; ')}. Export the result from UNICORN again to include them.` : '';
   const sk = added.filter(a => a.parsed.skipped && (!a.parsed.discarded || !a.parsed.discarded.length)), skipMsg = sk.length ? `. Left out ${sk.map(a => `${a.parsed.skipped} row${a.parsed.skipped > 1 ? 's' : ''} of ${a.name}`).join(', ')}: a row with an unreadable value splits the data, and only the longest unbroken block is kept. Check the file.` : '';
@@ -7347,6 +7349,7 @@ function stepList(){
   L.push({k: 'add', g: first ? 'Purification' : '', add: true, t: '', s: ''});
   const ys = finalYields(), y = ys[0] || finalYield(), fin = FIN_KEYS.some(v) || ndSamples.some(n => n.stage === 'final') || !!m('final').date;
   const fw = !fin || !y ? '' : y.meas && y.loaded && y.mg != null && y.mg > y.loaded.mg*1.05 ? `${sig2(y.mg)} mg is more than was loaded, check` : y.purTyped ? 'Purity typed, add a gel of the last pool' : '';
+  { const nt = traces.filter(t => !t.ex).length; if (nt) L.push({k: 'hplc', g: 'Analysis', t: 'HPLC traces', done: true, s: `${nt} trace${nt === 1 ? '' : 's'}, drawn as an overlay`}); }
   L.push({k: 'final', g: 'Results', t: 'Final sample', done: fin, warn: fw, s: fw ? fw : fin && y ? `${y.mg !== null ? sig2(y.mg) + ' mg' : 'unknown yield'}${y.perL != null ? `, ${sig2(y.perL)} mg per L` : ''}${y.meas ? '' : ', from the last pool'}` : ys.length > 1 ? `Latest pools: ${ys.map(q => `${q.poolMg != null ? sig2(q.poolMg) + ' mg' : 'unknown yield'} (${stepTitle(q.fin.r)})`).join(', ')}` : y ? `Latest pool: ${y.poolMg != null ? sig2(y.poolMg) + ' mg' : 'unknown yield'} after ${stepTitle(y.fin.r)}` : 'Concentration, storage, quality checks'});
   const hasWf = figures().some(f => f.kind === 'workflow'), gaps = hasWf ? methodGaps() : 0, gn = gaps ? methodGapNames(gapMemo.k) : [];
   /* name what is missing, at most four on the row so it stays short; the full list is in the tooltip */
@@ -7364,6 +7367,7 @@ const STEP_WHAT = {construct: 'Construct records (design and provenance records 
   run: 'Pool the fractions, then check Run conditions.',
   man: 'A step with no chromatogram, such as a gravity column, a precipitation or a dialysis.',
   btw: 'Load the NanoDrop export and enter the volume after concentrating.',
+  hplc: 'Plain time and signal files, such as an analytical HPLC export, drawn together as an overlay. They are not purification runs, so they have no fractions or pools.',
   final: 'Concentration, volume, storage and quality checks.',
   figure: 'The workflow figure, summary table and methods text.'};
 let tlHtml = '';
@@ -7633,7 +7637,7 @@ function selectStep(k){
   if (k !== curStep) rmArm = '';
   if (k !== curStep) $('#ssQuick')._all = false;
   curStep = k; prep.on = true;
-  cur = k.startsWith('btw:') ? 'conc:' + k.slice(4) : k.startsWith('run:') ? k.slice(4) : k.startsWith('man:') ? 'step:' + k.slice(4) : k === 'final' || k === 'figure' ? 'workflow' : 'step:' + k;
+  cur = k === 'hplc' ? 'overlay' : k.startsWith('btw:') ? 'conc:' + k.slice(4) : k.startsWith('run:') ? k.slice(4) : k.startsWith('man:') ? 'step:' + k.slice(4) : k === 'final' || k === 'figure' ? 'workflow' : 'step:' + k;
   if (!figures().some(f => f.id === cur)) cur = k.startsWith('run:') || k.startsWith('btw:') ? k.slice(4) : 'step:construct';
   marking = null; tagMode = ''; syncControls(); renderList(); render();
   const p = $('#panel'); if (p && p.scrollTo) p.scrollTo({top: 0, behavior: smooth()});
