@@ -4126,10 +4126,10 @@ function finalYield(path){
   const mg = meas ? fc*fv : pm;
   const cL = prep.on ? numOr(prep.cultureL, 0) : 0, cG = prep.on ? numOr(prep.pellet, 0) : 0, perG = cG > 0 ? mg/cG : null;
   const poolVol = fin.nd && fin.nd.mg !== null ? fin.nd.vol : fin.p && fin.p.measured ? fin.p.measVol : fin.p && fin.p.vol >= 0 ? fin.p.vol : null;
-  return {fin, k: allRows.indexOf(fin), mg, poolMg: pm, poolVol, poolPerL: cL > 0 ? pm/cL : null, meas, fc, fv, perL: cL > 0 ? mg/cL : null, perG, cL, basis: meas ? 'final' : allRows.basis, poolBasis: allRows.basis, pur: fin.pur, purEst: fin.purEst,
+  return {fin, k: allRows.indexOf(fin), mg, poolMg: pm, poolVol, poolPerL: cL > 0 ? pm/cL : null, meas, fc, fv, perL: cL > 0 ? mg/cL : null, perG, cL, basis: meas ? 'final' : allRows.basis, poolBasis: allRows.basis, pur: meas ? null : fin.pur, purEst: meas ? false : fin.purEst,
     perGTxt: perG == null ? '' : `${sig2(perG)} mg per g of wet cells`, odd: rows.some(x => x.yld > 100 || x.stepY > 105),
     loaded: (() => { if (manLoad > 0) return {mg: manLoad, kept: false, r: fin.r}; const i = rows.indexOf(fin); if (i < 1) return null; const pr = rows[i - 1], k = prep.on ? loadedAfter(pr.r) : null; return k ? {mg: k, kept: true, r: fin.r} : mgOf(pr) > 0 ? {mg: mgOf(pr), kept: false, r: fin.r} : null; })(),
-    purTyped: prep.on && hasTxt(prep.qcPurity) && fin.pur == null, qcPurity: prep.on && hasTxt(prep.qcPurity) ? prep.qcPurity : null}; }
+    purTyped: prep.on && hasTxt(prep.qcPurity) && (meas || fin.pur == null), qcPurity: prep.on && hasTxt(prep.qcPurity) ? prep.qcPurity : null}; }
 function finalYields(){
   const paths = wfBranches(); if (paths.length <= 1) { const y = finalYield(); return y ? [y] : []; }
   const ys = [], seenFin = new Set();
