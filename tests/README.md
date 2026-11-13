@@ -19,6 +19,7 @@ node run.js 00_ 10_                # run specific suites passed as arguments
 
 - `APP=/path/to/other.html node run.js` tests a different build.
 - `ONLY=<pattern> node run.js` filters tests using a pattern or regular expression matching suite files or checks.
+- `node quick.js` is the fast path before a pull request: it compares only preflight, smoke, the suites you changed and the suites mapped to the app sections your diff touches. `node quick.js --list` shows the choice. The mapping lives at the top of `quick.js`: add a line there when you add a suite or an app section.
 - `node compare.js` runs all suites on your working copy and on `origin/main` baseline, writing `results/compare.md` listing regressions, fixes, and invariant failures. `BASE=<file or git ref>` sets a custom baseline.
 - Test logs and screenshots go to `results/` (not committed).
 
