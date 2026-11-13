@@ -53,7 +53,11 @@ async function open(opts = {}){ await ready; const cloud = !!opts.cloud;
 /* ---------- UI helpers. Selectors live here only, so a renamed id is fixed in one place ---------- */
 const H = p => ({
   wait: ms => p.waitForTimeout(ms),
-  newProject: async name => { await p.fill('#npName', name); await p.click('#newProj button[type=submit]'); await p.waitForTimeout(700); },
+  /* the new-project form asks whether the project includes cloning (#1402). Expression is the default here, so every suite
+     written before that question keeps starting the project it always started; pass 'cloning' for the other path. The
+     radio is looked up first because compare.js also runs these suites on main, where older copies do not have it. */
+  newProject: async (name, type) => { await p.fill('#npName', name); const r = await p.$(type === 'cloning' ? '#npTypeC' : '#npTypeE'); if (r) await r.check();
+    await p.click('#newProj button[type=submit]'); await p.waitForTimeout(700); },
   step: async k => { await p.click(`#tl [data-step="${k}"]`); await p.waitForTimeout(450); },
   timeline: () => p.$$eval('#tl .tl-i', els => els.map(e => ({k: e.dataset.step, t: (e.querySelector('.tt') || {}).textContent, s: (e.querySelector('.ts') || {}).textContent, warn: !!e.closest('li.warn'), done: !!e.closest('li.done')}))),
   addRun: async files => { await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=run]'); await p.setInputFiles('#file', [].concat(files)); await p.waitForTimeout(2200); },
