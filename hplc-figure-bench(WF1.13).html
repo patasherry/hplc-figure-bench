@@ -4837,6 +4837,7 @@ function figures(){
   if (traces.length) f.push({kind:'overlay', id:'overlay', name: traces.every(t=>t.ex) ? 'HPLC example' : 'HPLC overlay'});
   { const nwf = runs.filter(r => r.inWf).length; if (nwf >= 2 || (nwf === 1 && (prepSteps().length || prep.cleave)) || (PROJ && nwf + prepSteps().length + manSteps().length >= 1)) f.push({kind:'workflow', id:'workflow', name:'Purification workflow'}); }
   /* in a project each upstream step has its own figure */
+  if (PROJ && CL().type === 'cloning') clSteps().forEach(s => f.push({kind: 'step', id: 'step:' + s.k, name: s.t, step: s.k}));
   if (PROJ) manSteps().forEach(m => f.push({kind: 'step', id: 'step:' + m.id, name: manObj(m).name, step: m.id}));
   if (PROJ) ['construct', 'transform', 'expr', 'lysis'].concat(prep.cleave ? ['cleave'] : []).forEach(k => f.push({kind: 'step', id: 'step:' + k, name: k === 'transform' ? 'Transformation' : PREP_NAME[k], step: k}));
   runs.forEach(r => f.push({kind:'run', id:r.id, name:r.name, run:r}));
@@ -4984,7 +4985,7 @@ function render(){
   clearTimeout(render._s); render._s = setTimeout(saveOpt, 300);
   if (PROJ) { renderSteps(); queueSave(); }
 }
-function selectFig(id){ if (marking && marking.gelId !== id) marking = null; if (!gels.some(g => g.id === id)) tagMode = ''; cur = id; syncControls(); render(); }
+function selectFig(id){ if (marking && marking.gelId !== id) marking = null; if (!gels.some(g => g.id === id)) tagMode = ''; cur = id; if (PROJ && id.startsWith('step:')) { const sk = id.slice(5); if (sk.startsWith('clone:')) curStep = sk; } syncControls(); render(); }
 $('#figtabs').addEventListener('click', e => { const b = e.target.closest('[data-fig]'); if (b) selectFig(b.dataset.fig); });
 $('#figtabs').addEventListener('keydown', e => { const k = {ArrowRight: 1, ArrowLeft: -1, Home: -1e9, End: 1e9}[e.key]; if (!k) return; e.preventDefault();
   const ids = figures().map(x => x.id), i = Math.max(0, Math.min(ids.length - 1, ids.indexOf(cur) + k)); selectFig(ids[i]); const b = $(`.figtab[data-fig="${ids[i]}"]`); if (b) b.focus(); });
@@ -7214,6 +7215,75 @@ function clLineage(){ const c = CL(), all = c.stages.flatMap(s => s.at.map((a, i
       L.push(`${n + 1}. ${clTitle(s)}${s.at.length > 1 ? `, attempt ${i + 1}` : ''}: ${CL_ST[a.st].toLowerCase()}${hasTxt(a.f._d) ? ` on ${a.f._d}` : ''}${id ? ` (${String(id).trim()})` : ''}${src ? `, from ${clTitle(src.s)}${src.s.at.length > 1 ? ` attempt ${src.i + 1}` : ''}` : ''}`); }); });
   const v = c.stages.some(s => s.kind === 'select' && !s.skip && !clFlags(s).length && s.at.some(a => CL_OK(a.st) && a.f.ver === 'Sequence verified'));
   L.push(v ? 'Cloning → Sequence-verified clone → Expression → Purification' : 'No sequence-verified clone is recorded yet.'); return L.join('\n'); }
+function buildCloneTrackerSVG(k){
+  const c = CL(), fs = fontSize(), fontFamily = FONTS[opt.font] || FONTS.Arial;
+  const nStages = c.stages.length, pad = 16, headH = fs * 3.6, rowH = Math.max(22, fs * 2.5), footH = fs * 3.4;
+  const endLine = clLineage().split('\n').pop() || '';
+  const maxTitleLen = Math.max(...c.stages.map(s => clTitle(s).length), endLine.length, 45);
+  const estW = Math.max(460, pad * 2 + maxTitleLen * fs * 0.55 + 160);
+  const W = Math.max(numOr(opt.w, 3.5) * 72, estW);
+  const H = pad + headH + Math.max(1, nStages) * rowH + footH + pad;
+  const s = [svgHead(W, H)];
+  if (opt.bg) s.push(`<rect width="${r2(W)}" height="${r2(H)}" fill="#ffffff"/>`);
+
+  const tplTitle = c.tpl && CL_TPL[c.tpl] ? CL_TPL[c.tpl].t : (PROJ ? PROJ.name + ' — Cloning' : 'Cloning Stage Tracker');
+  const nDone = c.stages.filter(stg => !stg.skip && stg.at.some(a => CL_OK(a.st))).length;
+  const nLive = c.stages.filter(stg => !stg.skip).length;
+  const sumTxt = nStages ? `${nDone} of ${nLive} stages completed` : 'Choose a cloning workflow';
+  const headY = pad + fs * 1.3;
+  s.push(`<text x="${r2(pad + 8)}" y="${r2(headY)}" font-family="${fontFamily}" font-size="${r2(fs * 1.3)}" font-weight="bold" fill="#151a28">${esc(tplTitle)}</text>`);
+  s.push(`<text x="${r2(W - pad - 8)}" y="${r2(headY)}" text-anchor="end" font-family="${fontFamily}" font-size="${r2(fs * 0.95)}" fill="#5a6177">${esc(sumTxt)}</text>`);
+  s.push(`<line x1="${r2(pad + 4)}" y1="${r2(pad + headH - 6)}" x2="${r2(W - pad - 4)}" y2="${r2(pad + headH - 6)}" stroke="#d8dce6" stroke-width="1"/>`);
+
+  const startY = pad + headH;
+  if (!nStages) {
+    const yMid = startY + rowH / 2;
+    s.push(`<text x="${r2(pad + 8)}" y="${r2(yMid + fs * 0.35)}" font-family="${fontFamily}" font-size="${r2(fs)}" fill="#666d82">No cloning workflow chosen yet. Pick a workflow to track stages.</text>`);
+  } else {
+    c.stages.forEach((stg, i) => {
+      const yRowTop = startY + i * rowH, yMid = yRowTop + rowH / 2, yText = yMid + fs * 0.35;
+      const isCur = ('clone:' + stg.id) === curStep || ('clone:' + stg.id) === k;
+      const rx = pad + 4, ry = yRowTop + 1, rw = W - (pad + 4) * 2, rh = rowH - 2;
+
+      if (isCur) {
+        s.push(`<rect x="${r2(rx)}" y="${r2(ry)}" width="${r2(rw)}" height="${r2(rh)}" rx="4" fill="#e2e6f6" stroke="#2b3c9b" stroke-width="1.2"/>`);
+      } else if (i % 2 === 0) {
+        s.push(`<rect x="${r2(rx)}" y="${r2(ry)}" width="${r2(rw)}" height="${r2(rh)}" rx="4" fill="#f8f9fc" stroke="none"/>`);
+      }
+
+      const title = clTitle(stg);
+      s.push(`<text x="${r2(pad + 12)}" y="${r2(yText)}" font-family="${fontFamily}" font-size="${r2(fs)}" fill="#151a28"${isCur ? ' font-weight="bold"' : ''}>${esc(title)}</text>`);
+
+      const nAtt = stg.at.length;
+      const attTxt = `${nAtt} attempt${nAtt === 1 ? '' : 's'}`;
+      const attX = W - pad - 100;
+      s.push(`<text x="${r2(attX)}" y="${r2(yText)}" text-anchor="end" font-family="${fontFamily}" font-size="${r2(fs * 0.9)}" fill="#5a6177">${attTxt}</text>`);
+
+      let badgeTxt = 'Not started', badgeBg = '#f0f1f4', badgeBorder = '#d8dce6', badgeInk = '#666d82';
+      if (stg.skip) {
+        badgeTxt = 'Skipped'; badgeBg = '#f0f1f4'; badgeBorder = '#b4bbca'; badgeInk = '#5a6177';
+      } else if (clFlags(stg).length) {
+        badgeTxt = 'Flagged'; badgeBg = '#fef3d6'; badgeBorder = '#E69F00'; badgeInk = '#8a5a00';
+      } else if (stg.at.some(a => CL_OK(a.st))) {
+        badgeTxt = 'Completed'; badgeBg = '#e6f5ec'; badgeBorder = '#009E73'; badgeInk = '#137257';
+      } else if (stg.at.some(a => a.st === 'fail')) {
+        badgeTxt = 'Failed'; badgeBg = '#fbeae8'; badgeBorder = '#D55E00'; badgeInk = '#b0201f';
+      }
+      const badgeW = 76, badgeH = Math.min(16, rowH - 6), badgeX = W - pad - 12 - badgeW, badgeY = yMid - badgeH / 2;
+      s.push(`<rect x="${r2(badgeX)}" y="${r2(badgeY)}" width="${r2(badgeW)}" height="${r2(badgeH)}" rx="${r2(badgeH / 2)}" fill="${badgeBg}" stroke="${badgeBorder}" stroke-width="1"/>`);
+      s.push(`<text x="${r2(badgeX + badgeW / 2)}" y="${r2(yMid + fs * 0.32)}" text-anchor="middle" font-family="${fontFamily}" font-size="${r2(fs * 0.85)}" font-weight="600" fill="${badgeInk}">${badgeTxt}</text>`);
+    });
+  }
+
+  const footYTop = startY + Math.max(1, nStages) * rowH, lineY = footYTop + 6;
+  s.push(`<line x1="${r2(pad + 4)}" y1="${r2(lineY)}" x2="${r2(W - pad - 4)}" y2="${r2(lineY)}" stroke="#d8dce6" stroke-width="1"/>`);
+  const footTextY = lineY + fs * 1.5;
+  s.push(`<text x="${r2(pad + 12)}" y="${r2(footTextY)}" font-family="${fontFamily}" font-size="${r2(fs * 0.9)}" font-style="italic" fill="#5a6177">${esc(endLine)}</text>`);
+
+  s.push('</svg>');
+  const geo = {W, H, L: pad, R: W - pad, T: pad, B: H - pad, step: k};
+  return {svg: s.join(''), geo};
+}
 let clOpen = '', clArm = '', clHtml = '';
 function clField(a, fd){ const v = a.f[fd.k] == null ? '' : a.f[fd.k], at = `data-cf="${esc(fd.k)}" data-at="${esc(a.id)}"`, lab = esc(fd.l) + (fd.ty === 'n' && fd.x ? ` (${esc(fd.x)})` : '');
   if (fd.ty === 'c') return `<label class="check cl-wide"><input type="checkbox" ${at}${v ? ' checked' : ''}> ${lab}</label>`;
@@ -7641,6 +7711,7 @@ function selectStep(k){
 }
 /* a step's own figure: its panel and gel, or the upstream band so far for the transformation */
 function buildStepFig(k){
+  if (k.startsWith('clone:') || k === 'clone') return buildCloneTrackerSVG(k);
   const fs = fontSize(), W = Math.max(numOr(opt.w, 3.5), 3.4)*72, base = {layout: 'row', W, chromH: numOr(opt.wfH, 2.2)*72, titles: true, letters: false, showGels: true, connectors: opt.connectors, arrows: true, gelMaxH: numOr(opt.wfGelH, 1.8)*72, bandH: fs*5};
   if (k === 'transform') { const c = prepObjFor('construct'), list = [c]; c.note = 'Transform'; if (prepSteps().some(o => o.id === 'expr')) list.push(prepObjFor('expr')); return composeRuns(list, Object.assign(base, {W: W*list.length})); }
   if (isManId(k)) { const m = manSteps().find(x => x.id === k); return composeRuns([manObj(m)], base); }
@@ -7677,7 +7748,7 @@ function baseName(f){
   if (f && f.kind === 'run') return safe(f.run.name);
   if (f && f.kind === 'gel') return 'gel_' + safe(f.gel.name);
   if (f && f.kind === 'workflow') return PROJ ? safe(PROJ.name) + '_workflow' : 'purification_workflow';
-  if (f && f.kind === 'step') return (PROJ ? safe(PROJ.name) + '_' : '') + f.step;
+  if (f && f.kind === 'step') return (PROJ ? safe(PROJ.name) + '_' : '') + safe(f.step);
   if (f && f.kind === 'struct') return 'structure_' + safe(struct ? struct.code : 'model');
   if (f && f.kind === 'nd') return 'nanodrop_spectra';
   if (f && f.kind === 'conc') return 'concentrated_' + String(stepTitle(f.run)).toLowerCase().replace(/[^a-z0-9]+/g, '_');
