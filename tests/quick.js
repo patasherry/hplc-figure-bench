@@ -24,7 +24,7 @@ const MAP = [
   [/^(UI$|More options|what to do next|home$)/, ['05_quick', '44_panel_more', '48_empty_start', '950_panel_padding', '1060_sidebar_trace_wrap', '1267_toast_dismiss']],
   [/^projects/, ['47_export_project', '669_persistence_roundtrip', '30_robust', '915_raw_files', '1022_downstream_allocation', '1023_carryover_semantics']],
   [/^cloning workflow/, ['1402_cloning_engine', '1305_selected_clone']],
-  [/^the step timeline/, ['31_wf_full', '44_panel_more', '1089_actionable_methods_gaps', '221_iso', '1402_cloning_engine']],
+  [/^the step timeline/, ['31_wf_full', '44_panel_more', '1089_actionable_methods_gaps', '1402_cloning_engine']],
   [/^export$/, ['50_export', '47_export_project']],
   [/^(helpers|example data)/, ['20_science', '05_quick']]
 ];

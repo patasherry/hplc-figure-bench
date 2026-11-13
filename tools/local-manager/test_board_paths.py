@@ -2,7 +2,7 @@
 single-file app, and a downstream agent then rejected Patrick's whole cloning request as hallucinated."""
 import re, subprocess, sys
 from pathlib import Path
-ROOT = Path(__file__).resolve().parents[0]
+ROOT = Path(__file__).resolve().parents[2]  # the repository root. It was this folder, so `git ls-files` listed only tools/local-manager and every real path looked invented
 
 def repo_files(root):
     out = subprocess.run(['git', 'ls-files'], cwd=str(root), capture_output=True, text=True, timeout=30)
