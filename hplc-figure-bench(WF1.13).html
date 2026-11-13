@@ -64,11 +64,11 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .projbar .pb-sep{color:var(--line2);font-size:18px} .projbar .pb-lab{color:var(--muted);font-size:12.5px;white-space:nowrap}
 .np-type{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center} .np-type .hint{margin:0}
 /* Include Cloning switch (#1433): one on/off control, a real button so Space and Enter work */
-.sw{display:inline-flex;align-items:center;gap:8px;font:inherit;font-size:13px;color:var(--ink);background:transparent;border:0;padding:2px 0;cursor:pointer}
-.sw .sw-t{position:relative;flex:none;width:30px;height:17px;border-radius:9px;background:var(--line);transition:background .15s}
-.sw .sw-t::after{content:'';position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:left .15s}
-.sw[aria-checked="true"] .sw-t{background:var(--accent)} .sw[aria-checked="true"] .sw-t::after{left:15px}
-.sw:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-s)}
+.tgl{display:inline-flex;align-items:center;gap:8px;font:inherit;font-size:13px;color:var(--ink);background:transparent;border:0;padding:2px 0;cursor:pointer}
+.tgl .tgl-t{position:relative;flex:none;width:30px;height:17px;border-radius:9px;background:var(--line);transition:background .15s}
+.tgl .tgl-t::after{content:'';position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:left .15s}
+.tgl[aria-checked="true"] .tgl-t{background:var(--accent)} .tgl[aria-checked="true"] .tgl-t::after{left:15px}
+.tgl:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-s)}
 .projtype{font-size:12.5px;color:var(--muted);flex:none;white-space:nowrap} .clone:empty{display:none} .clone .cl-type{display:none}
 @media (max-width:640px){.projtype{display:none} .clone .cl-type{display:grid}}
 .clone .cl-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px 10px;padding-top:9px} .clone .cl-wide{grid-column:1/-1}
@@ -540,7 +540,7 @@ button,input,select,textarea{font-family:inherit}
   <div class="projbar" id="projBar" hidden>
     <span class="pb-sep" aria-hidden="true">/</span><label for="projName" class="pb-lab">Project name</label>
     <input type="text" id="projName" class="projname" aria-label="Project name" placeholder="Project name" spellcheck="false">
-    <button type="button" id="projType" class="sw projtype" role="switch" aria-checked="false" title="Whether this project includes cloning. Switching it off hides the cloning steps and keeps every record."><span class="sw-t" aria-hidden="true"></span>Include Cloning</button>
+    <button type="button" id="projType" class="tgl projtype" role="switch" aria-checked="false" title="Whether this project includes cloning. Switching it off hides the cloning steps and keeps every record."><span class="tgl-t" aria-hidden="true"></span>Include Cloning</button>
     <span class="savestate" id="saveState" role="status" aria-live="polite"></span>
     <details class="rawfiles" id="rawPanel" hidden><summary id="rawSum">Raw files</summary><div class="rawlist" id="rawList"></div></details>
   </div>
@@ -562,7 +562,7 @@ button,input,select,textarea{font-family:inherit}
     <label class="f">Project name<input type="text" id="npName" required placeholder="e.g. KPP-MM, prep 3" spellcheck="false"></label>
     <label class="f">Protein<input type="text" id="npProt" placeholder="e.g. KPP-MM" spellcheck="false"></label>
     <button class="btn primary" type="submit">Start project</button>
-    <div class="np-type" id="npType"><button type="button" id="npCloning" class="sw" role="switch" aria-checked="false"><span class="sw-t" aria-hidden="true"></span>Include Cloning</button><span class="hint" id="npCloningHint">Off: the project starts at the construct and expression steps.</span></div>
+    <div class="np-type" id="npType"><button type="button" id="npCloning" class="tgl" role="switch" aria-checked="false"><span class="tgl-t" aria-hidden="true"></span>Include Cloning</button><span class="hint" id="npCloningHint">Off: the project starts at the construct and expression steps.</span></div>
   </form>
   <div class="projlist" id="projList" aria-live="polite"></div>
   <p class="home-where" id="homeWhere"></p>
@@ -7460,7 +7460,7 @@ function clMethodsText(){
   const sents = [intro, pcrSent, asmSent, hostSent, seqSent].filter(Boolean);
   return sents.join(' ');
 }
-const clTypeSel = () => `<div class="cl-type"><button type="button" class="sw" role="switch" data-ctype="1" aria-checked="${prep.includeCloning ? 'true' : 'false'}"><span class="sw-t" aria-hidden="true"></span>Include Cloning</button></div>`;
+const clTypeSel = () => `<div class="cl-type"><button type="button" class="tgl" role="switch" data-ctype="1" aria-checked="${prep.includeCloning ? 'true' : 'false'}"><span class="tgl-t" aria-hidden="true"></span>Include Cloning</button></div>`;
 function clPanelHtml(){ const c = CL(), onC = curStep === 'transform', id = curStep.startsWith('clone:') ? curStep.slice(6) : '', s = c.stages.find(x => x.id === id);
   if (onC) {
     if (c.type === 'cloning') {
