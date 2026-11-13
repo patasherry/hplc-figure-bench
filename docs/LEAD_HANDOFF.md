@@ -63,3 +63,7 @@ Never change scientific constants (`LADDERS`, `KNOWN_DEFAULT`, extinction coeffi
 ## When Claude is back
 
 Leave a short comment on #17 listing what you merged and closed, so the lead can pick up from there.
+
+## Patrick's requests and the status page (2026-11-12)
+
+Read **How a request from Patrick gets done** at the top of `docs/ORCHESTRATION.md` first. The issue labelled `status-page` is the one place that says where each of his requests stands. When he opens a chat, start there: plan every `needs-plan` issue into small jobs, and settle what sits under Waiting on Claude.

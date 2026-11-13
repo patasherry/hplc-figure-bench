@@ -2,9 +2,22 @@
 
 This is the full account of the automation around Protein Purification Bench: every worker, queue label, setting and the incidents behind them. It was moved out of `AGENTS.md` on 2026-11-12 so that coding workers stop reading about 6500 words of it on every job. `AGENTS.md` keeps the rules a worker needs. Update this file when you change how the automation works.
 
+## How a request from Patrick gets done (2026-11-12)
+
+Patrick asked for a cleaner hierarchy after his cloning request, posted on the Direction board, was rewritten by the board into four vague proposals and then sat unseen. The rules now:
+
+1. **One door.** A request is a `from-patrick` issue, opened with the Request form (`.github/ISSUE_TEMPLATE/request.yml`) or filed by Claude from a chat, always in his own words. The Direction board is for discussion he asks for (`Discuss: ...` on #222). It is not a way to ask for work, and nothing rewrites a request before a worker reads it.
+2. **Two sizes.** The queue leader (no AI) takes every new `from-patrick` issue. A short one gets `queued` and `owner-approved` and goes to the workers. A long one (over 2,500 characters, or the form's big-request box ticked) gets `needs-plan` and waits for one planning pass by the lead (Claude), who splits it into small, separately testable jobs, building shared structure first and data second, as the cloning engine did (#1403). No worker starts a `needs-plan` issue.
+3. **One status page.** The leader keeps one issue labelled `status-page` up to date: what waits on Patrick, what waits on Claude, what is stuck (no movement for 3 days), his requests in progress, what was finished in the last 14 days, and whether the workers are up. When something newly needs him or gets stuck, the leader mentions him there once, so GitHub notifies him.
+4. **No orphans.** An open issue with no state label and no open PR cannot be seen by any worker. The leader finds these every run: his own are put through intake again, the rest get `parked`.
+5. **Machine-made work is parked, not queued.** Follow-up issues the leader files from failing new checks and audit reports are labelled `parked`. The board no longer meets on a timer (`board_auto: false`) and the usability walks are off (`ux_every_hours: 0`). Adding `queued` to a parked issue starts it.
+6. **His requests go first.** Every background worker sorts `from-patrick` jobs ahead of the rest, in whichever queue they sit.
+
+The lead's part: when Patrick says "work through my status page" or "plan my requests", read the status page, plan each `needs-plan` issue into jobs (label them `queued`, `from-patrick`, `owner-approved`, link them from the request and close the request only when all of them are done), and settle anything under Waiting on Claude.
+
 ## Current routing (2026-11-12)
 
-Patrick's PC is now on only a couple of times a week, and he wants Claude and Codex used as little as possible. So:
+Patrick's PC is on about 10 hours a day on average (his estimate, 2026-11-12, after first saying a couple of times a week), and he wants Claude and Codex used as little as possible. The Antigravity API route in the cloud has refused every call since 2026-11-09 with a storage-quota error, so in practice the PC's `agy` CLI does the coding and PC-off hours do none. So:
 
 1. **Antigravity is the first worker, everywhere.** The queue leader routes every `queued` issue to `for-antigravity`. With the PC off, the Antigravity API route in the cloud manager serves that label. With the PC on, the `agy` CLI does too, up to `max_agy_jobs` (20) a day.
 2. **Antigravity gets its own second attempt.** A job it failed once, or one the gate sent back with notes, runs the second time on `agy_model_retry` (default `""`, which takes the sign-in's default model, the stronger one on AI Pro) instead of `agy_model` (3.8 Flash).

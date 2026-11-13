@@ -126,6 +126,7 @@ What a worker needs to know:
 - **The gate.** Your PR is checked by plain code: only the app, `tests/`, `docs/`, `README.md` and `.gitignore` change. No regressions. At least one check fails on main and passes on the PR. No check you add fails on the PR. No existing check is deleted or commented out. No test reaches into `window.__HFB`. `expected.json` is not rewritten. No merge conflict. A PR that fails is closed and the reasons are added to its issue.
 - **Empty pull requests are never merged.** If the fix is already on main, say so on the issue and close the issue directly, without a PR.
 - **Reported numbers are Patrick's call.** An issue labelled `needs-owner` without `owner-approved` is not yours to start.
+- **A `needs-plan` or `parked` issue is not yours to start either.** A `from-patrick` issue is the owner's request in his own words: do what it says, and do not rewrite it into something else.
 - **Agents never push to another agent's branch.** A revision goes on a new branch.
 - **`docs/GOALS.md`** is the owner's list of priorities. Weigh your work by it.
 
