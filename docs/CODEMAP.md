@@ -38,14 +38,14 @@
 | 6635–6644 | `collapsible panel sections (remembered), each with a one-line summary when closed` | Expand/collapse accordion panel UI state persistence in `localStorage` |
 | 6645–6690 | `More options inside each section (open or closed remembered), and the settings search` | Condensed progressive disclosure sections (`details.more`), settings search filter (`#panelSearch`), and automatic expansion of non-default settings (`moreSync`) |
 | 6691–6734 | `what to do next: one suggestion above the figure, with a button that takes you there` | Guided workflow suggestion bar above figures with actionable next-step buttons |
-| 6735–6816 | `projects: everything in one JSON file` | Exporting workspace state to `.json` files and importing project files |
-| 6817–7045 | `projects: a project per purification, saved with the page (db + assets) or in this browser` | IndexedDB (`hfb-projects`) and cloud persistence for multi-project management and asset blob storage |
-| 7046–7120 | `home` | Home screen workspace project list and project creation/opening UI |
-| 7121–7533 | `cloning workflow: stages, attempts and lineage` | The cloning engine: stage kinds and templates as data (`CL_KIND`, `CL_TPL`), attempts, flags, lineage and the `#clonePanel` |
-| 7534–7669 | `the step timeline` | Step-by-step purification timeline editor and step metadata sheet |
-| 7670–7886 | `quick fill: the lab's usual procedures, one click per step; every field stays editable` | One-click lab protocol templates (`LABQ`) populating workflow steps (IMAC, SEC, cleavage, expression, lysis) |
-| 7887–7990 | `export` | Exporting figures to High-DPI PNG, SVG, and bundled ZIP archives |
-| 7991–8011 | `example data` | Built-in demo chromatogram curves and gel images for instant testing |
+| 6735–6817 | `projects: everything in one JSON file` | Exporting workspace state to `.json` files and importing project files |
+| 6818–7046 | `projects: a project per purification, saved with the page (db + assets) or in this browser` | IndexedDB (`hfb-projects`) and cloud persistence for multi-project management and asset blob storage |
+| 7047–7121 | `home` | Home screen workspace project list and project creation/opening UI |
+| 7122–7534 | `cloning workflow: stages, attempts and lineage` | The cloning engine: stage kinds and templates as data (`CL_KIND`, `CL_TPL`), attempts, flags, lineage and the `#clonePanel` |
+| 7535–7670 | `the step timeline` | Step-by-step purification timeline editor and step metadata sheet |
+| 7671–7887 | `quick fill: the lab's usual procedures, one click per step; every field stays editable` | One-click lab protocol templates (`LABQ`) populating workflow steps (IMAC, SEC, cleavage, expression, lysis) |
+| 7888–7991 | `export` | Exporting figures to High-DPI PNG, SVG, and bundled ZIP archives |
+| 7992–8012 | `example data` | Built-in demo chromatogram curves and gel images for instant testing |
 
 ---
 
