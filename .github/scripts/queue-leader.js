@@ -7,12 +7,20 @@
 //   2. Merge: open PRs that touch only tests/ or docs/, with a clean Test suite report (no regressions), are
 //      squash-merged. Anything that changes the app or workflows gets `needs-coordinator` instead.
 //   3. Follow up: after a merge, "New checks failing" in the PR's test report and "Ready-to-file issues" in an
-//      audit report become new issues labelled `needs-triage`.
+//      audit report become new issues labelled `parked`: machine-found work waits until Patrick starts it.
+//   4. Patrick's requests (2026-11-12): intake of every `from-patrick` issue in his own words (small ones are
+//      queued, large ones wait for one planning pass as `needs-plan`), no open issue left without a state, and
+//      the status page, one issue that says where each of his requests stands and mentions him when one needs
+//      him or is stuck.
 // State lives on the issue labels. The per-issue JSON state comment went with the sessions.
 const AG_TAKES_APP = process.env.AG_TAKES_APP !== '0';
 // `queued` was called `jules-queue` until 2026-11-12. Both are read so nothing in flight is stranded; only the
 // new name is ever written. Drop QUEUE_OLD once no open issue carries it.
-const L = {queue: 'queued', fail: 'needs-coordinator', triage: 'needs-triage'};
+const L = {queue: 'queued', fail: 'needs-coordinator', triage: 'needs-triage', parked: 'parked', plan: 'needs-plan', mine: 'from-patrick', status: 'status-page'};
+const TRACKERS = new Set([17, 222, 782]);  // the improvement plan, the Direction board and the Claude Science inbox are standing issues, not work
+const BIG_CHARS = 2500, STUCK_DAYS = 3, DONE_DAYS = 14;
+/* a label that says whose move it is. An open issue with none of these, and no open PR, is invisible to every worker. */
+const isState = l => /^(for-|needs-|awaiting-|relay|paste-)/.test(l) || /-running$/.test(l) || ['queued', 'jules-queue', 'parked', 'ux-report', 'ready-for-lead', 'status-page'].includes(l);
 const QUEUE_OLD = 'jules-queue';
 const SAFE = f => /^(tests\/|docs\/|\.github\/ISSUE_TEMPLATE\/)/.test(f) || f === 'README.md' || f === 'tests/README.md';
 /* a few edits outside those folders are routine for test and docs PRs: adding a suite to the Test suite matrix, or adding up to 3 lines to AGENTS.md */
@@ -41,7 +49,7 @@ module.exports = async ({github, context, core}) => {
     for (const name of [L.queue, QUEUE_OLD]) for (const i of await issues(name)) if (!seen.has(i.number)) seen.set(i.number, i);
     return [...seen.values()]; };
   const ensureLabels = async () => { const have = new Set((await github.paginate(github.rest.issues.listLabelsForRepo, {owner, repo, per_page: 100})).map(l => l.name));
-    const want = {[L.queue]: '0E8A16', [L.fail]: 'D93F0B', [L.triage]: 'C5DEF5'};
+    const want = {[L.queue]: '0E8A16', [L.fail]: 'D93F0B', [L.triage]: 'C5DEF5', [L.parked]: 'EEEEEE', [L.plan]: 'FBCA04', [L.status]: '1D76DB'};
     for (const [name, color] of Object.entries(want)) if (!have.has(name)) await github.rest.issues.createLabel({owner, repo, name, color}); };
   const setLabels = async (n, add, remove) => { for (const r of remove) await github.rest.issues.removeLabel({owner, repo, issue_number: n, name: r}).catch(() => {});
     if (add.length) await github.rest.issues.addLabels({owner, repo, issue_number: n, labels: add}); };
@@ -102,6 +110,11 @@ module.exports = async ({github, context, core}) => {
     if (p.labels.some(l => l.name === L.fail)) await setLabels(p.number, [], [L.fail]);
     await github.rest.pulls.merge({owner, repo, pull_number: p.number, merge_method: 'squash', commit_title: `${p.title} (#${p.number})`});
     say(`PR #${p.number}: merged (tests/docs only, no regressions)`);
+    /* GitHub does not close the linked issue when this workflow's token does the merge (#1364, #1344 and others stayed open
+       for days with their fix on main and no label, so nothing could see them). Close what the PR says it closes. */
+    for (const m of String(p.body || '').matchAll(/(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi)) { const n = +m[1];
+      const it = await github.rest.issues.get({owner, repo, issue_number: n}).then(r => r.data, () => null);
+      if (it && !it.pull_request && it.state === 'open') { await github.rest.issues.update({owner, repo, issue_number: n, state: 'closed', state_reason: 'completed'}); say(`#${n}: closed, fixed by PR #${p.number}`); } }
     /* ---------- 3. follow-ups from what was merged ---------- */
     if (rep) { const sec = rep.body.split('#### New checks failing')[1]; if (sec) {
         const filedPrefixes = new Set();
@@ -115,12 +128,92 @@ module.exports = async ({github, context, core}) => {
             filedPrefixes.add(prefix);
             const suite = parts[0];
             const hint = `Target test suite: tests/suites/${suite}.js\nReproduce command: node tests/suites/${suite}.js\nGoal: Investigate and resolve this check failure. If the test check timed out or has an incorrect expectation, fix tests/suites/${suite}.js. If it revealed a bug in the application, fix hplc-figure-bench(WF1.13).html. Ensure 'node tests/suites/${suite}.js' passes without regressions.`;
-            await github.rest.issues.create({owner, repo, title: `Bug found by ${id}`, labels: [L.triage], body: `The check \`${id}\`, added in #${p.number}, fails on main:\n\n> ${detail}\n\nThe PR description in #${p.number} may say more about the cause.\n\n${hint}`}); say(`follow-up issue for ${id}`); routedAg = true; } } } }
+            await github.rest.issues.create({owner, repo, title: `Bug found by ${id}`, labels: [L.parked], body: `The check \`${id}\`, added in #${p.number}, fails on main:\n\n> ${detail}\n\nThe PR description in #${p.number} may say more about the cause.\n\n${hint}`}); say(`follow-up issue for ${id}`); routedAg = true; } } } }
     for (const f of files.filter(f => /^docs\/.*audit.*\.md$/.test(f))) { const raw = await github.rest.repos.getContent({owner, repo, path: f, ref: 'main'}).catch(() => null); if (!raw) continue;
       const md = Buffer.from(raw.data.content, 'base64').toString('utf8'), part = md.split(/^##\s+Ready-to-file issues\s*$/m)[1]; if (!part) continue;
       for (const block of part.split(/^###\s+/m).slice(1, 21)) { const title = block.split('\n')[0].trim(), body = block.split('\n').slice(1).join('\n').trim(); if (!title) continue;
         const exists = (await github.rest.search.issuesAndPullRequests({q: `repo:${owner}/${repo} is:issue in:title "${title.replace(/"/g, '')}"`})).data.total_count;
-        if (!exists) { await github.rest.issues.create({owner, repo, title, labels: [L.triage], body: `${body}\n\n_From ${f} (#${p.number})._`}); say(`follow-up issue: ${title}`); routedAg = true; } } } }
+        if (!exists) { await github.rest.issues.create({owner, repo, title, labels: [L.parked], body: `${body}\n\n_From ${f} (#${p.number})._`}); say(`follow-up issue: ${title}`); routedAg = true; } } } }
+
+  /* ---------- 4. Patrick's requests: intake, no orphans, the status page ---------- */
+  /* Wrapped whole: a fault here must never stop the routing and merging above. */
+  try {
+    const open = (await github.paginate(github.rest.issues.listForRepo, {owner, repo, state: 'open', per_page: 100})).filter(i => !i.pull_request);
+    const livePrs = await github.paginate(github.rest.pulls.list, {owner, repo, state: 'open', per_page: 100}), prOf = new Map();
+    for (const p of livePrs) { for (const m of `${p.title}\n${p.body || ''}`.matchAll(/(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi)) prOf.set(+m[1], p.number);
+      const b = /issue-(\d+)/.exec(p.head.ref); if (b) prOf.set(+b[1], p.number); }
+    for (const i of open) { const ls = labels(i); if (TRACKERS.has(i.number) || ls.includes(L.status)) continue;
+      const others = ls.filter(l => isState(l) && l !== L.parked && l !== L.triage);
+      if (ls.includes(L.parked) && others.length) { await setLabels(i.number, [], [L.parked]); i.labels = ls.filter(l => l !== L.parked); say(`#${i.number}: no longer parked`); continue; }
+      const orphan = !ls.some(isState) && !prOf.has(i.number), untriaged = ls.includes(L.triage) && !others.length && !ls.includes(L.parked);
+      /* a finished job whose PR was merged but whose issue was never closed: close it, do not park or requeue it */
+      if (orphan && ls.some(l => /-done$/.test(l))) {
+        const hits = (await github.rest.search.issuesAndPullRequests({q: `repo:${owner}/${repo} is:pr is:merged ${i.number} in:title,body`, per_page: 20})).data.items || [];
+        const fix = hits.find(h => new RegExp(`(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+#${i.number}\\b`, 'i').test(h.body || ''));
+        if (fix) { await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: `Fixed by #${fix.number}, which was merged. The issue had stayed open with no state label. Closing as done.`});
+          await github.rest.issues.update({owner, repo, issue_number: i.number, state: 'closed', state_reason: 'completed'}); i.state = 'closed'; say(`#${i.number}: closed, fixed by merged PR #${fix.number}`); continue; } }
+      if (ls.includes(L.mine) && (orphan || untriaged)) {
+        const body = i.body || '', big = /\[x\]\s*This is a big request/i.test(body) || body.length > BIG_CHARS;
+        const add = big ? [L.plan] : [L.queue, 'owner-approved'].filter(l => !ls.includes(l)), drop = ls.filter(l => l === L.triage || /-done$/.test(l));
+        await setLabels(i.number, add, drop);
+        await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: big
+          ? 'Received, in your own words. This is a large request, so it waits for one planning pass that splits it into small jobs before any worker touches it. Open a chat with Claude and say "plan my requests". It is listed on the status page until then.'
+          : 'Received, in your own words, and queued for the coding workers. It is listed on the status page until it is done.'});
+        i.labels = ls.filter(l => !drop.includes(l)).concat(add); i.updated_at = new Date().toISOString(); say(`#${i.number}: Patrick's request, ${big ? 'waiting for a plan' : 'queued'}`); if (!big) routedAg = true;
+      } else if (orphan) {
+        await setLabels(i.number, [L.parked], []);
+        await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: 'This issue was open with no label saying whose move it is, so no worker could see it. It is now `parked`: kept, readable and out of the queue. Add the `queued` label to start it.'});
+        i.labels = ls.concat([L.parked]); say(`#${i.number}: had no state, parked`); }
+    }
+
+    /* the status page */
+    const days = t => Math.floor((Date.now() - Date.parse(t)) / 864e5), link = i => `#${i.number} ${String(i.title).replace(/\|/g, '/').slice(0, 90)}`;
+    const stateOf = i => { const ls = labels(i), pr = prOf.get(i.number);
+      if (ls.includes('needs-owner') && !ls.includes('owner-approved')) return ['you', 'Waiting on you: reply OK or No on the issue'];
+      if (ls.includes(L.plan)) return ['claude', 'Waiting for a plan'];
+      if (ls.some(l => ['for-coordinator', 'needs-coordinator', 'ready-for-lead'].includes(l))) return ['claude', 'Waiting on the lead'];
+      if (pr) return ['work', `Pull request #${pr} open`];
+      if (ls.some(l => /-running$/.test(l))) return ['work', 'A worker is on it now'];
+      if (ls.includes('for-antigravity')) return ['work', 'With Antigravity'];
+      if (ls.some(l => ['for-codex', 'for-claude-code', 'for-claude-first', 'for-claude-cloud', 'for-copilot'].includes(l))) return ['work', 'With the retry workers'];
+      if (ls.includes(L.queue) && ls.includes('ag-returned')) return ['work', 'Queued for the PC: Antigravity handed it back'];
+      if (ls.includes(L.queue) || ls.includes('jules-queue')) return ['work', 'Queued'];
+      if (ls.includes(L.parked)) return ['parked', 'Parked'];
+      return ['work', ls.filter(isState).join(', ') || 'No state']; };
+    const openNow = open.filter(i => i.state !== 'closed');
+    const mine = openNow.filter(i => labels(i).includes(L.mine) && !labels(i).includes(L.status));
+    const askYou = openNow.filter(i => !labels(i).includes(L.status) && stateOf(i)[0] === 'you');
+    const askClaude = openNow.filter(i => stateOf(i)[0] === 'claude' && !TRACKERS.has(i.number) && !labels(i).includes(L.status));
+    const working = mine.filter(i => stateOf(i)[0] === 'work'), stuck = working.filter(i => days(i.updated_at) >= STUCK_DAYS);
+    const parkedN = openNow.filter(i => labels(i).includes(L.parked)).length;
+    const since = new Date(Date.now() - DONE_DAYS * 864e5).toISOString();
+    const done = (await github.paginate(github.rest.issues.listForRepo, {owner, repo, state: 'closed', labels: L.mine, since, per_page: 100})).filter(i => !i.pull_request && i.closed_at > since).sort((a, b) => b.closed_at.localeCompare(a.closed_at));
+    let pcLine = 'unknown', agLine = '';
+    try { const tcs = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: 17, per_page: 100});
+      const hb = [...tcs].reverse().find(c => c.body.startsWith('<!-- pc-heartbeat ')), m = hb && hb.body.match(/pc-heartbeat (\d+)/), ago = m ? (Date.now() / 1000 - Number(m[1])) / 3600 : null;
+      pcLine = ago === null ? 'never seen' : ago < 0.34 ? 'on' : `off, last seen ${ago < 48 ? Math.round(ago) + ' hours' : Math.round(ago / 24) + ' days'} ago`;
+      const cs = [...tcs].reverse().find(c => c.body.includes('<!-- cloud-state ')), cm = cs && cs.body.match(/<!-- cloud-state (\{.*?\}) -->/), st = cm ? JSON.parse(cm[1]) : {};
+      agLine = st.ag_off_until && st.ag_off_until > Date.now() / 1000 ? `paused (it refused ${st.ag_refused || 'its last'} calls in a row)` : 'available'; } catch (e) { say(`status page: could not read #17: ${e.message}`); }
+    const list = (xs, f) => xs.length ? xs.map(f).join('\n') : '_Nothing._';
+    const body = ['<!-- status-page -->', '# Where your requests stand', '',
+      `Rebuilt by the queue leader whenever something changes. To ask for something, open a [new request](https://github.com/${owner}/${repo}/issues/new?template=request.yml) or tell Claude in a chat. A request is filed in your own words and stays on this page until it is done.`, '',
+      `## Waiting on you (${askYou.length})`, list(askYou, i => `- ${link(i)}`), '',
+      `## Waiting on Claude (${askClaude.length})`, askClaude.length ? 'Open a chat with Claude and say "work through my status page".\n' + list(askClaude, i => `- ${link(i)}: ${stateOf(i)[1].toLowerCase()}`) : '_Nothing._', '',
+      `## Stuck (${stuck.length})`, stuck.length ? `No movement for ${STUCK_DAYS} days or more.\n` + list(stuck, i => `- ${link(i)}: ${stateOf(i)[1].toLowerCase()}, ${days(i.updated_at)} days`) : '_Nothing._', '',
+      `## Your requests in progress (${working.length})`, working.length ? '| Request | State | Days since it moved |\n|---|---|---|\n' + working.map(i => `| ${link(i)} | ${stateOf(i)[1]} | ${days(i.updated_at)} |`).join('\n') : '_Nothing._', '',
+      `## Done in the last ${DONE_DAYS} days (${done.length}, newest 10 shown)`, list(done.slice(0, 10), i => `- ${link(i)}${i.state_reason === 'not_planned' ? ' (closed without a change)' : ''}`), '',
+      '## Workers', `- PC manager: ${pcLine}`, `- Antigravity cloud route: ${agLine || 'unknown'}`, `- Parked issues, found by the machine and not started: [${parkedN}](https://github.com/${owner}/${repo}/issues?q=is%3Aissue+is%3Aopen+label%3Aparked). Add the \`queued\` label to one to start it.`].join('\n');
+    let page = open.find(i => labels(i).includes(L.status));
+    const told0 = page ? ((page.body || '').match(/<!-- status-told (\{.*?\}) -->/) || [])[1] : null; let told = {}; try { told = told0 ? JSON.parse(told0) : {}; } catch (e) { told = {}; }
+    const now = {}; askYou.forEach(i => { now[i.number] = 'you'; }); stuck.forEach(i => { now[i.number] = 'stuck'; });
+    const fresh = Object.keys(now).filter(n => told[n] !== now[n]);
+    const full = `${body}\n\n<!-- status-told ${JSON.stringify(now)} -->`;
+    if (!page) { page = (await github.rest.issues.create({owner, repo, title: 'Status page: where your requests stand', labels: [L.status], body: full})).data; say(`status page created as #${page.number}`); }
+    else if ((page.body || '') !== full) { await github.rest.issues.update({owner, repo, issue_number: page.number, body: full}); say('status page updated'); }
+    if (fresh.length) { const by = n => open.find(i => i.number === +n);
+      await github.rest.issues.createComment({owner, repo, issue_number: page.number, body: `@${owner} ` + fresh.map(n => now[n] === 'you' ? `${link(by(n))} needs your answer.` : `${link(by(n))} has not moved for ${STUCK_DAYS} days.`).join(' ')});
+      say(`status page: told Patrick about ${fresh.map(n => '#' + n).join(', ')}`); }
+  } catch (e) { say(`requests and status page: ${e.message}`); }
 
   await wakeCloud(routedAg);
   /* Check again soon only while the NEXT run would actually do something: a queued issue this leader would

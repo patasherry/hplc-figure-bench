@@ -7,7 +7,7 @@ on:
     - cron: '*/15 * * * *'
   workflow_dispatch:
   issues:
-    types: [labeled]
+    types: [opened, reopened, closed, labeled]
   # GitHub often delays or skips scheduled runs, so the leader also wakes on a finished Test suite run, to merge.
   workflow_run:
     workflows: ['Test suite']
@@ -21,7 +21,8 @@ permissions:
 
 jobs:
   lead:
-    if: github.event_name != 'issues' || github.event.label.name == 'queued' || github.event.label.name == 'jules-queue'
+    # an opened, reopened or closed issue changes the status page; of the labels, only the ones that change whose move it is
+    if: github.event_name != 'issues' || github.event.action != 'labeled' || contains(fromJSON('["queued", "jules-queue", "from-patrick", "needs-owner", "owner-approved", "needs-plan"]'), github.event.label.name)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # one leader at a time; the heartbeat below waits outside this lock

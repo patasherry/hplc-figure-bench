@@ -1,0 +1,28 @@
+name: Request from Patrick
+description: Anything you want done to the app or the project. It is filed in your own words and tracked on the status page until it is done.
+labels: ["from-patrick"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write it the way you would say it. Nobody rewrites it before a worker reads it.
+        Never attach real lab data: this repository is public. Describe the file in words (instrument, export type).
+  - type: textarea
+    id: want
+    attributes:
+      label: What do you want?
+      description: A bug, an annoyance, a change or a new feature. As short or as long as it needs.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What were you doing, and what did you expect?
+      description: Optional. For a bug, what the app showed and what it should have shown.
+  - type: checkboxes
+    id: size
+    attributes:
+      label: Size
+      description: A big request is planned once and split into small jobs before any worker starts. Long requests are treated as big automatically.
+      options:
+        - label: This is a big request with several parts

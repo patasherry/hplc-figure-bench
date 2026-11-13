@@ -34,6 +34,9 @@ cfg, REPO, gh = rv.cfg, rv.REPO, rv.gh
 BOARD = cfg.get('board_issue', 222)
 BOARD_EVERY = cfg.get('board_every_merges', 8)  # a round after this many merged PRs
 BOARD_HOURS = cfg.get('board_every_hours', 12)  # and at least this often while the PC is on (twice a day)
+# The board meets by itself only when board_auto is on. Off since 2026-11-12 (Patrick's choice): the PC's hours go to his
+# requests, and a meeting is held when he asks for one with a `Discuss: ...` comment on the board issue.
+BOARD_AUTO = cfg.get('board_auto', False)
 BOARD_LOW_QUEUE = cfg.get('board_low_queue', 10)  # when fewer jobs than this wait for workers
 BOARD_LOW_HOURS = cfg.get('board_low_cooldown_hours', 4)  # cooldown between low-queue board meetings
 AUTO_MAX, AUTO_QUEUE, AUTO_AVG = cfg.get('board_adopt_max', 2), cfg.get('board_queue_cap', 20), 3.5  # adopt at most 2 high-conviction issues a round, while fewer than 20 jobs wait
@@ -1679,7 +1682,14 @@ def ag_sweep_envs(keep_hours=None):
     A sandbox touched inside keep_hours is left alone, since a running job could still be using it and an interaction
     is capped at 3 hours."""
     cutoff = time.time() - (AG_ENV_KEEP_H if keep_hours is None else keep_hours) * 3600
-    envs = (gem_api('environments?pageSize=100') or {}).get('environments') or []
+    # every page: the first 100 alone left a project with more old sandboxes than that full after each sweep
+    envs, tok = [], ''
+    for _ in range(50):
+        r = gem_api('environments?pageSize=100' + (f'&pageToken={tok}' if tok else '')) or {}
+        envs += r.get('environments') or []
+        tok = r.get('nextPageToken') or ''
+        if not tok:
+            break
     gone = 0
     for e in envs:
         eid = (e.get('name') or '').rsplit('/', 1)[-1] or e.get('id') or ''
@@ -2057,9 +2067,13 @@ def bg_worker(s, key):
         waiting = [(i, W['own']) for i in issues(W['own']) if fresh(i)] + \
                   ([(i, 'for-claude-code') for i in issues('for-claude-code') if ok(i)] if W['takes_claude'] else []) + \
                   ([(i, 'for-copilot') for i in issues('for-copilot') if ok(i)] if cop_off else []) + \
-                  [(i, QUEUE) for i in queue if ok(i) and 'from-patrick' not in {l['name'] for l in i['labels']}
+                  [(i, QUEUE) for i in queue if ok(i)
                    and now - seen[str(i['number'])] >= OC_WAIT_MIN * 60 and (key != 'agy' or not rt.is_light(i['title']))
                    and (key != 'codex' or CODEX_QUEUE == 'all' or 'ag-returned' in {l['name'] for l in i['labels']})]
+    # Patrick's own requests go first, whatever queue they sit in (his choice, 2026-11-12). Until then a from-patrick job in the
+    # open queue was skipped by every worker here, a leftover from when Jules took those: one that Antigravity handed back
+    # (queued + ag-returned) could be taken by nobody. The sort is stable, so the order inside each group is kept.
+    waiting.sort(key=lambda w: 'from-patrick' not in {l['name'] for l in w[0]['labels']})
     waiting = rt.prefer_unlocked(waiting, busy_sections(s), lambda x: issue_sections(x.get('title', ''), x.get('body', ''))[1])
     if not waiting or not use(s, W['cap']):
         return
@@ -2257,7 +2271,7 @@ def lead_review(s):
 
 # ---------- usability scopes: the PC walks one use case through the app, the local model takes notes, the board proposes fixes ----------
 UX_MARK = '<!-- ux-scope-report -->'
-UX_EVERY = cfg.get('ux_every_hours', 3)  # one scope per this many hours while the PC is on; 0 turns it off
+UX_EVERY = cfg.get('ux_every_hours', 0)  # one scope per this many hours while the PC is on; 0 turns it off. Off by default since 2026-11-12 (it was 3): the walks file work nobody asked for
 UX_LABEL = 'ux-report'
 UX_NOTES = """You are a biochemistry graduate student using Protein Purification Bench, an app for protein purification figures, for the first time.
 Your goal: {goal}
@@ -2740,7 +2754,7 @@ def board(s):
         weekly = now.weekday() == 6 and now.hour >= DIGEST_HOUR and b.get('week') != now.strftime('%Y-%W')
         due = time.time() - b.get('at', 0) > BOARD_HOURS * 3600
         low = (len(issues_q()) + len(issues('for-antigravity'))) < BOARD_LOW_QUEUE and time.time() - b.get('at', 0) > BOARD_LOW_HOURS * 3600
-        why = 'weekly' if weekly else f'{len(merged)} merged PRs' if len(merged) >= BOARD_EVERY else f'{BOARD_HOURS} h since the last meeting' if due else 'the work queue is low' if low else ''
+        why = '' if not BOARD_AUTO else 'weekly' if weekly else f'{len(merged)} merged PRs' if len(merged) >= BOARD_EVERY else f'{BOARD_HOURS} h since the last meeting' if due else 'the work queue is low' if low else ''
         if why:
             b['week'] = now.strftime('%Y-%W'); b['since'] = dt.datetime.now(dt.timezone.utc).isoformat(); b['at'] = time.time()
             log(f'board: meeting ({why})')
