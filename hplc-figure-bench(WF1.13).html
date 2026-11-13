@@ -2512,8 +2512,8 @@ function buildOverlaySVG(ov){
 
   let yt = ticks(y0, y1, Math.max(3, Math.round(numOr(o.h,2.6)*1.8)));
   let xt = ticks(xlo, xhi, Math.max(4, Math.round(numOr(o.w,3.5)*2)));
-  const ytl = yt.v.map(v => tkf(v, yt.dec));
-  const mL = o.showY ? (tOut + 3 + Math.max(...ytl.map(s=>s.length))*cw + 5 + fs*1.2) : fs*0.8;
+  const ytl = yt.v.map(v => tkf(v, yt.dec)), padL = idp === 'zi-' ? 3 : 0;
+  const mL = padL + (o.showY ? (tOut + 3 + Math.max(...ytl.map(s=>s.length))*cw + 5 + fs*1.2) : fs*0.8);
   const mB = tOut + 3 + fs + 4 + fs*1.25, mT = fs*0.7;
   const plotH = Math.max(H - mB, mT + 24) - mT;
   yt = fitTicks(yt, y0, y1, Math.max(3, Math.round(numOr(o.h,2.6)*1.8)), plotH, 0, fs*1.28);
@@ -2549,7 +2549,7 @@ function buildOverlaySVG(ov){
   if (o.showY) {
     yt.v.forEach((v,i) => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${ytl[i]}</text>`));
     const yl = yLabelText();
-    if (yl) s.push(`<text transform="translate(${r2(fs*0.85)} ${r2((T+B)/2)}) rotate(-90)" text-anchor="middle">${esc(yl)}</text>`);
+    if (yl) s.push(`<text transform="translate(${r2(padL + fs*0.85)} ${r2((T+B)/2)}) rotate(-90)" text-anchor="middle">${esc(yl)}</text>`);
   }
   s.push('</g>');
   const lblLeft = [];
@@ -2728,8 +2728,8 @@ function buildRunPlainSVG(run, ov){
   /* the strip under the trace holds fraction labels, not data, so no y values are printed there */
   if (band && (run.ymin ?? '') === '') { const keep = yt.v.filter(v => v >= ylo - yr*0.05); if (keep.length >= 2) yt.v = keep; }
   let xt = ticks(xlo, xhi, Math.max(3, Math.round(W/72*2)));
-  const ytl = yt.v.map(v => tkf(v, yt.dec));
-  const mL = tOut + 3 + Math.max(...ytl.map(s=>s.length))*cw + 5 + fs*1.2;
+  const ytl = yt.v.map(v => tkf(v, yt.dec)), padL = idp === 'zi-' ? 3 : 0;
+  const mL = padL + tOut + 3 + Math.max(...ytl.map(s=>s.length))*cw + 5 + fs*1.2;
   const mR = hasSec ? tOut + 3 + Math.max(...stl.map(s=>s.length))*cw + 5 + fs*1.2 : fs*0.8;
   /* keep a usable plot even when fonts or margins are too big for the figure size */
   const L = mL, R = Math.max(W - mR, mL + 24), T = mT, B = Math.max(H - mB, mT + 24);
@@ -2847,7 +2847,7 @@ function buildRunPlainSVG(run, ov){
   xt.v.forEach(v => s.push(`<text x="${r2(px(v))}" y="${r2(xly)}" text-anchor="middle"${halo}>${tkf(v, xt.dec)}</text>`));
   const xlab = runXLabel(run); if (xlab) s.push(`<text x="${r2((L+R)/2)}" y="${r2(xly + 4 + fs*1.15)}" text-anchor="middle"${halo}>${esc(xlab)}</text>`);
   yt.v.forEach((v,i) => s.push(`<text x="${r2(L - tOut - 3)}" y="${r2(py(v) + fs*0.35)}" text-anchor="end">${ytl[i]}</text>`));
-  if (o.rylabel) s.push(`<text transform="translate(${r2(fs*0.85)} ${r2((T+B)/2)}) rotate(-90)" text-anchor="middle" fill="${hasSec ? run.color : '#000000'}">${uvTitle(o.rylabel, uvOf(run))}</text>`);
+  if (o.rylabel) s.push(`<text transform="translate(${r2(padL + fs*0.85)} ${r2((T+B)/2)}) rotate(-90)" text-anchor="middle" fill="${hasSec ? run.color : '#000000'}">${uvTitle(o.rylabel, uvOf(run))}</text>`);
   if (hasSec) {
     st.v.forEach((v,i) => s.push(`<text x="${r2(R + tOut + 3)}" y="${r2(py2(v) + fs*0.35)}">${stl[i]}</text>`));
     if (secTitle) s.push(`<text transform="translate(${r2(W - fs*0.35)} ${r2((T+secB)/2)}) rotate(-90)" text-anchor="middle" fill="${secCol}">${esc(secTitle)}</text>`);
