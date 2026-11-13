@@ -173,5 +173,67 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
     } finally { await close(); }
   });
 
+  await T.t('stage-rename-dup', async () => {
+    let exported = '';
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      p.setDefaultTimeout(15000);
+      await h.newProject('Stage dup synthetic', 'cloning');
+      await cl(p).locator('[data-cl=tpl][data-v=ath]').click(); await h.wait(400);
+      await go(h, 'Q5 PCR setup');
+
+      // two attempts so duplication proves it carries the last attempt's fields
+      await field(p, 'Polymerase or master mix').fill('Old synthetic mix'); await field(p, 'Polymerase or master mix').dispatchEvent('change'); await h.wait(200);
+      await setStatus(p, h, 0, 'fail');
+      await cl(p).locator('[data-cl=addat]').click(); await h.wait(300);
+      await field(p, 'Polymerase or master mix').fill('Q5 synthetic mix'); await field(p, 'Polymerase or master mix').dispatchEvent('change'); await h.wait(200);
+      await field(p, 'Reaction volume').fill('25'); await field(p, 'Reaction volume').dispatchEvent('change'); await h.wait(200);
+      await field(p, 'Date').fill('2026-11-12'); await field(p, 'Date').dispatchEvent('change'); await h.wait(200);
+      await field(p, 'Deviations').fill('Synthetic deviation'); await field(p, 'Deviations').dispatchEvent('change'); await h.wait(200);
+      await field(p, 'Result and notes').fill('Synthetic note'); await field(p, 'Result and notes').dispatchEvent('change'); await h.wait(200);
+      await setStatus(p, h, 1, 'done');
+
+      const nameBox = cl(p).locator('label.f', {hasText: 'Stage name'}).locator('input');
+      const dupBtn = cl(p).locator('button', {hasText: 'Duplicate this stage'});
+      T.check('dupst/rename-field-present', await nameBox.isVisible(), 'no stage rename field');
+      T.check('dupst/button-present', await dupBtn.isVisible(), 'no Duplicate this stage button');
+      if (await nameBox.isVisible() && await dupBtn.isVisible()) {
+        await nameBox.fill('Q5 PCR, insert 1'); await h.wait(250);
+        T.check('dupst/renamed', !!(await row(h, 'Q5 PCR, insert 1')) && !(await row(h, 'Q5 PCR setup')) && /Q5 PCR, insert 1/.test(await cl(p).locator('h2').innerText()), JSON.stringify(await rows(h)));
+        await nameBox.fill(''); await h.wait(250);
+        T.check('dupst/empty-uses-default', !!(await row(h, 'Q5 PCR setup')) && /Q5 PCR setup/.test(await cl(p).locator('h2').innerText()), await cl(p).locator('h2').innerText());
+        await nameBox.fill('Q5 PCR, insert 1'); await h.wait(250);
+
+        await dupBtn.click(); await h.wait(400);
+        const list = (await rows(h)).slice(1).map(x => x.t), idx = list.indexOf('Q5 PCR, insert 1');
+        T.check('dupst/inserted-after', idx >= 0 && list[idx + 1] === 'Q5 PCR setup', list.join(' | '));
+        T.check('dupst/one-not-started-attempt', await cl(p).locator('.cl-at').count() === 1 && await cl(p).locator('[data-cst]').first().inputValue() === 'todo', await cl(p).innerText());
+        T.check('dupst/carries-last-fields', await field(p, 'Polymerase or master mix').inputValue() === 'Q5 synthetic mix' && await field(p, 'Reaction volume').inputValue() === '25', await field(p, 'Polymerase or master mix').inputValue());
+        T.check('dupst/drops-date-notes-dev', await field(p, 'Date').inputValue() === '' && await field(p, 'Deviations').inputValue() === '' && await field(p, 'Result and notes').inputValue() === '', 'date, deviations or notes were copied');
+
+        await nameBox.fill('Q5 PCR, insert 2'); await h.wait(250);
+        exported = await exportJson(p);
+      }
+      T.check('dupst/no page errors', errs.length === 0, errs.join(' | '));
+    } finally { await close(); }
+
+    if (exported) {
+      const {p: p2, errs: errs2, close: close2} = await open(), h2 = H(p2);
+      try {
+        p2.setDefaultTimeout(15000);
+        await p2.setInputFiles('#projFile', {name: 'stage_dup_synthetic.json', mimeType: 'application/json', buffer: Buffer.from(exported)}); await h2.wait(1500);
+        const list = (await rows(h2)).slice(1).map(x => x.t), idx = list.indexOf('Q5 PCR, insert 1');
+        T.check('dupst/reload-both-names', idx >= 0 && list[idx + 1] === 'Q5 PCR, insert 2', list.join(' | '));
+        await go(h2, 'Q5 PCR, insert 1');
+        T.check('dupst/reload-orig-name-box', await cl(p2).locator('label.f', {hasText: 'Stage name'}).locator('input').inputValue() === 'Q5 PCR, insert 1', 'original stage name lost');
+        await go(h2, 'Q5 PCR, insert 2');
+        T.check('dupst/reload-dup-name-box', await cl(p2).locator('label.f', {hasText: 'Stage name'}).locator('input').inputValue() === 'Q5 PCR, insert 2', 'duplicated stage name lost');
+        T.check('dupst/reload-copied-field', await field(p2, 'Polymerase or master mix').inputValue() === 'Q5 synthetic mix' && await field(p2, 'Reaction volume').inputValue() === '25', await field(p2, 'Polymerase or master mix').inputValue());
+        T.check('dupst/reload-not-started', await cl(p2).locator('[data-cst]').first().inputValue() === 'todo' && await field(p2, 'Date').inputValue() === '' && await field(p2, 'Deviations').inputValue() === '' && await field(p2, 'Result and notes').inputValue() === '', 'status/date/notes/dev changed after reload');
+        T.check('dupst/reload no page errors', errs2.length === 0, errs2.join(' | '));
+      } finally { await close2(); }
+    }
+  });
+
   T.done();
 })();
