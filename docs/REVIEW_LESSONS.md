@@ -9,3 +9,4 @@ The manager keeps a second list on the PC by itself (`.hfb-lessons.txt` in the u
 - GitHub does not close an issue when the workflow token merges its pull request. A change that relies on "Closes #N" needs the issue closed in code (#1412).
 - A test helper that drags something and drags it back does not return it to the exact pixel. Use the app's own Reset control before the next check (#1421).
 - A new header control can squeeze the project name at narrow widths. Check the phone layout whenever the header gains anything (#1403).
+- A new CSS class can collide with one already in the stylesheet (`.sw` was the colour swatch). Search the file for the class name before adding it (#1435).
