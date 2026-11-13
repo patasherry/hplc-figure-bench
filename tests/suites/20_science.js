@@ -407,6 +407,46 @@ const JUNK = [/NaN/, /undefined/, /\[object/, /\(, /, / {2}/, /(?<!\.)\.\.(?!\.)
   });
 
 
+  /* A gel lane documents the final chromatographic pool, not material measured after it. */
+  await T.t('p8_two_step_final_state', async () => {
+    await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
+    await h.newProject('Two step final state');
+    await p.evaluate(() => { const e = document.getElementById('o-wfYield'); e.checked = true; e.dispatchEvent(new Event('input', {bubbles: true})); e.dispatchEvent(new Event('change', {bubbles: true})); });
+    await setOpt(p, 'o-protKda', '50'); await setOpt(p, 'o-eps', '1'); await setOpt(p, 'o-purBase', 'lane');
+    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep="man:other"]'); await h.wait(400);
+    await setField('#man-name', 'Starting sample'); await setField('#man-conc', '2'); await setField('#man-vol', '10');
+    await h.addRun(F.imac); await h.pool('T1-T6'); await setRun('path', 2);
+    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep="conc"]'); await h.wait(400);
+    await setField('#btw-conc', '5'); await setField('#btw-vOut', '1');
+    await h.addRun(F.q); await h.pool('T11-T16'); await setRun('path', 2);
+    const nd = 'Sample ID\tUser name\tDate\tTime\tmg/ml\tA280 10 mm\tA260 10 mm\t260/280\n' +
+      'IMAC pool\tPS\t10/22/2026\t15:00\t10.000\t10.000\t5.70\t0.57\nQ pool\tPS\t10/22/2026\t15:30\t4.000\t4.000\t2.28\t0.57';
+    await p.setInputFiles('#ndFile', {name: 'two_step_amounts.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(nd)}); await h.wait(500);
+    await h.step('final'); await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true));
+    await p.locator('#ndList select[data-ndk="runId"]').nth(0).selectOption({index: 1}); await h.wait(250);
+    await p.evaluate(() => document.querySelectorAll('.nd-edit').forEach(e => e.open = true)); await h.wait(150);
+    await p.locator('#ndList select[data-ndk="runId"]').nth(1).selectOption({index: 2}); await h.wait(250);
+    const ndVols = p.locator('#ndList [data-ndr="ndVol"]'); for (let i = 0; i < await ndVols.count(); i++) { await ndVols.nth(i).fill('1'); await ndVols.nth(i).dispatchEvent('change'); } await h.wait(300);
+    const gel = await p.evaluate(() => { const c = document.createElement('canvas'); c.width = 200; c.height = 240; const x = c.getContext('2d'), im = x.createImageData(c.width, c.height);
+      for (let y = 0; y < c.height; y++) for (let q = 0; q < c.width; q++) { const lane = q < 100 ? 0 : 1, dx = Math.abs(q % 100 - 50), w = Math.exp(-0.5*(dx/20)**8), bs = lane ? [[95,120,5],[160,30,5]] : [[35,70,4],[80,70,4],[130,70,4],[180,70,4]], dark = bs.reduce((s, b) => s + b[1]*Math.exp(-0.5*((y-b[0])/b[2])**2), 0)*w, v = Math.max(0, Math.round(245-dark)), k = 4*(y*c.width+q); im.data[k] = im.data[k+1] = im.data[k+2] = v; im.data[k+3] = 255; }
+      x.putImageData(im, 0, 0); return c.toDataURL('image/png'); });
+    await p.setInputFiles('#gelFile', {name: 'two_step_purity.png', mimeType: 'image/png', buffer: Buffer.from(gel.split(',')[1], 'base64')}); await h.wait(900);
+    await p.locator('#g-n').fill('2'); await p.locator('#g-n').dispatchEvent('input'); await h.wait(250);
+    await p.locator('#g-labels').fill('M, T11-T16'); await p.locator('#g-labels').dispatchEvent('input'); await h.wait(250);
+    await p.click('#g-match'); await h.wait(400);
+    const poolBands = p.locator('#bandTable tr').filter({hasText: 'T11-T16'}).last().locator('.bchip');
+    T.check('p8.fixture_has_two_pool_bands', await poolBands.count() >= 2, `pool bands: ${await poolBands.count()}`);
+    if (await poolBands.count() >= 2) { await poolBands.nth(0).click(); await h.wait(200); await poolBands.nth(1).click(); await h.wait(150); await poolBands.nth(1).click(); await h.wait(150); await poolBands.nth(1).click(); await h.wait(300); }
+    await h.step('figure'); const t = await table(), ndK = col(t, /^NanoDrop mg$/), yK = col(t, /^Yield/), imac = t.rows.find(r => /^1\./.test(r.Step)), q = t.rows.find(r => /^2\./.test(r.Step));
+    const basis = await sumNotes(), before = (await h.svgTexts()).map(x => x.t).join(' '), purity = before.match(/(?:≈)?(\d+)% pure by gel/);
+    T.check('p8.numeric_invariant', /(?:µmol|umol)/i.test(basis) && imac && q && num(imac[ndK]) === 10 && num(q[ndK]) === 4 && num(imac[yK]) === 50 && num(q[yK]) === 20 && !!purity, `basis: ${basis.slice(0, 120)}; rows: ${JSON.stringify(t.rows)}; figure: ${before.slice(-240)}`);
+    await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep="man:other"]'); await h.wait(400);
+    await setField('#man-name', 'Final buffer exchange'); await setField('#man-conc', '0.5'); await setField('#man-vol', '1'); await h.step('figure');
+    const finalFigure = (await h.svgTexts()).map(x => x.t).join(' ');
+    T.check('p8.final_amount_is_measured_state', /Final sample: 0\.50 mg/.test(finalFigure), finalFigure.slice(-300));
+    T.check('p8.final_state_does_not_inherit_gel_purity', !/pure by gel/.test(finalFigure), finalFigure.slice(-300));
+  });
+
   await T.t('p8_workflow_compact_labels', async () => {
     await p.click('text=All projects', {timeout: 1000}).catch(() => {}); await h.wait(600);
     await h.newProject('Compact labels');
