@@ -112,7 +112,7 @@ details.log pre { font-size: .75rem; max-height: 16rem; overflow: auto; backgrou
 
   <section class="tiles">
     <div class="tile" id="t-you"><div class="l">Waiting on you</div><div class="n" id="n-you">–</div></div>
-        <div class="tile"><div class="l">Queued</div><div class="n" id="n-queue">–</div></div>
+    <div class="tile"><div class="l">Queued</div><div class="n" id="n-queue">–</div></div>
     <div class="tile"><div class="l">In review or with the lead</div><div class="n" id="n-review">–</div></div>
     <div class="tile"><div class="l">App fixes, last 30 days</div><div class="n" id="n-fix">–</div></div>
   </section>
@@ -226,8 +226,8 @@ async function load() {
 function draw() {
   const {inbox, work, merged, health, notes} = data;
   const n = (s) => work.filter((w) => s.includes(w.stage)).length;
-  const v = {you: inbox.length, run: 0, queue: n(['Queued', 'Being sorted']), review: n(['Pull request in review', 'Waiting on the lead']), fix: merged.filter((m) => m.app).length};
-  $('n-you').textContent = v.you; $('n-run').textContent = v.run; $('n-queue').textContent = v.queue; $('n-review').textContent = v.review; $('n-fix').textContent = v.fix;
+  const v = {you: inbox.length, queue: n(['Queued', 'Being sorted']), review: n(['Pull request in review', 'Waiting on the lead']), fix: merged.filter((m) => m.app).length};
+  $('n-you').textContent = v.you; $('n-queue').textContent = v.queue; $('n-review').textContent = v.review; $('n-fix').textContent = v.fix;
   $('t-you').classList.toggle('alert', v.you > 0);
   $('take').textContent = `${v.you ? `${v.you} ${v.you === 1 ? 'thing needs' : 'things need'} you.` : 'Nothing needs you right now.'} ${v.queue} ${v.queue === 1 ? 'job is' : 'jobs are'} queued, and ${v.fix} app fixes went in over the last 30 days.`;
 
