@@ -59,9 +59,20 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
       await setStatus(p, h, 0, 'fail');
       T.check('ath/failed-not-done', !(await row(h, 'Q5 PCR setup')).done, 'a failed attempt marked the stage done');
       const svg = await h.exportSvg(), bx = await h.svgBoxes(svg);
-      T.check('ath/tracker-stage-titles', ATH.every(t => bx.texts.some(x => x.t === t)), 'missing stage title in SVG: ' + ATH.filter(t => !bx.texts.some(x => x.t === t)).join(', '));
+      const ATH_SHORT = ['Design', 'Primers', 'Stocks', 'PCR', 'Cycler', 'Gel', 'Pick PCR', 'KLD', 'Transform', 'Colonies', 'Culture', 'Miniprep', 'Seq', 'Verify', 'Transfer'];
+      T.check('ath/tracker-stage-labels', ATH_SHORT.every(t => bx.texts.some(x => x.t === t)), 'missing stage label in SVG: ' + ATH_SHORT.filter(t => !bx.texts.some(x => x.t === t)).join(', '));
       T.check('ath/tracker-not-clipped', bx.clipped.length === 0, bx.clipped.join(' | '));
-      T.check('ath/failed-not-completed', bx.texts.some(x => x.t === 'Failed') && !bx.texts.some(x => x.t === 'Completed'), 'failed attempt stage drawn as completed');
+      const pg = await p.context().newPage();
+      let marks = {total: 0, done: 0, fail: 0};
+      try {
+        await pg.setContent('<!doctype html><meta charset="utf-8"><body>' + svg + '</body>');
+        marks = await pg.evaluate(() => ({
+          total: document.querySelectorAll('svg [data-mark]').length,
+          done: document.querySelectorAll('svg [data-mark="done"]').length,
+          fail: document.querySelectorAll('svg [data-mark="fail"]').length
+        }));
+      } finally { await pg.close(); }
+      T.check('ath/failed-not-completed', marks.total === 15 && marks.fail === 1 && marks.done === 0 && !svg.includes('Not started'), JSON.stringify(marks));
       await cl(p).locator('[data-cl=addat]').click(); await h.wait(300);
       T.check('ath/repeat-keeps-failure', await cl(p).locator('.cl-at').count() === 2 && /Failed/.test(await cl(p).locator('.cl-at').first().locator('summary').innerText()), await cl(p).innerText());
       await setStatus(p, h, 1, 'done');
@@ -325,6 +336,39 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
 
       T.check('methods-transform/no page errors', errs2.length === 0, errs2.join(' | '));
     } finally { await close2(); }
+  });
+
+  await T.t('figure-card', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      p.setDefaultTimeout(15000);
+      await h.newProject('ATH card synthetic', 'cloning');
+      await cl(p).locator('[data-cl=tpl][data-v=ath]').click(); await h.wait(500);
+      await go(h, 'Construct and mutation design'); await setStatus(p, h, 0, 'done');
+      await go(h, 'Forward and reverse primer design'); await setStatus(p, h, 0, 'done');
+      await go(h, 'Primer ordering, resuspension and working stocks'); await setStatus(p, h, 0, 'done');
+      await go(h, 'Q5 PCR setup'); await setStatus(p, h, 0, 'fail');
+      const svg = await h.exportSvg(), bx = await h.svgBoxes(svg);
+      const pg = await p.context().newPage();
+      let info = {total: 0, filled: 0, failed: 0};
+      try {
+        await pg.setContent('<!doctype html><meta charset="utf-8"><body>' + svg + '</body>');
+        info = await pg.evaluate(() => {
+          const ms = [...document.querySelectorAll('svg [data-mark]')];
+          return {
+            total: ms.length,
+            filled: ms.filter(e => { const f = (e.getAttribute('fill') || '').toLowerCase(); return f && f !== 'none' && f !== '#ffffff' && f !== '#fff'; }).length,
+            failed: ms.filter(e => e.getAttribute('data-mark') === 'fail').length
+          };
+        });
+      } finally { await pg.close(); }
+      T.check('figure-card/15-marks', info.total === 15, `marks=${info.total}`);
+      T.check('figure-card/3-filled', info.filled === 3, `filled=${info.filled}`);
+      T.check('figure-card/1-failed', info.failed === 1, `failed=${info.failed}`);
+      T.check('figure-card/no-not-started', !svg.includes('Not started'), 'found "Not started" in saved SVG');
+      T.check('figure-card/not-clipped', bx.clipped.length === 0, bx.clipped.join(' | '));
+      T.check('figure-card/no page errors', errs.length === 0, errs.join(' | '));
+    } finally { await close(); }
   });
 
   T.done();
