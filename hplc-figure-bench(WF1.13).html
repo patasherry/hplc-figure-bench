@@ -74,7 +74,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.45 "Instrument Sans",syst
 .clone .cl-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px 10px;padding-top:9px} .clone .cl-wide{grid-column:1/-1}
 .clone .cl-at{border:1px solid var(--line);border-radius:var(--r-s);padding:7px 10px} .clone .cl-at > summary{cursor:pointer;display:flex;gap:8px;align-items:center;font-size:13px}
 .clone .cl-badge{font-size:11.5px;border:1px solid var(--line2);border-radius:999px;padding:1px 8px;color:var(--muted)} .clone .cl-badge.cl-fail,.clone .cl-badge.cl-review{border-color:var(--warn);color:var(--warn)} .clone .cl-badge.cl-done,.clone .cl-badge.cl-dev{color:var(--ink);font-weight:600}
-.clone .cl-acts,.clone .cl-tpls{display:flex;flex-wrap:wrap;gap:6px;align-items:center} .clone .cl-acts .sp{flex:1 1 auto} .clone .cl-ck{display:grid;gap:5px}
+.clone .cl-acts,.clone .cl-tpls{display:flex;flex-wrap:wrap;gap:6px;align-items:center} .clone .cl-acts .sp{flex:1 1 auto} .clone .cl-ck{display:grid;gap:5px} .clone .cl-wf{margin:0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}
 .clone .cl-flag{margin:0;font-size:12.5px;color:var(--warn);line-height:1.45} .clone .cl-seq{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
 .clone .cl-lin{margin:0;font:inherit;font-size:12px;line-height:1.5;white-space:pre-wrap;color:var(--muted);border:1px solid var(--line);border-radius:var(--r-s);padding:8px 10px;max-height:260px;overflow:auto}
 .projname{font:inherit;font-size:16px;font-weight:600;border:1px solid transparent;background:transparent;color:var(--ink);padding:3px 6px;border-radius:var(--r-s);min-width:0;flex:0 1 26ch}
@@ -7300,7 +7300,7 @@ function buildCloneTrackerSVG(k){
   const geo = {W, H, L: pad, R: W - pad, T: pad, B: H - pad, step: k};
   return {svg: s.join(''), geo};
 }
-let clOpen = '', clArm = '', clHtml = '';
+let clOpen = '', clArm = '', clHtml = '', clPick = false;
 function clField(a, fd){ const v = a.f[fd.k] == null ? '' : a.f[fd.k], at = `data-cf="${esc(fd.k)}" data-at="${esc(a.id)}"`, lab = esc(fd.l) + (fd.ty === 'n' && fd.x ? ` (${esc(fd.x)})` : '');
   if (fd.ty === 'c') return `<label class="check cl-wide"><input type="checkbox" ${at}${v ? ' checked' : ''}> ${lab}</label>`;
   if (fd.ty === 'a' || fd.ty === 'q') return `<label class="f cl-wide">${lab}<textarea rows="2" ${at}${fd.ty === 'q' ? ' class="cl-seq" spellcheck="false"' : ''}>${esc(v)}</textarea></label>`;
@@ -7481,9 +7481,10 @@ function clPanelHtml(){ const c = CL(), onC = curStep === 'transform', id = curS
       <label class="f">Sequence verification<select data-cext="ver"><option value="">Not recorded</option><option value="yes"${c.ext.ver === 'yes' ? ' selected' : ''}>Sequence verified</option><option value="no"${c.ext.ver === 'no' ? ' selected' : ''}>Not verified</option></select></label>
       <label class="f">How it was verified<input type="text" data-cext="note" value="${esc(c.ext.note)}"></label></div>${bad ? '<p class="cl-flag">Say how it was verified. Without that it is not recorded as sequence verified.</p>' : ''}${clTypeSel()}`; }
   const addSel = `<label class="f">Add a stage<select data-cadd="1"><option value="">Choose a stage to add</option><optgroup label="Cloning">${Object.keys(CL_KIND).filter(k => !CL_CC.includes(k)).map(k => `<option value="${k}">${esc(CL_KIND[k].t)}</option>`).join('')}</optgroup><optgroup label="Mix and Go competent cells"><option value="cc:all">All competent-cell stages</option>${CL_CC.map(k => `<option value="${k}">${esc(CL_KIND[k].t)}</option>`).join('')}</optgroup></select></label>`;
-  if (!s) return `<h2>Cloning workflow</h2>${c.stages.length ? '' : '<p class="hint">Choose a workflow. Its stages appear in the step list, every one can be skipped or repeated, and choosing another workflow later only adds stages.</p>'}
-    <div class="cl-tpls">${Object.keys(CL_TPL).map(k => `<button type="button" class="btn${c.tpl === k ? ' primary' : ''}" data-cl="tpl" data-v="${k}"${c.tpl === k ? ' aria-pressed="true"' : ''}>${esc(CL_TPL[k].t)}</button>`).join('')}</div>${addSel}
-    ${c.stages.length ? `<pre class="cl-lin" id="clLineage">${esc(clLineage())}</pre><div class="cl-acts"><button type="button" class="btn" data-cl="copy">Copy the lineage report</button></div>` : ''}${clTypeSel()}`;
+  if (!s) { const showPick = !c.tpl || clPick;
+    return `<h2>Cloning workflow</h2>${c.stages.length ? '' : '<p class="hint">Choose a workflow. Its stages appear in the step list, every one can be skipped or repeated, and choosing another workflow later only adds stages.</p>'}
+    ${showPick ? `<div class="cl-tpls">${Object.keys(CL_TPL).map(k => `<button type="button" class="btn${c.tpl === k ? ' primary' : ''}" data-cl="tpl" data-v="${k}"${c.tpl === k ? ' aria-pressed="true"' : ''}>${esc(CL_TPL[k].t)}</button>`).join('')}</div>` : `<p class="cl-wf">Workflow: <strong>${esc(CL_TPL[c.tpl].t)}</strong> <button type="button" class="linkbtn" data-cl="chgwf">Change workflow</button></p>`}${addSel}
+    ${c.stages.length ? `<pre class="cl-lin" id="clLineage">${esc(clLineage())}</pre><div class="cl-acts"><button type="button" class="btn" data-cl="copy">Copy the lineage report</button></div>` : ''}${clTypeSel()}`; }
   const d = CL_KIND[s.kind], fl = s.skip ? [] : clFlags(s), i = c.stages.indexOf(s);
   return `<h2>${esc(clTitle(s))}</h2><label class="f">Stage name<input type="text" data-cname="1" value="${esc(s.name)}" placeholder="${esc(d.t)}"></label>${(d.ref || []).map(r => `<p class="hint cl-ref">${esc(r)}</p>`).join('')}${fl.map(f => `<p class="cl-flag">${esc(f)}</p>`).join('')}
     ${s.skip ? '<p class="hint">Skipped. Its records are kept.</p>' : s.at.map((a, j) => clAttemptHtml(s, a, j)).join('')}
@@ -7514,7 +7515,8 @@ function onCloneClick(e){ const sw = e.target.closest('[data-ctype]'); if (sw) {
   const arm = k => { if (clArm === k) { clArm = ''; return true; } clArm = k; renderClone(true); return false; };
   if (w !== 'rmat' && w !== 'rmst') clArm = '';
   if (w === 'type') { setCloning(v === 'cloning'); return; }
-  if (w === 'tpl') { clApply(v); clChanged(true); return; }
+  if (w === 'tpl') { clPick = false; clApply(v); clChanged(true); return; }
+  if (w === 'chgwf') { clPick = true; renderClone(true); return; }
   if (w === 'copy') { const t = clLineage(); (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Lineage report copied'), () => toast('Could not copy. Select the text above instead.')); return; }
   if (w === 'dup' || w === 'rmat') { const r = clAt(v); if (!r) return;
     if (w === 'dup') { const n = {id: clNextId('a'), st: 'todo', from: r.a.from, f: JSON.parse(JSON.stringify(r.a.f)), ck: {}}; delete n.f._d; delete n.f._n; delete n.f._dev; r.s.at.push(n); clOpen = n.id; }
@@ -7874,7 +7876,7 @@ $('#ssDate').addEventListener('change', e => { metaSet(curStep, 'date', e.target
 $('#ssNotes').addEventListener('input', e => { metaSet(curStep, 'notes', e.target.value); queueSave(); });
 function selectStep(k){
   if (k === 'cleave' && !prep.cleave) { prep.cleave = true; gels.forEach(g => { g._prepA = null; }); }
-  if (k !== curStep) rmArm = '';
+  if (k !== curStep) { rmArm = ''; clPick = false; }
   if (k !== curStep) $('#ssQuick')._all = false;
   curStep = k; prep.on = true;
   cur = k === 'hplc' ? 'overlay' : k.startsWith('btw:') ? 'conc:' + k.slice(4) : k.startsWith('run:') ? k.slice(4) : k.startsWith('man:') ? 'step:' + k.slice(4) : k === 'final' || k === 'figure' ? 'workflow' : 'step:' + k;

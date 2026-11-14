@@ -327,5 +327,26 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
     } finally { await close2(); }
   });
 
+  await T.t('workflow-picker', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      p.setDefaultTimeout(15000);
+      await h.newProject('Workflow picker synthetic', 'cloning');
+      T.check('picker/buttons-before-choice', await cl(p).locator('[data-cl=tpl]').count() === 4, 'template buttons missing before choice');
+      await cl(p).locator('[data-cl=tpl][data-v=ath]').click(); await h.wait(400);
+      T.check('picker/hidden-after-choice', await cl(p).locator('[data-cl=tpl]').count() === 0, 'template buttons stayed after choosing Around-the-Horn');
+      T.check('picker/shows-chosen-name', (await cl(p).innerText()).includes('Around-the-Horn mutagenesis'), await cl(p).innerText());
+      const chg = cl(p).locator('button', {hasText: 'Change workflow'});
+      T.check('picker/change-workflow-on-setup', await chg.isVisible(), 'no Change workflow link on workflow step');
+      await go(h, 'Q5 PCR setup');
+      T.check('picker/none-on-stage-panel', await cl(p).locator('[data-cl=tpl]').count() === 0 && !(await chg.isVisible().catch(() => false)), 'template buttons or Change workflow appeared on stage panel');
+      await h.step('clone:setup');
+      T.check('picker/change-workflow-returns', await chg.isVisible() && await cl(p).locator('[data-cl=tpl]').count() === 0, 'Change workflow did not return on workflow step');
+      await chg.click(); await h.wait(300);
+      T.check('picker/buttons-return-on-click', await cl(p).locator('[data-cl=tpl]').count() === 4, 'template buttons did not return after clicking Change workflow');
+      T.check('picker/no page errors', errs.length === 0, errs.join(' | '));
+    } finally { await close(); }
+  });
+
   T.done();
 })();
