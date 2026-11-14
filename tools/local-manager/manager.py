@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import reviewer as rv  # noqa: E402  (shares the token, model and GitHub helper)
 import relay as rl  # noqa: E402  (offline relay protocol: pure text, docs/RELAY.md)
 import routing as rt  # noqa: E402  (which queued issues go to Antigravity: pure functions)
+import boardmap as bm  # noqa: E402  (the board's map of the project and its homework: docs/BOARD_MAP.md)
 
 cfg, REPO, gh = rv.cfg, rv.REPO, rv.gh
 BOARD = cfg.get('board_issue', 222)
@@ -2478,6 +2479,93 @@ def board_focus(s):
     return name, code[:7000] + ('\n... (section continues)' if len(code) > 7000 else '')
 
 
+def board_domain(s):
+    """This meeting's domain from docs/BOARD_MAP.md (the one looked at least recently) and its code. ('', '', '') without a map."""
+    try:
+        doms = bm.parse_map((ROOT / 'docs' / 'BOARD_MAP.md').read_text(encoding='utf-8'))
+        rows = bm.codemap_rows((ROOT / 'docs' / 'CODEMAP.md').read_text(encoding='utf-8'))
+        app = (ROOT / 'hplc-figure-bench(WF1.13).html').read_text(encoding='utf-8', errors='replace')
+    except Exception:
+        return '', '', ''
+    d = bm.pick_domain(doms, s.setdefault('board', {}).setdefault('dom_seen', {}))
+    if not d:
+        return '', '', ''
+    s['board']['dom_seen'][d['name']] = time.time()
+    return d['name'], d['body'], bm.domain_code(d, app, rows)
+
+
+def ask_gemini_search(q):
+    """Gemini with Google Search grounding, for board homework: (text with its web sources listed, ok). Google does not offer
+    search on every free key, so a refusal just means the homework is answered from PubMed and the adviser's own knowledge."""
+    if not GEMINI_KEY:
+        return '', False
+    body = json.dumps({'contents': [{'parts': [{'text': q}]}], 'tools': [{'google_search': {}}]}).encode()
+    for model in ('gemini-2.5-flash', 'gemini-2.5-flash-lite'):
+        wait = _gem['last'] + GEMINI_GAP - time.time()
+        if wait > 0:
+            time.sleep(wait)
+        _gem['last'] = time.time()
+        req = urllib.request.Request(f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', data=body,
+                                     headers={'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                c = json.loads(r.read())['candidates'][0]
+            txt = ''.join(x.get('text', '') for x in c.get('content', {}).get('parts', [])).strip()
+            web = [g.get('web', {}) for g in (c.get('groundingMetadata') or {}).get('groundingChunks', [])]
+            src = '\n'.join(f'- {w.get("title", "")}: {w.get("uri", "")}' for w in web if w.get('uri'))[:2000]
+            return (txt[:3000] + ('\nSources:\n' + src if src else '')), True
+        except Exception as e:
+            log(f'board homework: Gemini search on {model} unavailable ({str(e)[:80]})')
+    return '', False
+
+
+def board_do_homework(s, who, ask):
+    """Research and answer the homework set at the last meeting. Returns [(item, answer)] and clears the list."""
+    b = s.setdefault('board', {}); items = b.pop('homework', []) or []; out = []
+    for h in items[:3]:
+        papers = bm.pubmed(h.get('search', ''))
+        web, ok = ask_gemini_search(f'Research question for a protein purification figure app: {h["question"]} Give the key facts in under 250 words.') if use(s, 'gemini') else ('', False)
+        adv = next((w for w in who if w[0] == h['to']), who[0])
+        try:
+            ans = adv[1](bm.REPORT.format(who=adv[0], by=h.get('by', ''), question=h['question'], domain=h.get('domain', ''), sources=bm.sources_text(papers, web)))
+        except Exception as e:
+            ans = f'(no answer: {str(e)[:100]})'
+        out.append((dict(h, to=adv[0]), re.sub(r'<think>.*?</think>', '', str(ans), flags=re.S).strip()[:1500]))
+        b.setdefault('hw_done', []).append(h['question'])
+    b['hw_done'] = b.get('hw_done', [])[-40:]
+    if items:
+        log(f'board: {len(out)} homework answers read out')
+    return out
+
+
+def board_set_homework(s, who, meeting):
+    """The secretary (Gemini when it sits, else the first adviser) gives each adviser one research question for next time."""
+    sec = next((w for w in who if w[2] == 'gemini'), who[0])
+    try:
+        doms = [d['name'] for d in bm.parse_map((ROOT / 'docs' / 'BOARD_MAP.md').read_text(encoding='utf-8'))]
+    except Exception:
+        doms = []
+    try:
+        r = helper_json(sec[1](bm.HOMEWORK.format(domains='; '.join(doms) or 'any', advisers=', '.join(w[0] for w in who), meeting=meeting[-9000:]
+                                                  + '\n\nEarlier homework (do not repeat):\n' + '\n'.join(s.get('board', {}).get('hw_done', [])[-20:]))))
+    except Exception as e:
+        log(f'board: no homework set ({str(e)[:80]})')
+        return []
+    hw = bm.clean_homework((r or {}).get('homework'), [w[0] for w in who], doms, s.get('board', {}).get('hw_done', []))
+    s.setdefault('board', {})['homework'] = hw
+    return hw
+
+
+def hw_lines(reports, hw):
+    """The board post's homework sections: last meeting's answers, and what is due next time."""
+    L = []
+    if reports:
+        L += ['### Homework answers', ''] + [f'**{h["to"]}**, set by {h.get("by", "")} ({h.get("domain") or "general"}): {h["question"]}\n\n{a}\n' for h, a in reports]
+    if hw:
+        L += ['### Homework for the next meeting', ''] + [f'- **{h["to"]}** (set by {h["by"]}, {h.get("domain") or "general"}): {h["question"]}' for h in hw] + ['']
+    return L
+
+
 def codemap_functions(limit=120):
     """Function names from the Key Functions table in docs/CODEMAP.md, so advisers name real functions instead of inventing them."""
     try:
@@ -2583,12 +2671,15 @@ def valid_check(p):
 def board_round(s, topic=''):
     log('board: meeting started' + (f' ({topic[:60]})' if topic else ''))
     ctx, tp = board_context(), (f' (topic: "{topic}")' if topic else '')
-    fname, fcode = ('', '') if topic else board_focus(s)  # a meeting on Patrick's topic keeps to his topic
-    if fname:
-        ctx = f'The focus section `{fname}`, as it is in the app now:\n```js\n{fcode}\n```\n\n' + ctx
-    focus = (f'THIS MEETING\'S FOCUS is the app section `{fname}`, whose code opens the context. At least two of your proposals must be about it: '
-             f'read that code and look for a bug, a number or unit that could be wrong, a missing check, or a control that confuses. '
-             f'Recent work is already well covered, so do not propose it again.\n\n') if fname else ''
+    dname, dbody, fcode = ('', '', '') if topic else board_domain(s)  # a meeting on Patrick's topic keeps to his topic
+    fname = dname
+    if not dname and not topic:  # no map: one app section in turn
+        fname, fcode = board_focus(s)
+    if fcode:
+        ctx = (f'This meeting\'s domain, from docs/BOARD_MAP.md: {dname}\n{dbody}\n\n' if dname else '') + f'Its code as it is in the app now:\n```js\n{fcode}\n```\n\n' + ctx
+    focus = (f'THIS MEETING\'S FOCUS is {"the domain " + chr(34) + dname + chr(34) if dname else "the app section `" + fname + "`"}, whose entry and code open the context. At least two of your proposals must be about it: '
+             f'read that code and the questions worth exploring, and look for a bug, a number or unit that could be wrong, a missing check, a control that confuses, '
+             f'or something the homework answers show the app should do. Recent work is already well covered, so do not propose it again.\n\n') if fname else ''
     if CLOUD:
         who = [('Gemini Flash', lambda q: ask_gemini(q, ['gemini-flash-latest', 'gemini-2.5-flash']), 'gemini'),
                ('Gemini Flash Lite', lambda q: ask_gemini(q, ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite']), 'gemini')]
@@ -2608,6 +2699,10 @@ def board_round(s, topic=''):
         except Exception as e:
             notes.append(f'{name}: {str(e)[:100]}')
             return {}
+    # homework from the last meeting opens this one
+    reports = board_do_homework(s, who, ask)
+    if reports:
+        ctx = 'Homework answers from the last meeting (read these first, and build on them):\n' + '\n\n'.join(f'{h["to"]} on "{h["question"]}": {a}' for h, a in reports) + '\n\n' + ctx
     # opening: a review of the work in progress, then proposals with their case
     reviews, tracked, mem = [], repo_files(), board_memory()
     fake, dups, no_check = [], [], []
@@ -2646,11 +2741,12 @@ def board_round(s, topic=''):
     if not props:
         # Say so on the board: a meeting that drops every proposal used to leave no trace, so nobody could tell whether
         # the duplicate check was right or too strict (2026-11-13, 6 of 6 dropped). No BOARD_MARK: this is not a round to pick from.
-        if (fake or dups) and not DRY:
-            post(BOARD, '\n'.join([f'### Team meeting, {dt.datetime.now():%Y-%m-%d %H:%M}' + (f': {topic.splitlines()[0][:120]}' if topic else '') + ', nothing new adopted', '',
+        hw = board_set_homework(s, who, f'Domain: {dname or fname or topic[:200]}. Every proposal was a repeat or named files that do not exist:\n' + '\n'.join(dups + fake))
+        if (fake or dups or reports) and not DRY:
+            post(BOARD, '\n'.join([f'### Team meeting, {dt.datetime.now():%Y-%m-%d %H:%M}' + (f': {topic.splitlines()[0][:120]}' if topic else f': {dname or fname}' if (dname or fname) else '') + ', nothing new adopted', '',
                  'Every proposal was dropped before the debate. If one of these is not really a duplicate, reply **Discuss:** with it.', '']
                  + [f'- Already done, queued or declined: {d}' for d in dups] + [f'- Named files that do not exist: {x}' for x in fake]
-                 + ([f'_{"; ".join(notes)}_'] if notes else []))[:20000] + SIGN.format(rv.MODEL))
+                 + [''] + hw_lines(reports, hw) + ([f'_{"; ".join(notes)}_'] if notes else []))[:20000] + SIGN.format(rv.MODEL))
         return log(f'board: no proposals after pre-debate checks (fake={len(fake)}, dups={len(dups)}; {"; ".join(notes)})')
     round_ts = f'{dt.datetime.now():%Y-%m-%d %H:%M}'
     head = f'### Team meeting, {round_ts}' + (f': {topic.splitlines()[0][:120]}' if topic else '')  # a long request keeps a short heading
@@ -2781,7 +2877,9 @@ def board_round(s, topic=''):
         lines += ['Withdrawn during the debate: ' + '; '.join(f'{p["title"]} ({p["by"]})' for p in gone), '']
     if notes:
         lines += ['_' + '; '.join(notes) + '_', '']
-    lines += ['</details>']
+    lines += ['</details>', '']
+    hw = board_set_homework(s, who, f'Domain: {dname or fname or topic[:200]}\nProposals and votes:\n' + '\n'.join(f'{r}. {p["title"]} ({avg[p["id"]]:.1f}): {p["why"]}' for r, p in enumerate(ranked, 1)) + '\n\nDebate:\n' + talk_text()[-5000:])
+    lines += hw_lines(reports, hw)
     post(BOARD, '\n'.join(lines)[:60000] + SIGN.format(rv.MODEL))
     log(f'board: debate posted ({len(props)} proposals, {len(talk)} arguments, adopted {list(b["made"].values())})')
 
