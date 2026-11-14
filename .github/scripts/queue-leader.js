@@ -23,6 +23,8 @@ const TRACKERS = new Set([17, 222, 782]);  // the improvement plan, the Directio
 const BIG_CHARS = 2500, STUCK_DAYS = 3, DONE_DAYS = 14, SCORE_DAYS = 7;
 /* Parked issues go back to the workers a few at a time, when the queue is nearly empty, so they never crowd out Patrick's own requests:
    fewer than PARK_LOW jobs queued, the issue untouched for PARK_WAIT_DAYS (time for him to close it), at most PARK_PER_DAY a day. */
+/* a job Patrick started by hand (AGENTS.md, "A job started by hand ends with a pull request") that has no pull request after this many hours is reported */
+const HAND = 'hand-running', HAND_HOURS = 3;
 const PARK_LOW = 3, PARK_WAIT_DAYS = 2, PARK_PER_DAY = 2, KEEP = 'keep-parked';
 /* a label that says whose move it is. An open issue with none of these, and no open PR, is invisible to every worker. */
 const isState = l => /^(for-|needs-|awaiting-|relay|paste-)/.test(l) || /-running$/.test(l) || ['queued', 'jules-queue', 'parked', 'ux-report', 'ready-for-lead', 'status-page'].includes(l);
@@ -54,7 +56,7 @@ module.exports = async ({github, context, core}) => {
     for (const name of [L.queue, QUEUE_OLD]) for (const i of await issues(name)) if (!seen.has(i.number)) seen.set(i.number, i);
     return [...seen.values()]; };
   const ensureLabels = async () => { const have = new Set((await github.paginate(github.rest.issues.listLabelsForRepo, {owner, repo, per_page: 100})).map(l => l.name));
-    const want = {[L.queue]: '0E8A16', [L.fail]: 'D93F0B', [L.triage]: 'C5DEF5', [L.parked]: 'EEEEEE', [KEEP]: 'EEEEEE', [L.plan]: 'FBCA04', [L.status]: '1D76DB'};
+    const want = {[L.queue]: '0E8A16', [L.fail]: 'D93F0B', [L.triage]: 'C5DEF5', [L.parked]: 'EEEEEE', [KEEP]: 'EEEEEE', [HAND]: 'BFD4F2', [L.plan]: 'FBCA04', [L.status]: '1D76DB'};
     for (const [name, color] of Object.entries(want)) if (!have.has(name)) await github.rest.issues.createLabel({owner, repo, name, color}); };
   const setLabels = async (n, add, remove) => { for (const r of remove) await github.rest.issues.removeLabel({owner, repo, issue_number: n, name: r}).catch(() => {});
     if (add.length) await github.rest.issues.addLabels({owner, repo, issue_number: n, labels: add}); };
@@ -201,6 +203,7 @@ module.exports = async ({github, context, core}) => {
       if (ls.includes(L.plan)) return ['claude', 'Waiting for a plan'];
       if (ls.some(l => ['for-coordinator', 'needs-coordinator', 'ready-for-lead'].includes(l))) return ['claude', 'Waiting on the lead'];
       if (pr) return ['work', `Pull request #${pr} open`];
+      if (ls.includes(HAND)) return ['work', 'Started by hand in Antigravity, no pull request yet'];
       if (ls.some(l => /-running$/.test(l))) return ['work', 'A worker is on it now'];
       if (ls.includes('for-antigravity')) return ['work', 'With Antigravity'];
       if (ls.some(l => ['for-codex', 'for-claude-code', 'for-claude-first', 'for-claude-cloud', 'for-copilot'].includes(l))) return ['work', 'With the retry workers'];
@@ -213,6 +216,8 @@ module.exports = async ({github, context, core}) => {
     const askYou = openNow.filter(i => !labels(i).includes(L.status) && stateOf(i)[0] === 'you');
     const askClaude = openNow.filter(i => stateOf(i)[0] === 'claude' && !TRACKERS.has(i.number) && !labels(i).includes(L.status));
     const working = mine.filter(i => stateOf(i)[0] === 'work'), stuck = working.filter(i => days(i.updated_at) >= STUCK_DAYS);
+    const hours = t => (Date.now() - Date.parse(t)) / 36e5;
+    const handStale = openNow.filter(i => labels(i).includes(HAND) && !prOf.get(i.number) && hours(i.updated_at) >= HAND_HOURS);
     const parkedN = openNow.filter(i => labels(i).includes(L.parked)).length;
     const since = new Date(Date.now() - DONE_DAYS * 864e5).toISOString();
     const done = (await github.paginate(github.rest.issues.listForRepo, {owner, repo, state: 'closed', labels: L.mine, since, per_page: 100})).filter(i => !i.pull_request && i.closed_at > since).sort((a, b) => b.closed_at.localeCompare(a.closed_at));
@@ -234,19 +239,20 @@ module.exports = async ({github, context, core}) => {
       `Rebuilt by the queue leader whenever something changes. To ask for something, open a [new request](https://github.com/${owner}/${repo}/issues/new?template=request.yml) or tell Claude in a chat. A request is filed in your own words and stays on this page until it is done.`, '',
       `## Waiting on you (${askYou.length})`, list(askYou, i => `- ${link(i)}`), '',
       `## Waiting on Claude (${askClaude.length})`, askClaude.length ? 'Open a chat with Claude and say "work through my status page".\n' + list(askClaude, i => `- ${link(i)}: ${stateOf(i)[1].toLowerCase()}`) : '_Nothing._', '',
+      ...(handStale.length ? [`## Started by hand, no pull request (${handStale.length})`, `Started in Antigravity ${HAND_HOURS} or more hours ago with no pull request. Open that session in Antigravity: it probably stopped before pushing. Remove \`${HAND}\` and add \`queued\` to let the PC do it instead.\n` + list(handStale, i => `- ${link(i)}: ${Math.round(hours(i.updated_at))} hours`), ''] : []),
       `## Stuck (${stuck.length})`, stuck.length ? `No movement for ${STUCK_DAYS} days or more.\n` + list(stuck, i => `- ${link(i)}: ${stateOf(i)[1].toLowerCase()}, ${days(i.updated_at)} days`) : '_Nothing._', '',
       `## Your requests in progress (${working.length})`, working.length ? '| Request | State | Days since it moved |\n|---|---|---|\n' + working.map(i => `| ${link(i)} | ${stateOf(i)[1]} | ${days(i.updated_at)} |`).join('\n') : '_Nothing._', '',
       `## Done in the last ${DONE_DAYS} days (${done.length}, newest 10 shown)`, list(done.slice(0, 10), i => `- ${link(i)}${i.state_reason === 'not_planned' ? ' (closed without a change)' : ''}`), '',
       `## Workers, last ${SCORE_DAYS} days`, score, '', `- PC manager: ${pcLine}`, `- Antigravity cloud route: ${agLine || 'unknown'}`, `- Parked issues, found by the machine and not started: [${parkedN}](https://github.com/${owner}/${repo}/issues?q=is%3Aissue+is%3Aopen+label%3Aparked). When fewer than ${PARK_LOW} jobs are queued, the oldest one untouched for ${PARK_WAIT_DAYS} days is queued, at most ${PARK_PER_DAY} a day (${out.n} today). Add \`queued\` to start one now, \`${KEEP}\` to hold one, or close it.`].join('\n');
     let page = open.find(i => labels(i).includes(L.status));
     const told0 = page ? ((page.body || '').match(/<!-- status-told (\{.*?\}) -->/) || [])[1] : null; let told = {}; try { told = told0 ? JSON.parse(told0) : {}; } catch (e) { told = {}; }
-    const now = {}; askYou.forEach(i => { now[i.number] = 'you'; }); stuck.forEach(i => { now[i.number] = 'stuck'; });
+    const now = {}; askYou.forEach(i => { now[i.number] = 'you'; }); stuck.forEach(i => { now[i.number] = 'stuck'; }); handStale.forEach(i => { now[i.number] = 'hand'; });
     const fresh = Object.keys(now).filter(n => told[n] !== now[n]);
     const full = `${body}\n\n<!-- status-told ${JSON.stringify(now)} -->\n<!-- park-out ${JSON.stringify(out)} -->`;
     if (!page) { page = (await github.rest.issues.create({owner, repo, title: 'Status page: where your requests stand', labels: [L.status], body: full})).data; say(`status page created as #${page.number}`); }
     else if ((page.body || '') !== full) { await github.rest.issues.update({owner, repo, issue_number: page.number, body: full}); say('status page updated'); }
     if (fresh.length) { const by = n => open.find(i => i.number === +n);
-      await github.rest.issues.createComment({owner, repo, issue_number: page.number, body: `@${owner} ` + fresh.map(n => now[n] === 'you' ? `${link(by(n))} needs your answer.` : `${link(by(n))} has not moved for ${STUCK_DAYS} days.`).join(' ')});
+      await github.rest.issues.createComment({owner, repo, issue_number: page.number, body: `@${owner} ` + fresh.map(n => now[n] === 'you' ? `${link(by(n))} needs your answer.` : now[n] === 'hand' ? `${link(by(n))} was started by hand ${HAND_HOURS}+ hours ago and has no pull request: check the Antigravity session.` : `${link(by(n))} has not moved for ${STUCK_DAYS} days.`).join(' ')});
       say(`status page: told Patrick about ${fresh.map(n => '#' + n).join(', ')}`); }
   } catch (e) { say(`requests and status page: ${e.message}`); }
 

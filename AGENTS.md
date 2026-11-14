@@ -130,6 +130,17 @@ What a worker needs to know:
 - **A job has a check.** A queued issue follows the job-card form (`.github/ISSUE_TEMPLATE/job.md`): Change, Check, Where, Rules. The Check is how you know you are done. For one of Patrick's own requests, which may not name a check, write the check yourself first.
 - **A `needs-plan` or `parked` issue is not yours to start either.** A `from-patrick` issue is the owner's request in his own words: do what it says, and do not rewrite it into something else.
 - **Agents never push to another agent's branch.** A revision goes on a new branch.
+
+### A job started by hand ends with a pull request
+
+This is for a session Patrick starts himself: the Antigravity app, a Remote Agent, or any agent he gives an issue directly. On 2026-11-13 two such sessions finished their work and never pushed it, so nothing reached the app. If your prompt says the manager commits and pushes (every job the local manager runs says so), follow that instead and skip this.
+
+1. **Claim it first.** `gh issue edit <N> --add-label hand-running --remove-label queued --remove-label for-antigravity`, then `gh issue comment <N> --body "Started by hand in <agent name>."` This stops the PC from starting a second copy.
+2. **Work on a branch** named `agy/issue-<N>` (or `<agent>/issue-<N>`), made from an up-to-date `main`.
+3. **Finish = a pull request exists.** Commit, `git push -u origin <branch>`, then `gh pr create` with `Closes #<N>.` on the first line of the description. Check the pull request is listed before you call the job done.
+4. **If you cannot push or open it**, say so on the issue before you stop: `gh issue comment <N> --body "..."` with the error and where the work is. Never end with the work only inside your session.
+
+The queue leader lists any `hand-running` issue with no pull request after 3 hours on the status page and tells Patrick.
 - **`docs/GOALS.md`** is the owner's list of priorities. Weigh your work by it.
 
 ## Reviewing a pull request
