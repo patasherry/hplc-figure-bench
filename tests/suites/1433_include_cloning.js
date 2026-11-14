@@ -64,10 +64,13 @@ const {open, H, suite, fs} = require('../lib/harness');
       await p.locator('#clonePanel [data-cl=tpl][data-v=ath]').click(); await h.wait(500);
       const n = (await cloneRows(h)).length;
       T.check('keep/stages-added', n > 5, String(n));
+      // the saved stage count before switching off. Since #1439 a stage can be recorded at Transformation instead of in a
+      // row of its own (Transfer to expression), so the rows no longer give the count.
+      const before = (await exportJson(p)).prep.cloning.stages.length;
       await head(p).click(); await h.wait(500);
       T.check('keep/off-hides-steps', (await cloneRows(h)).length === 0, JSON.stringify(await cloneRows(h)));
       let j = await exportJson(p);
-      T.check('keep/records-kept-when-off', j.prep.includeCloning === false && j.prep.cloning.stages.length === n - 1, `includeCloning ${j.prep.includeCloning}, ${j.prep.cloning.stages.length} stages`);
+      T.check('keep/records-kept-when-off', j.prep.includeCloning === false && j.prep.cloning.stages.length === before && before >= n - 1, `includeCloning ${j.prep.includeCloning}, ${j.prep.cloning.stages.length} stages`);
       await head(p).click(); await h.wait(500);
       T.check('keep/on-brings-them-back', (await cloneRows(h)).length === n, `${(await cloneRows(h)).length} of ${n}`);
       j = await exportJson(p);
