@@ -61,7 +61,10 @@ const H = p => ({
     if (sw) { if ((await sw.getAttribute('aria-checked') === 'true') !== (type === 'cloning')) await sw.click(); }
     else { const r = await p.$(type === 'cloning' ? '#npTypeC' : '#npTypeE'); if (r) await r.check(); }
     await p.click('#newProj button[type=submit]'); await p.waitForTimeout(700); },
-  step: async k => { await p.click(`#tl [data-step="${k}"]`); await p.waitForTimeout(450); },
+  /* the Cloning group folds its stages (#1436): a stage not in view is reached through "Show all stages", as a person would */
+  allSteps: async () => { const b = await p.$('#tl [data-clall="1"]'); if (b) { await b.click(); await p.waitForTimeout(250); } },
+  step: async k => { if (!(await p.$(`#tl [data-step="${k}"]`))) { const b = await p.$('#tl [data-clall="1"]'); if (b) { await b.click(); await p.waitForTimeout(250); } }
+    await p.click(`#tl [data-step="${k}"]`); await p.waitForTimeout(450); },
   timeline: () => p.$$eval('#tl .tl-i', els => els.map(e => ({k: e.dataset.step, t: (e.querySelector('.tt') || {}).textContent, s: (e.querySelector('.ts') || {}).textContent, warn: !!e.closest('li.warn'), done: !!e.closest('li.done')}))),
   addRun: async files => { await p.click('#tl [data-addmenu]'); await p.click('#tl [data-addstep=run]'); await p.setInputFiles('#file', [].concat(files)); await p.waitForTimeout(2200); },
   /* files go in through the picker; a very long or non-ASCII name goes in as a drag and drop, which the picker in the test browser cannot pass */
