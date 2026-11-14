@@ -33,9 +33,36 @@ assert [i['number'] for i in rt.pick(qa, {'21': 2}, 2)] == [20]
 assert [i['number'] for i in rt.pick(qa, {'21': 1.7e9}, 2)] == [21, 20]
 assert rt.tries(1.7e9) == 1 and rt.tries(None) == 0 and rt.tries(2) == 2
 
-# needs-owner is excluded (unless owner-approved), from-patrick is not
-qo = [iss(30, 'Fix a', 'needs-owner'), iss(31, 'Fix b', 'from-patrick'), iss(32, 'Fix c', 'needs-owner', 'owner-approved')]
+# needs-owner is excluded (unless owner-approved), needs-plan and parked are always excluded, from-patrick is not
+qo = [iss(30, 'Fix a', 'needs-owner'), iss(31, 'Fix b', 'from-patrick'), iss(32, 'Fix c', 'needs-owner', 'owner-approved'),
+      iss(33, 'Fix d', 'queued', 'needs-plan'), iss(34, 'Fix e', 'queued', 'parked'), iss(35, 'Fix f', 'from-patrick', 'needs-plan')]
 assert [i['number'] for i in rt.pick(qo, {}, 5)] == [32, 31]
+assert rt.is_held(iss(33, 'Fix d', 'queued', 'needs-plan'))
+assert rt.is_held(iss(34, 'Fix e', 'queued', 'parked'))
+assert rt.is_held(iss(30, 'Fix a', 'needs-owner'))
+assert not rt.is_held(iss(32, 'Fix c', 'needs-owner', 'owner-approved'))
+
+# existing-check gate rejection detection
+assert rt.changes_existing_check('pre-flight gate failed: It deletes or changes 1 existing check(s), for example `T.check(...)`.')
+assert rt.changes_existing_check(['It deletes or changes 2 existing check(s), for example `T.check(...)`. Keep existing checks (AGENTS.md).'])
+assert rt.changes_existing_check(['It comments out existing tests. Leave them running (AGENTS.md).'])
+assert not rt.changes_existing_check('pre-flight gate failed: Numerical/parsing change to the app without any test added in tests/suites/.')
+assert not rt.changes_existing_check(['The Test suite reports regressions.'])
+
+# Discuss: request spec vs open discussion question
+cloning_spec = """Update the project-start interface as follows:
+
+Remove the current Yes and No buttons.
+Add one accessible toggle labeled Include Cloning.
+Default it to OFF for new projects.
+When switched ON:
+Reveal the cloning-template selector.
+Enable cloning stages and validation."""
+assert rt.is_request_spec(cloning_spec)
+assert rt.is_request_spec("Remove the old export button.\nAdd a SVG download button.\nKeep existing keyboard shortcuts.\nAdd tests for the button.")
+assert not rt.is_request_spec("What should we do next about SEC calibration curves?")
+assert not rt.is_request_spec("How should we handle multi-wavelength UV traces in UNICORN 7 archives? What are the trade-offs?")
+assert not rt.is_request_spec("Should we split the workflow panel or keep it in one toolbar?")
 
 # the per-pass limit holds, and a zero limit hands out nothing
 qm = [iss(n, 'Fix item %d' % n) for n in range(40, 46)]
