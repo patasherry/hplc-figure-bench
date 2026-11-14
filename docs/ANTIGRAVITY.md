@@ -6,6 +6,8 @@ real pull requests here: #759, #765, #1048, #1049, #1050.
 
 Its clone lives at `C:\Users\Patrick\hfb-antigravity` and can push and open pull requests.
 
+**Every session started by hand ends with a pull request.** AGENTS.md ("A job started by hand ends with a pull request"), which Antigravity reads in every session in a clone of this repository, tells it to claim the issue with the `hand-running` label, work on `agy/issue-<N>`, push, and open the pull request, or say on the issue why it could not. When you give Antigravity a request directly, it helps to end the prompt with: "Finish by pushing and opening a pull request that says Closes #<N>." The queue leader lists any `hand-running` issue with no pull request after 3 hours on the status page and mentions you.
+
 There are two ways to give it work.
 
 ## The scheduled prompt (preferred)
