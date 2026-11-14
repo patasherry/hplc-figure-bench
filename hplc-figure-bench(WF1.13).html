@@ -1011,6 +1011,7 @@ button,input,select,textarea{font-family:inherit}
         <label class="f">Vₜ (bed volume)<input type="number" step="0.01" id="sec-vt" data-sec="vt" placeholder="optional"></label>
       </div>
       <p class="hint" id="sec-v0note"></p>
+      <p class="hint warnc" id="sec-warn" hidden></p>
       <div class="secstd">
       <label class="f">Standards<select id="sec-set" data-sec="set"></select></label>
       <div class="known" id="secStdList"></div>
@@ -2132,6 +2133,7 @@ const secMono = () => { const m = numOr(opt.secMono, NaN); return m > 0 ? m : nu
 function secInfo(fit, ve){
   if (!fit) return {};
   const out = {ve}; if (fit.useKav) out.kav = (ve - fit.v0)/(fit.vt - fit.v0);
+  if (fit.v0 > 0 && fit.vt > fit.v0 && (ve < fit.v0 || ve > fit.vt)) out.rangeWarn = true;
   if (fit.useKav && ve <= fit.v0*1.02) { out.void = true; out.v0est = !!(fit.cal && fit.cal.v0est); return out; }
   if (fit.mw) { out.mw = fit.mw(ve); const x = fit.X(ve), eps = 1e-9*Math.max(1, Math.abs(fit.xhi)); out.extrap = x < fit.xlo - eps || x > fit.xhi + eps; /* any point outside the standards themselves is an extrapolation */
     const m = secMono(); if (m > 0) { out.ratio = out.mw/m; out.olig = out.ratio < 0.75 ? 0 : Math.round(out.ratio); } }
@@ -6603,6 +6605,24 @@ function renderSec(){
   const fit = secFit(c);
   $('#sec-fit').textContent = !fit || !fit.mw ? `Enter elution volumes for at least two standards (${fit ? fit.n : 0} so far), or read them from a standards run.${secGeomWarn(fit)}`
     : `Fit from ${fit.n} standards against ${fit.useKav ? 'Kav' : 'Ve'}: log MW = ${fmt(fit.a, 3)} ${fit.b < 0 ? '−' : '+'} ${fmt(Math.abs(fit.b), 3)}·${fit.useKav ? 'Kav' : 'Ve'}, R² = ${fmt(fit.r2, 4)}.${(w => w ? ` Largest miss: ${w.name} ${w.e > 0 ? '+' : '−'}${Math.round(Math.abs(w.e))}%.` : '')(secWorst(fit))}${fit.r2 < 0.97 ? ' The fit is loose, so check the volumes.' : ''}${secGeomWarn(fit)}`;
+  const colP = c.col ? SEC_COLUMNS[c.col] : null, colVt = colP && typeof colP.vt === 'number' ? colP.vt : null, colV0 = colVt != null ? Math.round(colVt * 0.36 * 100) / 100 : null;
+  const v0 = numOr(c.v0, colV0), vt = numOr(c.vt, colVt);
+  const badVe = (v0 > 0 && vt > 0 && vt > v0) && (
+    (c.stds || []).some(q => q.ve !== '' && isFinite(+q.ve) && (+q.ve < v0 || +q.ve > vt)) ||
+    runs.filter(r => isSec(r) && r.secCal === c.id).some(r => {
+      const fl = uvFlow(r);
+      return (r.integ || []).some(rw => {
+        const ax = rw.apex != null ? rw.apex : (rw.a + rw.b) / 2;
+        const ve = xUnit(r) === 'min' && fl > 0 ? ax * fl : ax;
+        return isFinite(ve) && (ve < v0 || ve > vt);
+      });
+    })
+  );
+  const warnEl = $('#sec-warn');
+  if (warnEl) {
+    const msg = badVe ? "Elution volume is outside the column's void-to-total range. Check that the value is in column volumes, not minutes." : '';
+    warnEl.textContent = msg; warnEl.hidden = !msg;
+  }
   $('#o-secMono').placeholder = numOr(opt.protKda, 0) > 0 ? `${opt.protKda} (from the gel settings)` : 'for oligomer state';
 }
 function onSec(el){
