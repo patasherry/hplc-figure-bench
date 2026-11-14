@@ -11,7 +11,7 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
   const rows = async h => { await h.allSteps(); return (await h.timeline()).filter(x => /^clone:/.test(x.k)); };
   const row = async (h, title) => (await rows(h)).find(x => x.t === title);
   const go = async (h, title) => { const r = await row(h, title); if (!r) throw new Error(`no stage "${title}" in the step list`); await h.step(r.k); return r.k; };
-  const field = (p, label) => cl(p).locator('details[open] label.f', {hasText: label}).locator('input, textarea, select').first();
+  const field = (p, label) => cl(p).locator(':is(.cl-single, .cl-at[open]) label.f', {hasText: label}).locator('input, textarea, select').first();
   const setStatus = async (p, h, n, v) => { await cl(p).locator('[data-cst]').nth(n).selectOption(v); await h.wait(300); };
   const exportJson = async p => { const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]); return fs.readFileSync(await dl.path(), 'utf8'); };
   const ATH = ['Construct and mutation design', 'Forward and reverse primer design', 'Primer ordering, resuspension and working stocks', 'Q5 PCR setup', 'Thermocycler program', 'Agarose-gel verification',
@@ -231,15 +231,15 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
       T.check('dupst/button-present', await dupBtn.isVisible(), 'no Duplicate this stage button');
       if (await nameBox.isVisible() && await dupBtn.isVisible()) {
         await nameBox.fill('Q5 PCR, insert 1'); await h.wait(250);
-        T.check('dupst/renamed', !!(await row(h, 'Q5 PCR, insert 1')) && !(await row(h, 'Q5 PCR setup')) && /Q5 PCR, insert 1/.test(await cl(p).locator('h2').innerText()), JSON.stringify(await rows(h)));
+        T.check('dupst/renamed', !!(await row(h, 'Q5 PCR, insert 1')) && !(await row(h, 'Q5 PCR setup')) && /Q5 PCR, insert 1/.test(await p.locator('#ssTitle').innerText()), JSON.stringify(await rows(h)));
         await nameBox.fill(''); await h.wait(250);
-        T.check('dupst/empty-uses-default', !!(await row(h, 'Q5 PCR setup')) && /Q5 PCR setup/.test(await cl(p).locator('h2').innerText()), await cl(p).locator('h2').innerText());
+        T.check('dupst/empty-uses-default', !!(await row(h, 'Q5 PCR setup')) && /Q5 PCR setup/.test(await p.locator('#ssTitle').innerText()), await p.locator('#ssTitle').innerText());
         await nameBox.fill('Q5 PCR, insert 1'); await h.wait(250);
 
         await dupBtn.click(); await h.wait(400);
         const list = (await rows(h)).slice(1).map(x => x.t), idx = list.indexOf('Q5 PCR, insert 1');
         T.check('dupst/inserted-after', idx >= 0 && list[idx + 1] === 'Q5 PCR setup', list.join(' | '));
-        T.check('dupst/one-not-started-attempt', await cl(p).locator('.cl-at').count() === 1 && await cl(p).locator('[data-cst]').first().inputValue() === 'todo', await cl(p).innerText());
+        T.check('dupst/one-not-started-attempt', await cl(p).locator('.cl-at').count() === 0 && await cl(p).locator('[data-cst]').first().inputValue() === 'todo', await cl(p).innerText());
         T.check('dupst/carries-last-fields', await field(p, 'Polymerase or master mix').inputValue() === 'Q5 synthetic mix' && await field(p, 'Reaction volume').inputValue() === '25', await field(p, 'Polymerase or master mix').inputValue());
         T.check('dupst/drops-date-notes-dev', await field(p, 'Date').inputValue() === '' && await field(p, 'Deviations').inputValue() === '' && await field(p, 'Result and notes').inputValue() === '', 'date, deviations or notes were copied');
 
@@ -403,6 +403,40 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
       T.check('figure-card/no-not-started', !svg.includes('Not started'), 'found "Not started" in saved SVG');
       T.check('figure-card/not-clipped', bx.clipped.length === 0, bx.clipped.join(' | '));
       T.check('figure-card/no page errors', errs.length === 0, errs.join(' | '));
+    } finally { await close(); }
+  });
+
+  await T.t('stage-quick-fill-and-attempts', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      p.setDefaultTimeout(15000);
+      await h.newProject('Quick fill cloning', 'cloning');
+      await cl(p).locator('[data-cl=tpl][data-v=ath]').click(); await h.wait(400);
+
+      await go(h, 'Thermocycler program');
+      const cycWhat = await p.locator('#ssWhat').innerText();
+
+      await go(h, 'Q5 PCR setup');
+      const pcrWhat = await p.locator('#ssWhat').innerText();
+      T.check('q5/stage-specific-what', /Polymerase/.test(pcrWhat) && pcrWhat !== cycWhat, pcrWhat);
+      T.check('q5/status-at-top', await cl(p).locator('.cl-top [data-cst]').isVisible(), 'status selector not at top');
+      T.check('q5/no-attempt-card-initially', await cl(p).locator('.cl-at').count() === 0, 'Attempt 1 card shown before Record another attempt');
+
+      const chip = p.locator('#ssQuick .qchip', {hasText: 'Q5, 25 µL, 0.5 µM primers'});
+      T.check('q5/chip-visible', await chip.isVisible(), 'Q5 quick-fill chip not visible');
+      await chip.click(); await h.wait(300);
+
+      const pol = await field(p, 'Polymerase or master mix').inputValue();
+      const tpl = await field(p, 'Template amount').inputValue();
+      const prm = await field(p, 'Primer concentration').inputValue();
+      const vol = await field(p, 'Reaction volume').inputValue();
+      T.check('q5/four-fields-filled', pol.includes('Q5') && tpl === '1 ng' && prm === '0.5' && vol === '25', `pol=${pol}, tpl=${tpl}, prm=${prm}, vol=${vol}`);
+
+      const addBtn = cl(p).locator('[data-cl=addat]', {hasText: 'Record another attempt'});
+      T.check('q5/record-another-btn', await addBtn.isVisible(), 'Record another attempt button not visible');
+      await addBtn.click(); await h.wait(300);
+      T.check('q5/attempts-list-shown', await cl(p).locator('.cl-at').count() === 2, 'attempt list did not appear after Record another attempt');
+      T.check('q5/no page errors', errs.length === 0, errs.join(' | '));
     } finally { await close(); }
   });
 

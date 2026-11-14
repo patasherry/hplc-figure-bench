@@ -7,7 +7,7 @@ const {open, H, suite, fs} = require('../lib/harness');
 (async () => {
   const T = suite('1439_clone_join');
   const cl = p => p.locator('#clonePanel');
-  const field = (p, label) => cl(p).locator('details[open] label.f', {hasText: label}).locator('input, textarea, select').first();
+  const field = (p, label) => cl(p).locator(':is(.cl-single, details[open]) label.f', {hasText: label}).locator('input, textarea, select').first();
   const rows = async h => { await h.allSteps(); return (await h.timeline()).filter(x => /^clone:/.test(x.k)); };
   const go = async (h, title) => { const r = (await rows(h)).find(x => x.t === title); if (!r) throw new Error(`no stage "${title}"`); await h.step(r.k); };
   const exportJson = async p => { const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]); return JSON.parse(fs.readFileSync(await dl.path(), 'utf8')); };
