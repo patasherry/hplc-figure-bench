@@ -7,7 +7,8 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
 (async () => {
   const T = suite('1402_cloning_engine');
   const cl = p => p.locator('#clonePanel');
-  const rows = async h => (await h.timeline()).filter(x => /^clone:/.test(x.k));
+  // every stage, unfolded first (#1436 folds a long Cloning group in the step list)
+  const rows = async h => { await h.allSteps(); return (await h.timeline()).filter(x => /^clone:/.test(x.k)); };
   const row = async (h, title) => (await rows(h)).find(x => x.t === title);
   const go = async (h, title) => { const r = await row(h, title); if (!r) throw new Error(`no stage "${title}" in the step list`); await h.step(r.k); return r.k; };
   const field = (p, label) => cl(p).locator('details[open] label.f', {hasText: label}).locator('input, textarea, select').first();

@@ -8,7 +8,8 @@ const {open, H, suite, fs} = require('../lib/harness');
   const T = suite('1433_include_cloning');
   const sw = p => p.locator('#npCloning'), head = p => p.locator('#projType');
   const on = async l => await l.getAttribute('aria-checked') === 'true';
-  const cloneRows = async h => (await h.timeline()).filter(x => /^clone:/.test(x.k));
+  // every stage, unfolded first (#1436 folds a long Cloning group in the step list)
+  const cloneRows = async h => { await h.allSteps(); return (await h.timeline()).filter(x => /^clone:/.test(x.k)); };
   const exportJson = async p => { const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]); return JSON.parse(fs.readFileSync(await dl.path(), 'utf8')); };
   const setPrep = async (p, h, sel, val) => { await p.locator(sel).fill(val); await p.locator(sel).dispatchEvent('change'); await h.wait(300); };
   const importJson = async (p, h, name, data) => {
