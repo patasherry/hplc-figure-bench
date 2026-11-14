@@ -386,5 +386,74 @@ const num = s => { const m = String(s == null ? '' : s).replace(/[≈~,]/g, '').
 
     await o.close();
   });
+
+  await T.t('sec_void_to_total_range_warning', async () => {
+    const o = await open(), p2 = o.p, h2 = H(p2);
+    p2.on('dialog', d => d.accept());
+    const openFolds = loc => loc.evaluate(e => {
+      let d = e.closest('details');
+      while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); }
+    });
+
+    await h2.newProject('SEC Range Warning Test');
+    await h2.addRun(path.join(DATA, 'chrom/sec_semicolon_unicorn7.csv'));
+    let rs = (await h2.timeline()).find(x => /^run:/.test(x.k));
+    if (rs) await h2.step(rs.k);
+    if (await p2.isVisible('#moreBtn') && /More options/i.test(await p2.locator('#moreBtn').textContent().catch(() => ''))) {
+      await p2.click('#moreBtn').catch(() => {});
+      await h2.wait(300);
+    }
+    const sc = p2.locator('#o-secStds');
+    await openFolds(sc);
+    if (!(await sc.isChecked())) { await sc.check({force: true}); await h2.wait(300); }
+
+    // (1) Select a column from SEC_COLUMNS (s200i, Vt=24, V0=8.64)
+    await p2.locator('#sec-col').selectOption('s200i');
+    await p2.locator('#sec-col').dispatchEvent('input');
+    await p2.locator('#sec-col').dispatchEvent('change');
+    await h2.wait(300);
+
+    const warnMsg = "Elution volume is outside the column's void-to-total range. Check that the value is in column volumes, not minutes.";
+    const warnLoc = p2.locator(`text=${warnMsg}`);
+
+    // (2) Enter an elution volume below V0 (V0 = 8.64, so 5 is below V0)
+    await p2.locator('#ss-v0').fill('5');
+    await p2.locator('#ss-v0').dispatchEvent('input');
+    await p2.locator('#ss-v0').dispatchEvent('change');
+    await h2.wait(300);
+
+    // (3) Assert the warning text is visible
+    const warnVis1 = await warnLoc.isVisible();
+    T.check('sec_range_warn_visible_below_v0', warnVis1, 'warning should be visible when elution volume is below V0');
+
+    // (4) Enter a value within [V0, Vt] (e.g. 15 mL)
+    await p2.locator('#ss-v0').fill('15');
+    await p2.locator('#ss-v0').dispatchEvent('input');
+    await p2.locator('#ss-v0').dispatchEvent('change');
+    await h2.wait(300);
+
+    // (5) Assert the warning is gone
+    const warnVis2 = await warnLoc.isVisible();
+    T.check('sec_range_warn_gone_within_range', !warnVis2, 'warning should be gone when elution volume is within [V0, Vt]');
+
+    // Also test entering a value above Vt (Vt = 24, so 30 is above Vt)
+    await p2.locator('#ss-v0').fill('30');
+    await p2.locator('#ss-v0').dispatchEvent('input');
+    await p2.locator('#ss-v0').dispatchEvent('change');
+    await h2.wait(300);
+    const warnVis3 = await warnLoc.isVisible();
+    T.check('sec_range_warn_visible_above_vt', warnVis3, 'warning should be visible when elution volume is above Vt');
+
+    // Return to valid value within range
+    await p2.locator('#ss-v0').fill('12');
+    await p2.locator('#ss-v0').dispatchEvent('input');
+    await p2.locator('#ss-v0').dispatchEvent('change');
+    await h2.wait(300);
+    const warnVis4 = await warnLoc.isVisible();
+    T.check('sec_range_warn_gone_within_range_again', !warnVis4, 'warning should be gone when elution volume is back within [V0, Vt]');
+
+    T.check('no page errors', !o.errs.length, o.errs.join(' | '));
+    await o.close();
+  });
   T.done();
 })();
