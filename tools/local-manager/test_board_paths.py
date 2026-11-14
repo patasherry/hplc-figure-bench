@@ -1,38 +1,9 @@
 """The board may only name files that exist. #1374 named src/workflows/templates/miniprep.js in a
 single-file app, and a downstream agent then rejected Patrick's whole cloning request as hallucinated."""
-import re, subprocess, sys
+import os, sys
 from pathlib import Path
-ROOT = Path(__file__).resolve().parents[2]  # the repository root. It was this folder, so `git ls-files` listed only tools/local-manager and every real path looked invented
-
-def repo_files(root):
-    out = subprocess.run(['git', 'ls-files'], cwd=str(root), capture_output=True, text=True, timeout=30)
-    return {l.strip() for l in out.stdout.splitlines() if l.strip()}
-
-PATHY = re.compile(r'[\w./-]*\w+\.(?:js|ts|jsx|tsx|json|html|css|md|py)\b')
-
-def invented_paths(text, tracked):
-    if not tracked:
-        return []
-    base = {p.rsplit('/', 1)[-1] for p in tracked}
-    bad = []
-    for m in PATHY.findall(text or ''):
-        p = m.strip('.,;:()[]`\'"')
-        if not p or p in tracked or p.rsplit('/', 1)[-1] in base:
-            continue
-        if any(t.endswith('/' + p) or t == p for t in tracked):
-            continue
-        bad.append(p)
-    return sorted(set(bad))
-
-
-BACKTICKED = re.compile(r'`([A-Za-z_][A-Za-z0-9_]*)`')
-CAMEL = re.compile(r'^[a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$')
-
-
-def unknown_idents(text, app):
-    if not app:
-        return []
-    return sorted({n for n in BACKTICKED.findall(text or '') if CAMEL.match(n) and n not in app})
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from boardpaths import ROOT, repo_files, invented_paths, unknown_idents
 
 
 def idents(repo):

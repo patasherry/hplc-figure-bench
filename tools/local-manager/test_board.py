@@ -55,5 +55,16 @@ with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'manager.py')
 
 assert '][:100]' in src, "Expected open issues context slice to be [:100]"
 assert "pass  # consolidated post at decision" in src, "Expected intermediate round posts to be consolidated"
+assert '"check":' in mgr.PROPOSE, "Expected PROPOSE schema to require a check field"
+assert '**Check:**' in src, "Expected adopted board issues to render **Check:**"
+assert 'LOCAL_AI_BRIEF.md' in src, "Expected board_context to include docs/LOCAL_AI_BRIEF.md"
+
+# 4. Check field validation and codemap function extraction
+assert mgr.valid_check({'check': 'tests/suites/25_gels.js: lane purity updates when band is tagged'})
+assert not mgr.valid_check({'check': ''})
+assert not mgr.valid_check({'check': 'TBD'})
+assert not mgr.valid_check({})
+funcs = mgr.codemap_functions()
+assert 'zoomCompose' in funcs and 'parseText' in funcs, f"Expected codemap functions, got {funcs[:5]}"
 
 print("test_board: all asserts passed")

@@ -86,12 +86,13 @@ module.exports = async ({github, context, core}) => {
      weeks. Patrick's own requests are exempt, since the worker writes the check for those and the gate demands one. */
   const hasCheck = b => /(\*\*|#+\s*)check\b/i.test(b) || /fails? on main/i.test(b) || /node tests\/suites\//i.test(b) || /reproduce command/i.test(b) || /check id/i.test(b);
   for (const i of await queued()) { const ls = labels(i);
-    if (ls.includes(L.mine) || ls.includes('ag-returned') || hasCheck(i.body || '')) continue;
+    if (ls.includes(L.mine) || hasCheck(i.body || '')) continue;
     await setLabels(i.number, [L.plan], [L.queue, QUEUE_OLD]);
     await github.rest.issues.createComment({owner, repo, issue_number: i.number, body: 'Held before any worker starts it: this issue does not say which check proves the job is done. It needs a **Check** line in the job-card form (`.github/ISSUE_TEMPLATE/job.md`): the one UI-level check that fails on main and passes after the change. Once the issue text has it, add the `queued` label again.'});
     say(`#${i.number}: no check named, held for a plan`); }
-  /* an issue a worker handed back (ag-returned), or one already routed, is not the leader's to act on */
-  const routable = i => !labels(i).some(l => l === 'ag-returned' || l === 'for-antigravity');
+  /* an issue a worker handed back (ag-returned), one held in needs-plan/parked/needs-owner, or one already routed, is not the leader's to act on */
+  const routable = i => { const ls = labels(i);
+    return !ls.some(l => l === 'ag-returned' || l === 'for-antigravity' || l === L.plan || l === L.parked) && !(ls.includes('needs-owner') && !ls.includes('owner-approved')); };
   if (agAvailable) {
     for (const i of await queued()) {
       if (!routable(i)) continue;
