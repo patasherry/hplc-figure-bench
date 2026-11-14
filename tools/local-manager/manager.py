@@ -2612,6 +2612,13 @@ def board_round(s, topic=''):
                 continue
             props.append(cand)
     if not props:
+        # Say so on the board: a meeting that drops every proposal used to leave no trace, so nobody could tell whether
+        # the duplicate check was right or too strict (2026-11-13, 6 of 6 dropped). No BOARD_MARK: this is not a round to pick from.
+        if (fake or dups) and not DRY:
+            post(BOARD, '\n'.join([f'### Team meeting, {dt.datetime.now():%Y-%m-%d %H:%M}' + (f': {topic.splitlines()[0][:120]}' if topic else '') + ', nothing new adopted', '',
+                 'Every proposal was dropped before the debate. If one of these is not really a duplicate, reply **Discuss:** with it.', '']
+                 + [f'- Already done, queued or declined: {d}' for d in dups] + [f'- Named files that do not exist: {x}' for x in fake]
+                 + ([f'_{"; ".join(notes)}_'] if notes else []))[:20000] + SIGN.format(rv.MODEL))
         return log(f'board: no proposals after pre-debate checks (fake={len(fake)}, dups={len(dups)}; {"; ".join(notes)})')
     round_ts = f'{dt.datetime.now():%Y-%m-%d %H:%M}'
     head = f'### Team meeting, {round_ts}' + (f': {topic.splitlines()[0][:120]}' if topic else '')  # a long request keeps a short heading
