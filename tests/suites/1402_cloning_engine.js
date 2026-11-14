@@ -327,5 +327,35 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
     } finally { await close2(); }
   });
 
+  await T.t('picker', async () => {
+    const {p, errs, close} = await open(), h = H(p);
+    try {
+      p.setDefaultTimeout(15000);
+      await h.newProject('Picker synthetic', 'cloning');
+      T.check('picker/buttons-before-choice', await p.locator('#clonePanel [data-cl=tpl]').count() > 0, 'no template buttons before choice');
+      await cl(p).locator('[data-cl=tpl][data-v=ath]').click(); await h.wait(400);
+
+      // no template buttons on a stage panel
+      await go(h, 'Construct and mutation design');
+      T.check('picker/no-buttons-on-stage', await p.locator('#clonePanel [data-cl=tpl]').count() === 0, 'template buttons found on stage panel');
+
+      // finds "Change workflow" on the workflow step
+      await h.step('clone:setup');
+      T.check('picker/no-buttons-after-choice', await p.locator('#clonePanel [data-cl=tpl]').count() === 0, 'template buttons still visible on workflow step');
+      const chg = p.locator('#clonePanel [data-cl=chgwf]');
+      T.check('picker/change-workflow-link', await chg.count() > 0 && /Change workflow/.test(await chg.innerText()), 'Change workflow link not found');
+      T.check('picker/shows-workflow-name', (await p.locator('#clonePanel').innerText()).includes('Around-the-Horn mutagenesis'), 'chosen workflow name not found in panel');
+
+      // buttons return after clicking it
+      if (await chg.count() > 0) {
+        await chg.click(); await h.wait(300);
+        T.check('picker/buttons-return', await p.locator('#clonePanel [data-cl=tpl]').count() > 0, 'template buttons did not return after clicking Change workflow');
+      } else {
+        T.check('picker/buttons-return', false, 'Change workflow link not present to click');
+      }
+      T.check('picker/no page errors', errs.length === 0, errs.join(' | '));
+    } finally { await close(); }
+  });
+
   T.done();
 })();
