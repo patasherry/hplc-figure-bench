@@ -17,13 +17,13 @@ const {open, H, suite} = require('../lib/harness');
       T.check('fold/at-most-4-rows', v.length <= 4 && v[0].k === 'clone:setup', JSON.stringify(v.map(x => x.t)));
       T.check('fold/upstream-in-view', (await h.timeline()).some(x => x.k === 'construct') && (await h.timeline()).some(x => x.k === 'expr'), 'Construct or Expression missing');
       const all = p.locator('#tl [data-clall="1"]');
-      T.check('fold/show-all-link', /Show all stages \(15\)/.test(await all.innerText()), await all.innerText());
+      T.check('fold/show-all-link', /Show all stages \(14\)/.test(await all.innerText()), await all.innerText());
       await all.click(); await h.wait(300);
       v = await vis();
-      T.check('fold/show-all-shows-15', v.length === 16, String(v.length));
+      T.check('fold/show-all-shows-14', v.length === 15, String(v.length));
       // the choice holds while moving to another step and back
       await h.step('expr'); await h.step('clone:setup');
-      T.check('fold/show-all-holds', (await vis()).length === 16, String((await vis()).length));
+      T.check('fold/show-all-holds', (await vis()).length === 15, String((await vis()).length));
       await p.locator('#tl [data-clall="0"]').click(); await h.wait(300);
       T.check('fold/fold-again', (await vis()).length <= 4, String((await vis()).length));
       // finish the first two stages: they fold into "2 done", and the next stage is the one in view

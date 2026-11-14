@@ -15,7 +15,11 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
   const setStatus = async (p, h, n, v) => { await cl(p).locator('[data-cst]').nth(n).selectOption(v); await h.wait(300); };
   const exportJson = async p => { const [dl] = await Promise.all([p.waitForEvent('download', {timeout: 10000}), p.click('#projSave')]); return fs.readFileSync(await dl.path(), 'utf8'); };
   const ATH = ['Construct and mutation design', 'Forward and reverse primer design', 'Primer ordering, resuspension and working stocks', 'Q5 PCR setup', 'Thermocycler program', 'Agarose-gel verification',
-    'Selection of successful PCR product', 'KLD treatment', 'Chemical transformation', 'Colony selection', 'Overnight culture', 'Miniprep', 'Sequencing and alignment', 'Selection of a sequence-verified clone', 'Transfer to expression'];
+    'Selection of successful PCR product', 'KLD treatment', 'Cloning transformation', 'Colony selection', 'Overnight culture', 'Miniprep', 'Sequencing and alignment', 'Selection of a sequence-verified clone'];
+  // #1439: the cloning-strain transformation is named "Cloning transformation", and Transfer to expression is recorded at the
+  // Transformation step instead of in a row of its own (Patrick's request). The template still holds 15 stages.
+  const trRow = async h => (await h.timeline()).find(x => x.k === 'transform');
+  const trPlasmid = async (p, h, v) => { await p.locator('#pr-trPlasmid').fill(v); await p.locator('#pr-trPlasmid').dispatchEvent('change'); await h.wait(250); };
 
   await T.t('entry', async () => {
     const {p, errs, close} = await open(), h = H(p);
@@ -86,11 +90,11 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
       const sel = await row(h, 'Selection of a sequence-verified clone');
       T.check('ath/verified-needs-sequencing', sel.warn && !sel.done, sel.s);
       // and moving on without one has to be said out loud
-      await go(h, 'Transfer to expression'); await setStatus(p, h, 0, 'done');
-      T.check('ath/transfer-flagged', (await row(h, 'Transfer to expression')).warn, (await row(h, 'Transfer to expression')).s);
+      await h.step('transform'); await setStatus(p, h, 0, 'done');
+      T.check('ath/transfer-flagged', (await trRow(h)).warn, (await trRow(h)).s);
       await cl(p).locator('[data-cf=bypass]').check(); await h.wait(300);
-      T.check('ath/bypass-recorded', !(await row(h, 'Transfer to expression')).warn, (await row(h, 'Transfer to expression')).s);
-      await field(p, 'Plasmid used').fill('pET28-ATH-syn'); await field(p, 'Plasmid used').dispatchEvent('change'); await h.wait(200);
+      T.check('ath/bypass-recorded', !(await trRow(h)).warn, (await trRow(h)).s);
+      await trPlasmid(p, h, 'pET28-ATH-syn');
       await field(p, 'Clone ID').fill('Clone 4'); await field(p, 'Clone ID').dispatchEvent('change'); await h.wait(200);
 
       // transformation step and methods text reflect the cloning transfer attempt and bypass
@@ -148,7 +152,7 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
       await h.newProject('HiFi synthetic', 'cloning');
       await cl(p).locator('[data-cl=tpl][data-v=hifi]').click(); await h.wait(500);
       const hf = (await rows(h)).slice(1).map(x => x.t);
-      T.check('hifi/stages', hf.length === 17 && hf[0] === 'gBlock and final-construct design' && hf.includes('Gradient PCR') && hf.includes('HiFi assembly') && hf.includes('Glycerol-stock creation') && hf.includes('Whole-plasmid sequencing') && hf.includes('Miniprep'), hf.join(' | '));
+      T.check('hifi/stages', hf.length === 16 && hf[0] === 'gBlock and final-construct design' && hf.includes('Gradient PCR') && hf.includes('HiFi assembly') && hf.includes('Glycerol-stock creation') && hf.includes('Whole-plasmid sequencing') && hf.includes('Miniprep'), hf.join(' | '));
       // the HiFi reaction must name its input DNA
       await go(h, 'HiFi assembly'); await setStatus(p, h, 0, 'done');
       T.check('hifi/needs-input', /input DNA/.test((await row(h, 'HiFi assembly')).s), (await row(h, 'HiFi assembly')).s);
@@ -167,7 +171,7 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
       await go(h, 'Competent cells: growth and harvest');
       await field(p, 'OD600 at harvest').fill('0.9'); await field(p, 'OD600 at harvest').dispatchEvent('change'); await h.wait(300);
       T.check('cc/od-range-flagged', /outside 0\.4 to 0\.6/.test((await row(h, 'Competent cells: growth and harvest')).s), (await row(h, 'Competent cells: growth and harvest')).s);
-      await go(h, 'Chemical transformation');
+      await go(h, 'Cloning transformation');
       T.check('cc/batch-offered-to-transformation', await cl(p).locator('#clBatches option[value="CC-SYN-01"]').count() === 1, 'the batch made in this project is not offered as the cell source');
       await setStatus(p, h, 0, 'done');
       T.check('cc/transformation-needs-batch', /competent-cell batch/.test(await cl(p).innerText()), 'a completed transformation with no batch was not flagged');
@@ -291,7 +295,7 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
       await go(h2, 'KLD treatment');
       await setStatus(p2, h2, 0, 'done');
 
-      await go(h2, 'Chemical transformation');
+      await go(h2, 'Cloning transformation');
       await field(p2, 'Host strain').fill('NEB 5-alpha'); await field(p2, 'Host strain').dispatchEvent('change'); await h2.wait(200);
       await setStatus(p2, h2, 0, 'done');
 
@@ -304,8 +308,8 @@ const {open, H, suite, fs, path, DATA} = require('../lib/harness');
       await field(p2, 'Verification status').selectOption('Sequence verified'); await h2.wait(200);
       await setStatus(p2, h2, 0, 'done');
 
-      await go(h2, 'Transfer to expression');
-      await field(p2, 'Plasmid used').fill('pET28-SUMO-K12A'); await field(p2, 'Plasmid used').dispatchEvent('change'); await h2.wait(200);
+      await h2.step('transform');
+      await trPlasmid(p2, h2, 'pET28-SUMO-K12A');
       await field(p2, 'Clone ID').fill('Clone 1'); await field(p2, 'Clone ID').dispatchEvent('change'); await h2.wait(200);
       await setStatus(p2, h2, 0, 'done');
 

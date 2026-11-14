@@ -148,7 +148,7 @@ body.proj #prepPanel details.sub{border:0;padding-top:0;margin-top:0} body.proj 
 .tl li.sub .tt{font-weight:600;font-size:13px}
 .tl li.tl-addrow::before{display:none}
 /* the folded cloning stages (#1436): one "N done" row and a "Show all stages" link, so a long template does not take over the step list */
-.tl li.tl-fold::before{display:none} .tl .tl-fold button{font:inherit;font-size:12.5px;color:var(--muted);background:transparent;border:0;padding:3px 6px 5px 36px;cursor:pointer;text-align:left;border-radius:var(--r-s)}
+.clone h3.cl-sub{margin:12px 0 2px;font-size:13px;font-weight:600} .tl li.tl-fold::before{display:none} .tl .tl-fold button{font:inherit;font-size:12.5px;color:var(--muted);background:transparent;border:0;padding:3px 6px 5px 36px;cursor:pointer;text-align:left;border-radius:var(--r-s)}
 .tl .tl-fold button:hover{color:var(--ink);background:var(--hover)} .tl .tl-fold button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .tl li.tl-addrow .tl-add{padding:4px 0 6px 36px}
 #ssNotes{font:inherit;font-size:13px}
@@ -7153,7 +7153,7 @@ const CL_KIND = {
   kld: {t: 'KLD treatment', from: ['pick'], fromMsg: 'A KLD reaction must name the PCR product it used', f: 'inVol:PCR product volume:n:µL;buffer:KLD reaction buffer volume:n:µL;enz:KLD enzyme mix volume:n:µL;total:Total reaction volume:n:µL;inc:Incubation (temperature and time);lot:Kit lot number'},
   hifi: {t: 'HiFi assembly', from: ['dnaq', 'cleanup', 'pick'], fromMsg: 'A HiFi assembly must name its input DNA', f: 'backbone:Backbone fragment;bbLen:Backbone length:n:bp;bbConc:Backbone concentration:n:ng/µL;bbMass:Backbone mass used:n:ng;bbVol:Backbone volume:n:µL;insert:Insert fragment;insLen:Insert length:n:bp;insConc:Insert concentration:n:ng/µL;insMass:Insert mass used:n:ng;insVol:Insert volume:n:µL;ratio:Insert to vector molar ratio;mix:Master mix and lot;total:Total reaction volume:n:µL;inc:Incubation (temperature and time);controls:Controls'},
   assembly: {t: 'DNA assembly or ligation', from: ['cleanup', 'pick', 'vector_prep', 'dnaq'], fromMsg: 'An assembly must name its input DNA', f: 'method:Assembly method;vector:Vector input;inserts:Insert inputs, with lengths:a;conc:Input concentrations:a;ratio:Molar ratios;total:Reaction volume:n:µL;kit:Reagent or kit, and lot;inc:Incubation program;controls:Controls;outcome:Outcome'},
-  transform: {t: 'Chemical transformation', from: ['kld', 'hifi', 'assembly', 'miniprep'], fromMsg: 'A transformation must name the reaction it used', need: [['cells', 'A transformation must name the competent-cell batch and aliquot used']], f: 'dna:DNA volume used:n:µL;host:Host strain;cells:Competent-cell batch and aliquot:b;method:Transformation method:s:Heat shock/Electroporation/Other;recovery:Recovery medium and time;antibiotic:Selection antibiotic;plate:Plate ID;plated:Dilution and volume plated;inc:Incubation conditions;colonies:Colony count:n;ctrl:Control-plate result'},
+  transform: {t: 'Cloning transformation', from: ['kld', 'hifi', 'assembly', 'miniprep'], fromMsg: 'A transformation must name the reaction it used', need: [['cells', 'A transformation must name the competent-cell batch and aliquot used']], f: 'dna:DNA volume used:n:µL;host:Host strain;cells:Competent-cell batch and aliquot:b;method:Transformation method:s:Heat shock/Electroporation/Other;recovery:Recovery medium and time;antibiotic:Selection antibiotic;plate:Plate ID;plated:Dilution and volume plated;inc:Incubation conditions;colonies:Colony count:n;ctrl:Control-plate result'},
   colony: {t: 'Colony selection', from: ['transform'], fromMsg: 'A colony must name its transformation', need: [['plate', 'A colony must name its plate']], f: 'plate:Source plate;ids:Colony IDs picked:a;where:Colony locations;n:Number picked:n'},
   screen: {t: 'Colony screening', from: ['transform', 'colony'], fromMsg: 'A screened colony must name its transformation', f: 'ids:Colony or clone IDs:a;plate:Source plate;method:Screening method:s:Colony PCR/Restriction digest/Other;primers:Colony-PCR primers;expected:Expected result;observed:Observed band sizes;digest:Restriction-digest result;gel:Screening gel:g;result:Result:s:Positive/Negative/Inconclusive;kept:Colonies retained;stock:Linked culture or glycerol stock'},
   culture: {t: 'Overnight culture', from: ['colony', 'screen'], f: 'colony:Colony ID;medium:Medium;antibiotic:Antibiotic;vol:Culture volume:n:mL;temp:Temperature:n:°C;time:Duration;id:Culture ID'},
@@ -7202,7 +7202,27 @@ function canonCloning(pr){ const c = pr.cloning && typeof pr.cloning === 'object
    in step with it, so older copies of the app read the same choice. */
 const CL = () => { const c = (prep.cloning && Array.isArray(prep.cloning.stages) && prep.cloning.ext ? prep : canonCloning(prep)).cloning;
   if (typeof prep.includeCloning !== 'boolean') prep.includeCloning = c.type === 'cloning' || c.stages.length > 0;
-  const t = prep.includeCloning ? 'cloning' : 'expression'; if (c.type !== t) c.type = t; return c; };
+  const t = prep.includeCloning ? 'cloning' : 'expression'; if (c.type !== t) c.type = t; clTrSync(c); return c; };
+/* #1439: the plasmid is entered once. The transfer to expression is recorded at the Transformation step, and its plasmid, host
+   and marker are that step's Plasmid, Strain and Selection. An attempt saved before this kept its own values: the first time it
+   is read they fill any of those fields that are empty. A value that differs from what the field already holds is kept in the
+   attempt's notes, so nothing is lost. From then on the attempt reads them from those fields. */
+const CL_TRSYNC = {plasmid: 'trPlasmid', host: 'strain', marker: 'trSel'};
+function clTrSync(c){ const ts = c.stages.find(x => x.kind === 'transfer'); if (!ts || !ts.at.length) return; const a = ts.at[ts.at.length - 1];
+  if (!a.f._sync) { const kept = [];
+    Object.entries(CL_TRSYNC).forEach(([k, pk]) => { const v = String(a.f[k] == null ? '' : a.f[k]).trim(); if (!v) return;
+      if (!hasTxt(prep[pk])) prep[pk] = v; else if (String(prep[pk]).trim() !== v) kept.push(`${clFields(CL_KIND.transfer).find(f => f.k === k).l}: ${v}`); });
+    if (kept.length) a.f._n = (hasTxt(a.f._n) ? a.f._n.trim() + '\n' : '') + 'Recorded on this attempt before the Transformation fields were used: ' + kept.join('; ') + '.';
+    a.f._sync = 1; }
+  Object.entries(CL_TRSYNC).forEach(([k, pk]) => { a.f[k] = String(prep[pk] || ''); }); }
+/* the construct and plasmid named in the cloning steps fill the Construct name and the Transformation plasmid, unless the user
+   typed something else there. clAuto remembers what was filled in, so a later verified clone can replace it. */
+function clAutoFill(){ const c = CL(); if (c.type !== 'cloning') return false; const au = prep.clAuto = prep.clAuto && typeof prep.clAuto === 'object' ? prep.clAuto : {};
+  const last = (kind, ok) => { const st = c.stages.filter(x => x.kind === kind && !x.skip); for (let i = st.length - 1; i >= 0; i--) { const a = st[i].at.slice().reverse().find(ok); if (a) return a; } return null; };
+  const ver = last('select', a => CL_OK(a.st) && a.f.ver === 'Sequence verified'), des = last('design', a => hasTxt(a.f.construct));
+  const plas = ver && hasTxt(ver.f.plasmid) ? ver.f.plasmid.trim() : '', con = des ? des.f.construct.trim() : plas;
+  let ch = false; [['trPlasmid', plas], ['name', con]].forEach(([k, v]) => { if (v && prep[k] !== v && (!hasTxt(prep[k]) || prep[k] === au[k])) { prep[k] = v; au[k] = v; ch = true; } });
+  return ch; }
 const clFields = d => String(d.f || '').split(';').filter(Boolean).map(x => { const p = x.split(':'); return {k: p[0], l: p[1], ty: p[2] || 't', x: p[3] || ''}; });
 const clTitle = s => hasTxt(s.name) ? s.name.trim() : CL_KIND[s.kind].t;
 const clNextId = p => { let n = 0; CL().stages.forEach(s => { [s.id].concat(s.at.map(a => a.id)).forEach(v => { const m = /^[sa](\d+)$/.exec(v); if (m) n = Math.max(n, +m[1]); }); }); return p + (n + 1); };
@@ -7225,7 +7245,8 @@ function clSummary(s){ const n = s.at.length, ok = s.at.filter(a => CL_OK(a.st))
 function clSteps(){ const c = CL(); if (c.type !== 'cloning') return [];
   const done = c.stages.filter(s => !s.skip && s.at.some(a => CL_OK(a.st))).length, live = c.stages.filter(s => !s.skip).length;
   const L = [{k: 'clone:setup', g: 'Cloning', t: c.tpl ? CL_TPL[c.tpl].t : 'Cloning workflow', done: live > 0 && done === live, s: c.stages.length ? `${done} of ${live} stages completed` : 'Choose a cloning workflow'}];
-  c.stages.forEach(s => { const fl = s.skip ? [] : clFlags(s); L.push({k: 'clone:' + s.id, t: clTitle(s), sub: true, done: !s.skip && !fl.length && s.at.some(a => CL_OK(a.st)), warn: fl[0] || '', s: fl[0] || clSummary(s)}); });
+  /* Transfer to expression is recorded at the Transformation step (#1439), so it is not a row of its own */
+  c.stages.forEach(s => { if (s.kind === 'transfer') return; const fl = s.skip ? [] : clFlags(s); L.push({k: 'clone:' + s.id, t: clTitle(s), sub: true, done: !s.skip && !fl.length && s.at.some(a => CL_OK(a.st)), warn: fl[0] || '', s: fl[0] || clSummary(s)}); });
   return L; }
 /* the lineage as text: what happened at each stage, with failed attempts named as failed */
 function clLineage(){ const c = CL(), all = c.stages.flatMap(s => s.at.map((a, i) => ({a, s, i}))), L = [`Cloning lineage${PROJ ? ': ' + PROJ.name : ''}`, `Workflow: ${c.tpl ? CL_TPL[c.tpl].t : 'not chosen'}`];
@@ -7312,13 +7333,13 @@ function clField(a, fd){ const v = a.f[fd.k] == null ? '' : a.f[fd.k], at = `dat
   if (fd.ty === 'b') { const bs = CL().stages.filter(s => s.kind === 'cc_batch').flatMap(s => s.at).map(x => x.f.id).filter(hasTxt);
     return `<label class="f cl-wide">${lab}<input type="text" list="clBatches" ${at} value="${esc(v)}" placeholder="${bs.length ? 'Choose a batch made in this project, or type one' : 'Batch ID and aliquot'}"><datalist id="clBatches">${bs.map(b => `<option value="${esc(b)}">`).join('')}</datalist></label>`; }
   return `<label class="f">${lab}<input type="${fd.ty === 'd' ? 'date' : 'text'}"${fd.ty === 'n' ? ' inputmode="decimal"' : ''} ${at} value="${esc(v)}"></label>`; }
-function clAttemptHtml(s, a, i){ const d = CL_KIND[s.kind], src = clSources(d), open = clOpen === a.id || (!s.at.some(x => x.id === clOpen) && i === s.at.length - 1);
+function clAttemptHtml(s, a, i, hide){ const d = CL_KIND[s.kind], src = clSources(d), open = clOpen === a.id || (!s.at.some(x => x.id === clOpen) && i === s.at.length - 1);
   return `<details class="cl-at" data-atbox="${esc(a.id)}"${open ? ' open' : ''}><summary><b>Attempt ${i + 1}</b><span class="cl-badge cl-${a.st}">${esc(CL_ST[a.st])}</span></summary><div class="cl-grid">
     <label class="f">Status<select data-cst="${esc(a.id)}">${Object.keys(CL_ST).map(k => `<option value="${k}"${k === a.st ? ' selected' : ''}>${esc(CL_ST[k])}</option>`).join('')}</select></label>
     ${clField(a, {k: '_d', l: 'Date', ty: 'd'})}${clField(a, {k: '_op', l: 'Operator', ty: 't'})}
     ${d.from ? `<label class="f cl-wide">Comes from<select data-cfrom="${esc(a.id)}"><option value="">${src.length ? 'Not linked' : 'Nothing to link to yet'}</option>${src.map(x => `<option value="${esc(x.a.id)}"${x.a.id === a.from ? ' selected' : ''}>${esc(x.lab)}</option>`).join('')}</select></label>` : ''}
     ${(d.ck || []).length ? `<div class="cl-wide cl-ck">${d.ck.map((t, j) => `<label class="check"><input type="checkbox" data-cck="${j}" data-at="${esc(a.id)}"${a.ck[j] ? ' checked' : ''}> ${esc(t)}</label>`).join('')}</div>` : ''}
-    ${clFields(d).map(fd => clField(a, fd)).join('')}${clField(a, {k: '_dev', l: 'Deviations', ty: 'a'})}${clField(a, {k: '_n', l: 'Result and notes', ty: 'a'})}
+    ${clFields(d).filter(fd => !(hide && hide[fd.k])).map(fd => clField(a, fd)).join('')}${clField(a, {k: '_dev', l: 'Deviations', ty: 'a'})}${clField(a, {k: '_n', l: 'Result and notes', ty: 'a'})}
     <div class="cl-wide cl-acts"><button type="button" class="btn quiet" data-cl="dup" data-v="${esc(a.id)}">Duplicate this attempt</button>${s.at.length > 1 ? `<button type="button" class="btn danger${clArm === 'at:' + a.id ? ' armed' : ''}" data-cl="rmat" data-v="${esc(a.id)}">${clArm === 'at:' + a.id ? 'Remove? Click again' : 'Remove attempt'}</button>` : ''}</div></div></details>`; }
 function clMethodsText(){
   const c = CL(); if (!c) return '';
@@ -7469,7 +7490,11 @@ function clPanelHtml(){ const c = CL(), onC = curStep === 'transform', id = curS
     if (c.type === 'cloning') {
       const ts = c.stages.find(x => x.kind === 'transfer');
       const ta = ts && !ts.skip ? ts.at.slice().reverse().find(a => CL_OK(a.st)) : null;
-      if (!ta) return '';
+      if (!ts) return '';
+      /* the transfer to expression is recorded here (#1439): its plasmid, host and marker are this step's own Plasmid, Strain and Selection */
+      const fl = ts.skip ? [] : clFlags(ts), rec = `<h3 class="cl-sub">Transfer to expression</h3><p class="hint">Plasmid, strain and selection are the Transformation fields. Record here which clone went into expression and whether it was sequence verified.</p>${fl.map(f => `<p class="cl-flag">${esc(f)}</p>`).join('')}`
+        + (ts.skip ? '<p class="hint">Skipped. Its records are kept.</p>' : ts.at.map((a, j) => clAttemptHtml(ts, a, j, CL_TRSYNC)).join(''));
+      if (!ta) return `<h2>Cloning record</h2>${rec}${clTypeSel()}`;
       const pl = (ta.f.plasmid || '').trim(), clId = (ta.f.clone || '').trim();
       const verified = c.stages.some(s => s.kind === 'select' && !s.skip && s.at.some(a => CL_OK(a.st) && a.f.ver === 'Sequence verified'));
       const verStr = ta.f.bypass ? 'verification was not recorded (bypassed)' : (verified ? 'sequence-verified clone recorded' : 'verification was not recorded');
@@ -7477,7 +7502,7 @@ function clPanelHtml(){ const c = CL(), onC = curStep === 'transform', id = curS
       if (pl) parts.push(`plasmid ${pl}`);
       if (clId) parts.push(`clone ${clId}`);
       parts.push(verStr);
-      return `<h2>Cloning record</h2><p class="hint cl-ro" id="clTrLine">${esc(parts.join(', ').replace(/^./, x => x.toUpperCase()))}.</p>${clTypeSel()}`;
+      return `<h2>Cloning record</h2><p class="hint cl-ro" id="clTrLine">${esc(parts.join(', ').replace(/^./, x => x.toUpperCase()))}.</p>${rec}${clTypeSel()}`;
     }
     const bad = c.ext.ver === 'yes' && !hasTxt(c.ext.note);
     return `<h2>Where the plasmid came from</h2><p class="hint">Cloning was done outside this workflow, or was not documented here.</p><div class="cl-grid"><label class="f cl-wide">Source of the plasmid or construct<input type="text" data-cext="src" value="${esc(c.ext.src)}"></label>
@@ -7498,7 +7523,7 @@ function renderClone(force){ const el = $('#clonePanel'); if (!el || !PROJ || !(
   if (h === clHtml && !force) return; if (!force && inside && /^(INPUT|TEXTAREA)$/.test(ae.tagName)) return;
   const key = inside ? ['cf', 'at', 'cst', 'cfrom', 'cext', 'cck', 'cadd', 'cname', 'cl', 'v'].filter(k => ae.dataset[k] != null).map(k => `[data-${k}="${ae.dataset[k]}"]`).join('') : '';
   clHtml = h; el.innerHTML = h; if (key) { const n = el.querySelector(key); if (n) n.focus(); } }
-function clChanged(redraw){ renderSteps(); if (redraw) renderClone(true); if (PROJ && curStep.startsWith('clone:')) { const f = curFig(); if (f) { cur = f.id; const r = buildFig(f, true); G = r.geo; if (r.svg) paper.innerHTML = r.svg; } } queueSave(); }
+function clChanged(redraw){ if (clAutoFill()) renderPrep(); renderSteps(); if (redraw) renderClone(true); if (PROJ && curStep.startsWith('clone:')) { const f = curFig(); if (f) { cur = f.id; const r = buildFig(f, true); G = r.geo; if (r.svg) paper.innerHTML = r.svg; } } queueSave(); }
 const clAt = id => { for (const s of CL().stages) { const a = s.at.find(x => x.id === id); if (a) return {s, a}; } return null; };
 function onCloneField(e){ const t = e.target, c = CL();
   if (t.dataset.cname) { const s = c.stages.find(x => 'clone:' + x.id === curStep); if (s) { s.name = t.value; const h2 = $('#clonePanel h2'); if (h2) h2.textContent = clTitle(s); clHtml = clPanelHtml(); clChanged(false); } return; }
@@ -7571,10 +7596,11 @@ function stepList(){
   clSteps().forEach(x => L.push(x));
   L.push({k: 'construct', g: 'Upstream', t: 'Construct', done: !!cm, s: cm ? `${cm.tn}, ${fmt(cm.mTag, 1)} kDa` : 'Protein sequence or GenBank file'});
   const trDone = ['trPlasmid', 'trMethod', 'trSel', 'trCol', 'trStock'].some(v) || !!m('transform').date;
-  L.push({k: 'transform', t: /glycerol/i.test(prep.trMethod || '') ? 'Glycerol stock' : 'Transformation', done: trDone, s: [prep.strain, prep.trSel].map(x => String(x || '').trim()).filter(Boolean).join(', ') || 'Strain and selection, or a glycerol stock'});
+  const trSt = prep.includeCloning ? CL().stages.find(x => x.kind === 'transfer' && !x.skip) : null, trFl = trSt ? clFlags(trSt)[0] || '' : '';
+  L.push({k: 'transform', t: /glycerol/i.test(prep.trMethod || '') ? 'Glycerol stock' : 'Transformation', done: trDone && !trFl, warn: trFl, s: trFl || [prep.strain, prep.trSel].map(x => String(x || '').trim()).filter(Boolean).join(', ') || 'Strain and selection, or a glycerol stock'});
   const ex = EXPR_KEYS.some(v) || gels.some(g => lanesFor(g, 'expr').length), el = prepLines('expr').map(x => typeof x === 'string' ? x : x.t);
   /* with cloning on, the clone that went into expression has to be named (#1433): a selected clone at Transformation, or a completed Transfer to expression */
-  const exNeed = ex && prep.includeCloning && !selClone() && !CL().stages.some(st => st.kind === 'transfer' && !st.skip && st.at.some(a => CL_OK(a.st))) ? 'Connect the clone used for expression: select it at Transformation, or complete Transfer to expression' : '';
+  const exNeed = ex && prep.includeCloning && !selClone() && !CL().stages.some(st => st.kind === 'transfer' && !st.skip && st.at.some(a => CL_OK(a.st))) ? 'Connect the clone used for expression: select it at Transformation, or mark the transfer to expression done there' : '';
   L.push({k: 'expr', t: 'Expression', done: ex && !exNeed, warn: exNeed, s: exNeed || (ex ? el.slice(0, 2).join(', ').replace(/ /g, ' ') : 'Starter, induction, harvest, expression gel')});
   const ly = LYS_KEYS.some(v) || gels.some(g => lanesFor(g, 'lysis').length);
   L.push({k: 'lysis', t: 'Lysis', done: ly, s: ly ? [prep.lysMethod, numOr(prep.lysVol, 0) > 0 ? `${fmtAuto(+prep.lysVol)} mL lysate` : ''].filter(Boolean).join(', ') : 'Method, buffer, additives, clarification'});
