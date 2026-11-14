@@ -74,16 +74,16 @@ A file with only time and signal columns, such as an analytical HPLC export, is 
 
 ## Cloning workflow
 
-A new project asks one question first: **Does this project include cloning?** Neither answer is preselected.
+The new-project form has one switch, **Include Cloning**. It is off for a new project and answers to a click, Space or Enter.
 
-- **No, start with expression** opens the project as before. The Transformation step gains a short record of where the plasmid came from. A construct is recorded as sequence verified only when you say how it was verified.
-- **Yes, start with cloning** adds a **Cloning** group at the top of the step list. Choose a workflow there: Around-the-Horn mutagenesis, gBlock-to-pDEST HiFi assembly, PCR-based plasmid cloning, or a custom one. Its stages appear as steps. Mix and Go competent-cell preparation can be added to any project from **Add a stage**.
+- **Off** opens the project at the construct and expression steps, as before. The Transformation step gains a short record of where the plasmid came from. A construct is recorded as sequence verified only when you say how it was verified.
+- **On** adds a **Cloning** group at the top of the step list. Choose a workflow there: Around-the-Horn mutagenesis, gBlock-to-pDEST HiFi assembly, PCR-based plasmid cloning, or a custom one. Its stages appear as steps. Mix and Go competent-cell preparation can be added to any project from **Add a stage**. With cloning on, the Expression step is flagged until the clone used for expression is named: select it at Transformation, or complete **Transfer to expression**.
 
 Each stage keeps a list of attempts. An attempt has a status, a date, an operator, the attempt it comes from, the stage's own fields, deviations and notes. A failed attempt stays in the record when you repeat the step, and a stage can be skipped, moved or duplicated. The miniprep and competent-cell stages carry a checklist and the source recipe as a reference line.
 
 The app does not calculate or fill in any cloning value. It only flags records that are incomplete: a selected PCR product with no gel lane, a KLD or HiFi reaction with no input, a colony with no transformation, a transformation with no competent-cell batch, a clone marked verified with no completed sequencing record, a batch marked Qualified with no competency test, and a harvest OD600 outside 0.4 to 0.6. A flagged stage is not shown as done.
 
-The **Cloning workflow** step shows the lineage of the whole record as text, with a button to copy it. The workflow type is shown in the project header and can be changed there (on a phone, in the Cloning workflow or Transformation step). Changing it never deletes a record. Projects saved before this feature open unchanged and read **Workflow type not specified**.
+The **Cloning workflow** step shows the lineage of the whole record as text, with a button to copy it. The same **Include Cloning** switch is in the project header (on a phone, in the Cloning workflow or Transformation step). Switching it off hides the cloning steps, their flags and the cloning lines in the Methods, and keeps every record for when it is switched on again. It is saved with the project as `includeCloning`. A project saved before the switch existed opens with it on if it holds any cloning record, and off if it does not.
 
 Not built yet: calculators (primer dilution, molar ratios, recipe scaling), file attachments on a stage, separate planned and actual values, competent-cell batches shared between projects, and the cloning record in the Methods text.
 
